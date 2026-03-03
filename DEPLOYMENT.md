@@ -1,39 +1,37 @@
 # Railway Deployment
 
-Use two Railway services in the same project:
-- Backend API service rooted at `social-media/`
-- Frontend service rooted at `social-media/frontend/`
+This repo now supports **single-service deploy** on Railway:
+- One service rooted at `social-media/`
+- Railway build compiles `frontend/` automatically
+- Backend serves React build + API from the same domain
 
-## 1) Backend service
+## 1) Railway service settings
 
 1. Connect repo and set **Root Directory** to `social-media`.
-2. Keep start command as `npm start`.
+2. Keep config-as-code enabled (`railway.json`).
 3. Public domain target port should be `5000`.
 4. Set variables:
 	- `NODE_ENV=production`
 	- `JWT_SECRET=<strong-random-secret>`
-	- `MONGODB_URI=<railway-mongodb-connection-string>`
-	- `CLIENT_URL=<your-frontend-domain>`
-5. For Railway Mongo, prefer the plugin-provided URL variable (copy/paste exact value from the Mongo service).
+	- `MONGODB_URI=<railway-mongodb-connection-string>` **or** rely on Railway Mongo `MONGO_URL`
+	- `CLIENT_URL=https://<your-domain>`
+5. For Railway Mongo, safest is to set `MONGODB_URI=${{MONGO_URL}}`.
 
-## 2) Frontend service
+## 2) Endpoints
 
-1. Create a second service from the same repo.
-2. Set **Root Directory** to `social-media/frontend`.
-3. Build command: `npm run build`.
-4. Start command: `npm start`.
-5. Set variable:
-	- `REACT_APP_API_URL=https://<your-backend-domain>/api`
+- Frontend app: `https://<your-domain>/`
+- API base: `https://<your-domain>/api`
+- Health check: `https://<your-domain>/health`
 
 ## 3) Verify after deploy
 
-1. Backend health: `https://<backend-domain>/` should return API JSON.
-2. Frontend loads at its Railway URL.
-3. Browser network calls from frontend should hit `https://<backend-domain>/api/...` with no CORS errors.
+1. `/health` returns API JSON.
+2. `/` loads the React app.
+3. Browser network calls hit `/api/...` with no CORS errors.
 
 ## Common issues
 
-- `CLIENT_URL` must be the frontend URL, not the backend URL.
-- If Mongo auth fails, your URI is not the exact Railway Mongo connection string.
+- `CLIENT_URL` should be your Railway domain **without relying on trailing slash**.
+- If Mongo auth fails, map `MONGODB_URI` directly to Railway Mongo `MONGO_URL`.
 - `JWT_SECRET` should not be `change-this-in-production` in production.
 

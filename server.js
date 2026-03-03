@@ -3,15 +3,37 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
+
+const configuredOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+const corsOrigin = (origin, callback) => {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  const normalizedOrigin = origin.replace(/\/$/, '');
+  if (configuredOrigins.includes(normalizedOrigin)) {
+    callback(null, true);
+    return;
+  }
+
+  callback(new Error('Not allowed by CORS'));
+};
 
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: corsOrigin,
   credentials: true
 }));
 
@@ -28,7 +50,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // MongoDB connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/socialmedia', {
+const mongoUri = process.env.MONGODB_URI
+  || process.env.MONGO_URL
+  || process.env.MONGO_PUBLIC_URL
+  || 'mongodb://localhost:27017/socialmedia';
+
+mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
@@ -36,7 +63,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/socialmed
 .catch(err => console.error('MongoDB connection error:', err));
 
 // Basic route
-app.get('/', (req, res) => {
+app.get('/health', (req, res) => {
   res.json({ message: 'Social Media API v1.0', status: 'active' });
 });
 
@@ -48,6 +75,19 @@ app.use('/api/chat', require('./routes/chat'));
 app.use('/api/market', require('./routes/market'));
 app.use('/api/location', require('./routes/location'));
 app.use('/api/universal', require('./routes/universal'));
+
+if (isProduction) {
+  const frontendBuildPath = path.join(__dirname, 'frontend', 'build');
+  app.use(express.static(frontendBuildPath));
+
+  app.get(/^\/(?!api|health).*/, (req, res) => {
+    res.sendFile(path.join(frontendBuildPath, 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.json({ message: 'Social Media API v1.0', status: 'active' });
+  });
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -73,7 +113,7 @@ const server = app.listen(PORT, () => {
 // Socket.io setup
 const io = require('socket.io')(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: configuredOrigins,
     methods: ['GET', 'POST']
   }
 });
