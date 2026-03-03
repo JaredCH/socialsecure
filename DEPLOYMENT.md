@@ -1,26 +1,39 @@
 # Railway Deployment
 
-## Backend (`social-media`)
+Use two Railway services in the same project:
+- Backend API service rooted at `social-media/`
+- Frontend service rooted at `social-media/frontend/`
 
-1. Create a new Railway project and connect this repository.
-2. Set the service root to `social-media/`.
-3. Railway will use [`railway.json`](railway.json) and run `npm start`.
-4. Add environment variables from [`.env.example`](.env.example).
-5. Provision MongoDB (Railway plugin or external MongoDB Atlas) and set `MONGODB_URI`.
-6. Set `CLIENT_URL` to your frontend URL.
+## 1) Backend service
 
-## Frontend (`social-media/frontend`)
+1. Connect repo and set **Root Directory** to `social-media`.
+2. Keep start command as `npm start`.
+3. Public domain target port should be `5000`.
+4. Set variables:
+	- `NODE_ENV=production`
+	- `JWT_SECRET=<strong-random-secret>`
+	- `MONGODB_URI=<railway-mongodb-connection-string>`
+	- `CLIENT_URL=<your-frontend-domain>`
+5. For Railway Mongo, prefer the plugin-provided URL variable (copy/paste exact value from the Mongo service).
 
-Deploy as a separate service:
+## 2) Frontend service
 
-1. Create a second Railway service with root `social-media/frontend/`.
-2. Build command: `npm run build`.
-3. Start command: `npx serve -s build -l $PORT` (or use another static host).
-4. Set `REACT_APP_API_URL` to backend URL + `/api`.
+1. Create a second service from the same repo.
+2. Set **Root Directory** to `social-media/frontend`.
+3. Build command: `npm run build`.
+4. Start command: `npm start`.
+5. Set variable:
+	- `REACT_APP_API_URL=https://<your-backend-domain>/api`
 
-## Notes
+## 3) Verify after deploy
 
-- Private PGP keys are client-side only via [`pgp.js`](frontend/src/utils/pgp.js).
-- Universal account referral routes are implemented in [`routes/universal.js`](routes/universal.js).
-- Ensure CORS `CLIENT_URL` matches deployed frontend domain.
+1. Backend health: `https://<backend-domain>/` should return API JSON.
+2. Frontend loads at its Railway URL.
+3. Browser network calls from frontend should hit `https://<backend-domain>/api/...` with no CORS errors.
+
+## Common issues
+
+- `CLIENT_URL` must be the frontend URL, not the backend URL.
+- If Mongo auth fails, your URI is not the exact Railway Mongo connection string.
+- `JWT_SECRET` should not be `change-this-in-production` in production.
 
