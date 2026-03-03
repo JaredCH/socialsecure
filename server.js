@@ -6,11 +6,18 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 require('dotenv').config();
 
+const cleanEnv = (value) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed.replace(/^['\"]|['\"]$/g, '');
+};
+
 const app = express();
 const PORT = process.env.PORT || 5000;
-const isProduction = process.env.NODE_ENV === 'production';
+const nodeEnv = cleanEnv(process.env.NODE_ENV || 'development');
+const isProduction = nodeEnv === 'production';
 
-const configuredOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
+const configuredOrigins = (cleanEnv(process.env.CLIENT_URL) || 'http://localhost:3000')
   .split(',')
   .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean);
@@ -50,9 +57,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // MongoDB connection
-const mongoUri = process.env.MONGODB_URI
-  || process.env.MONGO_URL
-  || process.env.MONGO_PUBLIC_URL
+const mongoUri = cleanEnv(process.env.MONGODB_URI)
+  || cleanEnv(process.env.MONGO_URL)
+  || cleanEnv(process.env.MONGO_PUBLIC_URL)
   || 'mongodb://localhost:27017/socialmedia';
 
 mongoose.connect(mongoUri, {
@@ -65,6 +72,11 @@ mongoose.connect(mongoUri, {
 // Basic route
 app.get('/health', (req, res) => {
   res.json({ message: 'Social Media API v1.0', status: 'active' });
+});
+
+app.get('/', (req, res, next) => {
+  if (isProduction) return next();
+  return res.json({ message: 'Social Media API v1.0', status: 'active' });
 });
 
 // API routes
@@ -95,7 +107,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({
     error: {
       message: err.message || 'Internal Server Error',
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+      ...(nodeEnv === 'development' && { stack: err.stack })
     }
   });
 });

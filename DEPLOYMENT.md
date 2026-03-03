@@ -17,6 +17,24 @@ This repo now supports **single-service deploy** on Railway:
 	- `CLIENT_URL=https://<your-domain>`
 5. For Railway Mongo, safest is to set `MONGODB_URI=${{MONGO_URL}}`.
 
+### Raw variables (copy/paste)
+
+For service `socialsecure` (Raw Editor):
+
+```env
+NODE_ENV=production
+CLIENT_URL=https://socialsecure-production.up.railway.app
+MONGODB_URI=${{mongodb.MONGO_URL}}
+REDIS_URL=${{redis.REDIS_URL}}
+SMTP_PORT=587
+JWT_SECRET=REPLACE_WITH_LONG_RANDOM_SECRET
+```
+
+Notes:
+- Do not put quotes around values.
+- If your Mongo/Redis service names are different, replace `mongodb` and `redis` with your actual Railway service names.
+- Use Railway "Add Variable Reference" if Raw Editor rejects the reference syntax.
+
 ## 2) Endpoints
 
 - Frontend app: `https://<your-domain>/`
