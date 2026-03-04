@@ -5,6 +5,9 @@ import { authAPI, feedAPI } from '../utils/api';
 const VISIBILITY_OPTIONS = ['public', 'friends', 'private'];
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
+const GALLERY_STORAGE_KEY = 'socialsecure.gallery.v1';
+const GALLERY_MAX_ITEMS = 24;
+const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 
 const isRenderableMediaUrl = (value) => {
   if (typeof value !== 'string') return false;
@@ -114,6 +117,54 @@ const normalizePost = (post) => {
   };
 };
 
+const readGalleryStore = () => {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(GALLERY_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeGalleryStore = (store) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(GALLERY_STORAGE_KEY, JSON.stringify(store));
+};
+
+const readGalleryItems = (ownerKey) => {
+  if (!ownerKey) return [];
+  const store = readGalleryStore();
+  const items = store[ownerKey];
+  return Array.isArray(items) ? items : [];
+};
+
+const writeGalleryItems = (ownerKey, items) => {
+  if (!ownerKey) return;
+  const store = readGalleryStore();
+  store[ownerKey] = items;
+  writeGalleryStore(store);
+};
+
+const toDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+    reader.readAsDataURL(file);
+  });
+
+const computeReactionCounts = (votes) => {
+  const values = Object.values(votes || {});
+  return {
+    likes: values.filter((value) => value === 'like').length,
+    dislikes: values.filter((value) => value === 'dislike').length,
+  };
+};
+
 const Social = () => {
   const initialGuestUser = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
@@ -136,6 +187,42 @@ const Social = () => {
   });
   const [commentInputs, setCommentInputs] = useState({});
   const [actionLoadingByPost, setActionLoadingByPost] = useState({});
+  const [galleryItems, setGalleryItems] = useState([]);
+  const [galleryUrlInput, setGalleryUrlInput] = useState('');
+  const [galleryError, setGalleryError] = useState('');
+  const [galleryBusy, setGalleryBusy] = useState(false);
+
+  const galleryOwnerKey = useMemo(() => {
+    if (isAuthenticated && currentUser?._id) {
+      return `user:${currentUser._id}`;
+    }
+
+    if (guestProfile?._id) {
+      return `user:${guestProfile._id}`;
+    }
+
+    const guestKey = guestUser.trim().toLowerCase();
+    return guestKey ? `guest:${guestKey}` : '';
+  }, [isAuthenticated, currentUser?._id, guestProfile?._id, guestUser]);
+
+  const galleryActorKey = useMemo(() => {
+    if (isAuthenticated && currentUser?._id) {
+      return `user:${currentUser._id}`;
+    }
+    return 'guest:anonymous';
+  }, [isAuthenticated, currentUser?._id]);
+
+  const canManageGallery = isAuthenticated && Boolean(currentUser?._id);
+
+  useEffect(() => {
+    if (!galleryOwnerKey) {
+      setGalleryItems([]);
+      return;
+    }
+
+    setGalleryItems(readGalleryItems(galleryOwnerKey));
+    setGalleryError('');
+  }, [galleryOwnerKey]);
 
   const setPostActionLoading = (postId, value) => {
     setActionLoadingByPost((prev) => {
@@ -359,11 +446,133 @@ const Social = () => {
     }
   };
 
+  const persistGallery = (nextItems) => {
+    setGalleryItems(nextItems);
+    writeGalleryItems(galleryOwnerKey, nextItems);
+  };
+
+  const handleAddGalleryUrl = () => {
+    if (!canManageGallery) return;
+
+    const value = galleryUrlInput.trim();
+    if (!value) return;
+
+    if (!isRenderableMediaUrl(value)) {
+      setGalleryError('Gallery image URL must be a valid http/https URL.');
+      return;
+    }
+
+    if (galleryItems.length >= GALLERY_MAX_ITEMS) {
+      setGalleryError(`Gallery can contain up to ${GALLERY_MAX_ITEMS} images.`);
+      return;
+    }
+
+    const normalized = value.toLowerCase();
+    if (galleryItems.some((item) => String(item.url || '').toLowerCase() === normalized)) {
+      setGalleryUrlInput('');
+      return;
+    }
+
+    const nextItems = [
+      {
+        id: `gallery-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        url: value,
+        votes: {},
+        likes: 0,
+        dislikes: 0,
+        createdAt: new Date().toISOString(),
+      },
+      ...galleryItems,
+    ];
+
+    persistGallery(nextItems);
+    setGalleryUrlInput('');
+    setGalleryError('');
+  };
+
+  const handleUploadGalleryImage = async (event) => {
+    if (!canManageGallery) return;
+
+    const [file] = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setGalleryError('Only image files are supported.');
+      return;
+    }
+
+    if (file.size > GALLERY_MAX_IMAGE_SIZE_BYTES) {
+      setGalleryError('Image file is too large (max 3MB).');
+      return;
+    }
+
+    if (galleryItems.length >= GALLERY_MAX_ITEMS) {
+      setGalleryError(`Gallery can contain up to ${GALLERY_MAX_ITEMS} images.`);
+      return;
+    }
+
+    setGalleryBusy(true);
+    try {
+      const dataUrl = await toDataUrl(file);
+      const nextItems = [
+        {
+          id: `gallery-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          url: dataUrl,
+          votes: {},
+          likes: 0,
+          dislikes: 0,
+          createdAt: new Date().toISOString(),
+          fileName: file.name,
+        },
+        ...galleryItems,
+      ];
+
+      persistGallery(nextItems);
+      setGalleryError('');
+    } catch {
+      setGalleryError('Failed to upload image. Please try again.');
+    } finally {
+      setGalleryBusy(false);
+    }
+  };
+
+  const handleRemoveGalleryImage = (imageId) => {
+    if (!canManageGallery) return;
+    const nextItems = galleryItems.filter((item) => item.id !== imageId);
+    persistGallery(nextItems);
+  };
+
+  const handleGalleryReaction = (imageId, reactionType) => {
+    const nextItems = galleryItems.map((item) => {
+      if (item.id !== imageId) return item;
+
+      const nextVotes = { ...(item.votes || {}) };
+      const existingReaction = nextVotes[galleryActorKey];
+
+      if (existingReaction === reactionType) {
+        delete nextVotes[galleryActorKey];
+      } else {
+        nextVotes[galleryActorKey] = reactionType;
+      }
+
+      const { likes, dislikes } = computeReactionCounts(nextVotes);
+      return {
+        ...item,
+        votes: nextVotes,
+        likes,
+        dislikes,
+      };
+    });
+
+    persistGallery(nextItems);
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg p-6">
         <h2 className="text-2xl font-semibold mb-2">Social</h2>
-        <p className="text-gray-600">
+        <p className="text-blue-100">
           {isAuthenticated
             ? 'Share updates, browse your timeline, and connect with your community.'
             : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
@@ -648,6 +857,102 @@ const Social = () => {
                   </article>
                 );
               })
+            )}
+          </section>
+
+          <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xl font-semibold">Gallery</h3>
+              <span className="text-xs text-gray-500">{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
+            </div>
+
+            {canManageGallery ? (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Add images by URL or upload image files. You can remove your own gallery items any time.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="url"
+                    value={galleryUrlInput}
+                    onChange={(event) => setGalleryUrlInput(event.target.value)}
+                    placeholder="https://example.com/photo.jpg"
+                    className="flex-1 border rounded px-3 py-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddGalleryUrl}
+                    className="border border-blue-600 text-blue-600 px-4 py-2 rounded hover:bg-blue-50"
+                  >
+                    Add URL
+                  </button>
+                </div>
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUploadGalleryImage}
+                    disabled={galleryBusy}
+                  />
+                </label>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600">Browse gallery items and react with like/dislike.</p>
+            )}
+
+            {galleryError ? (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">{galleryError}</div>
+            ) : null}
+
+            {galleryItems.length === 0 ? (
+              <div className="text-sm text-gray-500 border rounded p-4 bg-gray-50">No gallery images yet.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {galleryItems.map((image) => {
+                  const viewerReaction = image.votes?.[galleryActorKey] || null;
+
+                  return (
+                    <article key={image.id} className="border rounded-lg overflow-hidden bg-white">
+                      <img src={image.url} alt="Gallery item" className="w-full h-48 object-cover" />
+                      <div className="p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <button
+                            type="button"
+                            onClick={() => handleGalleryReaction(image.id, 'like')}
+                            className={`px-2 py-1 rounded border ${
+                              viewerReaction === 'like'
+                                ? 'bg-green-600 border-green-600 text-white'
+                                : 'border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            👍 {image.likes || 0}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleGalleryReaction(image.id, 'dislike')}
+                            className={`px-2 py-1 rounded border ${
+                              viewerReaction === 'dislike'
+                                ? 'bg-red-600 border-red-600 text-white'
+                                : 'border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            👎 {image.dislikes || 0}
+                          </button>
+                        </div>
+                        {canManageGallery ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveGalleryImage(image.id)}
+                            className="text-xs text-red-600 hover:text-red-700"
+                          >
+                            Remove image
+                          </button>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             )}
           </section>
         </section>

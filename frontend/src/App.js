@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import PGPTools from './pages/PGPTools';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -142,7 +141,6 @@ function App() {
               {isAuthenticated && !encryptionPasswordRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600">Chat</Link>}
               {isAuthenticated && !encryptionPasswordRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600">Market</Link>}
               {isAuthenticated && !encryptionPasswordRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
-              {!encryptionPasswordRequired && <Link to="/pgp" className="text-gray-600 hover:text-blue-600">PGP Tools</Link>}
               {isAuthenticated ? (
                 <>
                   <Link to="/settings" className="text-gray-600 hover:text-blue-600">User Settings</Link>
@@ -220,14 +218,7 @@ function App() {
                 </ProtectedRoute>
               )}
             />
-            <Route
-              path="/pgp"
-              element={
-                isAuthenticated && encryptionPasswordRequired
-                  ? <Navigate to="/settings" replace />
-                  : <PGPTools />
-              }
-            />
+            <Route path="/pgp" element={<Navigate to="/settings" replace />} />
           </Routes>
         </main>
         

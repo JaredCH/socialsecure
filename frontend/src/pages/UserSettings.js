@@ -54,6 +54,10 @@ function UserSettings({
   const [savingEncryptionPassword, setSavingEncryptionPassword] = useState(false);
   const [encryptionErrorMessage, setEncryptionErrorMessage] = useState('');
   const [encryptionSuccessMessage, setEncryptionSuccessMessage] = useState('');
+  const [pgpPublicKey, setPgpPublicKey] = useState('');
+  const [savingPgpPublicKey, setSavingPgpPublicKey] = useState(false);
+  const [pgpErrorMessage, setPgpErrorMessage] = useState('');
+  const [pgpSuccessMessage, setPgpSuccessMessage] = useState('');
 
   const hasEncryptionPassword = !!encryptionPasswordStatus?.hasEncryptionPassword;
 
@@ -70,6 +74,7 @@ function UserSettings({
       linksText: linksToText(user.links),
       profileTheme: user.profileTheme || 'default'
     });
+    setPgpPublicKey(user.pgpPublicKey || '');
   }, [user]);
 
   const handleChange = (e) => {
@@ -173,6 +178,41 @@ function UserSettings({
       toast.error(message);
     } finally {
       setSavingEncryptionPassword(false);
+    }
+  };
+
+  const handleSavePgpPublicKey = async (e) => {
+    e.preventDefault();
+    setPgpErrorMessage('');
+    setPgpSuccessMessage('');
+
+    const trimmedPublicKey = pgpPublicKey.trim();
+    if (!trimmedPublicKey) {
+      setPgpErrorMessage('Public PGP key is required.');
+      return;
+    }
+
+    if (!trimmedPublicKey.includes('-----BEGIN PGP PUBLIC KEY BLOCK-----')) {
+      setPgpErrorMessage('Please provide a valid PGP public key block.');
+      return;
+    }
+
+    setSavingPgpPublicKey(true);
+    try {
+      await authAPI.setupPGP(trimmedPublicKey);
+      setUser((prev) => ({
+        ...(prev || {}),
+        pgpPublicKey: trimmedPublicKey,
+        hasPGP: true
+      }));
+      setPgpSuccessMessage('Public PGP key saved successfully.');
+      toast.success('Public PGP key saved');
+    } catch (error) {
+      const message = error.response?.data?.error || 'Failed to save public PGP key';
+      setPgpErrorMessage(message);
+      toast.error(message);
+    } finally {
+      setSavingPgpPublicKey(false);
     }
   };
 
@@ -373,6 +413,42 @@ function UserSettings({
 
         <button type="submit" disabled={saving} className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50">
           {saving ? 'Saving...' : 'Save Profile'}
+        </button>
+      </form>
+
+      <form onSubmit={handleSavePgpPublicKey} className="space-y-3 border rounded p-4 bg-gray-50">
+        <h3 className="text-lg font-semibold text-gray-800">Public PGP Key</h3>
+        <p className="text-sm text-gray-600">
+          Add your existing <span className="font-medium">public</span> key so other people can encrypt messages to you.
+          Never paste or upload your private key.
+        </p>
+
+        {pgpErrorMessage ? (
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" role="alert">
+            {pgpErrorMessage}
+          </div>
+        ) : null}
+
+        {pgpSuccessMessage ? (
+          <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3" role="status">
+            {pgpSuccessMessage}
+          </div>
+        ) : null}
+
+        <textarea
+          value={pgpPublicKey}
+          onChange={(e) => setPgpPublicKey(e.target.value)}
+          className="w-full border rounded p-2 font-mono text-xs"
+          rows={8}
+          placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
+        />
+
+        <button
+          type="submit"
+          disabled={savingPgpPublicKey}
+          className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
+        >
+          {savingPgpPublicKey ? 'Saving...' : 'Save Public Key'}
         </button>
       </form>
     </div>

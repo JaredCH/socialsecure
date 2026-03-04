@@ -103,9 +103,11 @@ router.get('/:userId', authenticateToken, async (req, res) => {
     const { userId } = req.params;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
+    const requesterId = String(req.user.userId || '');
+    const targetUserId = String(userId || '');
     
     // Check if requesting user has permission to view this feed
-    if (req.user.userId !== userId) {
+    if (requesterId !== targetUserId) {
       // In a real implementation, check friendship status
       const isFriend = false; // Placeholder - implement friendship check
       if (!isFriend) {
@@ -153,7 +155,8 @@ router.post('/post', [
       longitude,
       mediaUrls: mediaUrlsInput
     } = req.body;
-    const authorId = req.user.userId;
+    const authorId = String(req.user.userId || '');
+    const normalizedTargetFeedId = String(targetFeedId || '');
 
     const mediaUrlsValidation = sanitizeAndValidateMediaUrls(mediaUrlsInput);
     if (!mediaUrlsValidation.ok) {
@@ -170,7 +173,7 @@ router.post('/post', [
     }
     
     // Check permissions (users can post to their own feed or friends' feeds)
-    if (targetFeedId !== authorId) {
+    if (normalizedTargetFeedId !== authorId) {
       // In a real implementation, check if users are friends
       const areFriends = false; // Placeholder - implement friendship check
       if (!areFriends) {
