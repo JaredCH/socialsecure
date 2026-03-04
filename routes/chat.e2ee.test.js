@@ -256,7 +256,7 @@ describe('Chat E2EE boundary hardening', () => {
       messages: [{ _id: 'm1', createdAt: new Date('2024-01-01T00:00:00.000Z') }],
       hasMore: true,
       cursorSource: { _id: 'm1', createdAt: new Date('2024-01-01T00:00:00.000Z') },
-      limit: 200
+      limit: 500
     });
 
     const rawCursor = Buffer.from('2024-01-01T01:00:00.000Z|m9').toString('base64url');
@@ -268,11 +268,44 @@ describe('Chat E2EE boundary hardening', () => {
     expect(response.status).toBe(200);
     expect(ChatMessageMock.getRoomMessagesByCursor).toHaveBeenCalledWith(
       'room-1',
-      expect.objectContaining({ limit: 200 })
+      expect.objectContaining({ limit: 500 })
     );
     expect(response.body.pagination.mode).toBe('cursor');
-    expect(response.body.pagination.limit).toBe(200);
+    expect(response.body.pagination.limit).toBe(500);
     expect(response.body.pagination.hasMore).toBe(true);
     expect(typeof response.body.pagination.nextCursor).toBe('string');
+  });
+
+  it('accepts messageType and commandData for E2EE messages', async () => {
+    const app = buildApp();
+
+    const savedDoc = {
+      save: jest.fn().mockResolvedValue(undefined),
+      populate: jest.fn().mockResolvedValue(undefined),
+      toPublicMessage: jest.fn().mockReturnValue({ _id: 'msg-1', messageType: 'command' })
+    };
+
+    ChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', incrementMessageCount: jest.fn(), addMember: jest.fn() });
+    User.findById.mockResolvedValue({ _id: 'user-1', city: 'City', location: { coordinates: [0, 0] } });
+    DeviceKey.findOne.mockResolvedValue({ _id: 'device-record' });
+    ChatMessageMock.findOne.mockReturnValue(createSelectLean(null));
+    ChatMessageMock.checkRateLimit = jest.fn().mockResolvedValue({ allowed: true, remaining: 1 });
+    ChatMessageMock.mockImplementation(() => savedDoc);
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages/e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({
+        e2ee: validEnvelope,
+        messageType: 'command',
+        commandData: {
+          command: 'msg',
+          targetUsername: 'alice',
+          processedContent: '→ alice: hello'
+        }
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
   });
 });

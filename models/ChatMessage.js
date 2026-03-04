@@ -18,6 +18,48 @@ const chatMessageSchema = new mongoose.Schema({
     trim: true,
     maxlength: 2000
   },
+  messageType: {
+    type: String,
+    enum: ['text', 'action', 'system', 'command'],
+    default: 'text',
+    index: true
+  },
+  commandData: {
+    command: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+      default: null
+    },
+    result: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
+    },
+    processedContent: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+      default: null
+    },
+    targetUserId: {
+      type: String,
+      trim: true,
+      maxlength: 128,
+      default: null
+    },
+    targetUsername: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+      default: null
+    },
+    nickname: {
+      type: String,
+      trim: true,
+      maxlength: 32,
+      default: null
+    }
+  },
   encryptedContent: {
     type: String,
     default: null
@@ -160,6 +202,8 @@ chatMessageSchema.statics.toPublicMessageShape = function(message) {
     userId: message.userId,
     isEncrypted: !!message.isEncrypted,
     isE2EE: !!message?.e2ee?.enabled,
+    messageType: message.messageType || 'text',
+    commandData: message.commandData || null,
     location: message.location,
     createdAt: message.createdAt,
     migrationFlag: message?.e2ee?.migrationFlag || 'legacy',
@@ -199,7 +243,7 @@ chatMessageSchema.statics.toPublicMessageShape = function(message) {
 // Static method to get messages for a room with pagination
 chatMessageSchema.statics.getRoomMessages = async function(roomId, page = 1, limit = 50) {
   const normalizedPage = Math.max(parseInt(page, 10) || 1, 1);
-  const normalizedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+  const normalizedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
   const skip = (normalizedPage - 1) * normalizedLimit;
   
   const messages = await this.find({ roomId })
@@ -213,7 +257,7 @@ chatMessageSchema.statics.getRoomMessages = async function(roomId, page = 1, lim
 };
 
 chatMessageSchema.statics.getRoomMessagesByCursor = async function(roomId, options = {}) {
-  const normalizedLimit = Math.min(Math.max(parseInt(options.limit, 10) || 50, 1), 200);
+  const normalizedLimit = Math.min(Math.max(parseInt(options.limit, 10) || 50, 1), 500);
   const filter = { roomId };
 
   if (options.beforeCreatedAt && options.beforeId) {

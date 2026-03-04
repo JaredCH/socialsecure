@@ -40,7 +40,16 @@ const E2EE_LIMITS = {
 };
 
 const DEFAULT_MESSAGE_LIMIT = 50;
-const MAX_MESSAGE_LIMIT = 200;
+const MAX_MESSAGE_LIMIT = 500;
+const MESSAGE_TYPES = ['text', 'action', 'system', 'command'];
+
+const COMMAND_DATA_LIMITS = {
+  command: 64,
+  processedContent: 2000,
+  targetUserId: 128,
+  targetUsername: 64,
+  nickname: 32
+};
 
 const isSafeString = (value, maxLength) => typeof value === 'string' && value.length > 0 && value.length <= maxLength;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -75,6 +84,70 @@ const decodeMessageCursor = (cursor) => {
   } catch (error) {
     return { error: 'Malformed cursor' };
   }
+};
+
+const isValidMessageType = (messageType) => MESSAGE_TYPES.includes(messageType);
+
+const normalizeMessageType = (messageType) => (isValidMessageType(messageType) ? messageType : 'text');
+
+const sanitizeCommandData = (commandData) => {
+  if (!commandData || typeof commandData !== 'object' || Array.isArray(commandData)) {
+    return null;
+  }
+
+  const sanitized = {};
+
+  if (typeof commandData.command === 'string') {
+    const command = commandData.command.trim().slice(0, COMMAND_DATA_LIMITS.command);
+    if (command) sanitized.command = command;
+  }
+
+  if (typeof commandData.processedContent === 'string') {
+    const processedContent = commandData.processedContent.slice(0, COMMAND_DATA_LIMITS.processedContent);
+    if (processedContent) sanitized.processedContent = processedContent;
+  }
+
+  if (typeof commandData.targetUserId === 'string') {
+    const targetUserId = commandData.targetUserId.trim().slice(0, COMMAND_DATA_LIMITS.targetUserId);
+    if (targetUserId) sanitized.targetUserId = targetUserId;
+  }
+
+  if (typeof commandData.targetUsername === 'string') {
+    const targetUsername = commandData.targetUsername.trim().slice(0, COMMAND_DATA_LIMITS.targetUsername);
+    if (targetUsername) sanitized.targetUsername = targetUsername;
+  }
+
+  if (typeof commandData.nickname === 'string') {
+    const nickname = commandData.nickname.trim().slice(0, COMMAND_DATA_LIMITS.nickname);
+    if (nickname) sanitized.nickname = nickname;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(commandData, 'result')) {
+    sanitized.result = commandData.result;
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : null;
+};
+
+const createRoomEventMessage = async ({ roomId, userId, content, messageType = 'system', commandData = null }) => {
+  const eventMessage = new ChatMessage({
+    roomId,
+    userId,
+    content,
+    encryptedContent: null,
+    isEncrypted: false,
+    messageType: normalizeMessageType(messageType),
+    commandData: sanitizeCommandData(commandData)
+  });
+
+  await eventMessage.save();
+  await eventMessage.populate('userId', 'username realName');
+  return eventMessage;
+};
+
+const isRoomMember = (room, userId) => {
+  if (!room || !Array.isArray(room.members)) return false;
+  return room.members.some((memberId) => String(memberId) === String(userId));
 };
 
 const validateE2EEEnvelope = (envelope) => {
@@ -336,6 +409,8 @@ router.post('/rooms/:roomId/messages', [
   authenticateToken,
   body('content').optional().trim().isLength({ max: 2000 }).withMessage('Message too long'),
   body('encryptedContent').optional().trim(),
+  body('messageType').optional().isIn(MESSAGE_TYPES).withMessage('Invalid message type'),
+  body('commandData').optional().isObject().withMessage('commandData must be an object'),
   body('latitude').optional().isFloat({ min: -90, max: 90 }),
   body('longitude').optional().isFloat({ min: -180, max: 180 })
 ], async (req, res) => {
@@ -346,7 +421,14 @@ router.post('/rooms/:roomId/messages', [
   
   try {
     const { roomId } = req.params;
-    const { content, encryptedContent, latitude, longitude } = req.body;
+    const {
+      content,
+      encryptedContent,
+      messageType,
+      commandData,
+      latitude,
+      longitude
+    } = req.body;
     const userId = req.user.userId;
     
     // Get room
@@ -380,6 +462,8 @@ router.post('/rooms/:roomId/messages', [
       content,
       encryptedContent,
       isEncrypted: !!encryptedContent,
+      messageType: normalizeMessageType(messageType),
+      commandData: sanitizeCommandData(commandData),
       rateLimitKey: userCity === roomCity ? null : `${userId}:${roomId}:external`
     };
     
@@ -429,6 +513,8 @@ router.post('/rooms/:roomId/messages/e2ee', [
   authenticateToken,
   body('content').not().exists().withMessage('Plaintext content is not allowed on E2EE endpoint'),
   body('encryptedContent').not().exists().withMessage('Legacy encryptedContent is not allowed on E2EE endpoint'),
+  body('messageType').optional().isIn(MESSAGE_TYPES).withMessage('Invalid messageType'),
+  body('commandData').optional().isObject().withMessage('commandData must be an object'),
   body('e2ee').custom((value) => {
     const envelopeError = validateE2EEEnvelope(value);
     if (envelopeError) {
@@ -446,7 +532,13 @@ router.post('/rooms/:roomId/messages/e2ee', [
 
   try {
     const { roomId } = req.params;
-    const { e2ee, latitude, longitude } = req.body;
+    const {
+      e2ee,
+      messageType,
+      commandData,
+      latitude,
+      longitude
+    } = req.body;
     const userId = req.user.userId;
 
     const room = await ChatRoom.findById(roomId);
@@ -496,6 +588,8 @@ router.post('/rooms/:roomId/messages/e2ee', [
       content: null,
       encryptedContent: null,
       isEncrypted: true,
+      messageType: normalizeMessageType(messageType),
+      commandData: sanitizeCommandData(commandData),
       rateLimitKey: userCity === roomCity ? null : `${userId}:${roomId}:external`,
       e2ee: {
         enabled: true,
@@ -1095,12 +1189,38 @@ router.post('/rooms/:roomId/join', authenticateToken, async (req, res) => {
     if (!room) {
       return res.status(404).json({ error: 'Chat room not found' });
     }
+
+    const joiningUser = await User.findById(userId).select('username realName').lean();
+    if (!joiningUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const wasMember = isRoomMember(room, userId);
     
     await room.addMember(userId);
+
+    let systemMessage = null;
+    if (!wasMember) {
+      const displayName = joiningUser.username || joiningUser.realName || 'user';
+      const event = await createRoomEventMessage({
+        roomId,
+        userId,
+        content: `${displayName} joined ${room.name || 'the room'}`,
+        messageType: 'system',
+        commandData: {
+          command: 'join',
+          targetUserId: String(joiningUser._id),
+          targetUsername: displayName
+        }
+      });
+      await room.incrementMessageCount();
+      systemMessage = event.toPublicMessage();
+    }
     
     res.json({
       success: true,
       message: 'Joined chat room successfully',
+      systemMessage,
       room: {
         _id: room._id,
         name: room.name,
@@ -1123,12 +1243,38 @@ router.post('/rooms/:roomId/leave', authenticateToken, async (req, res) => {
     if (!room) {
       return res.status(404).json({ error: 'Chat room not found' });
     }
+
+    const leavingUser = await User.findById(userId).select('username realName').lean();
+    if (!leavingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const wasMember = isRoomMember(room, userId);
     
     await room.removeMember(userId);
+
+    let systemMessage = null;
+    if (wasMember) {
+      const displayName = leavingUser.username || leavingUser.realName || 'user';
+      const event = await createRoomEventMessage({
+        roomId,
+        userId,
+        content: `${displayName} left ${room.name || 'the room'}`,
+        messageType: 'system',
+        commandData: {
+          command: 'leave',
+          targetUserId: String(leavingUser._id),
+          targetUsername: displayName
+        }
+      });
+      await room.incrementMessageCount();
+      systemMessage = event.toPublicMessage();
+    }
     
     res.json({
       success: true,
       message: 'Left chat room successfully',
+      systemMessage,
       room: {
         _id: room._id,
         name: room.name,
@@ -1138,6 +1284,50 @@ router.post('/rooms/:roomId/leave', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error leaving room:', error);
     res.status(500).json({ error: 'Failed to leave chat room', details: error.message });
+  }
+});
+
+// List room members for slash /list UX
+router.get('/rooms/:roomId/users', authenticateToken, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const room = await ChatRoom.findById(roomId).select('_id name members').lean();
+
+    if (!room) {
+      return res.status(404).json({ error: 'Chat room not found' });
+    }
+
+    const memberIds = Array.isArray(room.members) ? room.members : [];
+    const users = memberIds.length > 0
+      ? await User.find({ _id: { $in: memberIds } }).select('_id username realName').lean()
+      : [];
+
+    const sortedUsers = users
+      .map((u) => ({
+        _id: u._id,
+        username: u.username || null,
+        realName: u.realName || null
+      }))
+      .sort((a, b) => {
+        const aName = (a.username || a.realName || '').toLowerCase();
+        const bName = (b.username || b.realName || '').toLowerCase();
+        if (aName < bName) return -1;
+        if (aName > bName) return 1;
+        return 0;
+      });
+
+    return res.json({
+      success: true,
+      room: {
+        _id: room._id,
+        name: room.name,
+        memberCount: sortedUsers.length
+      },
+      users: sortedUsers
+    });
+  } catch (error) {
+    console.error('Error listing room users:', error);
+    return res.status(500).json({ error: 'Failed to list room users', details: error.message });
   }
 });
 

@@ -98,13 +98,13 @@ export const galleryAPI = {
 export const chatAPI = {
   getNearbyRooms: (longitude, latitude, maxDistance = 50) => 
     api.get(`/chat/rooms/nearby?longitude=${longitude}&latitude=${latitude}&maxDistance=${maxDistance}`),
-  getRoom: (roomId, page = 1, limit = 50) => 
+  getRoom: (roomId, page = 1, limit = 500) =>
     api.get(`/chat/rooms/${roomId}?page=${page}&limit=${limit}`),
   sendMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages`, data),
   sendE2EEMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages/e2ee`, data),
-  getMessages: (roomId, page = 1, limit = 50) => 
+  getMessages: (roomId, page = 1, limit = 500) =>
     api.get(`/chat/rooms/${roomId}/messages?page=${page}&limit=${limit}`),
-  getMessagesByCursor: (roomId, cursor, limit = 50) => {
+  getMessagesByCursor: (roomId, cursor, limit = 500) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) {
       params.append('cursor', cursor);
@@ -129,6 +129,7 @@ export const chatAPI = {
   },
   joinRoom: (roomId) => api.post(`/chat/rooms/${roomId}/join`),
   leaveRoom: (roomId) => api.post(`/chat/rooms/${roomId}/leave`),
+  getRoomUsers: (roomId) => api.get(`/chat/rooms/${roomId}/users`),
 };
 
 // Location API
