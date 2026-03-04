@@ -180,7 +180,51 @@ export const universalAPI = {
     return api.get(`/universal/search?${params.toString()}`);
   },
   invite: (data) => api.post('/universal/invite', data),
-  invitations: (page = 1, limit = 20) => api.get(`/universal/invitations?page=${page}&limit=${limit}`),
+  invitations: (page = 1, limit = 20, status = null) => {
+    const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
+    if (status) params.append('status', status);
+    return api.get(`/universal/invitations?${params.toString()}`);
+  },
+  // Get referral statistics
+  getReferralStats: () => api.get('/universal/referral-stats'),
+  // Resend invitation
+  resendInvitation: (id) => api.post(`/universal/invitations/${id}/resend`),
+  // Revoke invitation
+  revokeInvitation: (id, reason = '') => api.post(`/universal/invitations/${id}/revoke`, { reason }),
+  // Register by referral code
+  registerByCode: (data) => api.post('/universal/register-by-code', data),
+};
+
+// Friends API
+export const friendsAPI = {
+  // Get all friends
+  getFriends: () => api.get('/friends'),
+  // Get friend count
+  getFriendCount: () => api.get('/friends/count'),
+  // Get incoming friend requests
+  getIncomingRequests: () => api.get('/friends/requests/incoming'),
+  // Get outgoing friend requests
+  getOutgoingRequests: () => api.get('/friends/requests/outgoing'),
+  // Send friend request
+  sendRequest: (userId, message = null) => api.post('/friends/request', { userId, message }),
+  // Accept friend request
+  acceptRequest: (friendshipId) => api.post(`/friends/${friendshipId}/accept`),
+  // Decline friend request
+  declineRequest: (friendshipId) => api.post(`/friends/${friendshipId}/decline`),
+  // Remove/unfriend
+  removeFriend: (friendshipId) => api.delete(`/friends/${friendshipId}`),
+  // Block user
+  blockUser: (friendshipId, reason = null) => api.post(`/friends/${friendshipId}/block`, { reason }),
+  // Get top friends
+  getTopFriends: (userIdOrUsername) => api.get(`/friends/top/${userIdOrUsername}`),
+  // Update top friends order
+  updateTopFriends: (friendIds) => api.put('/friends/top', { friendIds }),
+  // Get privacy settings
+  getPrivacySettings: () => api.get('/friends/privacy'),
+  // Update privacy settings
+  updatePrivacySettings: (data) => api.put('/friends/privacy', data),
+  // Get relationship status
+  getRelationship: (userId) => api.get(`/friends/relationship/${userId}`),
 };
 
 export default api;

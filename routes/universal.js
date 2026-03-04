@@ -68,23 +68,47 @@ router.post('/invite', [
   }
 
   try {
-    const { email, phone } = req.body;
+    const { email, phone, message } = req.body;
+    const ip = req.ip || req.connection.remoteAddress;
+    const deviceFingerprint = req.headers['x-device-fingerprint'] || null;
 
     if (!email && !phone) {
       return res.status(400).json({ error: 'Email or phone is required' });
     }
 
+    // Validate referral (anti-abuse)
+    const validation = await ReferralInvitation.validateReferral(
+      req.user.userId,
+      email,
+      phone,
+      ip,
+      deviceFingerprint
+    );
+
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.errors.join(', ') });
+    }
+
+    // Check for existing user (self-referral)
+    if (email) {
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      if (existingUser) {
+        return res.status(400).json({ error: 'This user is already registered' });
+      }
+    }
+
+    // Check for existing pending invitation
     const existing = await ReferralInvitation.findOne({
       inviterId: req.user.userId,
-      status: 'sent',
+      status: { $in: ['sent', 'opened', 'registered'] },
       $or: [
-        ...(email ? [{ inviteeEmail: email }] : []),
+        ...(email ? [{ inviteeEmail: email.toLowerCase() }] : []),
         ...(phone ? [{ inviteePhone: phone }] : [])
       ]
     });
 
     if (existing) {
-      return res.status(409).json({ error: 'Invitation already sent' });
+      return res.status(409).json({ error: 'Invitation already sent to this user' });
     }
 
     const invitation = new ReferralInvitation({
@@ -92,18 +116,37 @@ router.post('/invite', [
       inviteeEmail: email,
       inviteePhone: phone,
       universalIdHash: ReferralInvitation.generateUniversalIdHash(email, phone),
-      token: ReferralInvitation.generateToken()
+      token: ReferralInvitation.generateToken(),
+      message: message || '',
+      inviterIp: ip,
+      inviterDeviceFingerprint: deviceFingerprint,
+      // Initialize status history
+      statusHistory: [{
+        status: 'sent',
+        changedAt: new Date(),
+        reason: 'Invitation created'
+      }]
     });
 
     await invitation.save();
+
+    // Emit structured log for observability
+    console.log('REFERRAL_INVITE_SENT', {
+      inviterId: req.user.userId,
+      invitationId: invitation._id,
+      invitee: email || phone,
+      timestamp: new Date().toISOString()
+    });
 
     return res.status(201).json({
       success: true,
       invitation: {
         id: invitation._id,
         token: invitation.token,
+        referralCode: invitation.referralCode,
         expiresAt: invitation.expiresAt,
-        inviteUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/register?token=${invitation.token}`
+        inviteUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/register?token=${invitation.token}`,
+        referralLink: `${process.env.CLIENT_URL || 'http://localhost:3000'}/register?ref=${invitation.referralCode}`
       }
     });
   } catch (error) {
@@ -118,14 +161,20 @@ router.get('/invitations', authenticateToken, async (req, res) => {
   try {
     const page = parseInt(req.query.page || '1', 10);
     const limit = parseInt(req.query.limit || '20', 10);
+    const status = req.query.status; // Optional status filter
     const skip = (page - 1) * limit;
 
+    const query = { inviterId: req.user.userId };
+    if (status) {
+      query.status = status;
+    }
+
     const [invitations, total] = await Promise.all([
-      ReferralInvitation.find({ inviterId: req.user.userId })
+      ReferralInvitation.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
-      ReferralInvitation.countDocuments({ inviterId: req.user.userId })
+      ReferralInvitation.countDocuments(query)
     ]);
 
     return res.json({
@@ -146,6 +195,223 @@ router.get('/invitations', authenticateToken, async (req, res) => {
   }
 });
 
+// Get referral statistics for the current user
+router.get('/referral-stats', authenticateToken, async (req, res) => {
+  try {
+    const stats = await ReferralInvitation.getReferralStats(req.user.userId);
+    
+    // Calculate conversion rates
+    const conversionRate = stats.totalInvitations > 0 
+      ? ((stats.registered / stats.totalInvitations) * 100).toFixed(1)
+      : 0;
+    
+    const rewardRate = stats.registered > 0 
+      ? ((stats.rewarded / stats.registered) * 100).toFixed(1)
+      : 0;
+
+    return res.json({
+      success: true,
+      stats: {
+        ...stats,
+        conversionRate: parseFloat(conversionRate),
+        rewardRate: parseFloat(rewardRate)
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to fetch referral stats',
+      details: error.message
+    });
+  }
+});
+
+// Resend invitation
+router.post('/invitations/:id/resend', authenticateToken, async (req, res) => {
+  try {
+    const invitation = await ReferralInvitation.findOne({
+      _id: req.params.id,
+      inviterId: req.user.userId
+    });
+
+    if (!invitation) {
+      return res.status(404).json({ error: 'Invitation not found' });
+    }
+
+    if (invitation.status === 'rewarded') {
+      return res.status(400).json({ error: 'Cannot resend rewarded invitation' });
+    }
+
+    if (invitation.status === 'revoked') {
+      return res.status(400).json({ error: 'Cannot resend revoked invitation' });
+    }
+
+    // Generate new token and reset expiration
+    invitation.token = ReferralInvitation.generateToken();
+    invitation.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    invitation.status = 'sent';
+    invitation.statusHistory.push({
+      status: 'sent',
+      changedAt: new Date(),
+      reason: 'Invitation resent'
+    });
+
+    await invitation.save();
+
+    return res.json({
+      success: true,
+      invitation: {
+        id: invitation._id,
+        token: invitation.token,
+        referralCode: invitation.referralCode,
+        expiresAt: invitation.expiresAt,
+        inviteUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/register?token=${invitation.token}`,
+        referralLink: `${process.env.CLIENT_URL || 'http://localhost:3000'}/register?ref=${invitation.referralCode}`
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to resend invitation',
+      details: error.message
+    });
+  }
+});
+
+// Cancel/Revoke invitation
+router.post('/invitations/:id/revoke', authenticateToken, async (req, res) => {
+  try {
+    const invitation = await ReferralInvitation.findOne({
+      _id: req.params.id,
+      inviterId: req.user.userId
+    });
+
+    if (!invitation) {
+      return res.status(404).json({ error: 'Invitation not found' });
+    }
+
+    if (invitation.status === 'rewarded') {
+      return res.status(400).json({ error: 'Cannot revoke rewarded invitation' });
+    }
+
+    await invitation.markAsRevoked(req.body.reason || 'Revoked by inviter');
+
+    return res.json({
+      success: true,
+      message: 'Invitation revoked'
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to revoke invitation',
+      details: error.message
+    });
+  }
+});
+
+// Track invitation click (for analytics)
+router.get('/track/:token', async (req, res) => {
+  try {
+    const invitation = await ReferralInvitation.findOne({
+      token: req.params.token
+    });
+
+    if (invitation && !invitation.isExpired()) {
+      await invitation.markAsOpened();
+    }
+
+    // Redirect to registration page
+    const redirectUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/register?token=${req.params.token}`;
+    res.redirect(redirectUrl);
+  } catch (error) {
+    // Still redirect even if tracking fails
+    const redirectUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/register?token=${req.params.token}`;
+    res.redirect(redirectUrl);
+  }
+});
+
+// Register via referral code (alternative to token)
+router.post('/register-by-code', [
+  body('realName').trim().notEmpty(),
+  body('username').trim().isLength({ min: 3, max: 30 }),
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 8 }),
+  body('referralCode').trim().notEmpty()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { realName, username, email, password, referralCode } = req.body;
+
+    // Find invitation by referral code
+    const invite = await ReferralInvitation.findOne({
+      referralCode: referralCode.toUpperCase(),
+      status: { $in: ['sent', 'opened'] }
+    });
+
+    if (!invite) {
+      return res.status(404).json({ error: 'Invalid referral code' });
+    }
+
+    if (invite.isExpired()) {
+      return res.status(400).json({ error: 'Referral code expired' });
+    }
+
+    const existing = await User.findOne({
+      $or: [
+        { email: email },
+        { username: username.toLowerCase() }
+      ]
+    });
+
+    if (existing) {
+      return res.status(409).json({ error: 'Username or email already in use' });
+    }
+
+    const user = new User({
+      universalId: invite.universalIdHash,
+      realName,
+      username: username.toLowerCase(),
+      email,
+      passwordHash: password,
+      registrationStatus: 'active',
+      referredBy: invite.inviterId,
+      referralCode: crypto.randomBytes(4).toString('hex').toUpperCase()
+    });
+
+    await user.save();
+    
+    // Update invitation status to registered
+    await invite.markAsRegistered(user._id);
+
+    // Emit structured log
+    console.log('REFERRAL_REGISTERED', {
+      inviterId: invite.inviterId,
+      inviteeId: user._id,
+      invitationId: invite._id,
+      timestamp: new Date().toISOString()
+    });
+
+    const authToken = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+      { expiresIn: '24h' }
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'Account created via referral',
+      user: user.toPublicProfile(),
+      token: authToken
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to register',
+      details: error.message
+    });
+  }
+});
+
 router.post('/accept/:token', [
   body('realName').trim().notEmpty(),
   body('username').trim().isLength({ min: 3, max: 30 }),
@@ -160,7 +426,7 @@ router.post('/accept/:token', [
   try {
     const invite = await ReferralInvitation.findOne({
       token: req.params.token,
-      status: 'sent'
+      status: { $in: ['sent', 'opened'] }
     });
 
     if (!invite) {
@@ -185,16 +451,26 @@ router.post('/accept/:token', [
     const user = new User({
       universalId: invite.universalIdHash,
       realName: req.body.realName,
-      username: req.body.username,
+      username: req.body.username.toLowerCase(),
       email: req.body.email,
       passwordHash: req.body.password,
       registrationStatus: 'active',
       referredBy: invite.inviterId,
-      referralCode: crypto.randomBytes(4).toString('hex')
+      referralCode: crypto.randomBytes(4).toString('hex').toUpperCase()
     });
 
     await user.save();
-    await invite.markAsAccepted();
+    
+    // Update invitation status to registered
+    await invite.markAsRegistered(user._id);
+
+    // Emit structured log
+    console.log('REFERRAL_REGISTERED', {
+      inviterId: invite.inviterId,
+      inviteeId: user._id,
+      invitationId: invite._id,
+      timestamp: new Date().toISOString()
+    });
 
     const authToken = jwt.sign(
       { userId: user._id },

@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { useLocation } from 'react-router-dom';
 import { authAPI } from '../utils/api';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
+import FriendsManager from '../components/FriendsManager';
 
 const PROFILE_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
@@ -655,6 +656,11 @@ function UserSettings({
           {savingPgpPublicKey ? 'Saving...' : 'Save Public Key'}
         </button>
       </form>
+
+      {/* Friends Management Section */}
+      <div className="mt-8">
+        <FriendsManager currentUser={user} onUserUpdate={setUser} />
+      </div>
     </div>
   );
 }

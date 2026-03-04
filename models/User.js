@@ -111,6 +111,22 @@ const userSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  // Friend system privacy settings
+  friendListPrivacy: {
+    type: String,
+    enum: ['public', 'friends', 'private'],
+    default: 'friends'
+  },
+  topFriendsPrivacy: {
+    type: String,
+    enum: ['public', 'friends', 'private'],
+    default: 'public'
+  },
+  // Friend count (cached for performance)
+  friendCount: {
+    type: Number,
+    default: 0
+  },
   createdAt: {
     type: Date,
     default: Date.now

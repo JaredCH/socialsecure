@@ -101,6 +101,7 @@ app.use('/api/chat', require('./routes/chat'));
 app.use('/api/market', require('./routes/market'));
 app.use('/api/location', require('./routes/location'));
 app.use('/api/universal', require('./routes/universal'));
+app.use('/api/friends', require('./routes/friends'));
 
 if (isProduction) {
   const frontendBuildPath = path.join(__dirname, 'frontend', 'build');
