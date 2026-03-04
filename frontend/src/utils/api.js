@@ -65,6 +65,35 @@ export const feedAPI = {
   getPost: (postId) => api.get(`/feed/post/${postId}`),
 };
 
+// Gallery API
+export const galleryAPI = {
+  getGallery: (ownerIdOrUsername, page = 1, limit = 20) =>
+    api.get(`/gallery/${encodeURIComponent(ownerIdOrUsername)}?page=${page}&limit=${limit}`),
+  createGalleryItem: (ownerIdOrUsername, data) =>
+    api.post(`/gallery/${encodeURIComponent(ownerIdOrUsername)}`, data),
+  uploadGalleryItem: (ownerIdOrUsername, file, caption = '') => {
+    const formData = new FormData();
+    formData.append('image', file);
+    if (caption) {
+      formData.append('caption', caption);
+    }
+
+    return api.post(`/gallery/${encodeURIComponent(ownerIdOrUsername)}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  updateGalleryItem: (ownerIdOrUsername, imageId, data) =>
+    api.patch(`/gallery/${encodeURIComponent(ownerIdOrUsername)}/${encodeURIComponent(imageId)}`, data),
+  deleteGalleryItem: (ownerIdOrUsername, imageId) =>
+    api.delete(`/gallery/${encodeURIComponent(ownerIdOrUsername)}/${encodeURIComponent(imageId)}`),
+  reactToGalleryImage: (ownerIdOrUsername, imageId, type) =>
+    api.post(`/gallery/${encodeURIComponent(ownerIdOrUsername)}/${encodeURIComponent(imageId)}/reaction`, {
+      type,
+    }),
+};
+
 // Chat API
 export const chatAPI = {
   getNearbyRooms: (longitude, latitude, maxDistance = 50) => 

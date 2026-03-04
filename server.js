@@ -62,6 +62,7 @@ app.use('/api/', limiter);
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // MongoDB connection
 const mongoUri = cleanEnv(process.env.MONGODB_URI)
@@ -94,6 +95,7 @@ app.get('/', (req, res, next) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/feed', require('./routes/feed'));
+app.use('/api/gallery', require('./routes/gallery'));
 app.use('/api/public', require('./routes/public'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/market', require('./routes/market'));

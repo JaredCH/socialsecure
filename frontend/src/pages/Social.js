@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI, feedAPI } from '../utils/api';
+import { authAPI, feedAPI, galleryAPI } from '../utils/api';
 
 const VISIBILITY_OPTIONS = ['public', 'friends', 'private'];
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
-const GALLERY_STORAGE_KEY = 'socialsecure.gallery.v1';
 const GALLERY_MAX_ITEMS = 24;
 const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 
@@ -117,53 +116,14 @@ const normalizePost = (post) => {
   };
 };
 
-const readGalleryStore = () => {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    const raw = window.localStorage.getItem(GALLERY_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-};
-
-const writeGalleryStore = (store) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(GALLERY_STORAGE_KEY, JSON.stringify(store));
-};
-
-const readGalleryItems = (ownerKey) => {
-  if (!ownerKey) return [];
-  const store = readGalleryStore();
-  const items = store[ownerKey];
-  return Array.isArray(items) ? items : [];
-};
-
-const writeGalleryItems = (ownerKey, items) => {
-  if (!ownerKey) return;
-  const store = readGalleryStore();
-  store[ownerKey] = items;
-  writeGalleryStore(store);
-};
-
-const toDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Failed to read file.'));
-    reader.readAsDataURL(file);
-  });
-
-const computeReactionCounts = (votes) => {
-  const values = Object.values(votes || {});
-  return {
-    likes: values.filter((value) => value === 'like').length,
-    dislikes: values.filter((value) => value === 'dislike').length,
-  };
-};
+const normalizeGalleryItem = (item) => ({
+  ...item,
+  likesCount: typeof item?.likesCount === 'number' ? item.likesCount : 0,
+  dislikesCount: typeof item?.dislikesCount === 'number' ? item.dislikesCount : 0,
+  viewerReaction: item?.viewerReaction || null,
+  caption: item?.caption || '',
+  mediaType: item?.mediaType || 'url',
+});
 
 const Social = () => {
   const initialGuestUser = useMemo(() => {
@@ -188,41 +148,76 @@ const Social = () => {
   const [commentInputs, setCommentInputs] = useState({});
   const [actionLoadingByPost, setActionLoadingByPost] = useState({});
   const [galleryItems, setGalleryItems] = useState([]);
+  const [galleryTargetInput, setGalleryTargetInput] = useState(initialGuestUser);
+  const [galleryTarget, setGalleryTarget] = useState(initialGuestUser.trim());
   const [galleryUrlInput, setGalleryUrlInput] = useState('');
+  const [galleryCaptionInput, setGalleryCaptionInput] = useState('');
   const [galleryError, setGalleryError] = useState('');
   const [galleryBusy, setGalleryBusy] = useState(false);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryActionLoadingByImage, setGalleryActionLoadingByImage] = useState({});
+  const [galleryEditById, setGalleryEditById] = useState({});
 
-  const galleryOwnerKey = useMemo(() => {
+  const galleryOwnerIdentifier = useMemo(() => {
+    if (galleryTarget) {
+      return galleryTarget;
+    }
+
     if (isAuthenticated && currentUser?._id) {
-      return `user:${currentUser._id}`;
+      return String(currentUser._id);
     }
 
     if (guestProfile?._id) {
-      return `user:${guestProfile._id}`;
+      return String(guestProfile._id);
     }
 
-    const guestKey = guestUser.trim().toLowerCase();
-    return guestKey ? `guest:${guestKey}` : '';
-  }, [isAuthenticated, currentUser?._id, guestProfile?._id, guestUser]);
+    return guestUser.trim();
+  }, [galleryTarget, isAuthenticated, currentUser?._id, guestProfile?._id, guestUser]);
 
-  const galleryActorKey = useMemo(() => {
-    if (isAuthenticated && currentUser?._id) {
-      return `user:${currentUser._id}`;
-    }
-    return 'guest:anonymous';
-  }, [isAuthenticated, currentUser?._id]);
+  const viewerCanReact = isAuthenticated && Boolean(currentUser?._id);
+  const normalizedGalleryOwnerIdentifier = String(galleryOwnerIdentifier || '').trim().toLowerCase();
+  const normalizedCurrentUserId = String(currentUser?._id || '').trim().toLowerCase();
+  const normalizedCurrentUsername = String(currentUser?.username || '').trim().toLowerCase();
 
-  const canManageGallery = isAuthenticated && Boolean(currentUser?._id);
+  const canManageGallery =
+    viewerCanReact
+    && Boolean(galleryOwnerIdentifier)
+    && (
+      normalizedGalleryOwnerIdentifier === normalizedCurrentUserId
+      || normalizedGalleryOwnerIdentifier === normalizedCurrentUsername
+    );
 
-  useEffect(() => {
-    if (!galleryOwnerKey) {
+  const setGalleryActionLoading = (imageId, value) => {
+    setGalleryActionLoadingByImage((prev) => {
+      if (!value) {
+        const next = { ...prev };
+        delete next[imageId];
+        return next;
+      }
+      return { ...prev, [imageId]: true };
+    });
+  };
+
+  const loadGallery = useCallback(async () => {
+    if (!galleryOwnerIdentifier) {
       setGalleryItems([]);
+      setGalleryError('');
       return;
     }
 
-    setGalleryItems(readGalleryItems(galleryOwnerKey));
+    setGalleryLoading(true);
     setGalleryError('');
-  }, [galleryOwnerKey]);
+    try {
+      const response = await galleryAPI.getGallery(galleryOwnerIdentifier, 1, GALLERY_MAX_ITEMS);
+      const items = Array.isArray(response.data?.items) ? response.data.items : [];
+      setGalleryItems(items.map(normalizeGalleryItem));
+    } catch (error) {
+      setGalleryItems([]);
+      setGalleryError(error.response?.data?.error || 'Failed to load gallery.');
+    } finally {
+      setGalleryLoading(false);
+    }
+  }, [galleryOwnerIdentifier]);
 
   const setPostActionLoading = (postId, value) => {
     setActionLoadingByPost((prev) => {
@@ -293,6 +288,10 @@ const Social = () => {
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  useEffect(() => {
+    loadGallery();
+  }, [loadGallery]);
 
   const handleAddMediaUrl = () => {
     const value = postForm.mediaUrlInput.trim();
@@ -446,13 +445,8 @@ const Social = () => {
     }
   };
 
-  const persistGallery = (nextItems) => {
-    setGalleryItems(nextItems);
-    writeGalleryItems(galleryOwnerKey, nextItems);
-  };
-
-  const handleAddGalleryUrl = () => {
-    if (!canManageGallery) return;
+  const handleAddGalleryUrl = async () => {
+    if (!canManageGallery || !galleryOwnerIdentifier) return;
 
     const value = galleryUrlInput.trim();
     if (!value) return;
@@ -467,31 +461,32 @@ const Social = () => {
       return;
     }
 
-    const normalized = value.toLowerCase();
-    if (galleryItems.some((item) => String(item.url || '').toLowerCase() === normalized)) {
-      setGalleryUrlInput('');
-      return;
-    }
-
-    const nextItems = [
-      {
-        id: `gallery-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        url: value,
-        votes: {},
-        likes: 0,
-        dislikes: 0,
-        createdAt: new Date().toISOString(),
-      },
-      ...galleryItems,
-    ];
-
-    persistGallery(nextItems);
-    setGalleryUrlInput('');
+    setGalleryBusy(true);
     setGalleryError('');
+    try {
+      const response = await galleryAPI.createGalleryItem(galleryOwnerIdentifier, {
+        mediaUrl: value,
+        caption: galleryCaptionInput,
+      });
+
+      const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
+      if (created) {
+        setGalleryItems((prev) => [created, ...prev]);
+      } else {
+        await loadGallery();
+      }
+
+      setGalleryUrlInput('');
+      setGalleryCaptionInput('');
+    } catch (error) {
+      setGalleryError(error.response?.data?.error || 'Failed to add gallery URL.');
+    } finally {
+      setGalleryBusy(false);
+    }
   };
 
   const handleUploadGalleryImage = async (event) => {
-    if (!canManageGallery) return;
+    if (!canManageGallery || !galleryOwnerIdentifier) return;
 
     const [file] = Array.from(event.target.files || []);
     event.target.value = '';
@@ -513,59 +508,133 @@ const Social = () => {
     }
 
     setGalleryBusy(true);
+    setGalleryError('');
     try {
-      const dataUrl = await toDataUrl(file);
-      const nextItems = [
-        {
-          id: `gallery-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          url: dataUrl,
-          votes: {},
-          likes: 0,
-          dislikes: 0,
-          createdAt: new Date().toISOString(),
-          fileName: file.name,
-        },
-        ...galleryItems,
-      ];
+      const response = await galleryAPI.uploadGalleryItem(
+        galleryOwnerIdentifier,
+        file,
+        galleryCaptionInput
+      );
 
-      persistGallery(nextItems);
-      setGalleryError('');
-    } catch {
-      setGalleryError('Failed to upload image. Please try again.');
+      const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
+      if (created) {
+        setGalleryItems((prev) => [created, ...prev]);
+      } else {
+        await loadGallery();
+      }
+
+      setGalleryCaptionInput('');
+    } catch (error) {
+      setGalleryError(error.response?.data?.error || 'Failed to upload image.');
     } finally {
       setGalleryBusy(false);
     }
   };
 
-  const handleRemoveGalleryImage = (imageId) => {
-    if (!canManageGallery) return;
-    const nextItems = galleryItems.filter((item) => item.id !== imageId);
-    persistGallery(nextItems);
+  const handleStartEditGalleryItem = (item) => {
+    setGalleryEditById((prev) => ({
+      ...prev,
+      [item._id]: {
+        mediaUrl: item.mediaType === 'url' ? item.mediaUrl || '' : '',
+        caption: item.caption || '',
+      },
+    }));
   };
 
-  const handleGalleryReaction = (imageId, reactionType) => {
-    const nextItems = galleryItems.map((item) => {
-      if (item.id !== imageId) return item;
+  const handleCancelEditGalleryItem = (imageId) => {
+    setGalleryEditById((prev) => {
+      const next = { ...prev };
+      delete next[imageId];
+      return next;
+    });
+  };
 
-      const nextVotes = { ...(item.votes || {}) };
-      const existingReaction = nextVotes[galleryActorKey];
+  const handleEditGalleryField = (imageId, field, value) => {
+    setGalleryEditById((prev) => ({
+      ...prev,
+      [imageId]: {
+        mediaUrl: prev[imageId]?.mediaUrl || '',
+        caption: prev[imageId]?.caption || '',
+        [field]: value,
+      },
+    }));
+  };
 
-      if (existingReaction === reactionType) {
-        delete nextVotes[galleryActorKey];
-      } else {
-        nextVotes[galleryActorKey] = reactionType;
+  const handleSaveGalleryItem = async (item) => {
+    if (!canManageGallery || !galleryOwnerIdentifier) return;
+
+    const editState = galleryEditById[item._id];
+    if (!editState) return;
+
+    setGalleryActionLoading(item._id, true);
+    setGalleryError('');
+    try {
+      const payload = { caption: editState.caption || '' };
+      if (item.mediaType === 'url') {
+        payload.mediaUrl = editState.mediaUrl || '';
       }
 
-      const { likes, dislikes } = computeReactionCounts(nextVotes);
-      return {
-        ...item,
-        votes: nextVotes,
-        likes,
-        dislikes,
-      };
-    });
+      const response = await galleryAPI.updateGalleryItem(galleryOwnerIdentifier, item._id, payload);
+      const updated = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
 
-    persistGallery(nextItems);
+      if (updated) {
+        setGalleryItems((prev) => prev.map((image) => (image._id === item._id ? updated : image)));
+      } else {
+        await loadGallery();
+      }
+
+      handleCancelEditGalleryItem(item._id);
+    } catch (error) {
+      setGalleryError(error.response?.data?.error || 'Failed to update gallery image.');
+    } finally {
+      setGalleryActionLoading(item._id, false);
+    }
+  };
+
+  const handleRemoveGalleryImage = async (imageId) => {
+    if (!canManageGallery || !galleryOwnerIdentifier) return;
+
+    setGalleryActionLoading(imageId, true);
+    setGalleryError('');
+    try {
+      await galleryAPI.deleteGalleryItem(galleryOwnerIdentifier, imageId);
+      setGalleryItems((prev) => prev.filter((item) => item._id !== imageId));
+      handleCancelEditGalleryItem(imageId);
+    } catch (error) {
+      setGalleryError(error.response?.data?.error || 'Failed to remove gallery image.');
+    } finally {
+      setGalleryActionLoading(imageId, false);
+    }
+  };
+
+  const handleGalleryReaction = async (imageId, reactionType) => {
+    if (!viewerCanReact || !galleryOwnerIdentifier) return;
+
+    setGalleryActionLoading(imageId, true);
+    setGalleryError('');
+    try {
+      const response = await galleryAPI.reactToGalleryImage(galleryOwnerIdentifier, imageId, reactionType);
+      const viewerReaction = response.data?.reaction || null;
+      const likesCount = typeof response.data?.likesCount === 'number' ? response.data.likesCount : 0;
+      const dislikesCount = typeof response.data?.dislikesCount === 'number' ? response.data.dislikesCount : 0;
+
+      setGalleryItems((prev) =>
+        prev.map((item) =>
+          item._id === imageId
+            ? {
+                ...item,
+                viewerReaction,
+                likesCount,
+                dislikesCount,
+              }
+            : item
+        )
+      );
+    } catch (error) {
+      setGalleryError(error.response?.data?.error || 'Failed to update gallery reaction.');
+    } finally {
+      setGalleryActionLoading(imageId, false);
+    }
   };
 
   return (
@@ -873,6 +942,63 @@ const Social = () => {
               <span className="text-xs text-gray-500">{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
             </div>
 
+            {!isAuthenticated && (
+              <div className="space-y-2 border rounded-lg p-3 bg-gray-50">
+                <p className="text-sm text-gray-600">Choose a profile to browse gallery media.</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={galleryTargetInput}
+                    onChange={(event) => setGalleryTargetInput(event.target.value)}
+                    placeholder="username or user ID"
+                    className="flex-1 border rounded px-3 py-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setGalleryTarget(galleryTargetInput.trim())}
+                    disabled={galleryBusy || galleryLoading}
+                    className="border border-gray-300 px-4 py-2 rounded hover:bg-gray-100 disabled:opacity-60"
+                  >
+                    Load Gallery
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isAuthenticated && (
+              <div className="space-y-2 border rounded-lg p-3 bg-gray-50">
+                <p className="text-sm text-gray-600">Viewing gallery for your account by default. You can view another user gallery by username or user ID.</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={galleryTargetInput}
+                    onChange={(event) => setGalleryTargetInput(event.target.value)}
+                    placeholder="leave blank for my gallery, or enter username/user ID"
+                    className="flex-1 border rounded px-3 py-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setGalleryTarget(galleryTargetInput.trim())}
+                    disabled={galleryBusy || galleryLoading}
+                    className="border border-gray-300 px-4 py-2 rounded hover:bg-gray-100 disabled:opacity-60"
+                  >
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGalleryTargetInput('');
+                      setGalleryTarget('');
+                    }}
+                    disabled={galleryBusy || galleryLoading}
+                    className="border border-gray-300 px-4 py-2 rounded hover:bg-gray-100 disabled:opacity-60"
+                  >
+                    My Gallery
+                  </button>
+                </div>
+              </div>
+            )}
+
             {canManageGallery ? (
               <div className="space-y-3">
                 <p className="text-sm text-gray-600">
@@ -889,11 +1015,20 @@ const Social = () => {
                   <button
                     type="button"
                     onClick={handleAddGalleryUrl}
+                    disabled={galleryBusy}
                     className="border border-blue-600 text-blue-600 px-4 py-2 rounded hover:bg-blue-50"
                   >
-                    Add URL
+                    {galleryBusy ? 'Adding...' : 'Add URL'}
                   </button>
                 </div>
+                <input
+                  type="text"
+                  value={galleryCaptionInput}
+                  onChange={(event) => setGalleryCaptionInput(event.target.value)}
+                  placeholder="Optional caption"
+                  maxLength={280}
+                  className="w-full border rounded px-3 py-2"
+                />
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700">
                   <input
                     type="file"
@@ -911,49 +1046,120 @@ const Social = () => {
               <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">{galleryError}</div>
             ) : null}
 
-            {galleryItems.length === 0 ? (
+            {galleryLoading ? (
+              <div className="text-sm text-gray-500 border rounded p-4 bg-gray-50">Loading gallery...</div>
+            ) : galleryItems.length === 0 ? (
               <div className="text-sm text-gray-500 border rounded p-4 bg-gray-50">No gallery images yet.</div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {galleryItems.map((image) => {
-                  const viewerReaction = image.votes?.[galleryActorKey] || null;
+                  const viewerReaction = image.viewerReaction || null;
+                  const imageBusy = Boolean(galleryActionLoadingByImage[image._id]);
+                  const editState = galleryEditById[image._id] || null;
 
                   return (
-                    <article key={image.id} className="border rounded-lg overflow-hidden bg-white">
-                      <img src={image.url} alt="Gallery item" className="w-full h-48 object-cover" />
+                    <article key={image._id} className="border rounded-lg overflow-hidden bg-white">
+                      <img src={image.mediaUrl} alt="Gallery item" className="w-full h-48 object-cover" />
                       <div className="p-3 space-y-2">
+                        {image.caption ? (
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{image.caption}</p>
+                        ) : null}
+
                         <div className="flex items-center gap-2 text-sm">
                           <button
                             type="button"
-                            onClick={() => handleGalleryReaction(image.id, 'like')}
+                            onClick={() => handleGalleryReaction(image._id, 'like')}
+                            disabled={!viewerCanReact || imageBusy}
                             className={`px-2 py-1 rounded border ${
                               viewerReaction === 'like'
                                 ? 'bg-green-600 border-green-600 text-white'
                                 : 'border-gray-300 hover:bg-gray-50'
                             }`}
                           >
-                            👍 {image.likes || 0}
+                            👍 {image.likesCount || 0}
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleGalleryReaction(image.id, 'dislike')}
+                            onClick={() => handleGalleryReaction(image._id, 'dislike')}
+                            disabled={!viewerCanReact || imageBusy}
                             className={`px-2 py-1 rounded border ${
                               viewerReaction === 'dislike'
                                 ? 'bg-red-600 border-red-600 text-white'
                                 : 'border-gray-300 hover:bg-gray-50'
                             }`}
                           >
-                            👎 {image.dislikes || 0}
+                            👎 {image.dislikesCount || 0}
                           </button>
                         </div>
+
+                        {!viewerCanReact ? (
+                          <p className="text-xs text-gray-500">Sign in to react.</p>
+                        ) : null}
+
                         {canManageGallery ? (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveGalleryImage(image.id)}
-                            className="text-xs text-red-600 hover:text-red-700"
-                          >
-                            Remove image
-                          </button>
+                          <div className="space-y-2 border-t pt-2">
+                            {editState ? (
+                              <div className="space-y-2">
+                                {image.mediaType === 'url' ? (
+                                  <input
+                                    type="url"
+                                    value={editState.mediaUrl}
+                                    onChange={(event) =>
+                                      handleEditGalleryField(image._id, 'mediaUrl', event.target.value)
+                                    }
+                                    placeholder="https://example.com/photo.jpg"
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                  />
+                                ) : null}
+                                <input
+                                  type="text"
+                                  value={editState.caption}
+                                  onChange={(event) =>
+                                    handleEditGalleryField(image._id, 'caption', event.target.value)
+                                  }
+                                  placeholder="Caption"
+                                  maxLength={280}
+                                  className="w-full border rounded px-2 py-1 text-sm"
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveGalleryItem(image)}
+                                    disabled={imageBusy}
+                                    className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCancelEditGalleryItem(image._id)}
+                                    disabled={imageBusy}
+                                    className="text-xs px-2 py-1 rounded border hover:bg-gray-50"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditGalleryItem(image)}
+                                disabled={imageBusy}
+                                className="text-xs text-blue-600 hover:text-blue-700"
+                              >
+                                Edit image
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveGalleryImage(image._id)}
+                              disabled={imageBusy}
+                              className="text-xs text-red-600 hover:text-red-700 disabled:opacity-60"
+                            >
+                              Remove image
+                            </button>
+                          </div>
                         ) : null}
                       </div>
                     </article>
