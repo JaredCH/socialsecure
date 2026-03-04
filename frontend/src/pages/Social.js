@@ -570,13 +570,20 @@ const Social = () => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg p-6">
-        <h2 className="text-2xl font-semibold mb-2">Social</h2>
-        <p className="text-blue-100">
-          {isAuthenticated
-            ? 'Share updates, browse your timeline, and connect with your community.'
-            : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
-        </p>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-700 to-violet-700 p-5 text-white shadow-lg ring-1 ring-white/20 sm:p-6 md:p-8">
+        <div className="max-w-3xl space-y-2 sm:space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100/95">
+            Community Hub
+          </p>
+          <h2 className="text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
+            Social
+          </h2>
+          <p className="text-sm leading-relaxed text-white/95 sm:text-base">
+            {isAuthenticated
+              ? 'Share updates, browse your timeline, and connect with your community.'
+              : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
