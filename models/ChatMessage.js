@@ -26,6 +26,93 @@ const chatMessageSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  e2ee: {
+    enabled: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    migrationFlag: {
+      type: String,
+      enum: ['legacy', 'migrated', 'native-e2ee'],
+      default: 'legacy'
+    },
+    version: {
+      type: Number,
+      min: 1,
+      max: 10
+    },
+    senderDeviceId: {
+      type: String,
+      trim: true,
+      maxlength: 128
+    },
+    clientMessageId: {
+      type: String,
+      trim: true,
+      maxlength: 128
+    },
+    keyVersion: {
+      type: Number,
+      min: 1,
+      max: 1000000
+    },
+    nonce: {
+      type: String,
+      maxlength: 4096
+    },
+    aad: {
+      type: String,
+      maxlength: 8192
+    },
+    ciphertext: {
+      type: String,
+      maxlength: 131072
+    },
+    signature: {
+      type: String,
+      maxlength: 16384
+    },
+    ciphertextHash: {
+      type: String,
+      maxlength: 128
+    },
+    algorithms: {
+      cipher: {
+        type: String,
+        trim: true,
+        maxlength: 64
+      },
+      signature: {
+        type: String,
+        trim: true,
+        maxlength: 64
+      },
+      hash: {
+        type: String,
+        trim: true,
+        maxlength: 32
+      }
+    },
+    migratedAt: {
+      type: Date,
+      default: null
+    },
+    plaintextTombstoned: {
+      type: Boolean,
+      default: false
+    },
+    migratedFromMessageFormat: {
+      type: String,
+      enum: ['legacy-plaintext', 'legacy-encrypted-content', null],
+      default: null
+    },
+    migrationActorUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    }
+  },
   location: {
     type: {
       type: String,
@@ -52,20 +139,110 @@ const chatMessageSchema = new mongoose.Schema({
 
 // Index for efficient room message retrieval
 chatMessageSchema.index({ roomId: 1, createdAt: -1 });
+chatMessageSchema.index({ roomId: 1, createdAt: -1, _id: -1 });
 chatMessageSchema.index({ userId: 1, createdAt: -1 });
+chatMessageSchema.index(
+  { 'e2ee.senderDeviceId': 1, 'e2ee.clientMessageId': 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      'e2ee.enabled': true,
+      'e2ee.senderDeviceId': { $exists: true, $type: 'string' },
+      'e2ee.clientMessageId': { $exists: true, $type: 'string' }
+    }
+  }
+);
+
+chatMessageSchema.statics.toPublicMessageShape = function(message) {
+  const base = {
+    _id: message._id,
+    roomId: message.roomId,
+    userId: message.userId,
+    isEncrypted: !!message.isEncrypted,
+    isE2EE: !!message?.e2ee?.enabled,
+    location: message.location,
+    createdAt: message.createdAt,
+    migrationFlag: message?.e2ee?.migrationFlag || 'legacy',
+    plaintextTombstoned: !!message?.e2ee?.plaintextTombstoned,
+    migratedAt: message?.e2ee?.migratedAt || null,
+    migratedFromMessageFormat: message?.e2ee?.migratedFromMessageFormat || null
+  };
+
+  if (message?.e2ee?.enabled) {
+    return {
+      ...base,
+      content: null,
+      e2ee: {
+        version: message.e2ee.version,
+        senderDeviceId: message.e2ee.senderDeviceId,
+        clientMessageId: message.e2ee.clientMessageId,
+        keyVersion: message.e2ee.keyVersion,
+        nonce: message.e2ee.nonce,
+        aad: message.e2ee.aad,
+        ciphertext: message.e2ee.ciphertext,
+        signature: message.e2ee.signature,
+        ciphertextHash: message.e2ee.ciphertextHash,
+        migratedAt: message.e2ee.migratedAt,
+        plaintextTombstoned: !!message.e2ee.plaintextTombstoned,
+        migratedFromMessageFormat: message.e2ee.migratedFromMessageFormat,
+        algorithms: message.e2ee.algorithms
+      }
+    };
+  }
+
+  return {
+    ...base,
+    content: message.isEncrypted ? '[Encrypted message]' : message.content
+  };
+};
 
 // Static method to get messages for a room with pagination
 chatMessageSchema.statics.getRoomMessages = async function(roomId, page = 1, limit = 50) {
-  const skip = (page - 1) * limit;
+  const normalizedPage = Math.max(parseInt(page, 10) || 1, 1);
+  const normalizedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+  const skip = (normalizedPage - 1) * normalizedLimit;
   
   const messages = await this.find({ roomId })
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(limit)
+    .limit(normalizedLimit)
     .populate('userId', 'username realName')
     .lean();
   
-  return messages.reverse(); // Return in chronological order
+  return messages.reverse().map((message) => this.toPublicMessageShape(message)); // Return in chronological order
+};
+
+chatMessageSchema.statics.getRoomMessagesByCursor = async function(roomId, options = {}) {
+  const normalizedLimit = Math.min(Math.max(parseInt(options.limit, 10) || 50, 1), 200);
+  const filter = { roomId };
+
+  if (options.beforeCreatedAt && options.beforeId) {
+    filter.$or = [
+      { createdAt: { $lt: options.beforeCreatedAt } },
+      { createdAt: options.beforeCreatedAt, _id: { $lt: options.beforeId } }
+    ];
+  }
+
+  const docs = await this.find(filter)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(normalizedLimit + 1)
+    .populate('userId', 'username realName')
+    .lean();
+
+  const hasMore = docs.length > normalizedLimit;
+  if (hasMore) {
+    docs.pop();
+  }
+
+  const cursorSource = docs[docs.length - 1] || null;
+  const messages = docs.reverse().map((message) => this.toPublicMessageShape(message));
+
+  return {
+    messages,
+    hasMore,
+    cursorSource,
+    limit: normalizedLimit
+  };
 };
 
 // Static method to check rate limit for user in non-resident city
@@ -93,15 +270,7 @@ chatMessageSchema.statics.checkRateLimit = async function(userId, roomId, userCi
 
 // Method to get public representation (hides encrypted content)
 chatMessageSchema.methods.toPublicMessage = function() {
-  return {
-    _id: this._id,
-    roomId: this.roomId,
-    userId: this.userId,
-    content: this.isEncrypted ? '[Encrypted message]' : this.content,
-    isEncrypted: this.isEncrypted,
-    location: this.location,
-    createdAt: this.createdAt
-  };
+  return this.constructor.toPublicMessageShape(this);
 };
 
 module.exports = mongoose.model('ChatMessage', chatMessageSchema);

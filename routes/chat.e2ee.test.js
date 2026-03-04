@@ -1,0 +1,278 @@
+const request = require('supertest');
+const express = require('express');
+
+jest.mock('jsonwebtoken', () => ({
+  verify: jest.fn()
+}));
+
+const ChatRoom = { findById: jest.fn() };
+const DeviceKey = { findOne: jest.fn() };
+const User = { findById: jest.fn() };
+const RoomKeyPackage = {};
+
+const createSelectLean = (value) => ({
+  select: jest.fn().mockReturnValue({
+    lean: jest.fn().mockResolvedValue(value)
+  })
+});
+
+const ChatMessageMock = jest.fn();
+ChatMessageMock.findOne = jest.fn();
+ChatMessageMock.getRoomMessages = jest.fn();
+ChatMessageMock.getRoomMessagesByCursor = jest.fn();
+
+jest.mock('../models/ChatRoom', () => ChatRoom);
+jest.mock('../models/ChatMessage', () => ChatMessageMock);
+jest.mock('../models/DeviceKey', () => DeviceKey);
+jest.mock('../models/RoomKeyPackage', () => RoomKeyPackage);
+jest.mock('../models/User', () => User);
+
+const jwt = require('jsonwebtoken');
+const chatRouter = require('./chat');
+
+const buildApp = () => {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/chat', chatRouter);
+  return app;
+};
+
+const validEnvelope = {
+  version: 1,
+  senderDeviceId: 'device-1',
+  clientMessageId: 'client-1',
+  keyVersion: 1,
+  nonce: 'bm9uY2U',
+  aad: '',
+  ciphertext: 'Y2lwaGVydGV4dA',
+  signature: 'c2lnbmF0dXJl',
+  ciphertextHash: 'a'.repeat(64),
+  algorithms: {
+    cipher: 'xchacha20poly1305',
+    signature: 'ed25519',
+    hash: 'sha256'
+  }
+};
+
+describe('Chat E2EE boundary hardening', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'user-1' }));
+  });
+
+  it('rejects plaintext on E2EE message endpoint', async () => {
+    const app = buildApp();
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages/e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({
+        content: 'plaintext',
+        e2ee: validEnvelope
+      });
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(response.body)).toContain('Plaintext content is not allowed on E2EE endpoint');
+  });
+
+  it('rejects malformed/tampered envelope hash', async () => {
+    const app = buildApp();
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages/e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({
+        e2ee: {
+          ...validEnvelope,
+          ciphertextHash: 'NOT_HEX'
+        }
+      });
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(response.body)).toContain('ciphertextHash must be a hex digest');
+  });
+
+  it('enforces sender device ownership on E2EE message endpoint', async () => {
+    const app = buildApp();
+
+    ChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', incrementMessageCount: jest.fn(), addMember: jest.fn() });
+    User.findById.mockResolvedValue({ _id: 'user-1', city: 'City', location: { coordinates: [0, 0] } });
+    DeviceKey.findOne.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages/e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({ e2ee: validEnvelope });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toMatch(/Sender device is not registered/);
+  });
+
+  it('rejects replayed clientMessageId for same sender device', async () => {
+    const app = buildApp();
+
+    ChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', incrementMessageCount: jest.fn(), addMember: jest.fn() });
+    User.findById.mockResolvedValue({ _id: 'user-1', city: 'City', location: { coordinates: [0, 0] } });
+    DeviceKey.findOne.mockResolvedValue({ _id: 'device-record' });
+    ChatMessageMock.findOne.mockReturnValue(createSelectLean({ _id: 'existing-message' }));
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages/e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({ e2ee: validEnvelope });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toMatch(/Duplicate clientMessageId/);
+  });
+
+  it('supports idempotent migration and tombstones plaintext', async () => {
+    const app = buildApp();
+
+    const legacyMessage = {
+      _id: 'message-1',
+      roomId: 'room-1',
+      userId: 'user-1',
+      content: 'legacy plaintext',
+      encryptedContent: null,
+      isEncrypted: false,
+      e2ee: { enabled: false, migrationFlag: 'legacy' },
+      save: jest.fn(async function save() { return this; }),
+      populate: jest.fn(async function populate() { return this; }),
+      toPublicMessage: jest.fn(function toPublicMessage() {
+        return {
+          _id: this._id,
+          content: this.content,
+          isE2EE: !!this?.e2ee?.enabled,
+          migrationFlag: this?.e2ee?.migrationFlag,
+          plaintextTombstoned: !!this?.e2ee?.plaintextTombstoned,
+          migratedFromMessageFormat: this?.e2ee?.migratedFromMessageFormat || null
+        };
+      })
+    };
+
+    ChatRoom.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'room-1' }) });
+    DeviceKey.findOne.mockResolvedValue({ _id: 'device-record' });
+
+    ChatMessageMock.findOne.mockImplementation((query) => {
+      if (query && query._id === 'message-1' && query.roomId === 'room-1') {
+        return Promise.resolve(legacyMessage);
+      }
+      return createSelectLean(null);
+    });
+
+    const first = await request(app)
+      .post('/api/chat/rooms/room-1/messages/message-1/migrate-e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({ e2ee: validEnvelope });
+
+    expect(first.status).toBe(200);
+    expect(first.body.idempotent).toBe(false);
+    expect(legacyMessage.content).toBeNull();
+    expect(legacyMessage.encryptedContent).toBeNull();
+    expect(legacyMessage.e2ee.enabled).toBe(true);
+    expect(legacyMessage.e2ee.migrationFlag).toBe('migrated');
+    expect(legacyMessage.e2ee.plaintextTombstoned).toBe(true);
+    expect(legacyMessage.e2ee.migratedFromMessageFormat).toBe('legacy-plaintext');
+
+    const second = await request(app)
+      .post('/api/chat/rooms/room-1/messages/message-1/migrate-e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({ e2ee: validEnvelope });
+
+    expect(second.status).toBe(200);
+    expect(second.body.idempotent).toBe(true);
+  });
+
+  it('prevents migration by non-sender', async () => {
+    const app = buildApp();
+
+    ChatRoom.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'room-1' }) });
+    ChatMessageMock.findOne.mockResolvedValue({
+      _id: 'message-2',
+      roomId: 'room-1',
+      userId: 'different-user'
+    });
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages/message-2/migrate-e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({ e2ee: validEnvelope });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toMatch(/original sender/);
+  });
+
+  it('rejects plaintext fields on migration endpoint', async () => {
+    const app = buildApp();
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages/message-4/migrate-e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({
+        content: 'legacy plaintext should not be re-sent',
+        e2ee: validEnvelope
+      });
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(response.body)).toContain('Plaintext content is not allowed on migration endpoint');
+  });
+
+  it('enforces sender device ownership on migration endpoint', async () => {
+    const app = buildApp();
+
+    const legacyMessage = {
+      _id: 'message-3',
+      roomId: 'room-1',
+      userId: 'user-1',
+      content: 'legacy plaintext',
+      encryptedContent: null,
+      isEncrypted: false,
+      e2ee: { enabled: false, migrationFlag: 'legacy' }
+    };
+
+    ChatRoom.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'room-1' }) });
+    DeviceKey.findOne.mockResolvedValue(null);
+    ChatMessageMock.findOne.mockImplementation((query) => {
+      if (query && query._id === 'message-3' && query.roomId === 'room-1') {
+        return Promise.resolve(legacyMessage);
+      }
+      return createSelectLean(null);
+    });
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages/message-3/migrate-e2ee')
+      .set('Authorization', 'Bearer token')
+      .send({ e2ee: validEnvelope });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toMatch(/Sender device is not registered/);
+  });
+
+  it('supports cursor pagination contract with bounded limit', async () => {
+    const app = buildApp();
+
+    ChatRoom.findById.mockResolvedValue({ _id: 'room-1', name: 'Room', type: 'city', city: 'City' });
+    ChatMessageMock.getRoomMessagesByCursor.mockResolvedValue({
+      messages: [{ _id: 'm1', createdAt: new Date('2024-01-01T00:00:00.000Z') }],
+      hasMore: true,
+      cursorSource: { _id: 'm1', createdAt: new Date('2024-01-01T00:00:00.000Z') },
+      limit: 200
+    });
+
+    const rawCursor = Buffer.from('2024-01-01T01:00:00.000Z|m9').toString('base64url');
+
+    const response = await request(app)
+      .get(`/api/chat/rooms/room-1/messages?cursor=${encodeURIComponent(rawCursor)}&limit=999`)
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(ChatMessageMock.getRoomMessagesByCursor).toHaveBeenCalledWith(
+      'room-1',
+      expect.objectContaining({ limit: 200 })
+    );
+    expect(response.body.pagination.mode).toBe('cursor');
+    expect(response.body.pagination.limit).toBe(200);
+    expect(response.body.pagination.hasMore).toBe(true);
+    expect(typeof response.body.pagination.nextCursor).toBe('string');
+  });
+});

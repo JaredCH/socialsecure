@@ -69,8 +69,32 @@ export const chatAPI = {
   getRoom: (roomId, page = 1, limit = 50) => 
     api.get(`/chat/rooms/${roomId}?page=${page}&limit=${limit}`),
   sendMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages`, data),
+  sendE2EEMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages/e2ee`, data),
   getMessages: (roomId, page = 1, limit = 50) => 
     api.get(`/chat/rooms/${roomId}/messages?page=${page}&limit=${limit}`),
+  getMessagesByCursor: (roomId, cursor, limit = 50) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) {
+      params.append('cursor', cursor);
+    }
+    return api.get(`/chat/rooms/${roomId}/messages?${params.toString()}`);
+  },
+  migrateMessageToE2EE: (roomId, messageId, data) =>
+    api.post(`/chat/rooms/${roomId}/messages/${messageId}/migrate-e2ee`, data),
+  registerDeviceKeys: (data) => api.post('/chat/devices/keys', data),
+  revokeDeviceKey: (deviceId) => api.delete(`/chat/devices/keys/${encodeURIComponent(deviceId)}`),
+  publishRoomKeyPackages: (roomId, packages) =>
+    api.post(`/chat/rooms/${roomId}/keys/packages`, { packages }),
+  syncRoomKeyPackages: (roomId, deviceId, since, limit = 100) => {
+    const params = new URLSearchParams({
+      deviceId,
+      limit: String(limit)
+    });
+    if (since) {
+      params.append('since', since);
+    }
+    return api.get(`/chat/rooms/${roomId}/keys/packages/sync?${params.toString()}`);
+  },
   joinRoom: (roomId) => api.post(`/chat/rooms/${roomId}/join`),
   leaveRoom: (roomId) => api.post(`/chat/rooms/${roomId}/leave`),
 };
