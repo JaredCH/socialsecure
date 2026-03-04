@@ -30,10 +30,13 @@ SMTP_PORT=587
 JWT_SECRET=REPLACE_WITH_LONG_RANDOM_SECRET
 ```
 
+Optional but fully-declared template lives in `.env.railway.template`.
+
 Notes:
 - Do not put quotes around values.
 - If your Mongo/Redis service names are different, replace `mongodb` and `redis` with your actual Railway service names.
 - Use Railway "Add Variable Reference" if Raw Editor rejects the reference syntax.
+- `REACT_APP_API_URL` is optional now because frontend defaults to same-origin `/api`.
 
 ## 2) Endpoints
 

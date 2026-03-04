@@ -17,7 +17,14 @@ const PORT = process.env.PORT || 5000;
 const nodeEnv = cleanEnv(process.env.NODE_ENV || 'development');
 const isProduction = nodeEnv === 'production';
 
-const configuredOrigins = (cleanEnv(process.env.CLIENT_URL) || 'http://localhost:3000')
+const railwayPublicDomain = cleanEnv(process.env.RAILWAY_PUBLIC_DOMAIN);
+const defaultOrigins = ['http://localhost:3000'];
+if (railwayPublicDomain) {
+  defaultOrigins.push(`https://${railwayPublicDomain}`);
+  defaultOrigins.push(`http://${railwayPublicDomain}`);
+}
+
+const configuredOrigins = (cleanEnv(process.env.CLIENT_URL) || defaultOrigins.join(','))
   .split(',')
   .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean);
@@ -61,6 +68,10 @@ const mongoUri = cleanEnv(process.env.MONGODB_URI)
   || cleanEnv(process.env.MONGO_URL)
   || cleanEnv(process.env.MONGO_PUBLIC_URL)
   || 'mongodb://localhost:27017/socialmedia';
+
+console.log(`Environment: ${nodeEnv}`);
+console.log(`Allowed CORS origins: ${configuredOrigins.join(', ')}`);
+console.log(`Mongo source: ${cleanEnv(process.env.MONGODB_URI) ? 'MONGODB_URI' : cleanEnv(process.env.MONGO_URL) ? 'MONGO_URL' : cleanEnv(process.env.MONGO_PUBLIC_URL) ? 'MONGO_PUBLIC_URL' : 'local-default'}`);
 
 mongoose.connect(mongoUri, {
   useNewUrlParser: true,
