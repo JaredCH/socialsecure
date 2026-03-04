@@ -1331,4 +1331,102 @@ router.get('/rooms/:roomId/users', authenticateToken, async (req, res) => {
   }
 });
 
+// Sync user's location rooms - trigger room creation/joining based on current location
+router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!user.location || !user.location.coordinates) {
+      return res.status(400).json({ error: 'User location not set. Please update your location first.' });
+    }
+    
+    // Sync location rooms
+    const result = await ChatRoom.syncUserLocationRooms(user);
+    
+    // Get all rooms the user is now a member of (including existing ones)
+    const userRooms = await ChatRoom.find({ members: userId })
+      .select('_id name type city state country location radius memberCount lastActivity')
+      .lean();
+    
+    return res.json({
+      success: true,
+      message: `Location rooms synced. ${result.created} new room(s) created.`,
+      createdRooms: result.rooms.map(room => ({
+        _id: room._id,
+        name: room.name,
+        type: room.type
+      })),
+      allRooms: userRooms.map(room => ({
+        _id: room._id,
+        name: room.name,
+        type: room.type,
+        city: room.city,
+        state: room.state,
+        country: room.country,
+        location: room.location,
+        radius: room.radius,
+        memberCount: room.memberCount || (room.members ? room.members.length : 0),
+        lastActivity: room.lastActivity
+      }))
+    });
+  } catch (error) {
+    console.error('Error syncing location rooms:', error);
+    return res.status(500).json({ error: 'Failed to sync location rooms', details: error.message });
+  }
+});
+
+// Get nearby location rooms
+router.get('/rooms/nearby', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { latitude, longitude, radius = 50 } = req.query;
+    
+    let lat, lon;
+    
+    if (latitude && longitude) {
+      lat = parseFloat(latitude);
+      lon = parseFloat(longitude);
+    } else {
+      // Get user's current location
+      const user = await User.findById(userId);
+      if (!user || !user.location || !user.location.coordinates) {
+        return res.status(400).json({ error: 'User location not set. Provide latitude/longitude or update your profile location.' });
+      }
+      [lon, lat] = user.location.coordinates;
+    }
+    
+    const maxRadius = Math.min(Math.max(parseInt(radius, 10) || 50, 1), 200);
+    
+    // Find nearby rooms using geospatial query
+    const nearbyRooms = await ChatRoom.findNearby(lon, lat, maxRadius);
+    
+    return res.json({
+      success: true,
+      location: { latitude: lat, longitude: lon },
+      radius: maxRadius,
+      rooms: nearbyRooms.map(room => ({
+        _id: room._id,
+        name: room.name,
+        type: room.type,
+        city: room.city,
+        state: room.state,
+        country: room.country,
+        location: room.location,
+        radius: room.radius,
+        memberCount: room.memberCount || (room.members ? room.members.length : 0),
+        lastActivity: room.lastActivity,
+        isMember: room.members && room.members.some(m => String(m) === String(userId))
+      }))
+    });
+  } catch (error) {
+    console.error('Error finding nearby rooms:', error);
+    return res.status(500).json({ error: 'Failed to find nearby rooms', details: error.message });
+  }
+});
+
 module.exports = router;

@@ -31,6 +31,7 @@ const chatRoomSchema = new mongoose.Schema({
   city: String,
   state: String,
   country: String,
+  county: String,
   members: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -78,7 +79,7 @@ chatRoomSchema.index({ type: 1, city: 1, state: 1, country: 1 });
 chatRoomSchema.statics.findNearby = function(longitude, latitude, maxDistanceMiles = 50) {
   // Convert miles to radians (approx 1 mile = 1/3959 radians)
   const maxDistanceRadians = maxDistanceMiles / 3959;
-  
+   
   return this.find({
     location: {
       $near: {
@@ -90,6 +91,129 @@ chatRoomSchema.statics.findNearby = function(longitude, latitude, maxDistanceMil
       }
     }
   }).limit(20);
+};
+
+// Static method to find or create a room by location (idempotent)
+chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
+  const { type, city, state, country, county, coordinates, radius = 50 } = locationData;
+  
+  // Build query for existing room
+  const query = { type };
+  if (type === 'city') {
+    query.city = city;
+    query.state = state;
+    query.country = country;
+  } else if (type === 'state') {
+    query.state = state;
+    query.country = country;
+  } else if (type === 'county') {
+    query.state = state;
+    query.country = country;
+    query.county = county;
+  }
+  
+  // Try to find existing room first
+  let room = await this.findOne(query);
+  
+  // If room exists, return it (preserve existing data - idempotent)
+  if (room) {
+    return { room, created: false };
+  }
+  
+  // Create room name based on location type
+  let name;
+  if (type === 'city') {
+    name = city ? `${city}, ${state || ''}` : 'Unknown City';
+  } else if (type === 'state') {
+    name = state || 'Unknown State';
+  } else if (type === 'county') {
+    name = county ? `${county}, ${state || ''}` : 'Unknown County';
+  } else {
+    name = 'Unknown Location';
+  }
+  
+  // Create new room with provided coordinates
+  // Only set metadata on initial creation - preserves existing room data
+  room = new this({
+    name: name.trim(),
+    type,
+    city: type === 'city' ? city : undefined,
+    state,
+    country,
+    county: type === 'county' ? county : undefined,
+    location: {
+      type: 'Point',
+      coordinates: coordinates || [0, 0]
+    },
+    radius,
+    members: [],
+    messageCount: 0,
+    lastActivity: new Date()
+  });
+  
+  await room.save();
+  
+  return { room, created: true };
+};
+
+// Static method to sync user's location rooms
+chatRoomSchema.statics.syncUserLocationRooms = async function(user) {
+  if (!user || !user.location || !user.location.coordinates) {
+    return { rooms: [], created: 0 };
+  }
+  
+  const [longitude, latitude] = user.location.coordinates;
+  const { city, state, country } = user;
+  
+  if (!city && !state && !country) {
+    return { rooms: [], created: 0 };
+  }
+  
+  const createdRooms = [];
+  
+  // Create/find city-level room
+  if (city) {
+    const { room, created } = await this.findOrCreateByLocation({
+      type: 'city',
+      city,
+      state,
+      country,
+      coordinates: [longitude, latitude],
+      radius: 25
+    });
+    
+    // Add user as member if not already
+    if (!room.members.includes(user._id)) {
+      room.members.push(user._id);
+      await room.save();
+    }
+    
+    if (created) createdRooms.push(room);
+  }
+  
+  // Create/find state-level room
+  if (state) {
+    const { room, created } = await this.findOrCreateByLocation({
+      type: 'state',
+      state,
+      country,
+      coordinates: [longitude, latitude],
+      radius: 100
+    });
+    
+    // Add user as member if not already
+    if (!room.members.includes(user._id)) {
+      room.members.push(user._id);
+      await room.save();
+    }
+    
+    if (created) createdRooms.push(room);
+  }
+  
+  return {
+    rooms: createdRooms,
+    created: createdRooms.length
+  };
 };
 
 // Method to add member to room

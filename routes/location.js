@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const NodeGeocoder = require('node-geocoder');
 const User = require('../models/User');
+const ChatRoom = require('../models/ChatRoom');
 
 // Initialize geocoder
 const geocoder = NodeGeocoder({
@@ -83,6 +84,16 @@ router.post('/update', [
     user.updatedAt = new Date();
     await user.save();
     
+    // Sync location rooms for the user (auto-create rooms if needed)
+    let locationRooms = [];
+    try {
+      const roomSyncResult = await ChatRoom.syncUserLocationRooms(user);
+      locationRooms = roomSyncResult.rooms;
+    } catch (roomError) {
+      console.warn('Failed to sync location rooms:', roomError.message);
+      // Continue - location update was successful even if room sync failed
+    }
+    
     res.json({
       success: true,
       message: 'Location updated successfully',
@@ -91,7 +102,12 @@ router.post('/update', [
         city: user.city,
         state: user.state,
         country: user.country
-      }
+      },
+      locationRooms: locationRooms.map(room => ({
+        _id: room._id,
+        name: room.name,
+        type: room.type
+      }))
     });
   } catch (error) {
     console.error('Error updating location:', error);

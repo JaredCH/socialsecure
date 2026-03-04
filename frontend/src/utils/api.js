@@ -130,6 +130,9 @@ export const chatAPI = {
   joinRoom: (roomId) => api.post(`/chat/rooms/${roomId}/join`),
   leaveRoom: (roomId) => api.post(`/chat/rooms/${roomId}/leave`),
   getRoomUsers: (roomId) => api.get(`/chat/rooms/${roomId}/users`),
+  syncLocationRooms: () => api.post('/chat/rooms/sync-location'),
+  getNearbyRooms: (latitude, longitude, radius = 50) =>
+    api.get(`/chat/rooms/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`),
 };
 
 // Location API

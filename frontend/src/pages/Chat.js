@@ -185,7 +185,16 @@ const Chat = () => {
         setProfile(profileData.user || null);
         setLocalNickname(profileData.user?.username || profileData.user?.realName || '');
 
-        const nearby = await chatAPI.getNearbyRooms(location.longitude, location.latitude, 100);
+        // Try to sync location rooms first, then get nearby rooms
+        try {
+          await chatAPI.syncLocationRooms();
+        } catch (syncError) {
+          // Continue even if sync fails - user may not have location set
+          console.warn('Location room sync skipped:', syncError.response?.data?.error);
+        }
+
+        // Get nearby rooms using user's location or browser geolocation
+        const nearby = await chatAPI.getNearbyRooms(location.latitude, location.longitude, 100);
         const roomList = Array.isArray(nearby.data?.rooms) ? nearby.data.rooms : [];
         setRooms(roomList);
         if (roomList.length > 0) {
