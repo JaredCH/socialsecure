@@ -39,7 +39,7 @@ function Register({ onSuccess }) {
       const { data } = await authAPI.register(payload);
       onSuccess(data);
       toast.success('Registration successful');
-      navigate('/profile');
+      navigate('/settings');
     } catch (error) {
       const apiError = error.response?.data;
       const message = apiError?.error || apiError?.errors?.[0]?.msg || 'Registration failed';

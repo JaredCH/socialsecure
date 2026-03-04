@@ -37,6 +37,9 @@ export const authAPI = {
   getProfile: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/profile', data),
   setupPGP: (publicKey) => api.post('/auth/pgp/setup', { publicKey }),
+  getEncryptionPasswordStatus: () => api.get('/auth/encryption-password/status'),
+  setEncryptionPassword: (data) => api.post('/auth/encryption-password/set', data),
+  changeEncryptionPassword: (data) => api.post('/auth/encryption-password/change', data),
 };
 
 // User API

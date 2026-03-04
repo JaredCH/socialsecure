@@ -70,15 +70,18 @@ router.get('/username/:username', authenticateToken, async (req, res) => {
     const { username } = req.params;
     
     const user = await User.findOne({ username: username.toLowerCase() })
-      .select('-passwordHash -pgpPublicKey');
+      .select('-passwordHash -encryptionPasswordHash -pgpPublicKey');
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    const publicUser = user.toPublicProfile();
+    delete publicUser.hasEncryptionPassword;
     
     res.json({
       success: true,
-      user: user.toPublicProfile()
+      user: publicUser
     });
   } catch (error) {
     console.error('Error fetching user:', error);
@@ -92,15 +95,18 @@ router.get('/:userId', authenticateToken, async (req, res) => {
     const { userId } = req.params;
     
     const user = await User.findById(userId)
-      .select('-passwordHash -pgpPublicKey');
+      .select('-passwordHash -encryptionPasswordHash -pgpPublicKey');
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    const publicUser = user.toPublicProfile();
+    delete publicUser.hasEncryptionPassword;
     
     res.json({
       success: true,
-      user: user.toPublicProfile()
+      user: publicUser
     });
   } catch (error) {
     console.error('Error fetching user:', error);

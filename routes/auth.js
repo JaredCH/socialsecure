@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 
 const PROFILE_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
+const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
 
 const isSafeHttpUrl = (value) => {
   try {
@@ -172,7 +174,7 @@ router.get('/me', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
-    const user = await User.findById(decoded.userId).select('-passwordHash');
+    const user = await User.findById(decoded.userId).select('-passwordHash -encryptionPasswordHash');
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -182,6 +184,155 @@ router.get('/me', async (req, res) => {
   } catch (error) {
     console.error('Auth error:', error);
     res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+// Get encryption-password status
+router.get('/encryption-password/status', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const user = await User.findById(decoded.userId).select('encryptionPasswordHash encryptionPasswordSetAt encryptionPasswordVersion');
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      hasEncryptionPassword: !!user.encryptionPasswordHash,
+      encryptionPasswordSetAt: user.encryptionPasswordSetAt || null,
+      encryptionPasswordVersion: user.encryptionPasswordVersion || 0
+    });
+  } catch (error) {
+    console.error('Encryption password status error:', error);
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+// Set initial encryption password
+router.post('/encryption-password/set', [
+  body('encryptionPassword')
+    .isString()
+    .withMessage('Encryption password is required')
+    .isLength({ min: ENCRYPTION_PASSWORD_MIN_LENGTH })
+    .withMessage(`Encryption password must be at least ${ENCRYPTION_PASSWORD_MIN_LENGTH} characters`),
+  body('confirmEncryptionPassword')
+    .isString()
+    .withMessage('Encryption password confirmation is required')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const { encryptionPassword, confirmEncryptionPassword } = req.body;
+    if (encryptionPassword !== confirmEncryptionPassword) {
+      return res.status(400).json({ error: 'Encryption password confirmation does not match' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const user = await User.findById(decoded.userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.encryptionPasswordHash) {
+      return res.status(409).json({ error: 'Encryption password is already set. Use change endpoint.' });
+    }
+
+    user.encryptionPasswordHash = await bcrypt.hash(encryptionPassword, 12);
+    user.encryptionPasswordSetAt = new Date();
+    user.encryptionPasswordVersion = 1;
+    user.updatedAt = new Date();
+    await user.save();
+
+    res.json({
+      message: 'Encryption password set successfully',
+      hasEncryptionPassword: true,
+      encryptionPasswordSetAt: user.encryptionPasswordSetAt,
+      encryptionPasswordVersion: user.encryptionPasswordVersion
+    });
+  } catch (error) {
+    console.error('Set encryption password error:', error);
+    res.status(500).json({ error: 'Failed to set encryption password', details: error.message });
+  }
+});
+
+// Change existing encryption password
+router.post('/encryption-password/change', [
+  body('currentEncryptionPassword')
+    .isString()
+    .withMessage('Current encryption password is required'),
+  body('newEncryptionPassword')
+    .isString()
+    .withMessage('New encryption password is required')
+    .isLength({ min: ENCRYPTION_PASSWORD_MIN_LENGTH })
+    .withMessage(`New encryption password must be at least ${ENCRYPTION_PASSWORD_MIN_LENGTH} characters`),
+  body('confirmNewEncryptionPassword')
+    .isString()
+    .withMessage('New encryption password confirmation is required')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const { currentEncryptionPassword, newEncryptionPassword, confirmNewEncryptionPassword } = req.body;
+    if (newEncryptionPassword !== confirmNewEncryptionPassword) {
+      return res.status(400).json({ error: 'New encryption password confirmation does not match' });
+    }
+    if (currentEncryptionPassword === newEncryptionPassword) {
+      return res.status(400).json({ error: 'New encryption password must be different from current password' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const user = await User.findById(decoded.userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.encryptionPasswordHash) {
+      return res.status(400).json({ error: 'Encryption password is not set. Use set endpoint first.' });
+    }
+
+    const isCurrentPasswordValid = await user.compareEncryptionPassword(currentEncryptionPassword);
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({ error: 'Current encryption password is incorrect' });
+    }
+
+    user.encryptionPasswordHash = await bcrypt.hash(newEncryptionPassword, 12);
+    user.encryptionPasswordSetAt = new Date();
+    user.encryptionPasswordVersion = (user.encryptionPasswordVersion || 1) + 1;
+    user.updatedAt = new Date();
+    await user.save();
+
+    res.json({
+      message: 'Encryption password changed successfully',
+      hasEncryptionPassword: true,
+      encryptionPasswordSetAt: user.encryptionPasswordSetAt,
+      encryptionPasswordVersion: user.encryptionPasswordVersion
+    });
+  } catch (error) {
+    console.error('Change encryption password error:', error);
+    res.status(500).json({ error: 'Failed to change encryption password', details: error.message });
   }
 });
 

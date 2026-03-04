@@ -38,6 +38,19 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  encryptionPasswordHash: {
+    type: String,
+    default: null
+  },
+  encryptionPasswordSetAt: {
+    type: Date,
+    default: null
+  },
+  encryptionPasswordVersion: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   pgpPublicKey: {
     type: String,
     default: null
@@ -126,6 +139,14 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.passwordHash);
 };
 
+// Method to compare encryption password
+userSchema.methods.compareEncryptionPassword = async function(candidatePassword) {
+  if (!this.encryptionPasswordHash) {
+    return false;
+  }
+  return await bcrypt.compare(candidatePassword, this.encryptionPasswordHash);
+};
+
 // Generate universal ID from email/phone hash
 userSchema.statics.generateUniversalId = function(email, phone) {
   const crypto = require('crypto');
@@ -136,6 +157,12 @@ userSchema.statics.generateUniversalId = function(email, phone) {
 
 // Method to get public profile (without sensitive data)
 userSchema.methods.toPublicProfile = function() {
+  const hasEncryptionPassword = Boolean(
+    this.encryptionPasswordHash
+    || this.encryptionPasswordSetAt
+    || (typeof this.encryptionPasswordVersion === 'number' && this.encryptionPasswordVersion > 0)
+  );
+
   return {
     _id: this._id,
     username: this.username,
@@ -150,6 +177,7 @@ userSchema.methods.toPublicProfile = function() {
     country: this.country,
     registrationStatus: this.registrationStatus,
     hasPGP: !!this.pgpPublicKey,
+    hasEncryptionPassword,
     createdAt: this.createdAt
   };
 };
