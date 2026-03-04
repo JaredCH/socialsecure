@@ -218,7 +218,7 @@ function App() {
                 </ProtectedRoute>
               )}
             />
-            <Route path="/pgp" element={<Navigate to="/settings" replace />} />
+            <Route path="/pgp" element={<Navigate to="/settings?deprecated=pgp" replace />} />
           </Routes>
         </main>
         

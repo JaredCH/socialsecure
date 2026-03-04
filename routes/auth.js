@@ -7,6 +7,11 @@ const User = require('../models/User');
 
 const PROFILE_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
+const MAX_PGP_PUBLIC_KEY_LENGTH = 20000;
+const PGP_PUBLIC_KEY_BEGIN = '-----BEGIN PGP PUBLIC KEY BLOCK-----';
+const PGP_PUBLIC_KEY_END = '-----END PGP PUBLIC KEY BLOCK-----';
+const PGP_PRIVATE_KEY_BEGIN = '-----BEGIN PGP PRIVATE KEY BLOCK-----';
+const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
 
 const isSafeHttpUrl = (value) => {
   try {
@@ -33,6 +38,31 @@ const normalizeLinks = (links) => {
       return '';
     })
     .filter(Boolean);
+};
+
+const normalizePgpPublicKey = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.replace(/\r\n/g, '\n').trim();
+};
+
+const getPgpPublicKeyValidationError = (publicKey) => {
+  if (!publicKey) {
+    return 'PGP public key is required';
+  }
+
+  if (publicKey.length > MAX_PGP_PUBLIC_KEY_LENGTH) {
+    return `PGP public key must be at most ${MAX_PGP_PUBLIC_KEY_LENGTH} characters`;
+  }
+
+  if (publicKey.includes(PGP_PRIVATE_KEY_BEGIN) || publicKey.includes(PGP_PRIVATE_KEY_END)) {
+    return 'Private key blocks are not allowed. Please submit only a public key block.';
+  }
+
+  if (!publicKey.includes(PGP_PUBLIC_KEY_BEGIN) || !publicKey.includes(PGP_PUBLIC_KEY_END)) {
+    return 'Invalid PGP public key format. Expected an armored public key block.';
+  }
+
+  return null;
 };
 
 // Generate JWT token
@@ -451,7 +481,7 @@ router.put('/profile', [
 
 // Setup PGP public key
 router.post('/pgp/setup', [
-  body('publicKey').notEmpty().withMessage('PGP public key is required')
+  body('publicKey').isString().withMessage('PGP public key is required')
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -471,14 +501,13 @@ router.post('/pgp/setup', [
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const { publicKey } = req.body;
-    
-    // Basic validation of PGP public key format
-    if (!publicKey.includes('-----BEGIN PGP PUBLIC KEY BLOCK-----')) {
-      return res.status(400).json({ error: 'Invalid PGP public key format' });
+    const normalizedPublicKey = normalizePgpPublicKey(req.body.publicKey);
+    const publicKeyValidationError = getPgpPublicKeyValidationError(normalizedPublicKey);
+    if (publicKeyValidationError) {
+      return res.status(400).json({ error: publicKeyValidationError });
     }
 
-    user.pgpPublicKey = publicKey;
+    user.pgpPublicKey = normalizedPublicKey;
     user.updatedAt = new Date();
     await user.save();
 

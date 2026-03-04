@@ -167,6 +167,7 @@ userSchema.methods.toPublicProfile = function() {
     _id: this._id,
     username: this.username,
     realName: this.realName,
+    pgpPublicKey: this.pgpPublicKey || '',
     bio: this.bio || '',
     avatarUrl: this.avatarUrl || '',
     bannerUrl: this.bannerUrl || '',

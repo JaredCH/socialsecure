@@ -140,5 +140,48 @@ describe('Auth encryption-password endpoints', () => {
     expect(user.encryptionPasswordHash).toBe('new-hashed-encryption-password');
     expect(user.encryptionPasswordVersion).toBe(3);
   });
+
+  it('saves a valid armored public PGP key', async () => {
+    const app = buildApp();
+    const user = {
+      pgpPublicKey: null,
+      save: jest.fn().mockResolvedValue(true)
+    };
+
+    mockUser.findById.mockResolvedValue(user);
+
+    const response = await request(app)
+      .post('/api/auth/pgp/setup')
+      .set('Authorization', 'Bearer token')
+      .send({
+        publicKey: '-----BEGIN PGP PUBLIC KEY BLOCK-----\nabc123\n-----END PGP PUBLIC KEY BLOCK-----'
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.hasPGP).toBe(true);
+    expect(user.pgpPublicKey).toContain('BEGIN PGP PUBLIC KEY BLOCK');
+    expect(user.save).toHaveBeenCalled();
+  });
+
+  it('rejects private PGP key block submission with explicit error', async () => {
+    const app = buildApp();
+    const user = {
+      pgpPublicKey: null,
+      save: jest.fn().mockResolvedValue(true)
+    };
+
+    mockUser.findById.mockResolvedValue(user);
+
+    const response = await request(app)
+      .post('/api/auth/pgp/setup')
+      .set('Authorization', 'Bearer token')
+      .send({
+        publicKey: '-----BEGIN PGP PRIVATE KEY BLOCK-----\nsecret\n-----END PGP PRIVATE KEY BLOCK-----'
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/private key blocks are not allowed/i);
+    expect(user.save).not.toHaveBeenCalled();
+  });
 });
 
