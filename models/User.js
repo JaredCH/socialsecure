@@ -42,6 +42,33 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  bio: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: ''
+  },
+  avatarUrl: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: ''
+  },
+  bannerUrl: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: ''
+  },
+  links: {
+    type: [String],
+    default: []
+  },
+  profileTheme: {
+    type: String,
+    enum: ['default', 'light', 'dark', 'sunset', 'forest'],
+    default: 'default'
+  },
   location: {
     type: {
       type: String,
@@ -113,6 +140,11 @@ userSchema.methods.toPublicProfile = function() {
     _id: this._id,
     username: this.username,
     realName: this.realName,
+    bio: this.bio || '',
+    avatarUrl: this.avatarUrl || '',
+    bannerUrl: this.bannerUrl || '',
+    links: Array.isArray(this.links) ? this.links : [],
+    profileTheme: this.profileTheme || 'default',
     city: this.city,
     state: this.state,
     country: this.country,

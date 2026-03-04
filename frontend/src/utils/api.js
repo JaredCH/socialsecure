@@ -50,6 +50,8 @@ export const userAPI = {
 export const feedAPI = {
   getUserFeed: (userId, page = 1, limit = 20) => 
     api.get(`/feed/${userId}?page=${page}&limit=${limit}`),
+  getPublicUserFeed: (userIdOrUsername, page = 1, limit = 20) =>
+    api.get(`/public/users/${encodeURIComponent(userIdOrUsername)}/feed?page=${page}&limit=${limit}`),
   createPost: (data) => api.post('/feed/post', data),
   deletePost: (postId) => api.delete(`/feed/post/${postId}`),
   likePost: (postId) => api.post(`/feed/post/${postId}/like`),

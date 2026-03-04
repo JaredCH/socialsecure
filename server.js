@@ -94,6 +94,7 @@ app.get('/', (req, res, next) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/feed', require('./routes/feed'));
+app.use('/api/public', require('./routes/public'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/market', require('./routes/market'));
 app.use('/api/location', require('./routes/location'));

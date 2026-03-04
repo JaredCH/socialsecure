@@ -5,6 +5,80 @@ const jwt = require('jsonwebtoken');
 const Post = require('../models/Post');
 const User = require('../models/User');
 
+const MEDIA_URL_MAX_ITEMS = 8;
+const MEDIA_URL_MAX_LENGTH = 2048;
+const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
+
+const sanitizeAndValidateMediaUrls = (mediaUrlsInput) => {
+  if (mediaUrlsInput === undefined || mediaUrlsInput === null) {
+    return { ok: true, mediaUrls: [] };
+  }
+
+  const candidateUrls = typeof mediaUrlsInput === 'string'
+    ? [mediaUrlsInput]
+    : mediaUrlsInput;
+
+  if (!Array.isArray(candidateUrls)) {
+    return {
+      ok: false,
+      error: 'Invalid "mediaUrls": expected an array of URL strings'
+    };
+  }
+
+  const seen = new Set();
+  const sanitized = [];
+
+  for (let i = 0; i < candidateUrls.length; i += 1) {
+    const rawUrl = candidateUrls[i];
+
+    if (typeof rawUrl !== 'string') {
+      return {
+        ok: false,
+        error: `Invalid "mediaUrls[${i}]": each media URL must be a string`
+      };
+    }
+
+    const normalizedUrl = rawUrl.trim();
+    if (!normalizedUrl) {
+      continue;
+    }
+
+    if (normalizedUrl.length > MEDIA_URL_MAX_LENGTH) {
+      return {
+        ok: false,
+        error: `Invalid "mediaUrls[${i}]": URL exceeds max length of ${MEDIA_URL_MAX_LENGTH} characters`
+      };
+    }
+
+    if (!HTTP_URL_REGEX.test(normalizedUrl)) {
+      return {
+        ok: false,
+        error: `Invalid "mediaUrls[${i}]": URL must begin with http:// or https://`
+      };
+    }
+
+    const dedupeKey = normalizedUrl.toLowerCase();
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
+    sanitized.push(normalizedUrl);
+
+    if (sanitized.length > MEDIA_URL_MAX_ITEMS) {
+      return {
+        ok: false,
+        error: `Too many media URLs: maximum allowed is ${MEDIA_URL_MAX_ITEMS}`
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    mediaUrls: sanitized
+  };
+};
+
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -60,6 +134,7 @@ router.post('/post', [
   body('encryptedContent').optional().trim(),
   body('targetFeedId').isMongoId().withMessage('Valid target feed ID required'),
   body('visibility').optional().isIn(['public', 'friends', 'private']).withMessage('Invalid visibility'),
+  body('mediaUrls').optional(),
   body('latitude').optional().isFloat({ min: -90, max: 90 }),
   body('longitude').optional().isFloat({ min: -180, max: 180 })
 ], async (req, res) => {
@@ -69,8 +144,24 @@ router.post('/post', [
   }
   
   try {
-    const { content, encryptedContent, targetFeedId, visibility = 'public', latitude, longitude } = req.body;
+    const {
+      content,
+      encryptedContent,
+      targetFeedId,
+      visibility = 'public',
+      latitude,
+      longitude,
+      mediaUrls: mediaUrlsInput
+    } = req.body;
     const authorId = req.user.userId;
+
+    const mediaUrlsValidation = sanitizeAndValidateMediaUrls(mediaUrlsInput);
+    if (!mediaUrlsValidation.ok) {
+      return res.status(400).json({
+        error: mediaUrlsValidation.error,
+        field: 'mediaUrls'
+      });
+    }
     
     // Check if target feed exists
     const targetUser = await User.findById(targetFeedId);
@@ -93,7 +184,8 @@ router.post('/post', [
       content,
       encryptedContent,
       isEncrypted: !!encryptedContent,
-      visibility
+      visibility,
+      mediaUrls: mediaUrlsValidation.mediaUrls
     };
     
     // Add location if provided

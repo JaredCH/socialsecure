@@ -4,6 +4,35 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 
+const PROFILE_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
+
+const isSafeHttpUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch (error) {
+    return false;
+  }
+};
+
+const normalizeLinks = (links) => {
+  if (!Array.isArray(links)) return [];
+
+  return links
+    .map((link) => {
+      if (typeof link === 'string') {
+        return link.trim();
+      }
+
+      if (link && typeof link === 'object' && typeof link.url === 'string') {
+        return link.url.trim();
+      }
+
+      return '';
+    })
+    .filter(Boolean);
+};
+
 // Generate JWT token
 const generateToken = (userId) => {
   return jwt.sign(
@@ -161,7 +190,59 @@ router.put('/profile', [
   body('realName').optional().trim().notEmpty().withMessage('Real name cannot be empty'),
   body('city').optional().trim(),
   body('state').optional().trim(),
-  body('country').optional().trim()
+  body('country').optional().trim(),
+  body('bio')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('Bio must be a string')
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Bio must be at most 500 characters'),
+  body('avatarUrl')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('Avatar URL must be a string')
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Avatar URL must be at most 500 characters')
+    .custom((value) => !value || isSafeHttpUrl(value))
+    .withMessage('Avatar URL must be a valid http(s) URL'),
+  body('bannerUrl')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('Banner URL must be a string')
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Banner URL must be at most 500 characters')
+    .custom((value) => !value || isSafeHttpUrl(value))
+    .withMessage('Banner URL must be a valid http(s) URL'),
+  body('links')
+    .optional({ nullable: true })
+    .isArray({ max: 10 })
+    .withMessage('Links must be an array with at most 10 items'),
+  body('links.*')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return !trimmed || (trimmed.length <= 500 && isSafeHttpUrl(trimmed));
+      }
+
+      if (value && typeof value === 'object' && typeof value.url === 'string') {
+        const trimmedUrl = value.url.trim();
+        return !!trimmedUrl && trimmedUrl.length <= 500 && isSafeHttpUrl(trimmedUrl);
+      }
+
+      return false;
+    })
+    .withMessage('Each link must be a valid http(s) URL string or object with a valid url field'),
+  body('profileTheme')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('Profile theme must be a string')
+    .trim()
+    .isIn(PROFILE_THEMES)
+    .withMessage(`Profile theme must be one of: ${PROFILE_THEMES.join(', ')}`)
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -182,11 +263,27 @@ router.put('/profile', [
     }
 
     // Update allowed fields
-    const { realName, city, state, country } = req.body;
+    const { realName, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme } = req.body;
     if (realName) user.realName = realName;
     if (city) user.city = city;
     if (state) user.state = state;
     if (country) user.country = country;
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'bio')) {
+      user.bio = (bio || '').trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'avatarUrl')) {
+      user.avatarUrl = (avatarUrl || '').trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'bannerUrl')) {
+      user.bannerUrl = (bannerUrl || '').trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'links')) {
+      user.links = normalizeLinks(links);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'profileTheme')) {
+      user.profileTheme = profileTheme || 'default';
+    }
     
     user.updatedAt = new Date();
     await user.save();
