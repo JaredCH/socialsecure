@@ -68,7 +68,11 @@ const findUserByIdOrUsername = async (identifier) => {
 
 const publicPostQuery = (userId) => ({
   targetFeedId: userId,
-  visibility: 'public'
+  visibility: 'public',
+  $or: [
+    { expiresAt: null },
+    { expiresAt: { $gt: new Date() } }
+  ]
 });
 
 const publicPostPopulate = [
@@ -113,6 +117,9 @@ const toPublicPost = (post) => ({
   content: post.content || null,
   mediaUrls: normalizeMediaUrls(post.mediaUrls),
   visibility: post.visibility,
+  visibleToCircles: Array.isArray(post.visibleToCircles) ? post.visibleToCircles : [],
+  locationRadius: Number.isFinite(Number(post.locationRadius)) ? Number(post.locationRadius) : null,
+  expiresAt: post.expiresAt || null,
   likesCount: Array.isArray(post.likes) ? post.likes.length : 0,
   commentsCount: Array.isArray(post.comments) ? post.comments.length : 0,
   createdAt: post.createdAt,
@@ -158,7 +165,7 @@ router.get('/users/:userId/feed', async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('_id authorId targetFeedId content visibility mediaUrls likes comments createdAt updatedAt')
+        .select('_id authorId targetFeedId content visibility visibleToCircles locationRadius expiresAt mediaUrls likes comments createdAt updatedAt')
         .populate(publicPostPopulate)
         .lean(),
       Post.countDocuments(query)

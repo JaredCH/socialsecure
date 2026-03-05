@@ -152,6 +152,7 @@ registerRoute('/api/market', () => require('./routes/market'));
 registerRoute('/api/location', () => require('./routes/location'));
 registerRoute('/api/universal', () => require('./routes/universal'));
 registerRoute('/api/friends', () => require('./routes/friends'));
+registerRoute('/api/circles', () => require('./routes/circles'));
 
 let newsRoutes = null;
 let mapsRoutes = null;
