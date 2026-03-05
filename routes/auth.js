@@ -366,6 +366,129 @@ router.post('/encryption-password/change', [
   }
 });
 
+// Verify encryption password and create 12-hour unlock session
+router.post('/encryption-password/verify', [
+  body('encryptionPassword')
+    .isString()
+    .withMessage('Encryption password is required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { encryptionPassword } = req.body;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const user = await User.findById(decoded.userId);
+
+    if (!user || user.registrationStatus !== 'active') {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.encryptionPasswordHash) {
+      return res.status(400).json({ error: 'Encryption password is not set' });
+    }
+
+    const isPasswordValid = await user.compareEncryptionPassword(encryptionPassword);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Incorrect encryption password' });
+    }
+
+    // Create a signed unlock token valid for 12 hours
+    const unlockToken = jwt.sign(
+      {
+        userId: user._id,
+        type: 'encryption_unlock',
+        version: user.encryptionPasswordVersion
+      },
+      process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+      { expiresIn: '12h' }
+    );
+
+    // Set secure cookie with unlock token
+    res.cookie('encryption_unlock', unlockToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 12 * 60 * 60 * 1000 // 12 hours
+    });
+
+    res.json({
+      success: true,
+      message: 'Encryption unlocked for 12 hours',
+      expiresIn: 12 * 60 * 60 // 12 hours in seconds
+    });
+  } catch (error) {
+    console.error('Verify encryption password error:', error);
+    res.status(500).json({ error: 'Failed to verify encryption password' });
+  }
+});
+
+// Check if encryption is currently unlocked (via cookie)
+router.get('/encryption-password/status/unlock', async (req, res) => {
+  try {
+    const unlockToken = req.cookies?.encryption_unlock;
+    
+    if (!unlockToken) {
+      return res.json({ unlocked: false });
+    }
+
+    try {
+      const decoded = jwt.verify(unlockToken, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+      
+      if (decoded.type !== 'encryption_unlock') {
+        return res.json({ unlocked: false });
+      }
+
+      // Verify password version hasn't changed
+      const user = await User.findById(decoded.userId);
+      if (!user || user.encryptionPasswordVersion !== decoded.version) {
+        return res.json({ unlocked: false });
+      }
+
+      // Calculate remaining time
+      const exp = decoded.exp * 1000;
+      const remaining = Math.max(0, exp - Date.now());
+
+      res.json({
+        unlocked: true,
+        expiresIn: Math.floor(remaining / 1000),
+        userId: decoded.userId
+      });
+    } catch (jwtError) {
+      return res.json({ unlocked: false });
+    }
+  } catch (error) {
+    console.error('Check unlock status error:', error);
+    res.status(500).json({ error: 'Failed to check unlock status' });
+  }
+});
+
+// Lock encryption (clear unlock cookie)
+router.post('/encryption-password/lock', async (req, res) => {
+  try {
+    res.cookie('encryption_unlock', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 0
+    });
+
+    res.json({ success: true, message: 'Encryption locked' });
+  } catch (error) {
+    console.error('Lock encryption error:', error);
+    res.status(500).json({ error: 'Failed to lock encryption' });
+  }
+});
+
 // Update user profile
 router.put('/profile', [
   body('realName').optional().trim().notEmpty().withMessage('Real name cannot be empty'),

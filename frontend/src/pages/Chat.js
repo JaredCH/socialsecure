@@ -16,6 +16,7 @@ import {
   setBoundedPlaintextCache,
   unlockOrCreateVault
 } from '../utils/e2ee';
+import EncryptionUnlockModal from '../components/EncryptionUnlockModal';
 
 const MESSAGE_PAGE_SIZE = {
   INITIAL_LOAD: 500,
@@ -78,6 +79,8 @@ const Chat = () => {
   const [unlocking, setUnlocking] = useState(false);
   const [unlockError, setUnlockError] = useState('');
   const [session, setSession] = useState(null);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [serverUnlocked, setServerUnlocked] = useState(false);
 
   const [messages, setMessages] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
@@ -185,6 +188,20 @@ const Chat = () => {
         setProfile(profileData.user || null);
         setLocalNickname(profileData.user?.username || profileData.user?.realName || '');
 
+        // Check if encryption is already unlocked via 12h session
+        if (profileData.user?.hasEncryptionPassword) {
+          try {
+            const unlockStatus = await authAPI.getEncryptionUnlockStatus();
+            if (unlockStatus.data?.unlocked) {
+              setServerUnlocked(true);
+              // Show modal but don't require password - user can proceed with session
+              setShowUnlockModal(true);
+            }
+          } catch (unlockCheckError) {
+            console.warn('Could not check unlock status:', unlockCheckError);
+          }
+        }
+
         // Try to sync location rooms first, then get nearby rooms
         try {
           await chatAPI.syncLocationRooms();
@@ -287,7 +304,57 @@ const Chat = () => {
     }
   };
 
-  const handleLock = () => {
+  // Handle unlock from modal (with 12h session) - called after modal successfully verifies password
+  const handleModalUnlock = async (password) => {
+    if (!profile?._id) {
+      toast.error('User profile is unavailable. Please re-login.');
+      return;
+    }
+
+    if (!password) {
+      toast.error('Password is required');
+      return;
+    }
+
+    setUnlocking(true);
+    setUnlockError('');
+
+    try {
+      // Unlock local vault with the password from modal
+      const { session: unlockedSession, created } = await unlockOrCreateVault({
+        userId: profile._id,
+        password: password
+      });
+
+      await chatAPI.registerDeviceKeys(await unlockedSession.getRegisterPayload());
+      if (activeRoomId) {
+        await loadKeyPackages(activeRoomId, unlockedSession);
+      }
+
+      setSession(unlockedSession);
+      setShowUnlockModal(false);
+      setServerUnlocked(true);
+      toast.success(created ? 'Encryption vault created and unlocked for 12h.' : 'Encryption unlocked for 12h.');
+    } catch (error) {
+      const message = error?.message || error.response?.data?.error || 'Failed to unlock encryption vault.';
+      setUnlockError(message);
+      toast.error(message);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const handleLock = async () => {
+    setSession(null);
+    setPlaintextById({});
+    setServerUnlocked(false);
+    
+    // Tell backend to clear the unlock cookie
+    try {
+      await authAPI.lockEncryption();
+    } catch (error) {
+      console.warn('Failed to lock on server:', error);
+    }
     setSession(null);
     setPlaintextById({});
     setDecryptErrors({});
@@ -628,30 +695,20 @@ const Chat = () => {
         ) : null}
       </div>
 
-      {!isUnlocked ? (
-        <form onSubmit={handleUnlock} className="border rounded p-4 bg-gray-50 space-y-3">
+      {!isUnlocked && profile?.hasEncryptionPassword ? (
+        <div className="border rounded p-4 bg-gray-50 space-y-3">
           <h3 className="font-semibold">Encryption Password Required</h3>
           <p className="text-sm text-gray-700">
             Enter your Encryption Password to unlock local device keys and room keys.
           </p>
-          <input
-            type="password"
-            value={unlockPassword}
-            onChange={(event) => setUnlockPassword(event.target.value)}
-            className="w-full border rounded p-2"
-            autoComplete="current-password"
-            placeholder="Encryption Password"
-            required
-          />
-          {unlockError ? <p className="text-sm text-red-600">{unlockError}</p> : null}
           <button
-            type="submit"
-            disabled={unlocking}
-            className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
+            type="button"
+            onClick={() => setShowUnlockModal(true)}
+            className="bg-blue-600 text-white rounded px-4 py-2 hover:bg-blue-700"
           >
-            {unlocking ? 'Unlocking...' : 'Unlock Encryption'}
+            Unlock Encryption
           </button>
-        </form>
+        </div>
       ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -824,6 +881,14 @@ const Chat = () => {
           </p>
         </section>
       </div>
+
+      {/* Encryption Unlock Modal */}
+      <EncryptionUnlockModal
+        isOpen={showUnlockModal}
+        onUnlock={handleModalUnlock}
+        onClose={() => setShowUnlockModal(false)}
+        showCloseButton={serverUnlocked}
+      />
     </div>
   );
 };

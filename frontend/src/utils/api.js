@@ -40,6 +40,10 @@ export const authAPI = {
   getEncryptionPasswordStatus: () => api.get('/auth/encryption-password/status'),
   setEncryptionPassword: (data) => api.post('/auth/encryption-password/set', data),
   changeEncryptionPassword: (data) => api.post('/auth/encryption-password/change', data),
+  // 12-hour unlock session
+  verifyEncryptionPassword: (password) => api.post('/auth/encryption-password/verify', { encryptionPassword: password }),
+  getEncryptionUnlockStatus: () => api.get('/auth/encryption-password/status/unlock'),
+  lockEncryption: () => api.post('/auth/encryption-password/lock'),
 };
 
 // User API
