@@ -10,6 +10,7 @@ import Social from './pages/Social';
 import Chat from './pages/Chat';
 import Market from './pages/Market';
 import News from './pages/News';
+import Maps from './pages/Maps';
 import { authAPI } from './utils/api';
 
 const ProtectedRoute = ({
@@ -142,6 +143,7 @@ function App() {
               {isAuthenticated && !encryptionPasswordRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600">Chat</Link>}
               {isAuthenticated && !encryptionPasswordRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600">Market</Link>}
               {isAuthenticated && !encryptionPasswordRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600">Maps</Link>}
               {isAuthenticated && !encryptionPasswordRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
               {isAuthenticated ? (
                 <>
@@ -217,6 +219,14 @@ function App() {
               element={(
                 <ProtectedRoute isAuthenticated={isAuthenticated} encryptionPasswordRequired={encryptionPasswordRequired}>
                   <News />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/maps"
+              element={(
+                <ProtectedRoute isAuthenticated={isAuthenticated} encryptionPasswordRequired={encryptionPasswordRequired}>
+                  <Maps />
                 </ProtectedRoute>
               )}
             />

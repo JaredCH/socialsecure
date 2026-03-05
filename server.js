@@ -105,11 +105,18 @@ app.use('/api/location', require('./routes/location'));
 app.use('/api/universal', require('./routes/universal'));
 app.use('/api/friends', require('./routes/friends'));
 app.use('/api/news', require('./routes/news'));
+app.use('/api/maps', require('./routes/maps'));
 
 // Start news ingestion scheduler
 const { startIngestionScheduler } = require('./routes/news');
 if (process.env.NODE_ENV !== 'test') {
   startIngestionScheduler();
+}
+
+// Start maps scheduled jobs
+const { startScheduledJobs: startMapsJobs } = require('./routes/maps');
+if (process.env.NODE_ENV !== 'test') {
+  startMapsJobs();
 }
 
 if (isProduction) {

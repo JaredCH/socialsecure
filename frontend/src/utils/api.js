@@ -264,4 +264,30 @@ export const newsAPI = {
   triggerIngestion: () => api.post('/news/ingest'),
 };
 
+// Maps API
+export const mapsAPI = {
+  // Location presence
+  updatePresence: (data) => api.post('/maps/presence', data),
+  getPresence: () => api.get('/maps/presence'),
+  updatePrivacy: (shareWithFriends) => api.put('/maps/presence/privacy', { shareWithFriends }),
+  deactivatePresence: () => api.delete('/maps/presence'),
+  
+  // Friend locations
+  getFriendsLocations: () => api.get('/maps/friends'),
+  
+  // Spotlights
+  createSpotlight: (data) => api.post('/maps/spotlight', data),
+  reactToSpotlight: (spotlightId, reactionType) => api.post(`/maps/spotlight/${spotlightId}/react`, { reactionType }),
+  getNearbySpotlights: (params) => api.get('/maps/spotlight/nearby', { params }),
+  getFriendsSpotlights: () => api.get('/maps/spotlight/friends'),
+  deleteSpotlight: (spotlightId) => api.delete(`/maps/spotlight/${spotlightId}`),
+  
+  // Heatmap
+  getHeatmap: (params) => api.get('/maps/heatmap', { params }),
+  
+  // Maps
+  getLocalMap: (params) => api.get('/maps/local', { params }),
+  getCommunityMap: (params) => api.get('/maps/community', { params }),
+};
+
 export default api;
