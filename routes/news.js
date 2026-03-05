@@ -56,9 +56,9 @@ async function fetchRssSource(source) {
     });
   } catch (error) {
     console.error(`Error fetching RSS source ${source.name}:`, error.message);
-    // Mark source as unhealthy
+    // Mark source as unhealthy - using correct field names from RssSource model
     await RssSource.findByIdAndUpdate(source._id, {
-      $inc: { failureCount: 1 },
+      $inc: { errorCount: 1 },
       lastFetchStatus: 'error',
       lastError: error.message
     });
@@ -270,16 +270,27 @@ async function ingestAllSources() {
     const articles = await fetchRssSource(source);
     allArticles = [...allArticles, ...articles];
     
-    // Update source status
+    // Update source status - using correct field names from RssSource model
     await RssSource.findByIdAndUpdate(source._id, {
-      lastFetchedAt: new Date(),
+      lastFetchAt: new Date(),
       lastFetchStatus: 'success',
-      lastArticleCount: articles.length
+      fetchCount: articles.length
     });
   }
   
-  // 2. Fetch default Google News topics
-  const defaultTopics = ['technology', 'science', 'health', 'business', 'sports', 'entertainment'];
+  // 2. Fetch default Google News topics - include ALL 10 categories
+  const defaultTopics = [
+    'technology',
+    'science',
+    'health',
+    'business',
+    'sports',
+    'entertainment',
+    'politics',
+    'finance',
+    'gaming',
+    'artificial intelligence'
+  ];
   for (const topic of defaultTopics) {
     const articles = await fetchGoogleNewsSource(topic, 'googleNews');
     allArticles = [...allArticles, ...articles];
@@ -318,20 +329,23 @@ const authenticateToken = (req, res, next) => {
 
 /**
  * GET /api/news/feed
- * Get personalized news feed for user
+ * Get personalized news feed for user with followed keywords prioritization
  */
 router.get('/feed', authenticateToken, async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 20, 
-      sourceType, 
-      topic, 
-      location 
+    const {
+      page = 1,
+      limit = 20,
+      sourceType,
+      topic,
+      location
     } = req.query;
     
     // Get user's news preferences
     let preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    
+    // Extract followed keywords for personalization
+    const followedKeywords = preferences?.followedKeywords?.map(k => k.keyword) || [];
     
     // Build query
     const query = { isActive: true };
@@ -341,14 +355,33 @@ router.get('/feed', authenticateToken, async (req, res) => {
       query.sourceType = sourceType;
     }
     
-    // Filter by topic
+    // Filter by topic - if no specific topic provided, use user's preferences
     if (topic) {
       query.topics = topic.toLowerCase();
+    } else if (preferences?.googleNewsTopics?.length > 0 || preferences?.gdletCategories?.length > 0) {
+      // Use user's preferred topics/categories when no specific topic filter is selected
+      const userTopics = [
+        ...(preferences.googleNewsTopics || []),
+        ...(preferences.gdletCategories || [])
+      ];
+      if (userTopics.length > 0) {
+        query.$or = [
+          { topics: { $in: userTopics.map(t => t.toLowerCase()) } },
+          { topics: { $exists: false } }
+        ];
+      }
     }
     
     // Filter by location
     if (location) {
       query.locations = location.toLowerCase();
+    }
+    
+    // Filter out hidden categories if user has preferences
+    if (preferences?.hiddenCategories?.length > 0) {
+      query.topics = {
+        $nin: preferences.hiddenCategories.map(c => c.toLowerCase())
+      };
     }
     
     // Calculate skip
@@ -358,7 +391,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
     let articles = await Article.find(query)
       .sort({ publishedAt: -1, freshnessScore: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(parseInt(limit) * 2) // Fetch more to account for re-ranking
       .lean();
     
     // If user has preferences, apply personalization
@@ -400,6 +433,48 @@ router.get('/feed', authenticateToken, async (req, res) => {
       }
     }
     
+    // PRIORITY: Apply followed keywords boosting and add visual indicators
+    if (followedKeywords.length > 0) {
+      articles = articles.map(article => {
+        const articleText = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
+        
+        // Check if article matches any followed keyword
+        const matchedKeywords = followedKeywords.filter(keyword =>
+          articleText.includes(keyword.toLowerCase())
+        );
+        
+        // Add matched keywords and boost score if matches found
+        if (matchedKeywords.length > 0) {
+          return {
+            ...article,
+            matchedKeywords,
+            isFollowingMatch: true, // Visual indicator for frontend
+            _boostScore: matchedKeywords.length // Used for sorting
+          };
+        }
+        
+        return {
+          ...article,
+          matchedKeywords: [],
+          isFollowingMatch: false,
+          _boostScore: 0
+        };
+      });
+      
+      // Re-sort to prioritize articles matching followed keywords
+      articles.sort((a, b) => {
+        // First priority: followed keyword matches (higher boost score = higher priority)
+        if (a._boostScore !== b._boostScore) {
+          return b._boostScore - a._boostScore;
+        }
+        // Second priority: recency
+        return new Date(b.publishedAt) - new Date(a.publishedAt);
+      });
+    }
+    
+    // Limit to requested number after re-ranking
+    articles = articles.slice(0, parseInt(limit));
+    
     // Get total count
     const total = await Article.countDocuments(query);
     
@@ -410,6 +485,10 @@ router.get('/feed', authenticateToken, async (req, res) => {
         limit: parseInt(limit),
         total,
         pages: Math.ceil(total / parseInt(limit))
+      },
+      personalization: {
+        followedKeywords,
+        hasKeywordMatches: articles.some(a => a.isFollowingMatch)
       }
     });
   } catch (error) {
@@ -627,6 +706,51 @@ router.delete('/preferences/locations/:locationId', authenticateToken, async (re
   } catch (error) {
     console.error('Error removing location:', error);
     res.status(500).json({ error: 'Failed to remove location' });
+  }
+});
+
+/**
+ * PUT /api/news/preferences/hidden-categories
+ * Update hidden categories - saves hidden categories to user's NewsPreferences
+ */
+router.put('/preferences/hidden-categories', authenticateToken, async (req, res) => {
+  try {
+    const { hiddenCategories } = req.body;
+    
+    if (!Array.isArray(hiddenCategories)) {
+      return res.status(400).json({ error: 'hiddenCategories must be an array' });
+    }
+    
+    // Ensure preferences exist first
+    let preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    
+    if (!preferences) {
+      // Create new preferences with hidden categories
+      preferences = await NewsPreferences.create({
+        user: req.user.userId,
+        hiddenCategories: hiddenCategories.map(c => c.toLowerCase())
+      });
+    } else {
+      // Update existing preferences
+      preferences = await NewsPreferences.findOneAndUpdate(
+        { user: req.user.userId },
+        {
+          $set: {
+            hiddenCategories: hiddenCategories.map(c => c.toLowerCase()),
+            updatedAt: new Date()
+          }
+        },
+        { new: true }
+      );
+    }
+    
+    res.json({
+      success: true,
+      preferences
+    });
+  } catch (error) {
+    console.error('Error updating hidden categories:', error);
+    res.status(500).json({ error: 'Failed to update hidden categories' });
   }
 });
 

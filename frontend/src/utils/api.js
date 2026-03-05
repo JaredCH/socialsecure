@@ -256,6 +256,8 @@ export const newsAPI = {
   addLocation: (data) => api.post('/news/preferences/locations', data),
   // Remove location preference
   removeLocation: (locationId) => api.delete(`/news/preferences/locations/${locationId}`),
+  // Update hidden categories
+  updateHiddenCategories: (hiddenCategories) => api.put('/news/preferences/hidden-categories', { hiddenCategories }),
   // Get available topics
   getTopics: () => api.get('/news/topics'),
   // Get single article

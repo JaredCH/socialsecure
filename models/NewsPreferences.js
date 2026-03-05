@@ -100,6 +100,12 @@ const newsPreferencesSchema = new mongoose.Schema({
     default: true
   },
   
+  // Hidden categories (categories user has hidden from the feed)
+  hiddenCategories: [{
+    type: String,
+    lowercase: true
+  }],
+  
   // General settings
   refreshInterval: {
     type: Number,
@@ -184,6 +190,24 @@ newsPreferencesSchema.methods.toggleSource = async function(sourceId, enabled) {
   } else {
     this.rssSources.push({ sourceId, enabled });
   }
+  await this.save();
+  return this;
+};
+
+// Method to hide a category
+newsPreferencesSchema.methods.hideCategory = async function(category) {
+  const normalized = category.toLowerCase().trim();
+  if (!this.hiddenCategories.includes(normalized)) {
+    this.hiddenCategories.push(normalized);
+    await this.save();
+  }
+  return this;
+};
+
+// Method to show a category (remove from hidden)
+newsPreferencesSchema.methods.showCategory = async function(category) {
+  const normalized = category.toLowerCase().trim();
+  this.hiddenCategories = this.hiddenCategories.filter(c => c !== normalized);
   await this.save();
   return this;
 };

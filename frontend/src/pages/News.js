@@ -1,6 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { newsAPI } from '../utils/api';
 
+// Define all available categories
+const ALL_CATEGORIES = [
+  { id: 'technology', name: 'Technology', icon: '💻' },
+  { id: 'science', name: 'Science', icon: '🔬' },
+  { id: 'health', name: 'Health', icon: '🏥' },
+  { id: 'business', name: 'Business', icon: '💼' },
+  { id: 'sports', name: 'Sports', icon: '⚽' },
+  { id: 'entertainment', name: 'Entertainment', icon: '🎬' },
+  { id: 'politics', name: 'Politics', icon: '🏛️' },
+  { id: 'finance', name: 'Finance', icon: '📈' },
+  { id: 'gaming', name: 'Gaming', icon: '🎮' },
+  { id: 'ai', name: 'AI & Machine Learning', icon: '🤖' },
+];
+
 // Format relative time (e.g., "2 hours ago")
 const formatRelativeTime = (dateString) => {
   const date = new Date(dateString);
@@ -37,6 +51,17 @@ function News() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showSettings, setShowSettings] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
+  
+  // Location form state
+  const [newLocation, setNewLocation] = useState({
+    city: '',
+    state: '',
+    country: ''
+  });
+  
+  // Hidden categories state (from preferences)
+  const [hiddenCategories, setHiddenCategories] = useState([]);
+  
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
 
   // Fetch initial data
@@ -58,6 +83,12 @@ function News() {
       setPagination(feedRes.data.pagination);
       setPreferences(prefsRes.data.preferences);
       setTopics(topicsRes.data.topics);
+      
+      // Set hidden categories from preferences
+      if (prefsRes.data.preferences?.hiddenCategories) {
+        setHiddenCategories(prefsRes.data.preferences.hiddenCategories);
+      }
+      
       setError(null);
     } catch (err) {
       console.error('Error loading news:', err);
@@ -160,10 +191,14 @@ function News() {
   };
 
   // Add location
-  const handleAddLocation = async (locationData) => {
+  const handleAddLocation = async (e) => {
+    e.preventDefault();
+    if (!newLocation.city.trim() && !newLocation.state.trim() && !newLocation.country.trim()) return;
+    
     try {
-      const res = await newsAPI.addLocation(locationData);
+      const res = await newsAPI.addLocation(newLocation);
       setPreferences(res.data.preferences);
+      setNewLocation({ city: '', state: '', country: '' });
     } catch (err) {
       console.error('Error adding location:', err);
     }
@@ -195,15 +230,38 @@ function News() {
     }
   };
 
+  // Toggle category visibility
+  const handleToggleCategory = async (categoryId) => {
+    const newHidden = hiddenCategories.includes(categoryId)
+      ? hiddenCategories.filter(c => c !== categoryId)
+      : [...hiddenCategories, categoryId];
+    
+    setHiddenCategories(newHidden);
+    
+    try {
+      const res = await newsAPI.updateHiddenCategories(newHidden);
+      setPreferences(res.data.preferences);
+    } catch (err) {
+      console.error('Error updating hidden categories:', err);
+      // Revert on error
+      setHiddenCategories(hiddenCategories);
+    }
+  };
+
+  // Get visible categories (filter out hidden ones)
+  const visibleCategories = ALL_CATEGORIES.filter(
+    cat => !hiddenCategories.includes(cat.id)
+  );
+
   if (loading && articles.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
+      <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
         <div className="max-w-4xl mx-auto">
           <div className="animate-pulse">
-            <div className="h-8 bg-gray-700 rounded w-48 mb-6"></div>
+            <div className="h-8 bg-gray-200 rounded w-48 mb-6"></div>
             <div className="space-y-4">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-32 bg-gray-800 rounded"></div>
+                <div key={i} className="h-32 bg-gray-200 rounded"></div>
               ))}
             </div>
           </div>
@@ -213,44 +271,44 @@ function News() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 sticky top-0 z-10">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold">📰 Latest News</h1>
             <button
               onClick={() => setShowSettings(!showSettings)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2 transition-colors"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 transition-colors"
             >
               <span>⚙️</span>
               <span>Configure</span>
             </button>
           </div>
           
-          {/* Topic Filters */}
+          {/* Topic Filters - Only show visible categories */}
           <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
             <button
               onClick={() => handleFilterChange('all')}
               className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
                 activeFilter === 'all' 
                   ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
               All
             </button>
-            {topics.map(topic => (
+            {visibleCategories.map(category => (
               <button
-                key={topic.id}
-                onClick={() => handleFilterChange(topic.id)}
+                key={category.id}
+                onClick={() => handleFilterChange(category.id)}
                 className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
-                  activeFilter === topic.id 
+                  activeFilter === category.id 
                     ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                {topic.icon} {topic.name}
+                {category.icon} {category.name}
               </button>
             ))}
           </div>
@@ -259,20 +317,20 @@ function News() {
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="bg-gray-800 border-b border-gray-700">
+        <div className="bg-white border-b border-gray-200">
           <div className="max-w-4xl mx-auto px-4 py-6">
             <h2 className="text-xl font-semibold mb-4">News Preferences</h2>
             
             {/* Local Priority Toggle */}
-            <div className="flex items-center justify-between py-3 border-b border-gray-700">
+            <div className="flex items-center justify-between py-3 border-b border-gray-200">
               <div>
                 <h3 className="font-medium">Local News Priority</h3>
-                <p className="text-sm text-gray-400">Prioritize news from your location</p>
+                <p className="text-sm text-gray-500">Prioritize news from your location</p>
               </div>
               <button
                 onClick={handleToggleLocalPriority}
                 className={`w-12 h-6 rounded-full transition-colors ${
-                  preferences?.localPriorityEnabled ? 'bg-blue-600' : 'bg-gray-600'
+                  preferences?.localPriorityEnabled ? 'bg-blue-600' : 'bg-gray-300'
                 }`}
               >
                 <div className={`w-5 h-5 bg-white rounded-full transition-transform ${
@@ -282,15 +340,15 @@ function News() {
             </div>
             
             {/* Google News Toggle */}
-            <div className="flex items-center justify-between py-3 border-b border-gray-700">
+            <div className="flex items-center justify-between py-3 border-b border-gray-200">
               <div>
                 <h3 className="font-medium">Google News Integration</h3>
-                <p className="text-sm text-gray-400">Include Google News in your feed</p>
+                <p className="text-sm text-gray-500">Include Google News in your feed</p>
               </div>
               <button
                 onClick={handleToggleGoogleNews}
                 className={`w-12 h-6 rounded-full transition-colors ${
-                  preferences?.googleNewsEnabled ? 'bg-blue-600' : 'bg-gray-600'
+                  preferences?.googleNewsEnabled ? 'bg-blue-600' : 'bg-gray-300'
                 }`}
               >
                 <div className={`w-5 h-5 bg-white rounded-full transition-transform ${
@@ -299,19 +357,49 @@ function News() {
               </button>
             </div>
             
+            {/* Category Visibility Configuration */}
+            <div className="py-3 border-b border-gray-200">
+              <h3 className="font-medium mb-3">Category Visibility</h3>
+              <p className="text-sm text-gray-500 mb-3">Toggle categories to show or hide them from your feed</p>
+              <div className="flex flex-wrap gap-2">
+                {ALL_CATEGORIES.map(category => {
+                  const isHidden = hiddenCategories.includes(category.id);
+                  return (
+                    <button
+                      key={category.id}
+                      onClick={() => handleToggleCategory(category.id)}
+                      className={`px-3 py-1.5 rounded-full text-sm flex items-center gap-1.5 transition-colors ${
+                        isHidden 
+                          ? 'bg-gray-200 text-gray-500 hover:bg-gray-300'
+                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                      }`}
+                    >
+                      <span>{category.icon}</span>
+                      <span>{category.name}</span>
+                      {isHidden ? (
+                        <span className="text-xs">🚫</span>
+                      ) : (
+                        <span className="text-xs">✓</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            
             {/* Followed Keywords */}
-            <div className="py-3 border-b border-gray-700">
+            <div className="py-3 border-b border-gray-200">
               <h3 className="font-medium mb-3">Followed Keywords</h3>
               <div className="flex flex-wrap gap-2 mb-3">
                 {preferences?.followedKeywords?.map((item) => (
                   <span 
                     key={item.keyword}
-                    className="px-3 py-1 bg-gray-700 rounded-full flex items-center gap-2"
+                    className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full flex items-center gap-2"
                   >
                     {item.keyword}
                     <button
                       onClick={() => handleRemoveKeyword(item.keyword)}
-                      className="text-gray-400 hover:text-red-400"
+                      className="text-gray-400 hover:text-red-500"
                     >
                       ×
                     </button>
@@ -324,11 +412,11 @@ function News() {
                   value={newKeyword}
                   onChange={(e) => setNewKeyword(e.target.value)}
                   placeholder="Add keyword (e.g., AI, Bitcoin)"
-                  className="flex-1 px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                 >
                   Add
                 </button>
@@ -342,24 +430,57 @@ function News() {
                 {preferences?.locations?.map((loc) => (
                   <div 
                     key={loc._id}
-                    className="flex items-center justify-between px-3 py-2 bg-gray-700 rounded-lg"
+                    className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
                   >
-                    <span>
+                    <span className="text-gray-700">
                       {loc.city || loc.county || loc.state || loc.country}
-                      {loc.isPrimary && <span className="ml-2 text-xs text-blue-400">Primary</span>}
+                      {loc.isPrimary && <span className="ml-2 text-xs text-blue-600">Primary</span>}
                     </span>
                     <button
                       onClick={() => handleRemoveLocation(loc._id)}
-                      className="text-gray-400 hover:text-red-400"
+                      className="text-gray-400 hover:text-red-500"
                     >
                       ×
                     </button>
                   </div>
                 ))}
+                {(!preferences?.locations || preferences.locations.length === 0) && (
+                  <p className="text-sm text-gray-500">No locations added yet</p>
+                )}
               </div>
-              <div className="text-sm text-gray-400">
-                Add locations in settings to prioritize local news
-              </div>
+              
+              {/* Add Location Form */}
+              <form onSubmit={handleAddLocation} className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newLocation.city}
+                    onChange={(e) => setNewLocation({ ...newLocation, city: e.target.value })}
+                    placeholder="City"
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={newLocation.state}
+                    onChange={(e) => setNewLocation({ ...newLocation, state: e.target.value })}
+                    placeholder="State"
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={newLocation.country}
+                    onChange={(e) => setNewLocation({ ...newLocation, country: e.target.value })}
+                    placeholder="Country"
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  Add Location
+                </button>
+              </form>
             </div>
           </div>
         </div>
@@ -368,22 +489,22 @@ function News() {
       {/* News Feed */}
       <div className="max-w-4xl mx-auto px-4 py-6">
         {error && (
-          <div className="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded-lg mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
             {error}
           </div>
         )}
         
         {articles.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">No news articles available</p>
-            <p className="text-gray-500 mt-2">Try adjusting your filters or preferences</p>
+            <p className="text-gray-500 text-lg">No news articles available</p>
+            <p className="text-gray-400 mt-2">Try adjusting your filters or preferences</p>
           </div>
         ) : (
           <div className="space-y-4">
             {articles.map((article) => (
               <article 
                 key={article._id}
-                className="bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors"
+                className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow"
               >
                 <a 
                   href={article.url} 
@@ -404,12 +525,12 @@ function News() {
                   
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <h2 className="text-lg font-semibold text-white hover:text-blue-400 transition-colors">
+                      <h2 className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors">
                         {article.title}
                       </h2>
                       
                       {article.description && (
-                        <p className="mt-2 text-gray-400 line-clamp-2">
+                        <p className="mt-2 text-gray-600 line-clamp-2">
                           {article.description.length > 200 
                             ? article.description.substring(0, 200) + '...'
                             : article.description
@@ -429,7 +550,7 @@ function News() {
                         {article.localityLevel && article.localityLevel !== 'global' && (
                           <>
                             <span>•</span>
-                            <span className="text-blue-400">{article.localityLevel}</span>
+                            <span className="text-blue-600">{article.localityLevel}</span>
                           </>
                         )}
                       </div>
@@ -447,7 +568,7 @@ function News() {
             <button
               onClick={loadMore}
               disabled={loading}
-              className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
+              className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors disabled:opacity-50"
             >
               {loading ? 'Loading...' : 'Load More'}
             </button>
