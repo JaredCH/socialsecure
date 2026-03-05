@@ -1,0 +1,93 @@
+const mongoose = require('mongoose');
+
+const notificationSchema = new mongoose.Schema({
+  recipientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  senderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  type: {
+    type: String,
+    enum: ['like', 'comment', 'mention', 'follow', 'message', 'system', 'security_alert'],
+    required: true
+  },
+  title: {
+    type: String,
+    required: true,
+    maxlength: 100,
+    trim: true
+  },
+  body: {
+    type: String,
+    maxlength: 500,
+    trim: true,
+    default: ''
+  },
+  data: {
+    postId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Post',
+      default: null
+    },
+    commentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null
+    },
+    messageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ChatMessage',
+      default: null
+    },
+    roomId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ChatRoom',
+      default: null
+    },
+    url: {
+      type: String,
+      default: ''
+    }
+  },
+  isRead: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  readAt: {
+    type: Date,
+    default: null
+  },
+  channels: {
+    inApp: {
+      type: Boolean,
+      default: true
+    },
+    email: {
+      type: Boolean,
+      default: false
+    },
+    push: {
+      type: Boolean,
+      default: false
+    }
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+    index: true
+  }
+}, {
+  timestamps: true
+});
+
+notificationSchema.index({ recipientId: 1, isRead: 1, createdAt: -1 });
+notificationSchema.index({ recipientId: 1, createdAt: -1 });
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 });
+
+module.exports = mongoose.model('Notification', notificationSchema);

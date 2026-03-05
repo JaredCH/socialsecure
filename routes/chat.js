@@ -9,6 +9,7 @@ const SecurityEvent = require('../models/SecurityEvent');
 const BlockList = require('../models/BlockList');
 const RoomKeyPackage = require('../models/RoomKeyPackage');
 const User = require('../models/User');
+const { createNotification } = require('../services/notifications');
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -192,6 +193,29 @@ const createRoomEventMessage = async ({ roomId, userId, content, messageType = '
 const isRoomMember = (room, userId) => {
   if (!room || !Array.isArray(room.members)) return false;
   return room.members.some((memberId) => String(memberId) === String(userId));
+};
+
+const notifyRoomMembers = async ({ room, senderId, senderLabel, message, messageType = 'message' }) => {
+  if (!room || !Array.isArray(room.members)) return;
+
+  const recipientIds = room.members
+    .map((memberId) => String(memberId))
+    .filter((memberId) => memberId && memberId !== String(senderId));
+
+  for (const recipientId of recipientIds) {
+    await createNotification({
+      recipientId,
+      senderId,
+      type: messageType,
+      title: 'New message',
+      body: `${senderLabel} sent a message in ${room.name || room.city || 'a room'}`,
+      data: {
+        messageId: message?._id,
+        roomId: room._id,
+        url: '/chat'
+      }
+    });
+  }
 };
 
 const validateE2EEEnvelope = (envelope) => {
@@ -547,6 +571,9 @@ router.post('/rooms/:roomId/messages', [
     
     // Populate user info for response
     await message.populate('userId', 'username realName');
+
+    const senderLabel = user.username || user.realName || 'Someone';
+    await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
     
     // Broadcast message via WebSocket (handled in server.js)
     // The WebSocket server will handle real-time broadcasting
@@ -698,6 +725,9 @@ router.post('/rooms/:roomId/messages/e2ee', [
     await room.incrementMessageCount();
     await room.addMember(userId);
     await message.populate('userId', 'username realName');
+
+    const senderLabel = user.username || user.realName || 'Someone';
+    await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
 
     return res.status(201).json({
       success: true,

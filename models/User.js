@@ -241,6 +241,48 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  notificationPreferences: {
+    likes: {
+      inApp: { type: Boolean, default: true },
+      email: { type: Boolean, default: false },
+      push: { type: Boolean, default: false }
+    },
+    comments: {
+      inApp: { type: Boolean, default: true },
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: false }
+    },
+    mentions: {
+      inApp: { type: Boolean, default: true },
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: false }
+    },
+    follows: {
+      inApp: { type: Boolean, default: true },
+      email: { type: Boolean, default: false },
+      push: { type: Boolean, default: false }
+    },
+    messages: {
+      inApp: { type: Boolean, default: true },
+      email: { type: Boolean, default: false },
+      push: { type: Boolean, default: false }
+    },
+    system: {
+      inApp: { type: Boolean, default: true },
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: false }
+    },
+    securityAlerts: {
+      inApp: { type: Boolean, default: true },
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: false }
+    }
+  },
+  unreadNotificationCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   // Friend count (cached for performance)
   friendCount: {
     type: Number,
@@ -316,6 +358,16 @@ userSchema.methods.toPublicProfile = function() {
     hasEncryptionPassword,
     isAdmin: !!this.isAdmin,
     moderationStatus: this.moderationStatus || 'active',
+    unreadNotificationCount: this.unreadNotificationCount || 0,
+    notificationPreferences: this.notificationPreferences || {
+      likes: { inApp: true, email: false, push: false },
+      comments: { inApp: true, email: true, push: false },
+      mentions: { inApp: true, email: true, push: false },
+      follows: { inApp: true, email: false, push: false },
+      messages: { inApp: true, email: false, push: false },
+      system: { inApp: true, email: true, push: false },
+      securityAlerts: { inApp: true, email: true, push: false }
+    },
     onboardingStatus: this.onboardingStatus || 'pending',
     onboardingStep: this.onboardingStep || 1,
     securityPreferences: this.securityPreferences || {

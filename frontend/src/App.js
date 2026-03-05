@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { io } from 'socket.io-client';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -14,7 +15,9 @@ import Maps from './pages/Maps';
 import OnboardingPage from './pages/OnboardingPage';
 import SecurityCenter from './pages/SecurityCenter';
 import ModerationDashboard from './pages/ModerationDashboard';
-import { authAPI } from './utils/api';
+import NotificationCenter from './components/NotificationCenter';
+import NotificationSettings from './pages/NotificationSettings';
+import { authAPI, notificationAPI } from './utils/api';
 
 const ProtectedRoute = ({
   isAuthenticated,
@@ -59,6 +62,9 @@ function App() {
       requirePasswordForSensitive: true
     }
   });
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [incomingNotification, setIncomingNotification] = useState(null);
+  const notificationSocketRef = useRef(null);
 
   const isAuthenticated = useMemo(() => Boolean(localStorage.getItem('token') && user), [user]);
   const onboardingRequired = isAuthenticated && onboardingStatus.status !== 'completed';
@@ -148,6 +154,7 @@ function App() {
       try {
         const { data } = await authAPI.getProfile();
         setUser(data.user);
+        setUnreadNotificationCount(Number(data.user?.unreadNotificationCount || 0));
         setOnboardingStatus((prev) => ({
           ...prev,
           status: data.user?.onboardingStatus || 'pending',
@@ -180,9 +187,64 @@ function App() {
     refreshOnboardingStatus();
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    const bootstrapNotifications = async () => {
+      if (!isAuthenticated) {
+        setUnreadNotificationCount(0);
+        return;
+      }
+
+      try {
+        const { data } = await notificationAPI.getUnreadCount();
+        setUnreadNotificationCount(Number(data?.count || 0));
+      } catch {
+        // ignore notification count refresh failures
+      }
+    };
+
+    bootstrapNotifications();
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?._id) {
+      if (notificationSocketRef.current) {
+        notificationSocketRef.current.disconnect();
+        notificationSocketRef.current = null;
+      }
+      return;
+    }
+
+    const socketOrigin = process.env.REACT_APP_SOCKET_URL || window.location.origin;
+    const socket = io(socketOrigin, {
+      auth: {
+        userId: String(user._id)
+      }
+    });
+
+    socket.on('connect', () => {
+      socket.emit('join-user', String(user._id));
+    });
+
+    socket.on('notification', (payload) => {
+      if (!payload) return;
+      setIncomingNotification(payload);
+      setUnreadNotificationCount((prev) => prev + (payload.isRead ? 0 : 1));
+    });
+
+    notificationSocketRef.current = socket;
+
+    return () => {
+      socket.disconnect();
+      if (notificationSocketRef.current === socket) {
+        notificationSocketRef.current = null;
+      }
+    };
+  }, [isAuthenticated, user?._id]);
+
   const handleAuthSuccess = (payload) => {
     localStorage.setItem('token', payload.token);
     setUser(payload.user);
+    setUnreadNotificationCount(Number(payload.user?.unreadNotificationCount || 0));
     setOnboardingStatus((prev) => ({
       ...prev,
       status: payload.user?.onboardingStatus || 'pending',
@@ -214,6 +276,8 @@ function App() {
       encryptionPasswordSetAt: null,
       encryptionPasswordVersion: 0
     });
+    setUnreadNotificationCount(0);
+    setIncomingNotification(null);
   };
 
   const handleOnboardingCompleted = async () => {
@@ -247,6 +311,13 @@ function App() {
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/security" className="text-gray-600 hover:text-blue-600">Security</Link>}
               {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && <Link to="/moderation" className="text-gray-600 hover:text-blue-600">Moderation</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && (
+                <NotificationCenter
+                  unreadCount={unreadNotificationCount}
+                  onUnreadCountChange={setUnreadNotificationCount}
+                  incomingNotification={incomingNotification}
+                />
+              )}
               {isAuthenticated && onboardingRequired && <Link to="/onboarding" className="text-blue-600 font-medium">Onboarding</Link>}
               {isAuthenticated ? (
                 <>
@@ -374,6 +445,18 @@ function App() {
                   encryptionPasswordRequired={encryptionPasswordRequired}
                 >
                   <Social />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/notification-settings"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                >
+                  <NotificationSettings />
                 </ProtectedRoute>
               )}
             />

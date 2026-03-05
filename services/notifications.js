@@ -1,0 +1,140 @@
+const Notification = require('../models/Notification');
+const User = require('../models/User');
+
+let ioInstance = null;
+
+const preferenceMap = {
+  like: 'likes',
+  comment: 'comments',
+  mention: 'mentions',
+  follow: 'follows',
+  message: 'messages',
+  system: 'system',
+  security_alert: 'securityAlerts'
+};
+
+const clampText = (value, max) => String(value || '').trim().slice(0, max);
+
+const toPayload = (notification) => ({
+  _id: notification._id,
+  recipientId: notification.recipientId,
+  senderId: notification.senderId,
+  type: notification.type,
+  title: notification.title,
+  body: notification.body,
+  data: notification.data || {},
+  channels: notification.channels,
+  isRead: notification.isRead,
+  readAt: notification.readAt,
+  createdAt: notification.createdAt
+});
+
+const getUserNotificationPreferences = (user) => {
+  const defaults = {
+    likes: { inApp: true, email: false, push: false },
+    comments: { inApp: true, email: true, push: false },
+    mentions: { inApp: true, email: true, push: false },
+    follows: { inApp: true, email: false, push: false },
+    messages: { inApp: true, email: false, push: false },
+    system: { inApp: true, email: true, push: false },
+    securityAlerts: { inApp: true, email: true, push: false }
+  };
+
+  const candidate = user?.notificationPreferences;
+  if (!candidate || typeof candidate !== 'object') {
+    return defaults;
+  }
+
+  const normalized = { ...defaults };
+  for (const key of Object.keys(defaults)) {
+    if (!candidate[key] || typeof candidate[key] !== 'object') continue;
+    normalized[key] = {
+      inApp: typeof candidate[key].inApp === 'boolean' ? candidate[key].inApp : defaults[key].inApp,
+      email: typeof candidate[key].email === 'boolean' ? candidate[key].email : defaults[key].email,
+      push: typeof candidate[key].push === 'boolean' ? candidate[key].push : defaults[key].push
+    };
+  }
+
+  return normalized;
+};
+
+const setNotificationIo = (io) => {
+  ioInstance = io;
+};
+
+const emitRealtime = (recipientId, payload) => {
+  if (!ioInstance) return;
+  ioInstance.to(`user:${String(recipientId)}`).emit('notification', payload);
+};
+
+const createNotification = async ({
+  recipientId,
+  senderId = null,
+  type,
+  title,
+  body = '',
+  data = {},
+  forceChannels = null
+}) => {
+  if (!recipientId || !type || !title) {
+    return null;
+  }
+
+  if (senderId && String(senderId) === String(recipientId)) {
+    return null;
+  }
+
+  const recipient = await User.findById(recipientId)
+    .select('notificationPreferences unreadNotificationCount registrationStatus')
+    .lean();
+
+  if (!recipient || recipient.registrationStatus !== 'active') {
+    return null;
+  }
+
+  const preferences = getUserNotificationPreferences(recipient);
+  const preferenceKey = preferenceMap[type] || 'system';
+  const prefChannels = preferences[preferenceKey] || { inApp: true, email: false, push: false };
+
+  const channels = forceChannels || {
+    inApp: !!prefChannels.inApp,
+    email: !!prefChannels.email,
+    push: !!prefChannels.push
+  };
+
+  const notification = await Notification.create({
+    recipientId,
+    senderId,
+    type,
+    title: clampText(title, 100),
+    body: clampText(body, 500),
+    data: {
+      postId: data.postId || null,
+      commentId: data.commentId || null,
+      messageId: data.messageId || null,
+      roomId: data.roomId || null,
+      url: clampText(data.url, 500)
+    },
+    channels,
+    isRead: channels.inApp ? false : true,
+    readAt: channels.inApp ? null : new Date()
+  });
+
+  if (channels.inApp) {
+    await User.updateOne(
+      { _id: recipientId },
+      { $inc: { unreadNotificationCount: 1 } }
+    );
+
+    emitRealtime(recipientId, toPayload(notification));
+  }
+
+  return notification;
+};
+
+module.exports = {
+  setNotificationIo,
+  createNotification,
+  getUserNotificationPreferences,
+  toPayload
+};
