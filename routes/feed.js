@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const BlockList = require('../models/BlockList');
 const MuteList = require('../models/MuteList');
+const { createNotification } = require('../services/notifications');
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
@@ -62,6 +63,15 @@ const normalizeObjectIdArray = (value) => {
   return value
     .map((entry) => String(entry || '').trim())
     .filter(Boolean);
+};
+
+const extractMentions = (content = '') => {
+  const matches = String(content || '').match(/@([a-zA-Z0-9_.]{3,30})/g) || [];
+  const usernames = new Set();
+  for (const mention of matches) {
+    usernames.add(mention.slice(1).toLowerCase());
+  }
+  return [...usernames];
 };
 
 const canViewerSeePost = (post, viewerId, friendIds, viewerCoordinates = null) => {
@@ -432,7 +442,23 @@ router.post('/post/:postId/like', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Cannot like this post' });
     }
     
+    const wasAlreadyLiked = post.likes.some((likeId) => String(likeId) === String(userId));
     await post.addLike(userId);
+
+    if (!wasAlreadyLiked && String(post.authorId) !== String(userId)) {
+      const actor = await User.findById(userId).select('username realName').lean();
+      await createNotification({
+        recipientId: post.authorId,
+        senderId: userId,
+        type: 'like',
+        title: 'New like',
+        body: `${actor?.username || actor?.realName || 'Someone'} liked your post`,
+        data: {
+          postId: post._id,
+          url: '/social'
+        }
+      });
+    }
     
     res.json({
       success: true,
@@ -500,6 +526,45 @@ router.post('/post/:postId/comment', [
     
     // Get the newly added comment
     const newComment = post.comments[post.comments.length - 1];
+
+    const actor = await User.findById(userId).select('username realName').lean();
+    if (String(post.authorId) !== String(userId)) {
+      await createNotification({
+        recipientId: post.authorId,
+        senderId: userId,
+        type: 'comment',
+        title: 'New comment',
+        body: `${actor?.username || actor?.realName || 'Someone'} commented on your post`,
+        data: {
+          postId: post._id,
+          commentId: newComment?._id,
+          url: '/social'
+        }
+      });
+    }
+
+    const mentionedUsernames = extractMentions(content);
+    if (mentionedUsernames.length > 0) {
+      const mentionedUsers = await User.find({ username: { $in: mentionedUsernames } })
+        .select('_id username')
+        .lean();
+
+      for (const mentionedUser of mentionedUsers) {
+        if (String(mentionedUser._id) === String(userId)) continue;
+        await createNotification({
+          recipientId: mentionedUser._id,
+          senderId: userId,
+          type: 'mention',
+          title: 'You were mentioned',
+          body: `${actor?.username || actor?.realName || 'Someone'} mentioned you in a comment`,
+          data: {
+            postId: post._id,
+            commentId: newComment?._id,
+            url: '/social'
+          }
+        });
+      }
+    }
     
     res.status(201).json({
       success: true,

@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const TopFriend = require('../models/TopFriend');
+const { createNotification } = require('../services/notifications');
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -91,6 +92,17 @@ router.post('/request', authenticateToken, async (req, res) => {
         existingFriendship.blockedAt = null;
         existingFriendship.removedAt = null;
         await existingFriendship.save();
+
+        await createNotification({
+          recipientId: userId,
+          senderId: req.user._id,
+          type: 'follow',
+          title: 'New follow request',
+          body: `${req.user.username || req.user.realName || 'Someone'} sent you a follow request`,
+          data: {
+            url: '/social'
+          }
+        });
         
         return res.json({
           success: true,
@@ -109,6 +121,17 @@ router.post('/request', authenticateToken, async (req, res) => {
     });
     
     await friendship.save();
+
+    await createNotification({
+      recipientId: userId,
+      senderId: req.user._id,
+      type: 'follow',
+      title: 'New follow request',
+      body: `${req.user.username || req.user.realName || 'Someone'} sent you a follow request`,
+      data: {
+        url: '/social'
+      }
+    });
     
     res.status(201).json({
       success: true,

@@ -154,6 +154,7 @@ registerRoute('/api/universal', () => require('./routes/universal'));
 registerRoute('/api/friends', () => require('./routes/friends'));
 registerRoute('/api/circles', () => require('./routes/circles'));
 registerRoute('/api/moderation', () => require('./routes/moderation'));
+registerRoute('/api/notifications', () => require('./routes/notifications'));
 
 let newsRoutes = null;
 let mapsRoutes = null;
@@ -245,9 +246,23 @@ const io = require('socket.io')(server, {
   }
 });
 
+const { setNotificationIo } = require('./services/notifications');
+setNotificationIo(io);
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
+
+  const authUserId = String(socket?.handshake?.auth?.userId || '').trim();
+  if (authUserId) {
+    socket.join(`user:${authUserId}`);
+  }
+
+  socket.on('join-user', (userId) => {
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedUserId) return;
+    socket.join(`user:${normalizedUserId}`);
+  });
   
   socket.on('join-room', (roomId) => {
     socket.join(roomId);

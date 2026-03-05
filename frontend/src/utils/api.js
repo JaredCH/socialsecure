@@ -255,6 +255,16 @@ export const circlesAPI = {
   removeMember: (circleName, userId) => api.delete(`/circles/${encodeURIComponent(circleName)}/members/${encodeURIComponent(userId)}`),
 };
 
+export const notificationAPI = {
+  getNotifications: (page = 1, limit = 20) => api.get(`/notifications?page=${page}&limit=${limit}`),
+  getUnreadCount: () => api.get('/notifications/unread-count'),
+  markAsRead: (id) => api.put(`/notifications/${encodeURIComponent(id)}/read`),
+  markAllAsRead: () => api.put('/notifications/read-all'),
+  deleteNotification: (id) => api.delete(`/notifications/${encodeURIComponent(id)}`),
+  getPreferences: () => api.get('/notifications/preferences'),
+  updatePreferences: (data) => api.put('/notifications/preferences', data),
+};
+
 // News API
 export const newsAPI = {
   // Get personalized news feed
