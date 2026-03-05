@@ -265,6 +265,20 @@ export const notificationAPI = {
   updatePreferences: (data) => api.put('/notifications/preferences', data),
 };
 
+export const discoveryAPI = {
+  getUsers: (q = '', page = 1, limit = 10) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (q) params.append('q', q);
+    return api.get(`/discovery/users?${params.toString()}`);
+  },
+  getPosts: (q = '', page = 1, limit = 10) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (q) params.append('q', q);
+    return api.get(`/discovery/posts?${params.toString()}`);
+  },
+  trackEvent: (eventType, metadata = {}) => api.post('/discovery/events', { eventType, metadata }),
+};
+
 // News API
 export const newsAPI = {
   // Get personalized news feed
