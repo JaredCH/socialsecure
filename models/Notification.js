@@ -14,7 +14,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['like', 'comment', 'mention', 'follow', 'message', 'system', 'security_alert'],
+    enum: ['like', 'comment', 'mention', 'follow', 'message', 'system', 'security_alert', 'market_transaction'],
     required: true
   },
   title: {
@@ -52,6 +52,16 @@ const notificationSchema = new mongoose.Schema({
     url: {
       type: String,
       default: ''
+    },
+    listingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MarketListing',
+      default: null
+    },
+    transactionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MarketTransaction',
+      default: null
     }
   },
   isRead: {

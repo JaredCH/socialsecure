@@ -167,6 +167,7 @@ export const locationAPI = {
 
 // Market API
 export const marketAPI = {
+  getCategories: () => api.get('/market/categories'),
   getListings: (filters = {}, page = 1, limit = 20) => {
     const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
     if (filters.category) params.append('category', filters.category);
@@ -175,6 +176,7 @@ export const marketAPI = {
     if (filters.latitude) params.append('latitude', filters.latitude);
     if (filters.longitude) params.append('longitude', filters.longitude);
     if (filters.maxDistance) params.append('maxDistance', filters.maxDistance);
+    if (filters.q) params.append('q', filters.q);
     return api.get(`/market/listings?${params}`);
   },
   getListing: (listingId) => api.get(`/market/listings/${listingId}`),
@@ -183,11 +185,29 @@ export const marketAPI = {
   deleteListing: (listingId) => api.delete(`/market/listings/${listingId}`),
   incrementViews: (listingId) => api.post(`/market/listings/${listingId}/view`),
   markAsSold: (listingId) => api.post(`/market/listings/${listingId}/sold`),
+  reactivateListing: (listingId) => api.post(`/market/listings/${listingId}/reactivate`),
   getUserListings: (page = 1, limit = 20, status) => {
     const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
     if (status) params.append('status', status);
     return api.get(`/market/user/listings?${params}`);
   },
+  // Transaction management
+  initiateSale: (listingId, data) => api.post(`/market/listings/${listingId}/initiate-sale`, data),
+  respondToTransaction: (transactionId, response) =>
+    api.post(`/market/transactions/${transactionId}/respond`, { response }),
+  getTransactions: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.role) queryParams.append('role', params.role);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    return api.get(`/market/transactions?${queryParams}`);
+  },
+  // Public trade history
+  getTradeHistory: (page = 1, limit = 20) =>
+    api.get(`/market/trade-history?page=${page}&limit=${limit}`),
+  // User search for buyer selection
+  searchUsers: (q) => api.get(`/market/users/search?q=${encodeURIComponent(q)}`),
 };
 
 // Universal Account / Referral API

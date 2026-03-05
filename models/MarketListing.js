@@ -38,10 +38,10 @@ const marketListingSchema = new mongoose.Schema({
   },
   externalLink: {
     type: String,
-    required: true,
+    default: '',
     validate: {
       validator: function(v) {
-        return /^https?:\/\/.+/.test(v);
+        return !v || /^https?:\/\/.+/.test(v);
       },
       message: 'External link must be a valid HTTP/HTTPS URL'
     }
@@ -100,6 +100,8 @@ const marketListingSchema = new mongoose.Schema({
 marketListingSchema.index({ location: '2dsphere' });
 marketListingSchema.index({ category: 1, status: 1, createdAt: -1 });
 marketListingSchema.index({ sellerId: 1, status: 1 });
+// Full-text search index
+marketListingSchema.index({ title: 'text', description: 'text' }, { weights: { title: 10, description: 1 } });
 
 // Method to increment view count
 marketListingSchema.methods.incrementViews = function() {
@@ -130,6 +132,14 @@ marketListingSchema.statics.getActiveListings = async function(filters = {}, pag
     ...filters
   };
   
+  // Handle text search filter
+  let sortQuery = { createdAt: -1 };
+  if (filters.search) {
+    query.$text = { $search: filters.search };
+    sortQuery = { score: { $meta: 'textScore' }, createdAt: -1 };
+    delete query.search;
+  }
+  
   // Handle location filter
   if (filters.nearby) {
     const { longitude, latitude, maxDistance = 50 } = filters.nearby;
@@ -145,8 +155,10 @@ marketListingSchema.statics.getActiveListings = async function(filters = {}, pag
     delete query.nearby;
   }
   
-  const listings = await this.find(query)
-    .sort({ createdAt: -1 })
+  const projection = filters.search ? { score: { $meta: 'textScore' } } : {};
+  
+  const listings = await this.find(query, projection)
+    .sort(sortQuery)
     .skip(skip)
     .limit(limit)
     .populate('sellerId', 'username realName city state')
