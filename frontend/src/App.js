@@ -8,6 +8,7 @@ import Register from './pages/Register';
 import UserSettings from './pages/UserSettings';
 import ReferFriend from './pages/ReferFriend';
 import Social from './pages/Social';
+import Discover from './pages/Discover';
 import Chat from './pages/Chat';
 import Market from './pages/Market';
 import News from './pages/News';
@@ -304,6 +305,7 @@ function App() {
             <div className="space-x-4">
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600">Home</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600">Social</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600">Discover</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600">Chat</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600">Market</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
@@ -433,6 +435,18 @@ function App() {
                   allowWhenEncryptionRequired={false}
                 >
                   {user?.isAdmin ? <ModerationDashboard /> : <Navigate to="/social" replace />}
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/discover"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                >
+                  <Discover />
                 </ProtectedRoute>
               )}
             />

@@ -10,7 +10,8 @@ const preferenceMap = {
   follow: 'follows',
   message: 'messages',
   system: 'system',
-  security_alert: 'securityAlerts'
+  security_alert: 'securityAlerts',
+  market_transaction: 'system'
 };
 
 const clampText = (value, max) => String(value || '').trim().slice(0, max);
@@ -22,7 +23,11 @@ const toPayload = (notification) => ({
   type: notification.type,
   title: notification.title,
   body: notification.body,
-  data: notification.data || {},
+  data: {
+    ...(notification.data || {}),
+    listingId: notification.data?.listingId || null,
+    transactionId: notification.data?.transactionId || null
+  },
   channels: notification.channels,
   isRead: notification.isRead,
   readAt: notification.readAt,
@@ -113,7 +118,9 @@ const createNotification = async ({
       commentId: data.commentId || null,
       messageId: data.messageId || null,
       roomId: data.roomId || null,
-      url: clampText(data.url, 500)
+      url: clampText(data.url, 500),
+      listingId: data.listingId || null,
+      transactionId: data.transactionId || null
     },
     channels,
     isRead: channels.inApp ? false : true,

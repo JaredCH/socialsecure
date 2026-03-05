@@ -155,6 +155,7 @@ registerRoute('/api/friends', () => require('./routes/friends'));
 registerRoute('/api/circles', () => require('./routes/circles'));
 registerRoute('/api/moderation', () => require('./routes/moderation'));
 registerRoute('/api/notifications', () => require('./routes/notifications'));
+registerRoute('/api/discovery', () => require('./routes/discovery'));
 
 let newsRoutes = null;
 let mapsRoutes = null;
