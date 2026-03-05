@@ -88,12 +88,29 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ error: 'Authentication required' });
   }
   
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', async (err, decoded) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
-    req.user = user;
-    next();
+
+    try {
+      const user = await User.findById(decoded.userId).select('onboardingStatus');
+      if (!user) {
+        return res.status(401).json({ error: 'User not found' });
+      }
+
+      if (user.onboardingStatus !== 'completed') {
+        return res.status(403).json({
+          error: 'Complete onboarding before using feed features',
+          code: 'ONBOARDING_REQUIRED'
+        });
+      }
+
+      req.user = decoded;
+      next();
+    } catch (lookupError) {
+      return res.status(500).json({ error: 'Authentication failed' });
+    }
   });
 };
 

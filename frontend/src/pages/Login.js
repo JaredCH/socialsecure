@@ -20,7 +20,7 @@ function Login({ onSuccess }) {
       const { data } = await authAPI.login(form);
       onSuccess(data);
       toast.success('Logged in successfully');
-      navigate('/settings');
+      navigate('/');
     } catch (error) {
       const message = error.response?.data?.error || 'Login failed';
       toast.error(message);

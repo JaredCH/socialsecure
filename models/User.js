@@ -127,6 +127,33 @@ const userSchema = new mongoose.Schema({
     enum: ['public', 'friends', 'private'],
     default: 'public'
   },
+  onboardingStatus: {
+    type: String,
+    enum: ['pending', 'in_progress', 'completed'],
+    default: 'pending'
+  },
+  onboardingStep: {
+    type: Number,
+    min: 1,
+    max: 4,
+    default: 1
+  },
+  securityPreferences: {
+    loginNotifications: {
+      type: Boolean,
+      default: true
+    },
+    sessionTimeout: {
+      type: Number,
+      default: 60,
+      min: 5,
+      max: 1440
+    },
+    requirePasswordForSensitive: {
+      type: Boolean,
+      default: true
+    }
+  },
   // Friend count (cached for performance)
   friendCount: {
     type: Number,
@@ -200,6 +227,13 @@ userSchema.methods.toPublicProfile = function() {
     registrationStatus: this.registrationStatus,
     hasPGP: !!this.pgpPublicKey,
     hasEncryptionPassword,
+    onboardingStatus: this.onboardingStatus || 'pending',
+    onboardingStep: this.onboardingStep || 1,
+    securityPreferences: this.securityPreferences || {
+      loginNotifications: true,
+      sessionTimeout: 60,
+      requirePasswordForSensitive: true
+    },
     createdAt: this.createdAt
   };
 };
