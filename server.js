@@ -145,19 +145,19 @@ app.use('/api/market', require('./routes/market'));
 app.use('/api/location', require('./routes/location'));
 app.use('/api/universal', require('./routes/universal'));
 app.use('/api/friends', require('./routes/friends'));
-app.use('/api/news', require('./routes/news'));
-app.use('/api/maps', require('./routes/maps'));
+const newsRoutes = require('./routes/news');
+const mapsRoutes = require('./routes/maps');
+app.use('/api/news', newsRoutes.router);
+app.use('/api/maps', mapsRoutes.router);
 
 // Start news ingestion scheduler
-const { startIngestionScheduler } = require('./routes/news');
 if (process.env.NODE_ENV !== 'test') {
-  startIngestionScheduler();
+  newsRoutes.startIngestionScheduler();
 }
 
 // Start maps scheduled jobs
-const { startScheduledJobs: startMapsJobs } = require('./routes/maps');
 if (process.env.NODE_ENV !== 'test') {
-  startMapsJobs();
+  mapsRoutes.startScheduledJobs();
 }
 
 if (isProduction) {
