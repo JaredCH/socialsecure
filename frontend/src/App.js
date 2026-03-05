@@ -8,6 +8,7 @@ import Register from './pages/Register';
 import UserSettings from './pages/UserSettings';
 import ReferFriend from './pages/ReferFriend';
 import Social from './pages/Social';
+import Discover from './pages/Discover';
 import Chat from './pages/Chat';
 import Market from './pages/Market';
 import News from './pages/News';
@@ -435,6 +436,18 @@ function App() {
                   allowWhenEncryptionRequired={false}
                 >
                   {user?.isAdmin ? <ModerationDashboard /> : <Navigate to="/social" replace />}
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/discover"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                >
+                  <Discover />
                 </ProtectedRoute>
               )}
             />

@@ -1,5 +1,4 @@
 const express = require('express');
-const router = express.Router();
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
@@ -7,367 +6,377 @@ const Post = require('../models/Post');
 const Friendship = require('../models/Friendship');
 const BlockList = require('../models/BlockList');
 
-// Stricter rate limiting for discovery endpoints to prevent scraping
-const discoveryRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 30,
-  message: 'Too many discovery requests, please try again later.',
-  keyGenerator: (req) => req.ip || 'unknown',
-  validate: { xForwardedForHeader: false }
-});
+const router = express.Router();
 
-// Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+const CACHE_TTL_MS = 30 * 1000;
+const DISCOVERY_MAX_LIMIT = 25;
+const discoveryCache = new Map();
 
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required' });
+const parsePagination = (query) => {
+  const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
+  const limit = Math.min(DISCOVERY_MAX_LIMIT, Math.max(1, Number.parseInt(query.limit, 10) || 10));
+  return { page, limit };
+};
+
+const parseViewerCoordinates = (query) => {
+  const latitude = Number.parseFloat(query.latitude);
+  const longitude = Number.parseFloat(query.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
   }
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return null;
+  }
+  return [longitude, latitude];
+};
 
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
-    }
-    req.user = user;
-    next();
+const getCache = (cacheKey) => {
+  const entry = discoveryCache.get(cacheKey);
+  if (!entry) return null;
+  if (Date.now() - entry.createdAt > CACHE_TTL_MS) {
+    discoveryCache.delete(cacheKey);
+    return null;
+  }
+  return entry.value;
+};
+
+const setCache = (cacheKey, value) => {
+  discoveryCache.set(cacheKey, {
+    createdAt: Date.now(),
+    value
   });
 };
 
-// Helper: get IDs of viewer's accepted friends
-const getViewerFriendIds = async (userId) => {
+const getFriendIds = async (userId) => {
   const friendships = await Friendship.find({
     status: 'accepted',
     $or: [{ requester: userId }, { recipient: userId }]
   }).select('requester recipient').lean();
 
   const ids = new Set();
-  for (const f of friendships) {
-    const r = String(f.requester);
-    const p = String(f.recipient);
-    ids.add(r === String(userId) ? p : r);
+  for (const friendship of friendships) {
+    const requester = String(friendship.requester);
+    const recipient = String(friendship.recipient);
+    ids.add(requester === String(userId) ? recipient : requester);
   }
+
   return ids;
 };
 
-// Helper: get IDs of users who have blocked or been blocked by the viewer
-const getBlockedIds = async (userId) => {
-  const [blocks, blockedBy] = await Promise.all([
-    BlockList.find({ userId }).select('blockedUserId').lean(),
-    BlockList.find({ blockedUserId: userId }).select('userId').lean()
+const getBlockedOrMutedIds = async (viewerId) => {
+  const [blocks, blockedByOthers] = await Promise.all([
+    BlockList.find({ userId: viewerId }).select('blockedUserId').lean(),
+    BlockList.find({ blockedUserId: viewerId }).select('userId').lean()
   ]);
 
-  const ids = new Set();
-  for (const b of blocks) ids.add(String(b.blockedUserId));
-  for (const b of blockedBy) ids.add(String(b.userId));
-  return ids;
+  const blockedOrMuted = new Set();
+  for (const row of blocks) blockedOrMuted.add(String(row.blockedUserId));
+  for (const row of blockedByOthers) blockedOrMuted.add(String(row.userId));
+  return blockedOrMuted;
 };
 
-// Compute location proximity score (0–3 points)
-const locationScore = (viewerUser, candidateUser) => {
-  if (!viewerUser || !candidateUser) return 0;
-  if (viewerUser.city && candidateUser.city && viewerUser.city === candidateUser.city) return 3;
-  if (viewerUser.state && candidateUser.state && viewerUser.state === candidateUser.state) return 2;
-  if (viewerUser.country && candidateUser.country && viewerUser.country === candidateUser.country) return 1;
+const scoreTextMatch = (needle, username = '', realName = '') => {
+  const q = String(needle || '').trim().toLowerCase();
+  if (!q) return 0.2;
+
+  const normalizedUsername = String(username || '').toLowerCase();
+  const normalizedRealName = String(realName || '').toLowerCase();
+
+  if (normalizedUsername === q) return 1;
+  if (normalizedUsername.startsWith(q)) return 0.85;
+  if (normalizedRealName.startsWith(q)) return 0.75;
+  if (normalizedUsername.includes(q) || normalizedRealName.includes(q)) return 0.55;
   return 0;
 };
 
-// Haversine distance in miles between two [lon, lat] coordinate pairs
-const distanceMiles = (coords1, coords2) => {
-  if (!Array.isArray(coords1) || !Array.isArray(coords2)) return null;
-  const toRadians = (d) => (d * Math.PI) / 180;
-  const EARTH_RADIUS_MILES = 3958.8;
-  const [lon1, lat1] = coords1;
-  const [lon2, lat2] = coords2;
-  if (![lon1, lat1, lon2, lat2].every((v) => Number.isFinite(Number(v)))) return null;
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
-  return EARTH_RADIUS_MILES * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+const scoreLocationAffinity = (viewer, candidate) => {
+  if (!viewer || !candidate) return 0;
+  let score = 0;
+  if (viewer.country && candidate.country && viewer.country === candidate.country) score += 0.3;
+  if (viewer.state && candidate.state && viewer.state === candidate.state) score += 0.35;
+  if (viewer.city && candidate.city && viewer.city === candidate.city) score += 0.35;
+  return Math.min(1, score);
 };
 
-// POST /api/discovery/users/impression - track user suggestion impressions
-router.post('/users/impression', authenticateToken, discoveryRateLimit, (req, res) => {
-  // Acknowledge analytics event; persistence can be added in future iteration
-  res.json({ success: true });
-});
+const recencyScore = (dateValue, maxDays = 90) => {
+  const timestamp = new Date(dateValue || 0).getTime();
+  if (!timestamp) return 0;
+  const ageDays = (Date.now() - timestamp) / (1000 * 60 * 60 * 24);
+  return Math.max(0, 1 - (ageDays / maxDays));
+};
 
-// POST /api/discovery/posts/impression - track post suggestion impressions
-router.post('/posts/impression', authenticateToken, discoveryRateLimit, (req, res) => {
-  res.json({ success: true });
-});
+const logDiscoveryEvent = ({ userId, eventType, metadata = {}, req }) => {
+  const payload = {
+    eventType,
+    userId,
+    metadata,
+    ipAddress: req.ip,
+    userAgent: req.get('user-agent') || null,
+    createdAt: new Date().toISOString()
+  };
+  console.log('[discovery-event]', JSON.stringify(payload));
+};
 
-/**
- * GET /api/discovery/users
- * Returns a ranked list of suggested users for the authenticated viewer.
- *
- * Ranking signals:
- *   1. Mutual friends  (up to 10 pts) – strongest social signal
- *   2. Location proximity (up to 3 pts) – same city/state/country
- *   3. Account recency  (up to 2 pts) – new members get a small boost
- *
- * Query params: page (default 1), limit (default 20, max 50)
- */
-router.get('/users', authenticateToken, discoveryRateLimit, async (req, res) => {
-  try {
-    const viewerId = req.user.userId;
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const skip = (page - 1) * limit;
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
 
-    // Concurrently fetch viewer profile, viewer's friends, and blocked users
-    const [viewerUser, friendIds, blockedIds] = await Promise.all([
-      User.findById(viewerId).select('city state country').lean(),
-      getViewerFriendIds(viewerId),
-      getBlockedIds(viewerId)
-    ]);
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
 
-    // Users to exclude from suggestions: viewer themselves, existing friends, blocked
-    const excludeIds = new Set([String(viewerId), ...friendIds, ...blockedIds]);
-
-    // Build mutual-friend candidate map via a single fan-out query on viewer's friends
-    // Find all accepted friendships that involve at least one of the viewer's friends
-    const friendFriendships = friendIds.size > 0
-      ? await Friendship.find({
-          status: 'accepted',
-          $or: [
-            { requester: { $in: Array.from(friendIds) } },
-            { recipient: { $in: Array.from(friendIds) } }
-          ]
-        }).select('requester recipient').lean()
-      : [];
-
-    // mutualMap: candidateId -> number of mutual friends with viewer
-    const mutualMap = new Map();
-    for (const f of friendFriendships) {
-      const r = String(f.requester);
-      const p = String(f.recipient);
-      // The candidate is the party who is NOT in the viewer's friend set
-      for (const candidateId of [r, p]) {
-        if (!friendIds.has(candidateId) && !excludeIds.has(candidateId)) {
-          mutualMap.set(candidateId, (mutualMap.get(candidateId) || 0) + 1);
-        }
-      }
+  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', async (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
     }
 
-    const mutualCandidateIds = Array.from(mutualMap.keys());
-
-    // Fetch both mutual-friend candidates and other active users in parallel
-    const [mutualCandidates, otherCandidates] = await Promise.all([
-      mutualCandidateIds.length > 0
-        ? User.find({ _id: { $in: mutualCandidateIds }, registrationStatus: 'active' })
-            .select('username realName bio avatarUrl city state country createdAt')
-            .lean()
-        : Promise.resolve([]),
-      User.find({ _id: { $nin: [...excludeIds, ...mutualCandidateIds] }, registrationStatus: 'active' })
-        .sort({ createdAt: -1 })
-        .limit(100)
-        .select('username realName bio avatarUrl city state country createdAt')
-        .lean()
-    ]);
-
-    const DAY_MS = 24 * 60 * 60 * 1000;
-    const now = Date.now();
-
-    const scoreCandidate = (user, mutualCount) => {
-      let score = 0;
-      const reasons = [];
-
-      // Signal 1: Mutual friends
-      if (mutualCount > 0) {
-        score += Math.min(10, mutualCount * 2);
-        reasons.push(`${mutualCount} mutual friend${mutualCount > 1 ? 's' : ''}`);
+    try {
+      const user = await User.findById(decoded.userId).select('onboardingStatus city state country');
+      if (!user) {
+        return res.status(401).json({ error: 'User not found' });
+      }
+      if (user.onboardingStatus !== 'completed') {
+        return res.status(403).json({ error: 'Complete onboarding before using discovery', code: 'ONBOARDING_REQUIRED' });
       }
 
-      // Signal 2: Location proximity
-      const locScore = locationScore(viewerUser, user);
-      if (locScore === 3) { score += 3; reasons.push('same city'); }
-      else if (locScore === 2) { score += 2; reasons.push('same state'); }
-      else if (locScore === 1) { score += 1; reasons.push('same country'); }
+      req.user = { userId: String(user._id) };
+      req.viewerProfile = {
+        city: user.city || '',
+        state: user.state || '',
+        country: user.country || ''
+      };
+      next();
+    } catch (lookupError) {
+      res.status(500).json({ error: 'Authentication failed' });
+    }
+  });
+};
 
-      // Signal 3: Account recency (new members get a short-lived boost)
-      const ageInDays = user.createdAt
-        ? (now - new Date(user.createdAt).getTime()) / DAY_MS
-        : 9999;
-      if (ageInDays < 7) { score += 2; reasons.push('new member'); }
-      else if (ageInDays < 30) { score += 1; }
+const discoveryLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many discovery requests, please try again shortly.' }
+});
 
-      return { score, reasons };
+router.get('/users', authenticateToken, discoveryLimiter, async (req, res) => {
+  try {
+    const viewerId = String(req.user.userId);
+    const query = String(req.query.q || '').trim();
+    const { page, limit } = parsePagination(req.query);
+    const cacheKey = `users:${viewerId}:${query}:${page}:${limit}`;
+
+    const cached = getCache(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true });
+    }
+
+    const [friendIds, blockedOrMuted] = await Promise.all([
+      getFriendIds(viewerId),
+      getBlockedOrMutedIds(viewerId)
+    ]);
+
+    const searchFilter = {
+      registrationStatus: 'active',
+      _id: { $ne: viewerId }
+    };
+    if (query.length >= 2) {
+      const searchRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      searchFilter.$or = [{ username: searchRegex }, { realName: searchRegex }];
+    }
+
+    const candidates = await User.find(searchFilter)
+      .select('_id username realName city state country friendCount createdAt')
+      .sort({ createdAt: -1 })
+      .limit(Math.min(300, Math.max(120, limit * 12)))
+      .lean();
+
+    const ranked = candidates
+      .filter((candidate) => !blockedOrMuted.has(String(candidate._id)))
+      .map((candidate) => {
+        const textMatch = scoreTextMatch(query, candidate.username, candidate.realName);
+        const socialSignal = Math.min(1, Math.log1p(Number(candidate.friendCount || 0)) / 4);
+        const locationSignal = scoreLocationAffinity(req.viewerProfile, candidate);
+        const freshness = recencyScore(candidate.createdAt, 120);
+        const isAlreadyFriend = friendIds.has(String(candidate._id));
+
+        const score =
+          (textMatch * 0.4)
+          + (socialSignal * 0.25)
+          + (locationSignal * 0.2)
+          + (freshness * 0.15)
+          + (isAlreadyFriend ? 0.05 : 0);
+
+        return {
+          ...candidate,
+          ranking: {
+            score: Number(score.toFixed(4)),
+            signals: {
+              textMatch: Number(textMatch.toFixed(3)),
+              socialSignal: Number(socialSignal.toFixed(3)),
+              locationSignal: Number(locationSignal.toFixed(3)),
+              freshness: Number(freshness.toFixed(3)),
+              alreadyFriend: isAlreadyFriend
+            }
+          }
+        };
+      })
+      .sort((a, b) => (b.ranking.score - a.ranking.score) || (new Date(b.createdAt) - new Date(a.createdAt)));
+
+    const total = ranked.length;
+    const start = (page - 1) * limit;
+    const users = ranked.slice(start, start + limit);
+    const responsePayload = {
+      success: true,
+      users,
+      page,
+      limit,
+      total,
+      hasMore: start + limit < total,
+      rankingSignals: ['textMatch', 'socialSignal', 'locationSignal', 'freshness', 'alreadyFriend'],
+      cached: false
     };
 
-    // Combine, deduplicate, and score
-    const seenIds = new Set();
-    const scoredUsers = [];
-
-    for (const u of mutualCandidates) {
-      const id = String(u._id);
-      if (!seenIds.has(id)) {
-        seenIds.add(id);
-        const { score, reasons } = scoreCandidate(u, mutualMap.get(id) || 0);
-        scoredUsers.push({ user: u, score, reasons });
-      }
-    }
-
-    for (const u of otherCandidates) {
-      const id = String(u._id);
-      if (!seenIds.has(id)) {
-        seenIds.add(id);
-        const { score, reasons } = scoreCandidate(u, 0);
-        scoredUsers.push({ user: u, score, reasons });
-      }
-    }
-
-    // Sort by rank desc; break ties by account creation date (newer first)
-    scoredUsers.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      return new Date(b.user.createdAt).getTime() - new Date(a.user.createdAt).getTime();
+    setCache(cacheKey, responsePayload);
+    logDiscoveryEvent({
+      userId: viewerId,
+      eventType: 'discovery_user_impression',
+      metadata: { query, page, limit, count: users.length },
+      req
     });
 
-    const total = scoredUsers.length;
-    const paginated = scoredUsers.slice(skip, skip + limit);
-
-    res.set('Cache-Control', 'private, max-age=60');
-    res.json({
-      success: true,
-      users: paginated.map(({ user, score, reasons }) => ({
-        _id: user._id,
-        username: user.username,
-        realName: user.realName,
-        bio: user.bio || '',
-        avatarUrl: user.avatarUrl || '',
-        city: user.city,
-        state: user.state,
-        country: user.country,
-        rankScore: score,
-        whySuggested: reasons.length > 0 ? reasons.join(' · ') : 'Suggested for you'
-      })),
-      pagination: {
-        page,
-        limit,
-        total,
-        hasMore: skip + limit < total
-      }
-    });
+    return res.json(responsePayload);
   } catch (error) {
-    console.error('Error in GET /discovery/users:', error);
-    res.status(500).json({ error: 'Failed to load user suggestions', details: error.message });
+    console.error('User discovery error:', error);
+    return res.status(500).json({ error: 'Failed to load user discovery results', details: error.message });
   }
 });
 
-/**
- * GET /api/discovery/posts
- * Returns a ranked list of suggested public posts for the authenticated viewer.
- *
- * Ranking signals:
- *   1. Engagement quality (likes + 2×comments, capped at 20 pts)
- *   2. Recency with half-life decay (up to 10 pts)
- *   3. Location proximity (up to 5 pts) – requires latitude/longitude query params
- *   4. From a friend (4 pts)
- *
- * Query params: page (default 1), limit (default 20, max 50),
- *               latitude, longitude (optional, for geo-ranking)
- */
-router.get('/posts', authenticateToken, discoveryRateLimit, async (req, res) => {
+router.get('/posts', authenticateToken, discoveryLimiter, async (req, res) => {
   try {
-    const viewerId = req.user.userId;
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const skip = (page - 1) * limit;
+    const viewerId = String(req.user.userId);
+    const query = String(req.query.q || '').trim();
+    const { page, limit } = parsePagination(req.query);
+    const viewerCoordinates = parseViewerCoordinates(req.query);
+    const cacheKey = `posts:${viewerId}:${query}:${page}:${limit}:${viewerCoordinates ? viewerCoordinates.join(',') : 'none'}`;
 
-    const latitude = parseFloat(req.query.latitude);
-    const longitude = parseFloat(req.query.longitude);
-    const hasCoords =
-      Number.isFinite(latitude) && Number.isFinite(longitude) &&
-      latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+    const cached = getCache(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true });
+    }
 
-    const [blockedIds, viewerFriendIds] = await Promise.all([
-      getBlockedIds(viewerId),
-      getViewerFriendIds(viewerId)
+    const [friendIds, blockedOrMuted] = await Promise.all([
+      getFriendIds(viewerId),
+      getBlockedOrMutedIds(viewerId)
     ]);
 
-    // Fetch recent public posts from non-blocked authors (last 30 days)
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const posts = await Post.find({
-      visibility: 'public',
-      authorId: { $nin: Array.from(blockedIds) },
-      $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
-      createdAt: { $gte: cutoff }
-    })
-      .select('authorId content mediaUrls likes comments createdAt location locationRadius')
-      .populate('authorId', 'username realName avatarUrl city state country')
+    const postFilter = {
+      $or: [
+        { expiresAt: null },
+        { expiresAt: { $gt: new Date() } }
+      ]
+    };
+
+    if (query.length >= 2) {
+      const searchRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      postFilter.content = searchRegex;
+    }
+
+    const candidates = await Post.find(postFilter)
       .sort({ createdAt: -1 })
-      .limit(500)
-      .lean();
+      .limit(Math.min(300, Math.max(120, limit * 12)))
+      .populate('authorId', 'username realName city state country')
+      .populate('targetFeedId', 'username realName');
 
-    const HOUR_MS = 60 * 60 * 1000;
-    const now = Date.now();
+    const ranked = candidates
+      .filter((post) => !blockedOrMuted.has(String(post.authorId?._id || post.authorId)))
+      .filter((post) => post.canView(viewerId, {
+        isFriend: friendIds.has(String(post.authorId?._id || post.authorId)),
+        viewerCoordinates
+      }))
+      .map((post) => {
+        const likesCount = Array.isArray(post.likes) ? post.likes.length : 0;
+        const commentsCount = Array.isArray(post.comments) ? post.comments.length : 0;
+        const engagement = Math.min(1, (likesCount + (commentsCount * 2)) / 25);
+        const freshness = recencyScore(post.createdAt, 30);
+        const socialSignal = friendIds.has(String(post.authorId?._id || post.authorId)) ? 1 : 0.2;
+        const textMatch = scoreTextMatch(query, post.authorId?.username || '', post.content || '');
+        const score = (engagement * 0.35) + (freshness * 0.3) + (socialSignal * 0.2) + (textMatch * 0.15);
 
-    const scoredPosts = posts.map((post) => {
-      let score = 0;
-      const reasons = [];
+        return {
+          _id: post._id,
+          content: post.content,
+          visibility: post.visibility,
+          authorId: post.authorId,
+          targetFeedId: post.targetFeedId,
+          createdAt: post.createdAt,
+          likesCount,
+          commentsCount,
+          ranking: {
+            score: Number(score.toFixed(4)),
+            signals: {
+              engagement: Number(engagement.toFixed(3)),
+              freshness: Number(freshness.toFixed(3)),
+              socialSignal: Number(socialSignal.toFixed(3)),
+              textMatch: Number(textMatch.toFixed(3))
+            }
+          }
+        };
+      })
+      .sort((a, b) => (b.ranking.score - a.ranking.score) || (new Date(b.createdAt) - new Date(a.createdAt)));
 
-      // Signal 1: Engagement quality
-      const likesCount = Array.isArray(post.likes) ? post.likes.length : 0;
-      const commentsCount = Array.isArray(post.comments) ? post.comments.length : 0;
-      const engagement = Math.min(20, likesCount + 2 * commentsCount);
-      score += engagement;
-      if (engagement > 5) reasons.push('popular post');
-
-      // Signal 2: Recency with exponential decay (half-life = 24 h)
-      const ageInHours = (now - new Date(post.createdAt).getTime()) / HOUR_MS;
-      score += Math.max(0, 10 * (0.5 ** (ageInHours / 24)));
-
-      // Signal 3: Location proximity (requires client-supplied coordinates)
-      if (hasCoords && Array.isArray(post.location?.coordinates)) {
-        const dist = distanceMiles(post.location.coordinates, [longitude, latitude]);
-        if (dist !== null) {
-          if (dist < 10) { score += 5; reasons.push('nearby'); }
-          else if (dist < 50) { score += 3; reasons.push('nearby'); }
-          else if (dist < 200) { score += 1; }
-        }
-      }
-
-      // Signal 4: Post is from one of the viewer's friends
-      const authorId = String(post.authorId?._id || post.authorId);
-      if (viewerFriendIds.has(authorId)) {
-        score += 4;
-        reasons.push('from a friend');
-      }
-
-      return { post, score, reasons };
-    });
-
-    scoredPosts.sort((a, b) => b.score - a.score);
-
-    const total = scoredPosts.length;
-    const paginated = scoredPosts.slice(skip, skip + limit);
-
-    res.set('Cache-Control', 'private, max-age=60');
-    res.json({
+    const total = ranked.length;
+    const start = (page - 1) * limit;
+    const posts = ranked.slice(start, start + limit);
+    const responsePayload = {
       success: true,
-      posts: paginated.map(({ post, score, reasons }) => ({
-        _id: post._id,
-        author: post.authorId,
-        content: post.content || '',
-        mediaUrls: post.mediaUrls || [],
-        likesCount: Array.isArray(post.likes) ? post.likes.length : 0,
-        commentsCount: Array.isArray(post.comments) ? post.comments.length : 0,
-        createdAt: post.createdAt,
-        rankScore: score,
-        whySuggested: reasons.length > 0 ? reasons.join(' · ') : 'Suggested for you'
-      })),
-      pagination: {
-        page,
-        limit,
-        total,
-        hasMore: skip + limit < total
-      }
+      posts,
+      page,
+      limit,
+      total,
+      hasMore: start + limit < total,
+      rankingSignals: ['engagement', 'freshness', 'socialSignal', 'textMatch'],
+      cached: false
+    };
+
+    setCache(cacheKey, responsePayload);
+    logDiscoveryEvent({
+      userId: viewerId,
+      eventType: 'discovery_post_impression',
+      metadata: { query, page, limit, count: posts.length },
+      req
     });
+
+    return res.json(responsePayload);
   } catch (error) {
-    console.error('Error in GET /discovery/posts:', error);
-    res.status(500).json({ error: 'Failed to load post suggestions', details: error.message });
+    console.error('Post discovery error:', error);
+    return res.status(500).json({ error: 'Failed to load post discovery results', details: error.message });
+  }
+});
+
+router.post('/events', authenticateToken, discoveryLimiter, async (req, res) => {
+  try {
+    const eventType = String(req.body?.eventType || '').trim();
+    const allowed = new Set(['profile_click', 'post_click', 'follow_click']);
+    if (!allowed.has(eventType)) {
+      return res.status(400).json({ error: 'Invalid discovery eventType' });
+    }
+
+    const metadata = typeof req.body?.metadata === 'object' && req.body.metadata
+      ? req.body.metadata
+      : {};
+
+    logDiscoveryEvent({
+      userId: String(req.user.userId),
+      eventType,
+      metadata,
+      req
+    });
+
+    return res.status(202).json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to record discovery event', details: error.message });
   }
 });
 

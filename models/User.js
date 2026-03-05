@@ -302,6 +302,9 @@ const userSchema = new mongoose.Schema({
 
 // Create geospatial index for location-based queries
 userSchema.index({ location: '2dsphere' });
+userSchema.index({ registrationStatus: 1, createdAt: -1 });
+userSchema.index({ city: 1, state: 1, country: 1 });
+userSchema.index({ friendCount: -1, createdAt: -1 });
 
 // Compound index to support discovery queries: active users ordered by recency
 userSchema.index({ registrationStatus: 1, createdAt: -1 });
