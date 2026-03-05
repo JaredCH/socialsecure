@@ -2,8 +2,12 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
+const Session = require('../models/Session');
+const SecurityEvent = require('../models/SecurityEvent');
+const DeviceKey = require('../models/DeviceKey');
 
 const PROFILE_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
@@ -75,6 +79,88 @@ const generateToken = (userId, onboardingStatus = 'pending') => {
   );
 };
 
+const hashToken = (token = '') => crypto.createHash('sha256').update(token).digest('hex');
+
+const getClientIp = (req) => {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || 'unknown';
+};
+
+const parseDeviceInfo = (userAgent = '') => {
+  const normalized = String(userAgent || '').toLowerCase();
+  const browser = normalized.includes('edg/')
+    ? 'Edge'
+    : normalized.includes('chrome/')
+      ? 'Chrome'
+      : normalized.includes('firefox/')
+        ? 'Firefox'
+        : normalized.includes('safari/')
+          ? 'Safari'
+          : 'Unknown';
+
+  const os = normalized.includes('windows')
+    ? 'Windows'
+    : normalized.includes('mac os')
+      ? 'macOS'
+      : normalized.includes('android')
+        ? 'Android'
+        : normalized.includes('iphone') || normalized.includes('ipad')
+          ? 'iOS'
+          : normalized.includes('linux')
+            ? 'Linux'
+            : 'Unknown';
+
+  return {
+    type: normalized.includes('mobile') ? 'mobile' : 'web',
+    browser,
+    os
+  };
+};
+
+const logSecurityEvent = async ({ userId, eventType, req, severity = 'info', metadata = {} }) => {
+  try {
+    await SecurityEvent.create({
+      userId,
+      eventType,
+      severity,
+      metadata: {
+        ip: getClientIp(req),
+        userAgent: req.headers['user-agent'] || '',
+        ...metadata
+      }
+    });
+  } catch (error) {
+    console.error('Failed to log security event:', error?.message || error);
+  }
+};
+
+const calculateSecurityScore = ({
+  hasStrongPassword,
+  hasCurrentBackup,
+  activeSessionCount,
+  deviceKeyCount
+}) => {
+  const passwordStrength = hasStrongPassword ? 25 : 12;
+  const has2FA = 0;
+  const backupCurrent = hasCurrentBackup ? 25 : 5;
+  const sessionHealth = activeSessionCount <= 3 ? 15 : activeSessionCount <= 5 ? 10 : 5;
+  const deviceKeyHealth = deviceKeyCount > 0 ? 10 : 0;
+
+  return {
+    securityScore: Math.min(passwordStrength + has2FA + backupCurrent + sessionHealth + deviceKeyHealth, 100),
+    scoreBreakdown: {
+      passwordStrength,
+      has2FA,
+      backupCurrent,
+      sessionHealth,
+      deviceKeyHealth
+    }
+  };
+};
+
 const getUserFromBearerToken = async (req, select = '') => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
@@ -83,15 +169,36 @@ const getUserFromBearerToken = async (req, select = '') => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+
+    const tokenHash = hashToken(token);
+    const session = await Session.findOne({ userId: decoded.userId, tokenHash, isRevoked: false });
+    if (!session) {
+      return { error: 'Session expired or revoked', status: 401 };
+    }
+
+    session.lastActivity = new Date();
+    await session.save();
+
     const user = await User.findById(decoded.userId).select(select);
     if (!user) {
       return { error: 'User not found', status: 404 };
     }
 
-    return { user, decoded };
+    return { user, decoded, token, tokenHash, session };
   } catch (error) {
     return { error: 'Invalid token', status: 401 };
   }
+};
+
+const authenticateToken = async (req, res, next) => {
+  const auth = await getUserFromBearerToken(req);
+  if (auth.error) {
+    return res.status(auth.status).json({ error: auth.error });
+  }
+
+  req.user = auth.user;
+  req.auth = auth;
+  next();
 };
 
 const sanitizeSecurityPreferences = (input = {}) => {
@@ -188,6 +295,28 @@ router.post('/register', [
     // Generate token
     const token = generateToken(user._id, user.onboardingStatus || 'pending');
 
+    await Session.findOneAndUpdate(
+      { userId: user._id, tokenHash: hashToken(token) },
+      {
+        $set: {
+          deviceInfo: parseDeviceInfo(req.headers['user-agent']),
+          ipAddress: getClientIp(req),
+          location: { city: null, country: null },
+          lastActivity: new Date(),
+          isRevoked: false,
+          revokedAt: null
+        }
+      },
+      { upsert: true, setDefaultsOnInsert: true, new: true }
+    );
+
+    await logSecurityEvent({
+      userId: user._id,
+      eventType: 'login',
+      req,
+      metadata: { location: { city: null, country: null } }
+    });
+
     res.status(201).json({
       message: 'Registration successful',
       user: user.toPublicProfile(),
@@ -239,6 +368,28 @@ router.post('/login', [
     // Generate token
     const token = generateToken(user._id, user.onboardingStatus || 'pending');
 
+    await Session.findOneAndUpdate(
+      { userId: user._id, tokenHash: hashToken(token) },
+      {
+        $set: {
+          deviceInfo: parseDeviceInfo(req.headers['user-agent']),
+          ipAddress: getClientIp(req),
+          location: { city: null, country: null },
+          lastActivity: new Date(),
+          isRevoked: false,
+          revokedAt: null
+        }
+      },
+      { upsert: true, setDefaultsOnInsert: true, new: true }
+    );
+
+    await logSecurityEvent({
+      userId: user._id,
+      eventType: 'login',
+      req,
+      metadata: { location: { city: null, country: null } }
+    });
+
     res.json({
       message: 'Login successful',
       user: user.toPublicProfile(),
@@ -263,6 +414,194 @@ router.get('/me', async (req, res) => {
   } catch (error) {
     console.error('Auth error:', error);
     res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+router.get('/security-center', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user;
+    const now = new Date();
+    const activeSessions = await Session.countDocuments({ userId: user._id, isRevoked: false });
+    const deviceKeys = await DeviceKey.countDocuments({ userId: user._id, isRevoked: false });
+    const recentEvents = await SecurityEvent.find({ userId: user._id })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    const lastBackupAt = user.recoveryKit?.lastGeneratedAt || null;
+    const daysSinceBackup = lastBackupAt
+      ? Math.floor((now.getTime() - new Date(lastBackupAt).getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    const backupInterval = user.securitySettings?.backupReminderInterval || 30;
+    const hasCurrentBackup = Number.isInteger(daysSinceBackup) ? daysSinceBackup < backupInterval : false;
+
+    const { securityScore, scoreBreakdown } = calculateSecurityScore({
+      hasStrongPassword: !!user.passwordHash,
+      hasCurrentBackup,
+      activeSessionCount: activeSessions,
+      deviceKeyCount: deviceKeys
+    });
+
+    if (user.securityScore !== securityScore) {
+      user.securityScore = securityScore;
+      user.updatedAt = new Date();
+      await user.save();
+    }
+
+    res.json({
+      securityScore,
+      scoreBreakdown,
+      activeSessions,
+      deviceKeys,
+      lastBackupAt,
+      daysSinceBackup,
+      recoveryKitCurrent: hasCurrentBackup,
+      securityPreferences: user.securityPreferences || {
+        loginNotifications: true,
+        sessionTimeout: 60,
+        requirePasswordForSensitive: true
+      },
+      recentEvents: recentEvents.map((event) => ({
+        id: event._id,
+        eventType: event.eventType,
+        severity: event.severity,
+        metadata: event.metadata,
+        createdAt: event.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('Security center error:', error);
+    res.status(500).json({ error: 'Failed to load security center' });
+  }
+});
+
+router.get('/sessions', authenticateToken, async (req, res) => {
+  try {
+    const sessions = await Session.find({ userId: req.user._id, isRevoked: false })
+      .sort({ lastActivity: -1 })
+      .lean();
+
+    res.json({
+      sessions: sessions.map((session) => ({
+        id: session._id,
+        deviceInfo: session.deviceInfo,
+        ipAddress: session.ipAddress,
+        location: session.location,
+        lastActivity: session.lastActivity,
+        createdAt: session.createdAt,
+        isCurrent: req.auth?.session && String(req.auth.session._id) === String(session._id)
+      }))
+    });
+  } catch (error) {
+    console.error('Session list error:', error);
+    res.status(500).json({ error: 'Failed to load sessions' });
+  }
+});
+
+router.delete('/sessions/:sessionId', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await Session.findOne({
+      _id: sessionId,
+      userId: req.user._id,
+      isRevoked: false
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (req.auth?.session && String(req.auth.session._id) === String(session._id)) {
+      return res.status(400).json({ error: 'Current session cannot be revoked from this endpoint' });
+    }
+
+    session.isRevoked = true;
+    session.revokedAt = new Date();
+    await session.save();
+
+    await logSecurityEvent({
+      userId: req.user._id,
+      eventType: 'session_revoked',
+      req,
+      severity: 'warning'
+    });
+
+    res.json({ success: true, message: 'Session revoked' });
+  } catch (error) {
+    console.error('Revoke session error:', error);
+    res.status(500).json({ error: 'Failed to revoke session' });
+  }
+});
+
+router.delete('/sessions/all-others', authenticateToken, async (req, res) => {
+  try {
+    const currentSessionId = req.auth?.session?._id;
+    const query = {
+      userId: req.user._id,
+      isRevoked: false,
+      ...(currentSessionId ? { _id: { $ne: currentSessionId } } : {})
+    };
+
+    const updateResult = await Session.updateMany(query, {
+      $set: {
+        isRevoked: true,
+        revokedAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+
+    await logSecurityEvent({
+      userId: req.user._id,
+      eventType: 'session_revoked',
+      req,
+      severity: 'warning'
+    });
+
+    res.json({
+      success: true,
+      revokedCount: updateResult.modifiedCount || 0,
+      message: 'All other sessions revoked'
+    });
+  } catch (error) {
+    console.error('Revoke all sessions error:', error);
+    res.status(500).json({ error: 'Failed to revoke sessions' });
+  }
+});
+
+router.get('/security-events', authenticateToken, async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 50);
+    const skip = (page - 1) * limit;
+
+    const [events, total] = await Promise.all([
+      SecurityEvent.find({ userId: req.user._id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      SecurityEvent.countDocuments({ userId: req.user._id })
+    ]);
+
+    res.json({
+      events: events.map((event) => ({
+        id: event._id,
+        eventType: event.eventType,
+        severity: event.severity,
+        metadata: event.metadata,
+        createdAt: event.createdAt
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1)
+      }
+    });
+  } catch (error) {
+    console.error('Security events error:', error);
+    res.status(500).json({ error: 'Failed to load security events' });
   }
 });
 
@@ -449,6 +788,12 @@ router.post('/encryption-password/set', [
     user.updatedAt = new Date();
     await user.save();
 
+    await logSecurityEvent({
+      userId: user._id,
+      eventType: 'password_change',
+      req
+    });
+
     res.json({
       message: 'Encryption password set successfully',
       hasEncryptionPassword: true,
@@ -515,6 +860,12 @@ router.post('/encryption-password/change', [
     user.encryptionPasswordVersion = (user.encryptionPasswordVersion || 1) + 1;
     user.updatedAt = new Date();
     await user.save();
+
+    await logSecurityEvent({
+      userId: user._id,
+      eventType: 'password_change',
+      req
+    });
 
     res.json({
       message: 'Encryption password changed successfully',
@@ -822,6 +1173,12 @@ router.post('/recovery-kit/metadata', authenticateToken, async (req, res) => {
     };
     user.updatedAt = new Date();
     await user.save();
+
+    await logSecurityEvent({
+      userId: user._id,
+      eventType: 'recovery_kit_created',
+      req
+    });
 
     res.json({ success: true, message: 'Recovery kit metadata saved' });
   } catch (error) {

@@ -177,6 +177,12 @@ const userSchema = new mongoose.Schema({
       default: 30 // days
     }
   },
+  securityScore: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100
+  },
   // Friend count (cached for performance)
   friendCount: {
     type: Number,
