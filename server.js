@@ -17,6 +17,10 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const nodeEnv = cleanEnv(process.env.NODE_ENV || 'development');
 const isProduction = nodeEnv === 'production';
+const trustProxyHops = Number.parseInt(cleanEnv(process.env.TRUST_PROXY_HOPS) || '1', 10);
+const normalizedTrustProxyHops = Number.isInteger(trustProxyHops) && trustProxyHops >= 0
+  ? trustProxyHops
+  : 1;
 
 const railwayPublicDomain = cleanEnv(process.env.RAILWAY_PUBLIC_DOMAIN);
 const defaultOrigins = ['http://localhost:3000'];
@@ -46,7 +50,7 @@ const corsOrigin = (origin, callback) => {
 };
 
 // Trust proxy for Railway deployment (handles client IP detection behind proxy)
-app.set('trust proxy', 1);
+app.set('trust proxy', normalizedTrustProxyHops);
 
 // Security middleware
 app.use(helmet());
@@ -59,7 +63,11 @@ app.use(cors({
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000, // limit each IP to 1000 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
+  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
+  validate: {
+    xForwardedForHeader: false
+  }
 });
 app.use('/api/', limiter);
 
@@ -77,6 +85,7 @@ const mongoUri = cleanEnv(process.env.MONGODB_URI)
 
 console.log(`Environment: ${nodeEnv}`);
 console.log(`Allowed CORS origins: ${configuredOrigins.join(', ')}`);
+console.log(`Trust proxy hops: ${normalizedTrustProxyHops}`);
 console.log(`Mongo source: ${cleanEnv(process.env.MONGODB_URI) ? 'MONGODB_URI' : cleanEnv(process.env.MONGO_URL) ? 'MONGO_URL' : cleanEnv(process.env.MONGO_PUBLIC_URL) ? 'MONGO_PUBLIC_URL' : 'local-default'}`);
 
 // Validate required environment variables in production
