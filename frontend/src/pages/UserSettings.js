@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { authAPI } from '../utils/api';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
 import FriendsManager from '../components/FriendsManager';
+import RecoveryKitManager from '../components/RecoveryKitManager';
 
 const PROFILE_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
@@ -660,6 +661,16 @@ function UserSettings({
       {/* Friends Management Section */}
       <div className="mt-8">
         <FriendsManager currentUser={user} onUserUpdate={setUser} />
+      </div>
+
+      {/* Recovery Kit Section */}
+      <div className="mt-8">
+        <RecoveryKitManager
+          encryptionPassword={encryptionForm.encryptionPassword || encryptionForm.currentEncryptionPassword}
+          pgpPrivateKey={generatedPrivateKey}
+          userId={user?._id}
+          username={user?.username}
+        />
       </div>
     </div>
   );
