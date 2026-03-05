@@ -49,6 +49,18 @@ const corsOrigin = (origin, callback) => {
   callback(new Error('Not allowed by CORS'));
 };
 
+const registerRoute = (mountPath, loader) => {
+  try {
+    const route = loader();
+    app.use(mountPath, route);
+    console.log(`Route mounted: ${mountPath}`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to mount route ${mountPath}:`, error);
+    return false;
+  }
+};
+
 // Trust proxy for Railway deployment (handles client IP detection behind proxy)
 app.set('trust proxy', normalizedTrustProxyHops);
 
@@ -130,29 +142,55 @@ app.get('/', (req, res, next) => {
 });
 
 // API routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/feed', require('./routes/feed'));
-app.use('/api/gallery', require('./routes/gallery'));
-app.use('/api/public', require('./routes/public'));
-app.use('/api/chat', require('./routes/chat'));
-app.use('/api/market', require('./routes/market'));
-app.use('/api/location', require('./routes/location'));
-app.use('/api/universal', require('./routes/universal'));
-app.use('/api/friends', require('./routes/friends'));
-const newsRoutes = require('./routes/news');
-const mapsRoutes = require('./routes/maps');
-app.use('/api/news', newsRoutes.router);
-app.use('/api/maps', mapsRoutes.router);
+registerRoute('/api/auth', () => require('./routes/auth'));
+registerRoute('/api/users', () => require('./routes/users'));
+registerRoute('/api/feed', () => require('./routes/feed'));
+registerRoute('/api/gallery', () => require('./routes/gallery'));
+registerRoute('/api/public', () => require('./routes/public'));
+registerRoute('/api/chat', () => require('./routes/chat'));
+registerRoute('/api/market', () => require('./routes/market'));
+registerRoute('/api/location', () => require('./routes/location'));
+registerRoute('/api/universal', () => require('./routes/universal'));
+registerRoute('/api/friends', () => require('./routes/friends'));
+
+let newsRoutes = null;
+let mapsRoutes = null;
+try {
+  newsRoutes = require('./routes/news');
+  app.use('/api/news', newsRoutes.router);
+  console.log('Route mounted: /api/news');
+} catch (error) {
+  console.error('Failed to mount route /api/news:', error);
+}
+
+try {
+  mapsRoutes = require('./routes/maps');
+  app.use('/api/maps', mapsRoutes.router);
+  console.log('Route mounted: /api/maps');
+} catch (error) {
+  console.error('Failed to mount route /api/maps:', error);
+}
 
 // Start news ingestion scheduler
 if (process.env.NODE_ENV !== 'test') {
-  newsRoutes.startIngestionScheduler();
+  try {
+    if (newsRoutes && typeof newsRoutes.startIngestionScheduler === 'function') {
+      newsRoutes.startIngestionScheduler();
+    }
+  } catch (error) {
+    console.error('Failed to start news ingestion scheduler:', error);
+  }
 }
 
 // Start maps scheduled jobs
 if (process.env.NODE_ENV !== 'test') {
-  mapsRoutes.startScheduledJobs();
+  try {
+    if (mapsRoutes && typeof mapsRoutes.startScheduledJobs === 'function') {
+      mapsRoutes.startScheduledJobs();
+    }
+  } catch (error) {
+    console.error('Failed to start maps scheduled jobs:', error);
+  }
 }
 
 if (isProduction) {
