@@ -139,6 +139,8 @@ postSchema.index({ authorId: 1, createdAt: -1 });
 postSchema.index({ visibility: 1, createdAt: -1 });
 postSchema.index({ authorId: 1, visibility: 1, createdAt: -1 });
 postSchema.index({ expiresAt: 1 });
+postSchema.index({ content: 'text' });
+postSchema.index({ createdAt: -1, visibility: 1, authorId: 1 });
 
 // Method to check if user can view post
 postSchema.methods.canView = function(viewerId, context = {}) {
