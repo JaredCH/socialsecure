@@ -5,8 +5,34 @@ const jwt = require('jsonwebtoken');
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
 const DeviceKey = require('../models/DeviceKey');
+const SecurityEvent = require('../models/SecurityEvent');
 const RoomKeyPackage = require('../models/RoomKeyPackage');
 const User = require('../models/User');
+
+const getClientIp = (req) => {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || 'unknown';
+};
+
+const logSecurityEvent = async ({ userId, eventType, req, metadata = {}, severity = 'info' }) => {
+  try {
+    await SecurityEvent.create({
+      userId,
+      eventType,
+      severity,
+      metadata: {
+        ip: getClientIp(req),
+        userAgent: req.headers['user-agent'] || '',
+        ...metadata
+      }
+    });
+  } catch (error) {
+    console.error('Failed to write security event:', error?.message || error);
+  }
+};
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -663,6 +689,31 @@ router.post('/rooms/:roomId/messages/e2ee', [
 });
 
 // Register or rotate an authenticated user's device keys
+router.get('/devices', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const devices = await DeviceKey.find({ userId })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return res.json({
+      devices: devices.map((device) => ({
+        id: device._id,
+        deviceId: device.deviceId,
+        keyVersion: device.keyVersion,
+        algorithms: device.algorithms,
+        isRevoked: !!device.isRevoked,
+        revokedAt: device.revokedAt || null,
+        updatedAt: device.updatedAt,
+        createdAt: device.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error loading devices:', error?.message || error);
+    return res.status(500).json({ error: 'Failed to load devices' });
+  }
+});
+
 router.post('/devices/keys', [
   authenticateToken,
   body('deviceId').isString().trim().isLength({ min: 1, max: E2EE_LIMITS.deviceId }),
@@ -701,6 +752,13 @@ router.post('/devices/keys', [
       { new: true, upsert: true, setDefaultsOnInsert: true }
     ).lean();
 
+    await logSecurityEvent({
+      userId,
+      eventType: 'device_key_registered',
+      req,
+      metadata: { deviceId }
+    });
+
     return res.status(201).json({
       success: true,
       message: 'Device key registered',
@@ -712,6 +770,7 @@ router.post('/devices/keys', [
         updatedAt: deviceKey.updatedAt
       }
     });
+
   } catch (error) {
     console.error('Error registering device key:', error?.message || error);
     return res.status(500).json({ error: 'Failed to register device key' });
@@ -743,6 +802,14 @@ router.delete('/devices/keys/:deviceId', authenticateToken, async (req, res) => 
     if (!deviceKey) {
       return res.status(404).json({ error: 'Device key not found' });
     }
+
+    await logSecurityEvent({
+      userId,
+      eventType: 'device_key_revoked',
+      req,
+      severity: 'warning',
+      metadata: { deviceId }
+    });
 
     return res.json({
       success: true,
