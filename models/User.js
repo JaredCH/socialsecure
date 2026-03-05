@@ -127,6 +127,28 @@ const userSchema = new mongoose.Schema({
     enum: ['public', 'friends', 'private'],
     default: 'public'
   },
+  circles: [{
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 50
+    },
+    members: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
+    color: {
+      type: String,
+      trim: true,
+      default: '#3B82F6',
+      maxlength: 16
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   onboardingStatus: {
     type: String,
     enum: ['pending', 'in_progress', 'completed'],

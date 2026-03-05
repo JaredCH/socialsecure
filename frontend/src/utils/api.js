@@ -68,7 +68,7 @@ export const userAPI = {
 // Feed API
 export const feedAPI = {
   getUserFeed: (userId, page = 1, limit = 20) => 
-    api.get(`/feed/${userId}?page=${page}&limit=${limit}`),
+    api.get(`/feed/user/${userId}?page=${page}&limit=${limit}`),
   getPublicUserFeed: (userIdOrUsername, page = 1, limit = 20) =>
     api.get(`/public/users/${encodeURIComponent(userIdOrUsername)}/feed?page=${page}&limit=${limit}`),
   createPost: (data) => api.post('/feed/post', data),
@@ -244,6 +244,15 @@ export const friendsAPI = {
   updatePrivacySettings: (data) => api.put('/friends/privacy', data),
   // Get relationship status
   getRelationship: (userId) => api.get(`/friends/relationship/${userId}`),
+};
+
+export const circlesAPI = {
+  getCircles: () => api.get('/circles'),
+  createCircle: (data) => api.post('/circles', data),
+  updateCircle: (circleName, data) => api.put(`/circles/${encodeURIComponent(circleName)}`, data),
+  deleteCircle: (circleName) => api.delete(`/circles/${encodeURIComponent(circleName)}`),
+  addMember: (circleName, userId) => api.post(`/circles/${encodeURIComponent(circleName)}/members`, { userId }),
+  removeMember: (circleName, userId) => api.delete(`/circles/${encodeURIComponent(circleName)}/members/${encodeURIComponent(userId)}`),
 };
 
 // News API

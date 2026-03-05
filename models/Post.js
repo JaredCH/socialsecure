@@ -1,5 +1,26 @@
 const mongoose = require('mongoose');
 
+const EARTH_RADIUS_MILES = 3958.8;
+
+const toRadians = (degrees) => (Number(degrees) * Math.PI) / 180;
+
+const calculateMiles = (origin, destination) => {
+  if (!origin || !destination) return null;
+  const [lon1, lat1] = origin;
+  const [lon2, lat2] = destination;
+  if (![lon1, lat1, lon2, lat2].every((value) => Number.isFinite(Number(value)))) {
+    return null;
+  }
+
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2)
+    + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_MILES * c;
+};
+
 const postSchema = new mongoose.Schema({
   authorId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -28,8 +49,32 @@ const postSchema = new mongoose.Schema({
   },
   visibility: {
     type: String,
-    enum: ['public', 'friends', 'private'],
+    enum: ['public', 'friends', 'circles', 'specific_users', 'private'],
     default: 'public'
+  },
+  visibleToCircles: [{
+    type: String,
+    trim: true,
+    maxlength: 50
+  }],
+  visibleToUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  excludeUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  locationRadius: {
+    type: Number,
+    default: null,
+    min: 1,
+    max: 1000
+  },
+  expiresAt: {
+    type: Date,
+    default: null,
+    index: true
   },
   location: {
     type: {
@@ -92,12 +137,62 @@ postSchema.index({ location: '2dsphere' });
 postSchema.index({ targetFeedId: 1, createdAt: -1 });
 postSchema.index({ authorId: 1, createdAt: -1 });
 postSchema.index({ visibility: 1, createdAt: -1 });
+postSchema.index({ authorId: 1, visibility: 1, createdAt: -1 });
+postSchema.index({ expiresAt: 1 });
 
 // Method to check if user can view post
-postSchema.methods.canView = function(userId, isFriend = false) {
-  if (this.visibility === 'public') return true;
-  if (this.visibility === 'friends' && isFriend) return true;
-  if (this.visibility === 'private' && this.targetFeedId.toString() === userId.toString()) return true;
+postSchema.methods.canView = function(viewerId, context = {}) {
+  if (!viewerId) return this.visibility === 'public';
+
+  const viewer = String(viewerId);
+  const author = String(this.authorId);
+  const target = String(this.targetFeedId);
+
+  if (this.expiresAt && this.expiresAt.getTime() < Date.now()) {
+    return false;
+  }
+
+  if (author === viewer || target === viewer) {
+    return true;
+  }
+
+  const excludedIds = Array.isArray(this.excludeUsers)
+    ? this.excludeUsers.map((entry) => String(entry))
+    : [];
+  if (excludedIds.includes(viewer)) {
+    return false;
+  }
+
+  const enforceLocationRadius = () => {
+    if (!this.locationRadius || !Array.isArray(this.location?.coordinates)) {
+      return true;
+    }
+    if (!Array.isArray(context.viewerCoordinates)) {
+      return false;
+    }
+    const miles = calculateMiles(this.location.coordinates, context.viewerCoordinates);
+    return Number.isFinite(miles) ? miles <= this.locationRadius : false;
+  };
+
+  if (this.visibility === 'public') {
+    return enforceLocationRadius();
+  }
+
+  if (this.visibility === 'friends') {
+    return !!context.isFriend;
+  }
+
+  if (this.visibility === 'circles' || this.visibility === 'specific_users') {
+    const allowedUsers = Array.isArray(this.visibleToUsers)
+      ? this.visibleToUsers.map((entry) => String(entry))
+      : [];
+    return allowedUsers.includes(viewer);
+  }
+
+  if (this.visibility === 'private') {
+    return author === viewer || target === viewer;
+  }
+
   return false;
 };
 

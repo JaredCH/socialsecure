@@ -1,12 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI, feedAPI, galleryAPI } from '../utils/api';
+import { authAPI, circlesAPI, feedAPI, friendsAPI, galleryAPI } from '../utils/api';
+import PrivacySelector from '../components/PrivacySelector';
+import CircleManager from '../components/CircleManager';
 
-const VISIBILITY_OPTIONS = ['public', 'friends', 'private'];
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const GALLERY_MAX_ITEMS = 24;
 const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
+
+const PRIVACY_BADGE_LABELS = {
+  public: 'Public',
+  friends: 'Friends',
+  circles: 'Circles',
+  specific_users: 'Specific Users',
+  private: 'Private'
+};
 
 const isRenderableMediaUrl = (value) => {
   if (typeof value !== 'string') return false;
@@ -144,7 +153,14 @@ const Social = () => {
     mediaUrlInput: '',
     mediaUrls: [],
     visibility: 'public',
+    visibleToCircles: [],
+    visibleToUsers: [],
+    excludeUsers: [],
+    locationRadius: '',
+    expirationPreset: 'none',
   });
+  const [circles, setCircles] = useState([]);
+  const [friends, setFriends] = useState([]);
   const [commentInputs, setCommentInputs] = useState({});
   const [actionLoadingByPost, setActionLoadingByPost] = useState({});
   const [galleryItems, setGalleryItems] = useState([]);
@@ -234,6 +250,13 @@ const Social = () => {
     const profileResponse = await authAPI.getProfile();
     const user = profileResponse.data?.user;
     setCurrentUser(user || null);
+
+    const [circlesResponse, friendsResponse] = await Promise.all([
+      circlesAPI.getCircles().catch(() => ({ data: { circles: [] } })),
+      friendsAPI.getFriends().catch(() => ({ data: { friends: [] } }))
+    ]);
+    setCircles(Array.isArray(circlesResponse.data?.circles) ? circlesResponse.data.circles : []);
+    setFriends(Array.isArray(friendsResponse.data?.friends) ? friendsResponse.data.friends : []);
 
     const timelineResponse = await feedAPI.getTimeline();
     const timelinePosts = Array.isArray(timelineResponse.data?.posts)
@@ -329,6 +352,87 @@ const Social = () => {
     }));
   };
 
+  const handlePostFormField = (field, value) => {
+    setPostForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const toggleStringInArray = (list, value) => {
+    if (list.includes(value)) {
+      return list.filter((entry) => entry !== value);
+    }
+    return [...list, value];
+  };
+
+  const handleToggleCircle = (circleName) => {
+    setPostForm((prev) => ({
+      ...prev,
+      visibleToCircles: toggleStringInArray(prev.visibleToCircles, circleName)
+    }));
+  };
+
+  const handleToggleVisibleUser = (userId) => {
+    setPostForm((prev) => ({
+      ...prev,
+      visibleToUsers: toggleStringInArray(prev.visibleToUsers, userId)
+    }));
+  };
+
+  const handleToggleExcludeUser = (userId) => {
+    setPostForm((prev) => ({
+      ...prev,
+      excludeUsers: toggleStringInArray(prev.excludeUsers, userId)
+    }));
+  };
+
+  const refreshCircles = async () => {
+    try {
+      const response = await circlesAPI.getCircles();
+      setCircles(Array.isArray(response.data?.circles) ? response.data.circles : []);
+    } catch {
+      setCircles([]);
+    }
+  };
+
+  const handleCreateCircle = async (payload) => {
+    try {
+      await circlesAPI.createCircle(payload);
+      await refreshCircles();
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to create circle.');
+    }
+  };
+
+  const handleDeleteCircle = async (circleName) => {
+    try {
+      await circlesAPI.deleteCircle(circleName);
+      await refreshCircles();
+      setPostForm((prev) => ({
+        ...prev,
+        visibleToCircles: prev.visibleToCircles.filter((entry) => entry !== circleName)
+      }));
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to delete circle.');
+    }
+  };
+
+  const handleAddCircleMember = async (circleName, userId) => {
+    try {
+      await circlesAPI.addMember(circleName, userId);
+      await refreshCircles();
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to add circle member.');
+    }
+  };
+
+  const handleRemoveCircleMember = async (circleName, userId) => {
+    try {
+      await circlesAPI.removeMember(circleName, userId);
+      await refreshCircles();
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to remove circle member.');
+    }
+  };
+
   const handleSubmitPost = async (event) => {
     event.preventDefault();
     if (!currentUser?._id) return;
@@ -342,10 +446,24 @@ const Social = () => {
     setSubmittingPost(true);
     setFeedError('');
     try {
+      let expiresAt = null;
+      if (postForm.expirationPreset === '24h') {
+        expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      } else if (postForm.expirationPreset === '7d') {
+        expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (postForm.expirationPreset === '30d') {
+        expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      }
+
       const response = await feedAPI.createPost({
         content,
         mediaUrls: postForm.mediaUrls,
         visibility: postForm.visibility,
+        visibleToCircles: postForm.visibleToCircles,
+        visibleToUsers: postForm.visibleToUsers,
+        excludeUsers: postForm.excludeUsers,
+        locationRadius: postForm.locationRadius ? Number(postForm.locationRadius) : null,
+        expiresAt,
         targetFeedId: currentUser._id,
       });
 
@@ -361,6 +479,11 @@ const Social = () => {
         mediaUrlInput: '',
         mediaUrls: [],
         visibility: 'public',
+        visibleToCircles: [],
+        visibleToUsers: [],
+        excludeUsers: [],
+        locationRadius: '',
+        expirationPreset: 'none',
       });
     } catch (error) {
       setFeedError(error.response?.data?.error || 'Failed to publish post.');
@@ -790,20 +913,15 @@ const Social = () => {
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Visibility</label>
-                <select
-                  value={postForm.visibility}
-                  onChange={(event) => setPostForm((prev) => ({ ...prev, visibility: event.target.value }))}
-                  className="border rounded px-3 py-2"
-                >
-                  {VISIBILITY_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <PrivacySelector
+                form={postForm}
+                circles={circles}
+                friends={friends}
+                onChange={handlePostFormField}
+                onToggleCircle={handleToggleCircle}
+                onToggleVisibleUser={handleToggleVisibleUser}
+                onToggleExcludeUser={handleToggleExcludeUser}
+              />
 
               <button
                 type="submit"
@@ -813,6 +931,17 @@ const Social = () => {
                 {submittingPost ? 'Publishing...' : 'Publish Post'}
               </button>
             </form>
+          )}
+
+          {isAuthenticated && (
+            <CircleManager
+              circles={circles}
+              friends={friends}
+              onCreateCircle={handleCreateCircle}
+              onDeleteCircle={handleDeleteCircle}
+              onAddMember={handleAddCircleMember}
+              onRemoveMember={handleRemoveCircleMember}
+            />
           )}
 
           <section className="space-y-4">
@@ -853,9 +982,23 @@ const Social = () => {
                         <p className="text-xs text-gray-500">{formatDate(post.createdAt)}</p>
                       </div>
                       <span className="text-xs uppercase tracking-wide bg-gray-100 px-2 py-1 rounded">
-                        {post.visibility}
+                        {PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}
                       </span>
                     </header>
+
+                    <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+                      {Array.isArray(post.visibleToCircles) && post.visibleToCircles.length > 0 && (
+                        <span className="bg-gray-100 px-2 py-1 rounded">
+                          Circles: {post.visibleToCircles.join(', ')}
+                        </span>
+                      )}
+                      {post.locationRadius ? (
+                        <span className="bg-gray-100 px-2 py-1 rounded">Radius: {post.locationRadius} mi</span>
+                      ) : null}
+                      {post.expiresAt ? (
+                        <span className="bg-gray-100 px-2 py-1 rounded">Expires: {formatDate(post.expiresAt)}</span>
+                      ) : null}
+                    </div>
 
                     {post.content && <p className="text-gray-800 whitespace-pre-wrap">{post.content}</p>}
 
