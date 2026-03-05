@@ -12,6 +12,7 @@ const PGP_PUBLIC_KEY_BEGIN = '-----BEGIN PGP PUBLIC KEY BLOCK-----';
 const PGP_PUBLIC_KEY_END = '-----END PGP PUBLIC KEY BLOCK-----';
 const PGP_PRIVATE_KEY_BEGIN = '-----BEGIN PGP PRIVATE KEY BLOCK-----';
 const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
+const ONBOARDING_TOTAL_STEPS = 4;
 
 const isSafeHttpUrl = (value) => {
   try {
@@ -66,12 +67,67 @@ const getPgpPublicKeyValidationError = (publicKey) => {
 };
 
 // Generate JWT token
-const generateToken = (userId) => {
+const generateToken = (userId, onboardingStatus = 'pending') => {
   return jwt.sign(
-    { userId },
+    { userId, onboardingStatus },
     process.env.JWT_SECRET || 'your-secret-key-change-in-production',
     { expiresIn: '24h' }
   );
+};
+
+const getUserFromBearerToken = async (req, select = '') => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return { error: 'No token provided', status: 401 };
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const user = await User.findById(decoded.userId).select(select);
+    if (!user) {
+      return { error: 'User not found', status: 404 };
+    }
+
+    return { user, decoded };
+  } catch (error) {
+    return { error: 'Invalid token', status: 401 };
+  }
+};
+
+const sanitizeSecurityPreferences = (input = {}) => {
+  const defaults = {
+    loginNotifications: true,
+    sessionTimeout: 60,
+    requirePasswordForSensitive: true
+  };
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return defaults;
+  }
+
+  const sessionTimeout = Number.parseInt(input.sessionTimeout, 10);
+
+  return {
+    loginNotifications: typeof input.loginNotifications === 'boolean'
+      ? input.loginNotifications
+      : defaults.loginNotifications,
+    sessionTimeout: Number.isInteger(sessionTimeout)
+      ? Math.min(Math.max(sessionTimeout, 5), 1440)
+      : defaults.sessionTimeout,
+    requirePasswordForSensitive: typeof input.requirePasswordForSensitive === 'boolean'
+      ? input.requirePasswordForSensitive
+      : defaults.requirePasswordForSensitive
+  };
+};
+
+const buildCompletedSteps = (status, onboardingStep) => {
+  if (status === 'completed') {
+    return [1, 2, 3, 4];
+  }
+
+  const step = Number.isInteger(onboardingStep) ? onboardingStep : 1;
+  const maxCompleted = Math.max(Math.min(step - 1, ONBOARDING_TOTAL_STEPS), 0);
+  return Array.from({ length: maxCompleted }, (_, index) => index + 1);
 };
 
 // Register new user
@@ -130,7 +186,7 @@ router.post('/register', [
     await user.save();
 
     // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.onboardingStatus || 'pending');
 
     res.status(201).json({
       message: 'Registration successful',
@@ -181,7 +237,7 @@ router.post('/login', [
     }
 
     // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.onboardingStatus || 'pending');
 
     res.json({
       message: 'Login successful',
@@ -198,22 +254,128 @@ router.post('/login', [
 // Get current user profile
 router.get('/me', async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
+    const auth = await getUserFromBearerToken(req, '-passwordHash -encryptionPasswordHash');
+    if (auth.error) {
+      return res.status(auth.status).json({ error: auth.error });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
-    const user = await User.findById(decoded.userId).select('-passwordHash -encryptionPasswordHash');
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    res.json({ user: user.toPublicProfile() });
+    res.json({ user: auth.user.toPublicProfile() });
   } catch (error) {
     console.error('Auth error:', error);
     res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+router.get('/onboarding-status', async (req, res) => {
+  try {
+    const auth = await getUserFromBearerToken(req, 'onboardingStatus onboardingStep securityPreferences');
+    if (auth.error) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+
+    const status = auth.user.onboardingStatus || 'pending';
+    const currentStep = status === 'completed'
+      ? ONBOARDING_TOTAL_STEPS
+      : Math.min(Math.max(auth.user.onboardingStep || 1, 1), ONBOARDING_TOTAL_STEPS);
+
+    res.json({
+      status,
+      currentStep,
+      completedSteps: buildCompletedSteps(status, currentStep),
+      securityPreferences: auth.user.securityPreferences || sanitizeSecurityPreferences()
+    });
+  } catch (error) {
+    console.error('Onboarding status error:', error);
+    res.status(500).json({ error: 'Failed to fetch onboarding status' });
+  }
+});
+
+router.post('/onboarding/progress', [
+  body('step').isInt({ min: 1, max: ONBOARDING_TOTAL_STEPS }).withMessage('Step must be between 1 and 4'),
+  body('data').optional().isObject().withMessage('data must be an object')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const auth = await getUserFromBearerToken(req, 'onboardingStatus onboardingStep securityPreferences');
+    if (auth.error) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+
+    const requestedStep = Number.parseInt(req.body.step, 10);
+    const user = auth.user;
+
+    if (user.onboardingStatus === 'completed') {
+      return res.json({
+        success: true,
+        nextStep: ONBOARDING_TOTAL_STEPS,
+        status: 'completed'
+      });
+    }
+
+    if (requestedStep === 4) {
+      user.securityPreferences = sanitizeSecurityPreferences(req.body?.data);
+    }
+
+    const previousStep = Number.isInteger(user.onboardingStep) ? user.onboardingStep : 1;
+    const advancedStep = Math.max(previousStep, requestedStep + 1);
+
+    user.onboardingStatus = advancedStep > 1 ? 'in_progress' : 'pending';
+    user.onboardingStep = Math.min(advancedStep, ONBOARDING_TOTAL_STEPS);
+    user.updatedAt = new Date();
+    await user.save();
+
+    res.json({
+      success: true,
+      nextStep: Math.min(requestedStep + 1, ONBOARDING_TOTAL_STEPS),
+      status: user.onboardingStatus,
+      currentStep: user.onboardingStep
+    });
+  } catch (error) {
+    console.error('Onboarding progress error:', error);
+    res.status(500).json({ error: 'Failed to update onboarding progress' });
+  }
+});
+
+router.post('/onboarding/complete', [
+  body('securityPreferences').optional().isObject().withMessage('securityPreferences must be an object')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const auth = await getUserFromBearerToken(req, 'onboardingStatus onboardingStep securityPreferences');
+    if (auth.error) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+
+    const user = auth.user;
+    if (req.body?.securityPreferences) {
+      user.securityPreferences = sanitizeSecurityPreferences(req.body.securityPreferences);
+    }
+
+    user.onboardingStatus = 'completed';
+    user.onboardingStep = ONBOARDING_TOTAL_STEPS;
+    user.updatedAt = new Date();
+    await user.save();
+
+    const token = generateToken(user._id, 'completed');
+
+    res.json({
+      success: true,
+      status: 'completed',
+      currentStep: ONBOARDING_TOTAL_STEPS,
+      completedSteps: [1, 2, 3, 4],
+      token
+    });
+  } catch (error) {
+    console.error('Onboarding completion error:', error);
+    res.status(500).json({ error: 'Failed to complete onboarding' });
   }
 });
 
