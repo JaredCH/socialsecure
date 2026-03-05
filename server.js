@@ -45,6 +45,9 @@ const corsOrigin = (origin, callback) => {
   callback(new Error('Not allowed by CORS'));
 };
 
+// Trust proxy for Railway deployment (handles client IP detection behind proxy)
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 app.use(cors({
@@ -52,7 +55,7 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
+// Rate limiting - trust proxy is set at app level (line 49)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000, // limit each IP to 1000 requests per windowMs
@@ -75,6 +78,35 @@ const mongoUri = cleanEnv(process.env.MONGODB_URI)
 console.log(`Environment: ${nodeEnv}`);
 console.log(`Allowed CORS origins: ${configuredOrigins.join(', ')}`);
 console.log(`Mongo source: ${cleanEnv(process.env.MONGODB_URI) ? 'MONGODB_URI' : cleanEnv(process.env.MONGO_URL) ? 'MONGO_URL' : cleanEnv(process.env.MONGO_PUBLIC_URL) ? 'MONGO_PUBLIC_URL' : 'local-default'}`);
+
+// Validate required environment variables in production
+if (isProduction) {
+  // JWT_SECRET is always required in production
+  if (!cleanEnv(process.env.JWT_SECRET)) {
+    console.error('ERROR: JWT_SECRET is required in production.');
+    console.error('Please set JWT_SECRET in your Railway project settings.');
+    process.exit(1);
+  }
+  
+  // At least one MongoDB connection variable must be present
+  const hasMongodbUri = !!cleanEnv(process.env.MONGODB_URI);
+  const hasMongoUrl = !!cleanEnv(process.env.MONGO_URL);
+  const hasMongoPublicUrl = !!cleanEnv(process.env.MONGO_PUBLIC_URL);
+  
+  if (!hasMongodbUri && !hasMongoUrl && !hasMongoPublicUrl) {
+    console.error('ERROR: No MongoDB connection variable found in production.');
+    console.error('Accepted variables: MONGODB_URI, MONGO_URL, or MONGO_PUBLIC_URL');
+    console.error('For Railway Mongo, set MONGODB_URI=${{mongodb.MONGO_URL}} or use MONGO_URL directly.');
+    process.exit(1);
+  }
+  
+  console.log('All required environment variables are configured.');
+  
+  // Warn about optional but recommended variables
+  if (!cleanEnv(process.env.RAILWAY_PUBLIC_DOMAIN) && !cleanEnv(process.env.CLIENT_URL)) {
+    console.warn('WARNING: Neither RAILWAY_PUBLIC_DOMAIN nor CLIENT_URL is set. CORS may not work correctly.');
+  }
+}
 
 mongoose.connect(mongoUri, {
   useNewUrlParser: true,

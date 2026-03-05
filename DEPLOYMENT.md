@@ -12,10 +12,12 @@ This repo now supports **single-service deploy** on Railway:
 3. Public domain target port should be `5000`.
 4. Set variables:
 	- `NODE_ENV=production`
-	- `JWT_SECRET=<strong-random-secret>`
-	- `MONGODB_URI=<railway-mongodb-connection-string>` **or** rely on Railway Mongo `MONGO_URL`
+	- `JWT_SECRET=<strong-random-secret>` (required)
+	- **Database**: Set ONE of these:
+		- `MONGODB_URI=${{mongodb.MONGO_URL}}` (recommended - maps Railway Mongo URL)
+		- `MONGO_URL=${{mongodb.MONGO_URL}}` (alternative)
+		- `MONGO_PUBLIC_URL=${{mongodb.MONGO_PUBLIC_URL}}` (alternative)
 	- `CLIENT_URL=https://<your-domain>`
-5. For Railway Mongo, safest is to set `MONGODB_URI=${{MONGO_URL}}`.
 
 ### Raw variables (copy/paste)
 
