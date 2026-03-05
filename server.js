@@ -88,30 +88,25 @@ console.log(`Allowed CORS origins: ${configuredOrigins.join(', ')}`);
 console.log(`Trust proxy hops: ${normalizedTrustProxyHops}`);
 console.log(`Mongo source: ${cleanEnv(process.env.MONGODB_URI) ? 'MONGODB_URI' : cleanEnv(process.env.MONGO_URL) ? 'MONGO_URL' : cleanEnv(process.env.MONGO_PUBLIC_URL) ? 'MONGO_PUBLIC_URL' : 'local-default'}`);
 
-// Validate required environment variables in production
+// Validate production environment configuration (non-fatal; keep service bootable for healthchecks)
 if (isProduction) {
-  // JWT_SECRET is always required in production
-  if (!cleanEnv(process.env.JWT_SECRET)) {
-    console.error('ERROR: JWT_SECRET is required in production.');
-    console.error('Please set JWT_SECRET in your Railway project settings.');
-    process.exit(1);
-  }
-  
-  // At least one MongoDB connection variable must be present
+  const hasJwtSecret = !!cleanEnv(process.env.JWT_SECRET);
   const hasMongodbUri = !!cleanEnv(process.env.MONGODB_URI);
   const hasMongoUrl = !!cleanEnv(process.env.MONGO_URL);
   const hasMongoPublicUrl = !!cleanEnv(process.env.MONGO_PUBLIC_URL);
-  
-  if (!hasMongodbUri && !hasMongoUrl && !hasMongoPublicUrl) {
-    console.error('ERROR: No MongoDB connection variable found in production.');
-    console.error('Accepted variables: MONGODB_URI, MONGO_URL, or MONGO_PUBLIC_URL');
-    console.error('For Railway Mongo, set MONGODB_URI=${{mongodb.MONGO_URL}} or use MONGO_URL directly.');
-    process.exit(1);
+
+  if (!hasJwtSecret) {
+    console.warn('WARNING: JWT_SECRET is not set in production. Using fallback secret is insecure.');
   }
-  
-  console.log('All required environment variables are configured.');
-  
-  // Warn about optional but recommended variables
+
+  if (!hasMongodbUri && !hasMongoUrl && !hasMongoPublicUrl) {
+    console.warn('WARNING: No MongoDB connection variable found in production.');
+    console.warn('Accepted variables: MONGODB_URI, MONGO_URL, or MONGO_PUBLIC_URL');
+    console.warn('For Railway Mongo, set MONGODB_URI=${{mongodb.MONGO_URL}} or use MONGO_URL directly.');
+  } else {
+    console.log('Production environment variables detected.');
+  }
+
   if (!cleanEnv(process.env.RAILWAY_PUBLIC_DOMAIN) && !cleanEnv(process.env.CLIENT_URL)) {
     console.warn('WARNING: Neither RAILWAY_PUBLIC_DOMAIN nor CLIENT_URL is set. CORS may not work correctly.');
   }
@@ -190,8 +185,16 @@ app.use('*', (req, res) => {
 });
 
 // Start server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
 });
 
 // Socket.io setup

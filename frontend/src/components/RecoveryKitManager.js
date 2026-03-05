@@ -2,6 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { authAPI } from '../utils/api';
 import toast from 'react-hot-toast';
 
+const toBase64 = (bytes) => {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+};
+
 const RecoveryKitManager = ({ encryptionPassword, pgpPrivateKey, userId, username }) => {
   const [recoveryKitStatus, setRecoveryKitStatus] = useState({
     lastBackupAt: null,
@@ -96,14 +106,18 @@ const RecoveryKitManager = ({ encryptionPassword, pgpPrivateKey, userId, usernam
 
   // Simple encryption for demo - in production use Web Crypto API properly
   const encryptRecoveryKit = async (kit, password) => {
+    if (!window.crypto || !window.crypto.subtle) {
+      throw new Error('Web Crypto API is not available in this browser');
+    }
+
     const encoder = new TextEncoder();
     const data = encoder.encode(JSON.stringify(kit));
     
     // Use SubtleCrypto for actual encryption
     const passwordKey = await deriveKey(password);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
     
-    const encrypted = await crypto.subtle.encrypt(
+    const encrypted = await window.crypto.subtle.encrypt(
       { name: 'AES-GCM', iv },
       passwordKey,
       data
@@ -115,12 +129,12 @@ const RecoveryKitManager = ({ encryptionPassword, pgpPrivateKey, userId, usernam
     result.set(new Uint8Array(encrypted), iv.length);
     
     // Base64 encode for storage
-    return btoa(String.fromCharCode(...result));
+    return toBase64(result);
   };
 
   const deriveKey = async (password) => {
     const encoder = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey(
+    const keyMaterial = await window.crypto.subtle.importKey(
       'raw',
       encoder.encode(password),
       'PBKDF2',
@@ -128,7 +142,7 @@ const RecoveryKitManager = ({ encryptionPassword, pgpPrivateKey, userId, usernam
       ['deriveKey']
     );
     
-    return crypto.subtle.deriveKey(
+    return window.crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
         salt: encoder.encode('SocialSecureRecoveryKit'),
