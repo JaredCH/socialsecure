@@ -3,6 +3,18 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const BlockList = require('../models/BlockList');
+
+const hasBlockRelationship = async (viewerId, targetId) => {
+  const record = await BlockList.findOne({
+    $or: [
+      { userId: viewerId, blockedUserId: targetId },
+      { userId: targetId, blockedUserId: viewerId }
+    ]
+  }).select('_id').lean();
+
+  return !!record;
+};
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -76,6 +88,11 @@ router.get('/username/:username', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    const blocked = await hasBlockRelationship(req.user.userId, user._id);
+    if (blocked) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     const publicUser = user.toPublicProfile();
     delete publicUser.hasEncryptionPassword;
     
@@ -98,6 +115,11 @@ router.get('/:userId', authenticateToken, async (req, res) => {
       .select('-passwordHash -encryptionPasswordHash -pgpPublicKey');
     
     if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const blocked = await hasBlockRelationship(req.user.userId, user._id);
+    if (blocked) {
       return res.status(404).json({ error: 'User not found' });
     }
 

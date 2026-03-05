@@ -313,4 +313,22 @@ export const mapsAPI = {
   getCommunityMap: (params) => api.get('/maps/community', { params }),
 };
 
+export const moderationAPI = {
+  report: (data) => api.post('/moderation/report', data),
+  getMyReports: () => api.get('/moderation/my-reports'),
+  getAccountActions: () => api.get('/moderation/account-actions'),
+  getBlocks: () => api.get('/moderation/blocks'),
+  blockUser: (userId, reason = '') => api.post('/moderation/block', { userId, reason }),
+  unblockUser: (userId) => api.delete(`/moderation/block/${encodeURIComponent(userId)}`),
+  getMutes: () => api.get('/moderation/mutes'),
+  muteUser: (userId) => api.post('/moderation/mute', { userId }),
+  unmuteUser: (userId) => api.delete(`/moderation/mute/${encodeURIComponent(userId)}`),
+  getReports: (params = {}) => api.get('/moderation/reports', { params }),
+  updateReport: (reportId, data) => api.put(`/moderation/reports/${encodeURIComponent(reportId)}`, data),
+  applyAction: (data) => api.post('/moderation/actions', data),
+  submitAppeal: (data) => api.post('/moderation/appeals', data),
+  getAppeals: () => api.get('/moderation/appeals'),
+  processAppeal: (reportId, data) => api.put(`/moderation/appeals/${encodeURIComponent(reportId)}`, data)
+};
+
 export default api;

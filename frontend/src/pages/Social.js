@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI, circlesAPI, feedAPI, friendsAPI, galleryAPI } from '../utils/api';
+import { authAPI, circlesAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
+import ReportModal from '../components/ReportModal';
+import BlockButton from '../components/BlockButton';
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
@@ -173,6 +175,15 @@ const Social = () => {
   const [galleryLoading, setGalleryLoading] = useState(false);
   const [galleryActionLoadingByImage, setGalleryActionLoadingByImage] = useState({});
   const [galleryEditById, setGalleryEditById] = useState({});
+  const [blockedUserIds, setBlockedUserIds] = useState([]);
+  const [mutedUserIds, setMutedUserIds] = useState([]);
+  const [myReports, setMyReports] = useState([]);
+  const [reportModalState, setReportModalState] = useState({
+    isOpen: false,
+    targetType: 'post',
+    targetId: null,
+    targetUserId: null
+  });
 
   const galleryOwnerIdentifier = useMemo(() => {
     if (galleryTarget) {
@@ -257,6 +268,16 @@ const Social = () => {
     ]);
     setCircles(Array.isArray(circlesResponse.data?.circles) ? circlesResponse.data.circles : []);
     setFriends(Array.isArray(friendsResponse.data?.friends) ? friendsResponse.data.friends : []);
+
+    const [blocksResponse, mutesResponse, reportsResponse] = await Promise.all([
+      moderationAPI.getBlocks().catch(() => ({ data: { blockedUsers: [] } })),
+      moderationAPI.getMutes().catch(() => ({ data: { mutedUsers: [] } })),
+      moderationAPI.getMyReports().catch(() => ({ data: { reports: [] } }))
+    ]);
+
+    setBlockedUserIds((blocksResponse.data?.blockedUsers || []).map((entry) => String(entry._id)));
+    setMutedUserIds((mutesResponse.data?.mutedUsers || []).map((entry) => String(entry._id)));
+    setMyReports(Array.isArray(reportsResponse.data?.reports) ? reportsResponse.data.reports : []);
 
     const timelineResponse = await feedAPI.getTimeline();
     const timelinePosts = Array.isArray(timelineResponse.data?.posts)
@@ -430,6 +451,80 @@ const Social = () => {
       await refreshCircles();
     } catch (error) {
       setFeedError(error.response?.data?.error || 'Failed to remove circle member.');
+    }
+  };
+
+  const refreshModerationState = async () => {
+    const [blocksResponse, mutesResponse, reportsResponse] = await Promise.all([
+      moderationAPI.getBlocks().catch(() => ({ data: { blockedUsers: [] } })),
+      moderationAPI.getMutes().catch(() => ({ data: { mutedUsers: [] } })),
+      moderationAPI.getMyReports().catch(() => ({ data: { reports: [] } }))
+    ]);
+
+    setBlockedUserIds((blocksResponse.data?.blockedUsers || []).map((entry) => String(entry._id)));
+    setMutedUserIds((mutesResponse.data?.mutedUsers || []).map((entry) => String(entry._id)));
+    setMyReports(Array.isArray(reportsResponse.data?.reports) ? reportsResponse.data.reports : []);
+  };
+
+  const handleBlockUser = async (userId, reason = '') => {
+    try {
+      await moderationAPI.blockUser(userId, reason);
+      await refreshModerationState();
+      await loadFeed();
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to block user.');
+    }
+  };
+
+  const handleUnblockUser = async (userId) => {
+    try {
+      await moderationAPI.unblockUser(userId);
+      await refreshModerationState();
+      await loadFeed();
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to unblock user.');
+    }
+  };
+
+  const handleToggleMuteUser = async (userId) => {
+    try {
+      if (mutedUserIds.includes(String(userId))) {
+        await moderationAPI.unmuteUser(userId);
+      } else {
+        await moderationAPI.muteUser(userId);
+      }
+      await refreshModerationState();
+      await loadFeed();
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to update mute state.');
+    }
+  };
+
+  const openReportModal = (targetType, targetId, targetUserId) => {
+    setReportModalState({
+      isOpen: true,
+      targetType,
+      targetId,
+      targetUserId
+    });
+  };
+
+  const closeReportModal = () => {
+    setReportModalState({
+      isOpen: false,
+      targetType: 'post',
+      targetId: null,
+      targetUserId: null
+    });
+  };
+
+  const submitReport = async (payload) => {
+    try {
+      await moderationAPI.report(payload);
+      await refreshModerationState();
+      closeReportModal();
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to submit report.');
     }
   };
 
@@ -968,9 +1063,12 @@ const Social = () => {
             ) : (
               posts.map((post) => {
                 const postAuthor = post.authorId?.username || 'unknown';
+                const postAuthorId = String(post.authorId?._id || post.authorId || '');
                 const postTarget = post.targetFeedId?.username || postAuthor;
                 const hasLiked = currentUser ? post.likes.includes(currentUser._id) : false;
                 const postBusy = Boolean(actionLoadingByPost[post._id]);
+                const isBlocked = blockedUserIds.includes(postAuthorId);
+                const isMuted = mutedUserIds.includes(postAuthorId);
 
                 return (
                   <article key={post._id} className="bg-white rounded-xl shadow p-5 space-y-3 border border-gray-100">
@@ -1014,6 +1112,51 @@ const Social = () => {
                       <span>{post.likesCount} like{post.likesCount === 1 ? '' : 's'}</span>
                       <span>{post.commentsCount} comment{post.commentsCount === 1 ? '' : 's'}</span>
                     </div>
+
+                    {isAuthenticated && postAuthorId && postAuthorId !== String(currentUser?._id) && (
+                      <div className="flex flex-wrap gap-2">
+                        <BlockButton
+                          isBlocked={isBlocked}
+                          onBlock={(reason) => handleBlockUser(postAuthorId, reason)}
+                          onUnblock={() => handleUnblockUser(postAuthorId)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMuteUser(postAuthorId)}
+                          className="px-3 py-1.5 rounded border border-gray-400 text-sm"
+                        >
+                          {isMuted ? 'Unmute User' : 'Mute User'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openReportModal('post', post._id, postAuthorId)}
+                          className="px-3 py-1.5 rounded border border-red-300 text-red-700 text-sm"
+                        >
+                          Report
+                        </button>
+                      </div>
+                    )}
+
+          {isAuthenticated && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-3">
+              <h3 className="text-lg font-semibold">Moderation Transparency</h3>
+              <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
+              {myReports.length === 0 ? (
+                <p className="text-sm text-gray-500">No submitted reports yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {myReports.slice(0, 10).map((report) => (
+                    <div key={report.id} className="border rounded p-2 text-sm">
+                      <p className="font-medium text-gray-900">
+                        {report.category} • {report.targetType} • {report.status}
+                      </p>
+                      <p className="text-gray-500">{formatDate(report.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
                     {isAuthenticated ? (
                       <div className="space-y-3">
@@ -1337,6 +1480,15 @@ const Social = () => {
           </section>
         </aside>
       </div>
+
+      <ReportModal
+        isOpen={reportModalState.isOpen}
+        targetType={reportModalState.targetType}
+        targetId={reportModalState.targetId}
+        targetUserId={reportModalState.targetUserId}
+        onClose={closeReportModal}
+        onSubmit={submitReport}
+      />
     </div>
   );
 };

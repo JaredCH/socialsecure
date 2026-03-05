@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const Post = require('../models/Post');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
+const BlockList = require('../models/BlockList');
+const MuteList = require('../models/MuteList');
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
@@ -39,6 +41,20 @@ const getFriendIds = async (userId) => {
     ids.add(requester === String(userId) ? recipient : requester);
   }
   return ids;
+};
+
+const getBlockedOrMutedIds = async (viewerId) => {
+  const [blocks, blockedByOthers, mutes] = await Promise.all([
+    BlockList.find({ userId: viewerId }).select('blockedUserId').lean(),
+    BlockList.find({ blockedUserId: viewerId }).select('userId').lean(),
+    MuteList.find({ userId: viewerId }).select('mutedUserId').lean()
+  ]);
+
+  const blockedOrMuted = new Set();
+  for (const row of blocks) blockedOrMuted.add(String(row.blockedUserId));
+  for (const row of blockedByOthers) blockedOrMuted.add(String(row.userId));
+  for (const row of mutes) blockedOrMuted.add(String(row.mutedUserId));
+  return blockedOrMuted;
 };
 
 const normalizeObjectIdArray = (value) => {
@@ -169,6 +185,7 @@ router.get('/user/:userId', authenticateToken, async (req, res) => {
     const viewerId = String(req.user.userId || '');
     const viewerCoordinates = parseViewerCoordinates(req);
     const friendIds = await getFriendIds(viewerId);
+    const blockedOrMuted = await getBlockedOrMutedIds(viewerId);
 
     const candidatePosts = await Post.find({
       targetFeedId: userId,
@@ -183,6 +200,8 @@ router.get('/user/:userId', authenticateToken, async (req, res) => {
       .populate('targetFeedId', 'username realName');
 
     const visiblePosts = candidatePosts
+      .filter((post) => !blockedOrMuted.has(String(post.authorId?._id || post.authorId)))
+      .filter((post) => !blockedOrMuted.has(String(post.targetFeedId?._id || post.targetFeedId)))
       .filter((post) => canViewerSeePost(post, viewerId, friendIds, viewerCoordinates));
 
     const start = (page - 1) * limit;
@@ -239,6 +258,17 @@ router.post('/post', [
     } = req.body;
     const authorId = String(req.user.userId || '');
     const normalizedTargetFeedId = String(targetFeedId || '');
+
+    const blockRelation = await BlockList.findOne({
+      $or: [
+        { userId: authorId, blockedUserId: normalizedTargetFeedId },
+        { userId: normalizedTargetFeedId, blockedUserId: authorId }
+      ]
+    }).select('_id').lean();
+
+    if (blockRelation) {
+      return res.status(403).json({ error: 'Cannot interact with this user due to block settings' });
+    }
 
     const mediaUrlsValidation = sanitizeAndValidateMediaUrls(mediaUrlsInput);
     if (!mediaUrlsValidation.ok) {
@@ -491,6 +521,7 @@ router.get('/timeline', authenticateToken, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const viewerCoordinates = parseViewerCoordinates(req);
     const friendIds = await getFriendIds(userId);
+    const blockedOrMuted = await getBlockedOrMutedIds(userId);
     const authorIds = [userId, ...friendIds];
 
     const candidatePosts = await Post.find({
@@ -517,6 +548,8 @@ router.get('/timeline', authenticateToken, async (req, res) => {
       .populate('targetFeedId', 'username realName');
 
     const visiblePosts = candidatePosts
+      .filter((post) => !blockedOrMuted.has(String(post.authorId?._id || post.authorId)))
+      .filter((post) => !blockedOrMuted.has(String(post.targetFeedId?._id || post.targetFeedId)))
       .filter((post) => canViewerSeePost(post, userId, friendIds, viewerCoordinates));
 
     const start = (page - 1) * limit;

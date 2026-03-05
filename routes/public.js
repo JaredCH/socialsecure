@@ -1,8 +1,10 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
 const router = express.Router();
 const User = require('../models/User');
 const Post = require('../models/Post');
+const BlockList = require('../models/BlockList');
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -51,6 +53,29 @@ const toPublicUserProfile = (userDoc) => {
     hasPGP: !!userDoc.pgpPublicKey,
     createdAt: userDoc.createdAt
   };
+};
+
+const getViewerIdFromAuthHeader = (req) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return null;
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    return decoded.userId ? String(decoded.userId) : null;
+  } catch {
+    return null;
+  }
+};
+
+const hasBlockRelationship = async (viewerId, targetId) => {
+  if (!viewerId || !targetId) return false;
+  const record = await BlockList.findOne({
+    $or: [
+      { userId: viewerId, blockedUserId: targetId },
+      { userId: targetId, blockedUserId: viewerId }
+    ]
+  }).select('_id').lean();
+  return !!record;
 };
 
 const findUserByIdOrUsername = async (identifier) => {
@@ -135,6 +160,12 @@ router.get('/users/:username', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    const viewerId = getViewerIdFromAuthHeader(req);
+    const blocked = await hasBlockRelationship(viewerId, user._id);
+    if (blocked) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     return res.json({
       success: true,
       user: toPublicUserProfile(user)
@@ -150,6 +181,12 @@ router.get('/users/:userId/feed', async (req, res) => {
   try {
     const user = await findUserByIdOrUsername(req.params.userId);
     if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const viewerId = getViewerIdFromAuthHeader(req);
+    const blocked = await hasBlockRelationship(viewerId, user._id);
+    if (blocked) {
       return res.status(404).json({ error: 'User not found' });
     }
 

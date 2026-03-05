@@ -6,6 +6,7 @@ const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
 const DeviceKey = require('../models/DeviceKey');
 const SecurityEvent = require('../models/SecurityEvent');
+const BlockList = require('../models/BlockList');
 const RoomKeyPackage = require('../models/RoomKeyPackage');
 const User = require('../models/User');
 
@@ -485,6 +486,20 @@ router.post('/rooms/:roomId/messages', [
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    const memberIds = Array.isArray(room.members)
+      ? room.members.map((member) => String(member))
+      : [];
+    const blockedRelation = await BlockList.findOne({
+      $or: [
+        { userId, blockedUserId: { $in: memberIds } },
+        { userId: { $in: memberIds }, blockedUserId: userId }
+      ]
+    }).select('_id').lean();
+
+    if (blockedRelation) {
+      return res.status(403).json({ error: 'Cannot send messages due to block settings in this room' });
+    }
     
     // Check rate limit for non-resident cities
     const userCity = user.city || '';
@@ -592,6 +607,20 @@ router.post('/rooms/:roomId/messages/e2ee', [
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    const memberIds = Array.isArray(room.members)
+      ? room.members.map((member) => String(member))
+      : [];
+    const blockedRelation = await BlockList.findOne({
+      $or: [
+        { userId, blockedUserId: { $in: memberIds } },
+        { userId: { $in: memberIds }, blockedUserId: userId }
+      ]
+    }).select('_id').lean();
+
+    if (blockedRelation) {
+      return res.status(403).json({ error: 'Cannot send messages due to block settings in this room' });
     }
 
     const ownedDevice = await DeviceKey.findOne({
