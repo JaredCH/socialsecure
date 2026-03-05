@@ -98,6 +98,7 @@ const Chat = () => {
   const [decrypting, setDecrypting] = useState(false);
   const [decryptErrors, setDecryptErrors] = useState({});
   const [plaintextById, setPlaintextById] = useState({});
+  const [rateLimitInfo, setRateLimitInfo] = useState(null);
   const plaintextCacheRef = useRef(new Map());
   const latestPackageSyncByRoomRef = useRef({});
   const messageViewportRef = useRef(null);
@@ -673,6 +674,22 @@ const Chat = () => {
         requestAnimationFrame(() => scrollToBottom());
       }
     } catch (error) {
+      // Handle rate limit response
+      if (error.response?.status === 429) {
+        const rateData = error.response?.data?.rateLimit;
+        if (rateData) {
+          setRateLimitInfo({
+            allowed: false,
+            bucket: rateData.bucket || 'remote',
+            limit: rateData.limit,
+            remaining: 0,
+            retryAfter: rateData.retryAfter,
+            windowSeconds: rateData.windowSeconds
+          });
+          toast.error(`Rate limited. Try again in ${rateData.retryAfter} seconds.`);
+          return;
+        }
+      }
       toast.error(error.response?.data?.error || error.message || 'Failed to send encrypted message.');
     } finally {
       setSending(false);
@@ -875,6 +892,19 @@ const Chat = () => {
               {sending ? 'Sending...' : 'Send E2EE'}
             </button>
           </form>
+
+          {/* Rate limit info display */}
+          {rateLimitInfo && (
+            <div className={`text-xs p-2 rounded ${rateLimitInfo.allowed ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}`}>
+              {rateLimitInfo.bucket === 'primary' ? (
+                <span>✓ You're in this city - unlimited messages</span>
+              ) : rateLimitInfo.bucket === 'nearby' ? (
+                <span>📍 Nearby city ({rateLimitInfo.distance?.toFixed(0)} miles) - {rateLimitInfo.remaining}/{rateLimitInfo.limit} messages per {rateLimitInfo.windowSeconds}s remaining</span>
+              ) : (
+                <span>🌍 Remote city - {rateLimitInfo.allowed ? `${rateLimitInfo.remaining} message(s) remaining` : `Rate limited - try again in ${rateLimitInfo.retryAfter}s`}</span>
+              )}
+            </div>
+          )}
 
           <p className="text-xs text-gray-500">
             Slash commands: /join [room], /leave, /nick [name], /msg [user] [message], /list

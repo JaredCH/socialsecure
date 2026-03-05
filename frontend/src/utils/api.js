@@ -142,12 +142,15 @@ export const chatAPI = {
 // Location API
 export const locationAPI = {
   update: (data) => api.post('/location/update', data),
-  getCities: (latitude, longitude, radius = 50) => 
+  getCities: (latitude, longitude, radius = 50) =>
     api.get(`/location/cities?latitude=${latitude}&longitude=${longitude}&radius=${radius}`),
   validateAddress: (address) => api.get(`/location/validate?address=${encodeURIComponent(address)}`),
   getMyLocation: () => api.get('/location/me'),
-  calculateDistance: (lat1, lon1, lat2, lon2) => 
+  calculateDistance: (lat1, lon1, lat2, lon2) =>
     api.post('/location/distance', { lat1, lon1, lat2, lon2 }),
+  // Zip-based location
+  getZipLocation: (zipCode) => api.get(`/location/zip/${zipCode}`),
+  searchCities: (query, limit = 20) => api.get(`/location/search?q=${encodeURIComponent(query)}&limit=${limit}`),
 };
 
 // Market API

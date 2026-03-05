@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
+const { body, query, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const NodeGeocoder = require('node-geocoder');
 const User = require('../models/User');
@@ -301,6 +301,148 @@ router.post('/distance', [
   } catch (error) {
     console.error('Error calculating distance:', error);
     res.status(500).json({ error: 'Failed to calculate distance', details: error.message });
+  }
+});
+
+// Get user's primary city and nearby cities based on zip code
+router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
+  try {
+    const { zipCode } = req.params;
+    
+    if (!zipCode || zipCode.length < 5) {
+      return res.status(400).json({ error: 'Valid zip code required' });
+    }
+
+    // Try to resolve zip code to location
+    let locationData = null;
+    try {
+      const results = await geocoder.geocode(`${zipCode}, United States`);
+      if (results && results.length > 0) {
+        const result = results[0];
+        locationData = {
+          zipCode: zipCode,
+          city: result.city,
+          state: result.state,
+          country: result.country,
+          latitude: result.latitude,
+          longitude: result.longitude
+        };
+      }
+    } catch (geoError) {
+      console.warn('Geocoding failed for zip:', zipCode, geoError.message);
+    }
+
+    if (!locationData) {
+      return res.status(404).json({ error: 'Could not resolve zip code to location' });
+    }
+
+    // Find or create primary city room
+    let primaryRoom = await ChatRoom.findOne({
+      city: locationData.city,
+      state: locationData.state,
+      isActive: true
+    });
+
+    // Find nearby cities (within 50 miles)
+    const nearbyCities = await ChatRoom.find({
+      isActive: true,
+      $or: [
+        { city: locationData.city, state: locationData.state },
+        {
+          location: {
+            $near: {
+              $geometry: {
+                type: 'Point',
+                coordinates: [locationData.longitude, locationData.latitude]
+              },
+              $maxDistance: 50 * 1609.34 // 50 miles in meters
+            }
+          }
+        }
+      ]
+    }).limit(20);
+
+    // Categorize rooms
+    const primary = primaryRoom ? {
+      _id: primaryRoom._id,
+      name: primaryRoom.name,
+      city: primaryRoom.city,
+      state: primaryRoom.state,
+      bucket: 'primary',
+      memberCount: primaryRoom.memberCount || 0
+    } : null;
+
+    const nearby = nearbyCities
+      .filter(r => r._id.toString() !== primaryRoom?._id?.toString())
+      .map(r => ({
+        _id: r._id,
+        name: r.name,
+        city: r.city,
+        state: r.state,
+        bucket: 'nearby',
+        memberCount: r.memberCount || 0
+      }));
+
+    // Update user's location
+    await User.findByIdAndUpdate(req.user.userId, {
+      zipCode: locationData.zipCode,
+      city: locationData.city,
+      state: locationData.state,
+      country: locationData.country,
+      location: {
+        type: 'Point',
+        coordinates: [locationData.longitude, locationData.latitude]
+      }
+    });
+
+    res.json({
+      success: true,
+      location: locationData,
+      primary,
+      nearby,
+      totalNearby: nearby.length
+    });
+  } catch (error) {
+    console.error('Error resolving zip code:', error);
+    res.status(500).json({ error: 'Failed to resolve zip code', details: error.message });
+  }
+});
+
+// Search for cities/rooms by name
+router.get('/search', authenticateToken, [
+  query('q').trim().notEmpty().withMessage('Search query required'),
+  query('limit').optional().isInt({ min: 1, max: 50 })
+], async (req, res) => {
+  try {
+    const { q, limit = 20 } = req.query;
+    
+    const searchRegex = new RegExp(q, 'i');
+    
+    const rooms = await ChatRoom.find({
+      name: searchRegex,
+      isActive: true
+    })
+    .select('name city state memberCount')
+    .limit(parseInt(limit))
+    .lean();
+
+    const results = rooms.map(room => ({
+      _id: room._id,
+      name: room.name,
+      city: room.city,
+      state: room.state,
+      bucket: 'remote', // Manual search results are considered remote
+      memberCount: room.memberCount || 0
+    }));
+
+    res.json({
+      success: true,
+      results,
+      count: results.length
+    });
+  } catch (error) {
+    console.error('Error searching cities:', error);
+    res.status(500).json({ error: 'Failed to search cities' });
   }
 });
 

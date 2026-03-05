@@ -289,27 +289,72 @@ chatMessageSchema.statics.getRoomMessagesByCursor = async function(roomId, optio
   };
 };
 
-// Static method to check rate limit for user in non-resident city
-chatMessageSchema.statics.checkRateLimit = async function(userId, roomId, userCity, roomCity) {
-  // If user is in the same city as room, no rate limit
+// Static method to check rate limit for user based on distance to room
+// Distance buckets:
+// - Primary (same city): unlimited
+// - Nearby (<=50 miles): 3 messages per 15 seconds
+// - Remote (>50 miles): 1 message per 15 seconds
+chatMessageSchema.statics.checkRateLimit = async function(userId, roomId, userCity, roomCity, distanceMiles = null) {
+  // If user is in the same city as room (primary city), no rate limit
   if (userCity === roomCity) {
-    return { allowed: true, remaining: Infinity };
+    return {
+      allowed: true,
+      remaining: Infinity,
+      bucket: 'primary',
+      limit: null
+    };
   }
   
-  // For non-resident cities: 1 message per 15 seconds
-  const fifteenSecondsAgo = new Date(Date.now() - 15000);
-  const key = `${userId}:${roomId}:external`;
+  // Determine distance bucket
+  let bucket = 'remote';
+  let maxMessages = 1;
+  let windowMs = 15000; // 15 seconds
   
-  const recentMessage = await this.findOne({
+  if (distanceMiles !== null && distanceMiles <= 50) {
+    bucket = 'nearby';
+    maxMessages = 3;
+  }
+  
+  const windowStart = new Date(Date.now() - windowMs);
+  const key = `${userId}:${roomId}:${bucket}`;
+  
+  // Count messages in the time window
+  const messageCount = await this.countDocuments({
     rateLimitKey: key,
-    createdAt: { $gte: fifteenSecondsAgo }
+    createdAt: { $gte: windowStart }
   });
   
-  if (recentMessage) {
-    return { allowed: false, remaining: 0 };
+  if (messageCount >= maxMessages) {
+    // Calculate retry after time
+    const oldestMessage = await this.findOne({
+      rateLimitKey: key,
+      createdAt: { $gte: windowStart }
+    }).sort({ createdAt: 1 });
+    
+    let retryAfter = 15;
+    if (oldestMessage) {
+      const oldestTime = new Date(oldestMessage.createdAt).getTime();
+      const retryTime = oldestTime + windowMs - Date.now();
+      retryAfter = Math.max(1, Math.ceil(retryTime / 1000));
+    }
+    
+    return {
+      allowed: false,
+      remaining: 0,
+      bucket,
+      limit: maxMessages,
+      windowSeconds: windowMs / 1000,
+      retryAfter
+    };
   }
   
-  return { allowed: true, remaining: 1 };
+  return {
+    allowed: true,
+    remaining: maxMessages - messageCount,
+    bucket,
+    limit: maxMessages,
+    windowSeconds: windowMs / 1000
+  };
 };
 
 // Method to get public representation (hides encrypted content)

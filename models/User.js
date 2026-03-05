@@ -96,6 +96,11 @@ const userSchema = new mongoose.Schema({
   city: String,
   state: String,
   country: String,
+  zipCode: {
+    type: String,
+    trim: true,
+    default: null
+  },
   registrationStatus: {
     type: String,
     enum: ['pending', 'active', 'suspended'],
