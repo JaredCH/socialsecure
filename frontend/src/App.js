@@ -12,6 +12,7 @@ import Chat from './pages/Chat';
 import Market from './pages/Market';
 import News from './pages/News';
 import Maps from './pages/Maps';
+import Discovery from './pages/Discovery';
 import OnboardingPage from './pages/OnboardingPage';
 import SecurityCenter from './pages/SecurityCenter';
 import ModerationDashboard from './pages/ModerationDashboard';
@@ -304,6 +305,7 @@ function App() {
             <div className="space-x-4">
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600">Home</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600">Social</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600">Discover</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600">Chat</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600">Market</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
@@ -457,6 +459,18 @@ function App() {
                   encryptionPasswordRequired={encryptionPasswordRequired}
                 >
                   <NotificationSettings />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/discover"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                >
+                  <Discovery />
                 </ProtectedRoute>
               )}
             />

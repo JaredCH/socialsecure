@@ -303,6 +303,9 @@ const userSchema = new mongoose.Schema({
 // Create geospatial index for location-based queries
 userSchema.index({ location: '2dsphere' });
 
+// Compound index to support discovery queries: active users ordered by recency
+userSchema.index({ registrationStatus: 1, createdAt: -1 });
+
 // Hash password before saving
 userSchema.pre('save', async function(next) {
   if (this.isModified('passwordHash') && this.passwordHash) {
