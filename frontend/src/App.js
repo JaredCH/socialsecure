@@ -13,6 +13,7 @@ import Chat from './pages/Chat';
 import Market from './pages/Market';
 import News from './pages/News';
 import Maps from './pages/Maps';
+import Discovery from './pages/Discovery';
 import OnboardingPage from './pages/OnboardingPage';
 import SecurityCenter from './pages/SecurityCenter';
 import ModerationDashboard from './pages/ModerationDashboard';
@@ -471,6 +472,18 @@ function App() {
                   encryptionPasswordRequired={encryptionPasswordRequired}
                 >
                   <NotificationSettings />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/discover"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                >
+                  <Discovery />
                 </ProtectedRoute>
               )}
             />
