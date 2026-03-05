@@ -806,4 +806,67 @@ router.post('/pgp/setup', [
   }
 });
 
+// POST /auth/recovery-kit/metadata - Store last backup timestamp
+router.post('/recovery-kit/metadata', authenticateToken, async (req, res) => {
+  try {
+    const { lastGeneratedAt, kitVersion = 1 } = req.body;
+    
+    if (!lastGeneratedAt) {
+      return res.status(400).json({ error: 'lastGeneratedAt is required' });
+    }
+
+    const user = req.user;
+    user.recoveryKit = {
+      lastGeneratedAt: new Date(lastGeneratedAt),
+      kitVersion: Math.max(1, kitVersion)
+    };
+    user.updatedAt = new Date();
+    await user.save();
+
+    res.json({ success: true, message: 'Recovery kit metadata saved' });
+  } catch (error) {
+    console.error('Recovery kit metadata error:', error);
+    res.status(500).json({ error: 'Failed to save recovery kit metadata' });
+  }
+});
+
+// GET /auth/recovery-kit/status - Check if backup is current
+router.get('/recovery-kit/status', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user;
+    const now = new Date();
+    
+    let lastBackupAt = null;
+    let daysSinceBackup = 0;
+    let isCurrent = false;
+    let recommendedAction = 'none';
+
+    if (user.recoveryKit && user.recoveryKit.lastGeneratedAt) {
+      lastBackupAt = user.recoveryKit.lastGeneratedAt.toISOString();
+      const diffTime = Math.abs(now - user.recoveryKit.lastGeneratedAt);
+      daysSinceBackup = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      const interval = user.securitySettings?.backupReminderInterval || 30;
+      isCurrent = daysSinceBackup < interval;
+    }
+
+    if (!lastBackupAt) {
+      recommendedAction = 'create_backup';
+    } else if (!isCurrent) {
+      recommendedAction = 'update_backup';
+    }
+
+    res.json({
+      lastBackupAt,
+      daysSinceBackup,
+      isCurrent,
+      recommendedAction,
+      promptForBackup: user.securitySettings?.promptForBackup ?? true
+    });
+  } catch (error) {
+    console.error('Recovery kit status error:', error);
+    res.status(500).json({ error: 'Failed to get recovery kit status' });
+  }
+});
+
 module.exports = router;

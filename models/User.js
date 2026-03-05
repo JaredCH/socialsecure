@@ -154,6 +154,29 @@ const userSchema = new mongoose.Schema({
       default: true
     }
   },
+  // Recovery kit metadata (never store the kit itself - E2EE principle)
+  recoveryKit: {
+    lastGeneratedAt: {
+      type: Date,
+      default: null
+    },
+    kitVersion: {
+      type: Number,
+      default: 1,
+      min: 1
+    }
+  },
+  // Security settings for backup prompts
+  securitySettings: {
+    promptForBackup: {
+      type: Boolean,
+      default: true
+    },
+    backupReminderInterval: {
+      type: Number,
+      default: 30 // days
+    }
+  },
   // Friend count (cached for performance)
   friendCount: {
     type: Number,

@@ -47,6 +47,9 @@ export const authAPI = {
   verifyEncryptionPassword: (password) => api.post('/auth/encryption-password/verify', { encryptionPassword: password }),
   getEncryptionUnlockStatus: () => api.get('/auth/encryption-password/status/unlock'),
   lockEncryption: () => api.post('/auth/encryption-password/lock'),
+  // Recovery kit
+  saveRecoveryKitMetadata: (data) => api.post('/auth/recovery-kit/metadata', data),
+  getRecoveryKitStatus: () => api.get('/auth/recovery-kit/status'),
 };
 
 // User API
