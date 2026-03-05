@@ -234,4 +234,34 @@ export const friendsAPI = {
   getRelationship: (userId) => api.get(`/friends/relationship/${userId}`),
 };
 
+// News API
+export const newsAPI = {
+  // Get personalized news feed
+  getFeed: (params = {}) => api.get('/news/feed', { params }),
+  // Get available RSS sources
+  getSources: () => api.get('/news/sources'),
+  // Add new RSS source
+  addSource: (data) => api.post('/news/sources', data),
+  // Remove RSS source
+  removeSource: (sourceId) => api.delete(`/news/sources/${sourceId}`),
+  // Get user's news preferences
+  getPreferences: () => api.get('/news/preferences'),
+  // Update user's news preferences
+  updatePreferences: (data) => api.put('/news/preferences', data),
+  // Add followed keyword
+  addKeyword: (keyword) => api.post('/news/preferences/keywords', { keyword }),
+  // Remove followed keyword
+  removeKeyword: (keyword) => api.delete(`/news/preferences/keywords/${encodeURIComponent(keyword)}`),
+  // Add location preference
+  addLocation: (data) => api.post('/news/preferences/locations', data),
+  // Remove location preference
+  removeLocation: (locationId) => api.delete(`/news/preferences/locations/${locationId}`),
+  // Get available topics
+  getTopics: () => api.get('/news/topics'),
+  // Get single article
+  getArticle: (id) => api.get(`/news/article/${id}`),
+  // Trigger manual ingestion (admin)
+  triggerIngestion: () => api.post('/news/ingest'),
+};
+
 export default api;

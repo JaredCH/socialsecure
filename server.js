@@ -104,6 +104,13 @@ app.use('/api/market', require('./routes/market'));
 app.use('/api/location', require('./routes/location'));
 app.use('/api/universal', require('./routes/universal'));
 app.use('/api/friends', require('./routes/friends'));
+app.use('/api/news', require('./routes/news'));
+
+// Start news ingestion scheduler
+const { startIngestionScheduler } = require('./routes/news');
+if (process.env.NODE_ENV !== 'test') {
+  startIngestionScheduler();
+}
 
 if (isProduction) {
   const frontendBuildPath = path.join(__dirname, 'frontend', 'build');

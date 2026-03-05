@@ -1,0 +1,191 @@
+const mongoose = require('mongoose');
+
+// User's location preferences for news
+const newsLocationSchema = new mongoose.Schema({
+  city: {
+    type: String,
+    default: null
+  },
+  county: {
+    type: String,
+    default: null
+  },
+  state: {
+    type: String,
+    default: null
+  },
+  country: {
+    type: String,
+    default: null
+  },
+  isPrimary: {
+    type: Boolean,
+    default: false
+  }
+});
+
+// User's followed keywords
+const followedKeywordSchema = new mongoose.Schema({
+  keyword: {
+    type: String,
+    required: true,
+    lowercase: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// User's news source preferences
+const sourcePreferenceSchema = new mongoose.Schema({
+  sourceId: {
+    type: String,
+    required: true
+  },
+  sourceType: {
+    type: String,
+    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'gdlet'],
+    default: 'rss'
+  },
+  enabled: {
+    type: Boolean,
+    default: true
+  },
+  priority: {
+    type: Number,
+    default: 1,
+    min: 1,
+    max: 5
+  }
+});
+
+// Main user news preferences
+const newsPreferencesSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true
+  },
+  // RSS source preferences
+  rssSources: [sourcePreferenceSchema],
+  
+  // Google News generated feeds
+  googleNewsTopics: [{
+    type: String,
+    lowercase: true
+  }],
+  googleNewsEnabled: {
+    type: Boolean,
+    default: true
+  },
+  
+  // GDLET preferences
+  gdletCategories: [String],
+  gdletEnabled: {
+    type: Boolean,
+    default: true
+  },
+  
+  // Location preferences
+  locations: [newsLocationSchema],
+  
+  // Followed keywords
+  followedKeywords: [followedKeywordSchema],
+  
+  // Local prioritization settings
+  localPriorityEnabled: {
+    type: Boolean,
+    default: true
+  },
+  
+  // General settings
+  refreshInterval: {
+    type: Number,
+    default: 10 // minutes
+  },
+  articlesPerPage: {
+    type: Number,
+    default: 20
+  }
+}, {
+  timestamps: true
+});
+
+// Static method to get or create preferences
+newsPreferencesSchema.statics.getOrCreate = async function(userId) {
+  let prefs = await this.findOne({ user: userId });
+  if (!prefs) {
+    prefs = await this.create({ user: userId });
+  }
+  return prefs;
+};
+
+// Method to add a location
+newsPreferencesSchema.methods.addLocation = async function(location) {
+  // Check if location already exists
+  const exists = this.locations.some(loc => 
+    loc.city === location.city && 
+    loc.state === location.state && 
+    loc.country === location.country
+  );
+  
+  if (!exists) {
+    this.locations.push({
+      ...location,
+      isPrimary: this.locations.length === 0
+    });
+    await this.save();
+  }
+  return this;
+};
+
+// Method to remove a location
+newsPreferencesSchema.methods.removeLocation = async function(locationId) {
+  this.locations = this.locations.filter(loc => 
+    loc._id.toString() !== locationId.toString()
+  );
+  
+  // If primary was removed, make first remaining as primary
+  if (this.locations.length > 0 && !this.locations.some(loc => loc.isPrimary)) {
+    this.locations[0].isPrimary = true;
+  }
+  
+  await this.save();
+  return this;
+};
+
+// Method to add a keyword
+newsPreferencesSchema.methods.addKeyword = async function(keyword) {
+  const normalized = keyword.toLowerCase().trim();
+  
+  if (!this.followedKeywords.some(k => k.keyword === normalized)) {
+    this.followedKeywords.push({ keyword: normalized });
+    await this.save();
+  }
+  return this;
+};
+
+// Method to remove a keyword
+newsPreferencesSchema.methods.removeKeyword = async function(keyword) {
+  this.followedKeywords = this.followedKeywords.filter(k => 
+    k.keyword !== keyword.toLowerCase()
+  );
+  await this.save();
+  return this;
+};
+
+// Method to toggle source
+newsPreferencesSchema.methods.toggleSource = async function(sourceId, enabled) {
+  const source = this.rssSources.find(s => s.sourceId === sourceId);
+  if (source) {
+    source.enabled = enabled;
+  } else {
+    this.rssSources.push({ sourceId, enabled });
+  }
+  await this.save();
+  return this;
+};
+
+module.exports = mongoose.model('NewsPreferences', newsPreferencesSchema);
