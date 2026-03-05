@@ -13,6 +13,7 @@ import News from './pages/News';
 import Maps from './pages/Maps';
 import OnboardingPage from './pages/OnboardingPage';
 import SecurityCenter from './pages/SecurityCenter';
+import ModerationDashboard from './pages/ModerationDashboard';
 import { authAPI } from './utils/api';
 
 const ProtectedRoute = ({
@@ -244,6 +245,7 @@ function App() {
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600">Maps</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/security" className="text-gray-600 hover:text-blue-600">Security</Link>}
+              {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && <Link to="/moderation" className="text-gray-600 hover:text-blue-600">Moderation</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
               {isAuthenticated && onboardingRequired && <Link to="/onboarding" className="text-blue-600 font-medium">Onboarding</Link>}
               {isAuthenticated ? (
@@ -346,6 +348,20 @@ function App() {
                   allowWhenEncryptionRequired={false}
                 >
                   <SecurityCenter />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/moderation"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  allowWhenOnboardingRequired={false}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                  allowWhenEncryptionRequired={false}
+                >
+                  {user?.isAdmin ? <ModerationDashboard /> : <Navigate to="/social" replace />}
                 </ProtectedRoute>
               )}
             />

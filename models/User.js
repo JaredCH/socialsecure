@@ -205,6 +205,42 @@ const userSchema = new mongoose.Schema({
     min: 0,
     max: 100
   },
+  moderationStatus: {
+    type: String,
+    enum: ['active', 'warned', 'suspended', 'banned'],
+    default: 'active'
+  },
+  moderationHistory: [{
+    action: {
+      type: String,
+      enum: ['warning', 'suspension', 'ban']
+    },
+    reason: {
+      type: String,
+      default: ''
+    },
+    duration: {
+      type: Number,
+      default: null
+    },
+    appliedAt: {
+      type: Date,
+      default: Date.now
+    },
+    expiresAt: {
+      type: Date,
+      default: null
+    },
+    appliedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    }
+  }],
+  isAdmin: {
+    type: Boolean,
+    default: false
+  },
   // Friend count (cached for performance)
   friendCount: {
     type: Number,
@@ -278,6 +314,8 @@ userSchema.methods.toPublicProfile = function() {
     registrationStatus: this.registrationStatus,
     hasPGP: !!this.pgpPublicKey,
     hasEncryptionPassword,
+    isAdmin: !!this.isAdmin,
+    moderationStatus: this.moderationStatus || 'active',
     onboardingStatus: this.onboardingStatus || 'pending',
     onboardingStep: this.onboardingStep || 1,
     securityPreferences: this.securityPreferences || {
