@@ -15,7 +15,6 @@ function Register({ onSuccess, onWelcomeRequired }) {
     email: '',
     password: '',
     country: '',
-    county: '',
     zipCode: '',
     referralCode: token || ''
   });
@@ -36,17 +35,11 @@ function Register({ onSuccess, onWelcomeRequired }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const county = form.county.trim();
     const zipCode = form.zipCode.trim().toUpperCase().replace(/\s+/g, '');
     const selectedCountry = COUNTRY_CODE_OPTIONS.find((option) => option.code === form.country);
 
     if (!selectedCountry) {
       toast.error('Please select a valid country');
-      return;
-    }
-
-    if (!county || county.length > 100) {
-      toast.error('County is required and must be 100 characters or fewer');
       return;
     }
 
@@ -65,7 +58,6 @@ function Register({ onSuccess, onWelcomeRequired }) {
         email: form.email.trim().toLowerCase(),
         password: form.password,
         countryCode: selectedCountry.code,
-        county,
         zipCode,
         referralCode: form.referralCode || undefined
       };
@@ -181,7 +173,7 @@ function Register({ onSuccess, onWelcomeRequired }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
             <select
@@ -199,19 +191,6 @@ function Register({ onSuccess, onWelcomeRequired }) {
               ))}
             </select>
             <p className="text-xs text-gray-500 mt-1">Top 20 population countries are pinned first.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">County</label>
-            <input
-              name="county"
-              value={form.county}
-              onChange={handleChange}
-              className="border rounded p-2 w-full"
-              placeholder="County"
-              maxLength={100}
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">Enter your county for local room matching.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Zip Code</label>
