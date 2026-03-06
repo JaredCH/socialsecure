@@ -46,9 +46,7 @@ const getPanelHeightUnits = (panel = {}) => {
 };
 
 const getColumnBoundsForArea = (area) => {
-  if (area === 'sideLeft') return { min: 0, max: 1 };
-  if (area === 'sideRight') return { min: 10, max: 11 };
-  return { min: 2, max: 9 };
+  return { min: 0, max: GRID_COLUMNS - 1 };
 };
 
 const panelWithPlacement = (panel = {}, row = 0, col = 0) => ({
@@ -150,11 +148,14 @@ const SocialDesignStudioModal = ({
   const [newConfigName, setNewConfigName] = useState('');
   const [duplicateNames, setDuplicateNames] = useState({});
   const [activePanelId, setActivePanelId] = useState('');
+  const [editingPanelId, setEditingPanelId] = useState('');
   const [dragPanelId, setDragPanelId] = useState('');
   const [hoverCell, setHoverCell] = useState(null);
+  const [isPlacementMode, setIsPlacementMode] = useState(false);
   const normalized = useMemo(() => normalizeSocialPreferences(preferences), [preferences]);
   const gridLayout = useMemo(() => buildPanelLayoutMap(normalized), [normalized]);
   const selectedPanel = activePanelId ? gridLayout.placed.find((panel) => panel.id === activePanelId) : null;
+  const editingPanel = editingPanelId ? gridLayout.placed.find((panel) => panel.id === editingPanelId) : null;
 
   if (!isOpen) return null;
 
@@ -172,6 +173,13 @@ const SocialDesignStudioModal = ({
         ? (Number(patch.gridPlacement.row) * 100 + Number(patch.gridPlacement.col || 0))
         : panel.order
     });
+  };
+
+  const openPanelEditor = (panelId) => {
+    setActivePanelId(panelId);
+    setEditingPanelId(panelId);
+    setIsPlacementMode(false);
+    setHoverCell(null);
   };
 
   const getPlacementFootprint = (panel, row, col) => {
@@ -212,61 +220,34 @@ const SocialDesignStudioModal = ({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">Layout studio</h3>
-                  <p className="text-sm text-slate-700">Drag panels on a 6-column by 10-row grid. Green = valid placement, red = blocked.</p>
+                  <p className="text-sm text-slate-800">Click a panel to edit shape, then hover and place it on the 6-column by 10-row grid. Green = valid placement, red = blocked.</p>
                 </div>
                 {busy ? <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Saving…</span> : null}
               </div>
               <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(260px,0.85fr)_minmax(0,1.4fr)]">
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <h4 className="text-sm font-semibold text-slate-900">Panel shape and slot</h4>
-                  <p className="mt-1 text-xs text-slate-700">Select a panel, then adjust size and height or drag it on the grid.</p>
+                  <p className="mt-1 text-xs text-slate-800">Click a panel to open the editor, adjust shape, then place where it fits.</p>
                   <div className="mt-3 space-y-2">
                     {gridLayout.placed.map((panel) => (
                       <button
                         key={panel.id}
                         type="button"
-                        onClick={() => setActivePanelId(panel.id)}
+                        onClick={() => openPanelEditor(panel.id)}
                           className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${activePanelId === panel.id ? 'border-blue-400 bg-blue-50 text-blue-900' : 'border-slate-200 text-slate-800 hover:bg-slate-50'}`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-semibold">{SOCIAL_PANEL_LABELS[panel.id] || panel.id}</span>
-                          <span className="text-xs text-slate-700">r{formatConceptCoordinate(panel.gridPlacement.row)} c{formatConceptCoordinate(panel.gridPlacement.col)}</span>
+                          <span className="text-xs text-slate-800">r{formatConceptCoordinate(panel.gridPlacement.row)} c{formatConceptCoordinate(panel.gridPlacement.col)}</span>
                         </div>
                       </button>
                     ))}
                   </div>
-                  {selectedPanel ? (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <Field label="Width">
-                        <select
-                          value={selectedPanel.size}
-                          onChange={(event) => updateLayoutPatch(selectedPanel.id, { size: event.target.value })}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                        >
-                          {(selectedPanel.area === 'sideLeft' || selectedPanel.area === 'sideRight'
-                            ? ['sidePanelHalfHeight', 'sidePanelFull']
-                            : ['halfCol', 'oneCol', 'twoCols', 'threeCols', 'fourCols']
-                          ).map((value) => (
-                            <option key={value} value={value}>{value === 'sidePanelHalfHeight' ? 'Side panel (compact)' : value === 'sidePanelFull' ? 'Side panel (full)' : value}</option>
-                          ))}
-                        </select>
-                      </Field>
-                      <Field label="Height">
-                        <select
-                          value={selectedPanel.height || 'fullRow'}
-                          onChange={(event) => updateLayoutPatch(selectedPanel.id, { height: event.target.value })}
-                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                        >
-                          {(selectedPanel.area === 'sideLeft' || selectedPanel.area === 'sideRight'
-                            ? ['halfRow', 'fullRow', 'twoRows', 'fourRows']
-                            : ['halfRow', 'fullRow', 'twoRows', 'threeRows', 'fourRows']
-                          ).map((value) => (
-                            <option key={value} value={value}>{SOCIAL_HEIGHT_LABELS[value]}</option>
-                          ))}
-                        </select>
-                      </Field>
-                    </div>
-                  ) : null}
+                  <p className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900">
+                    {selectedPanel && isPlacementMode
+                      ? `Now hover over the grid and click a green position to place ${SOCIAL_PANEL_LABELS[selectedPanel.id] || selectedPanel.id}.`
+                      : 'Pick a panel to begin editing and placement.'}
+                  </p>
                 </div>
                 <div
                   className="relative rounded-2xl border border-slate-200 p-3"
@@ -284,7 +265,7 @@ const SocialDesignStudioModal = ({
                     setHoverCell(null);
                   }}
                 >
-                  <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-800">
                     <span>Grid preview</span>
                     <span>6x10 conceptual grid (12x20 internal slots)</span>
                   </div>
@@ -302,12 +283,19 @@ const SocialDesignStudioModal = ({
                           type="button"
                           className={`h-4 w-full rounded-[3px] ${inHoverFootprint ? (footprint.valid ? 'bg-emerald-400' : 'bg-rose-400') : 'bg-white/75 hover:bg-blue-100'}`}
                           onMouseEnter={() => setHoverCell({ row, col })}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            if (dragPanelId) setHoverCell({ row, col });
+                          }}
                           onClick={() => {
                             if (!selectedPanel) return;
                             const result = getPlacementFootprint(selectedPanel, row, col);
                             if (!result.valid) return;
                             updateLayoutPatch(selectedPanel.id, { gridPlacement: { row, col } });
+                            setIsPlacementMode(false);
+                            setHoverCell(null);
                           }}
+                          aria-label={`Grid cell row ${row + 1} col ${col + 1}`}
                         />
                       );
                     })}
@@ -319,13 +307,14 @@ const SocialDesignStudioModal = ({
                           key={panel.id}
                           draggable
                           onDragStart={() => {
-                            setActivePanelId(panel.id);
+                            openPanelEditor(panel.id);
                             setDragPanelId(panel.id);
                           }}
                           onDragEnd={() => {
                             setDragPanelId('');
                             setHoverCell(null);
                           }}
+                          onClick={() => openPanelEditor(panel.id)}
                           className={`absolute cursor-grab rounded-md border border-black/10 px-1 py-1 text-[10px] font-semibold shadow-sm ${activePanelId === panel.id ? 'ring-2 ring-blue-400' : ''}`}
                           style={{
                             left: `calc(${(panel.gridPlacement.col / GRID_COLUMNS) * 100}% + 4px)`,
@@ -343,15 +332,15 @@ const SocialDesignStudioModal = ({
                     })}
                   </div>
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <div className="rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-700">
-                      <p className="font-semibold text-slate-900">Side columns</p>
-                      <p>Conceptual columns 1 and 6 are side-panel only lanes.</p>
+                    <div className="rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-800">
+                      <p className="font-semibold text-slate-900">Placement</p>
+                      <p>Panels can be placed in any lane where their footprint stays in-bounds.</p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-700">
-                      <p className="font-semibold text-slate-900">Main columns</p>
-                      <p>Conceptual columns 2-5 allow widths from ½ to 4 columns.</p>
+                    <div className="rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-800">
+                      <p className="font-semibold text-slate-900">Widths</p>
+                      <p>Main panels support widths from ½ to 4 conceptual columns.</p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-700">
+                    <div className="rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-800">
                       <p className="font-semibold text-slate-900">Rows</p>
                       <p>Rows support ½, 1, 2, 3, and 4 row heights.</p>
                     </div>
@@ -364,7 +353,7 @@ const SocialDesignStudioModal = ({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">Global styling</h3>
-                  <p className="text-sm text-slate-700">Apply page-wide panel, header, font, and preset sizing changes.</p>
+                  <p className="text-sm text-slate-800">Apply page-wide panel, header, font, and preset sizing changes.</p>
                 </div>
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -393,7 +382,7 @@ const SocialDesignStudioModal = ({
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-lg font-semibold text-slate-900">Panel overrides</h3>
-              <p className="text-sm text-slate-700">Keep most panels global, then selectively opt into custom styling.</p>
+              <p className="text-sm text-slate-800">Keep most panels global, then selectively opt into custom styling.</p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {SOCIAL_PANEL_IDS.map((panelId) => {
                   const panel = normalized.panels?.[panelId];
@@ -402,7 +391,7 @@ const SocialDesignStudioModal = ({
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h4 className="font-semibold text-slate-900">{SOCIAL_PANEL_LABELS[panelId] || panelId}</h4>
-                          <p className="text-xs text-slate-700">{panel?.useCustomStyles ? 'Custom override active' : 'Using global style'}</p>
+                          <p className="text-xs text-slate-800">{panel?.useCustomStyles ? 'Custom override active' : 'Using global style'}</p>
                         </div>
                         <button type="button" onClick={() => onPanelOverrideToggle(panelId, !panel?.useCustomStyles)} className="rounded-lg border border-slate-200 px-3 py-1 text-xs hover:bg-slate-50">
                           {panel?.useCustomStyles ? 'Use global' : 'Enable override'}
@@ -434,7 +423,7 @@ const SocialDesignStudioModal = ({
                 {(SOCIAL_DESIGN_TEMPLATES || []).map((template) => (
                   <button key={template.id} type="button" onClick={() => onApplyTemplate(template)} className="rounded-2xl border border-slate-200 px-4 py-4 text-left hover:border-slate-300 hover:bg-slate-50">
                     <p className="font-semibold text-slate-900">{template.name}</p>
-                    <p className="text-sm text-slate-700">{template.description}</p>
+                    <p className="text-sm text-slate-800">{template.description}</p>
                   </button>
                 ))}
               </div>
@@ -452,7 +441,7 @@ const SocialDesignStudioModal = ({
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-slate-900">{config.name}</p>
-                        <p className="text-xs text-slate-700">{config._id === activeConfigId ? 'Currently applied' : 'Saved draft'}</p>
+                        <p className="text-xs text-slate-800">{config._id === activeConfigId ? 'Currently applied' : 'Saved draft'}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <button type="button" onClick={() => onApplyConfig(config._id)} className="rounded-lg border border-slate-200 px-3 py-1 text-xs hover:bg-slate-50">Apply</button>
@@ -479,11 +468,11 @@ const SocialDesignStudioModal = ({
               <h3 className="text-lg font-semibold text-slate-900">Shared designs</h3>
               <div className="mt-4 space-y-3">
                 {sharedDesigns.length === 0 ? (
-                  <p className="text-sm text-slate-700">No shared designs available for this profile yet.</p>
+                  <p className="text-sm text-slate-800">No shared designs available for this profile yet.</p>
                 ) : sharedDesigns.map((config) => (
                   <div key={config._id} className="rounded-2xl border border-slate-200 p-4">
                     <p className="font-semibold text-slate-900">{config.name}</p>
-                    <p className="text-xs text-slate-700">by @{config.owner?.username || 'designer'}</p>
+                    <p className="text-xs text-slate-800">by @{config.owner?.username || 'designer'}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button type="button" onClick={() => onFavoriteShared(config)} className="rounded-lg border border-slate-200 px-3 py-1 text-xs hover:bg-slate-50">{config.isFavorite ? 'Unfavorite' : 'Favorite'}</button>
                       <button type="button" onClick={() => onCloneShared(config, `${config.name} Clone`, false)} className="rounded-lg border border-slate-200 px-3 py-1 text-xs hover:bg-slate-50">Clone</button>
@@ -497,7 +486,7 @@ const SocialDesignStudioModal = ({
                   <p className="text-sm font-semibold text-slate-900">Favorites</p>
                   <div className="mt-2 space-y-2">
                     {favoriteDesigns.map((config) => (
-                      <p key={config._id} className="text-sm text-slate-600">{config.name} • @{config.owner?.username || 'designer'}</p>
+                      <p key={config._id} className="text-sm text-slate-700">{config.name} • @{config.owner?.username || 'designer'}</p>
                     ))}
                   </div>
                 </div>
@@ -512,6 +501,68 @@ const SocialDesignStudioModal = ({
           </div>
         </div>
       </div>
+      {editingPanel ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className="text-lg font-semibold text-slate-900">Edit panel shape</h4>
+                <p className="text-sm text-slate-800">{SOCIAL_PANEL_LABELS[editingPanel.id] || editingPanel.id}</p>
+              </div>
+              <button type="button" onClick={() => setEditingPanelId('')} className="rounded-lg border border-slate-200 px-3 py-1 text-sm font-medium text-slate-800 hover:bg-slate-50">Close</button>
+            </div>
+            <p className="mt-3 text-sm text-slate-800">Adjust width and height, then click “Start placement” to hover the grid and place this panel anywhere it fits.</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <Field label="Width">
+                <select
+                  value={editingPanel.size}
+                  onChange={(event) => {
+                    updateLayoutPatch(editingPanel.id, { size: event.target.value });
+                    setIsPlacementMode(true);
+                  }}
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                >
+                  {(editingPanel.area === 'sideLeft' || editingPanel.area === 'sideRight'
+                    ? ['sidePanelHalfHeight', 'sidePanelFull']
+                    : ['halfCol', 'oneCol', 'twoCols', 'threeCols', 'fourCols']
+                  ).map((value) => (
+                    <option key={value} value={value}>{value === 'sidePanelHalfHeight' ? 'Side panel (compact)' : value === 'sidePanelFull' ? 'Side panel (full)' : value}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Height">
+                <select
+                  value={editingPanel.height || 'fullRow'}
+                  onChange={(event) => {
+                    updateLayoutPatch(editingPanel.id, { height: event.target.value });
+                    setIsPlacementMode(true);
+                  }}
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                >
+                  {(editingPanel.area === 'sideLeft' || editingPanel.area === 'sideRight'
+                    ? ['halfRow', 'fullRow', 'twoRows', 'fourRows']
+                    : ['halfRow', 'fullRow', 'twoRows', 'threeRows', 'fourRows']
+                  ).map((value) => (
+                    <option key={value} value={value}>{SOCIAL_HEIGHT_LABELS[value]}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPlacementMode(true);
+                  setEditingPanelId('');
+                }}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Start placement
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
