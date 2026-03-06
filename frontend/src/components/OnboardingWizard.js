@@ -18,6 +18,16 @@ const STEP_LABELS = [
   'Security Preferences',
   'Finish'
 ];
+export const SESSION_TIMEOUT_OPTIONS = [
+  { value: 'per_message', label: 'Per message - require password' },
+  { value: '10', label: '10 minutes' },
+  { value: '30', label: '30 minutes' },
+  { value: '60', label: '60 minutes' },
+  { value: '120', label: '2 hours' },
+  { value: '240', label: '4 hours' },
+  { value: '360', label: '6 Hours' },
+  { value: '1440', label: 'Once Daily' }
+];
 const SEED_WORD_BANK = [
   'amber', 'anchor', 'apex', 'apple', 'arrow', 'atlas', 'aurora', 'autumn', 'badge', 'bamboo', 'beacon', 'binary',
   'blossom', 'breeze', 'bridge', 'cactus', 'candle', 'canvas', 'captain', 'carbon', 'cedar', 'cherry', 'cloud', 'cobalt',
@@ -76,6 +86,16 @@ export const createRecoveryPhraseQrCodeDataUrl = async (phrase) => {
     margin: 1,
     errorCorrectionLevel: 'M'
   });
+};
+
+export const getSessionTimeoutSelectValue = (preferences) => {
+  if (preferences?.requirePasswordForSensitive && preferences?.sessionTimeout === 5) {
+    return 'per_message';
+  }
+
+  const timeoutValue = String(preferences?.sessionTimeout ?? '');
+  const hasMatchingOption = SESSION_TIMEOUT_OPTIONS.some((option) => option.value === timeoutValue);
+  return hasMatchingOption ? timeoutValue : '60';
 };
 
 function OnboardingWizard({
@@ -283,10 +303,16 @@ function OnboardingWizard({
   const handleStepThree = async (event) => {
     event.preventDefault();
     setSubmitting(true);
+    const normalizedSecurityPreferences = {
+      ...securityPreferences,
+      sessionTimeout: !securityPreferences.requirePasswordForSensitive && securityPreferences.sessionTimeout === 5
+        ? 10
+        : securityPreferences.sessionTimeout
+    };
 
     try {
       await authAPI.updateOnboardingProgress(3, {
-        securityPreferences
+        securityPreferences: normalizedSecurityPreferences
       });
       await onProgressSaved();
       setStep(4);
@@ -507,17 +533,25 @@ function OnboardingWizard({
 
           <label className="block text-sm">
             Session timeout (minutes)
-            <input
-              type="number"
-              min={5}
-              max={1440}
-              value={securityPreferences.sessionTimeout}
+            <select
+              value={getSessionTimeoutSelectValue(securityPreferences)}
               onChange={(event) => setSecurityPreferences((prev) => ({
                 ...prev,
-                sessionTimeout: Number.parseInt(event.target.value, 10) || 60
+                sessionTimeout: event.target.value === 'per_message'
+                  ? 5
+                  : Number.parseInt(event.target.value, 10) || 60,
+                requirePasswordForSensitive: event.target.value === 'per_message'
+                  ? true
+                  : prev.requirePasswordForSensitive
               }))}
               className="w-full border rounded p-2 mt-1"
-            />
+            >
+              {SESSION_TIMEOUT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="flex items-center gap-2 text-sm">
@@ -526,7 +560,10 @@ function OnboardingWizard({
               checked={securityPreferences.requirePasswordForSensitive}
               onChange={(event) => setSecurityPreferences((prev) => ({
                 ...prev,
-                requirePasswordForSensitive: event.target.checked
+                requirePasswordForSensitive: event.target.checked,
+                sessionTimeout: !event.target.checked && prev.sessionTimeout === 5
+                  ? 10
+                  : prev.sessionTimeout
               }))}
             />
             Require password for sensitive actions
