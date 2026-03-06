@@ -1,8 +1,8 @@
-# Issue: `/maps` implementation-versus-plan audit and execution plan for Spotlight velocity plus privacy-safe density heatmap
+# Issue: Maps feature implementation audit and privacy-focused phased execution plan
 
 ## Scope and audit method
 
-This issue documents an end-to-end implementation-versus-plan audit of the `/maps` feature, grounded in repository evidence. The audit covers frontend rendering, backend APIs, data models, scheduling and background jobs, permissions and authorization, privacy controls, telemetry and analytics, caching, and test coverage. Planning intent was reconstructed from code semantics, comments, naming, existing product copy, and available documentation; repository docs are sparse for maps-specific planning, so each conclusion is explicitly labeled as confirmed, partially supported, inferred, or unknown.
+This issue documents an end-to-end implementation-versus-plan audit of the `/maps` feature, grounded in repository evidence. The audit covers frontend rendering, backend APIs, data models, scheduling and background jobs, permissions and authorization, privacy controls, telemetry and analytics, caching, and test coverage. Planning intent was reconstructed from code semantics, comments, naming, existing product copy, and available documentation; repository docs are sparse for maps-specific planning, so each conclusion is explicitly labeled as confirmed, partially supported, inferred, or unknown. Mandatory heatmap participation is treated in this issue as a fixed product constraint because it is explicitly stated as non-negotiable in the originating requirement.
 
 Audit confidence labels in this issue use the following semantics. Confirmed means direct evidence in code. Partially supported means evidence exists but behavior is incomplete or only implied. Inferred means intent is reconstructed from naming, product copy, and design shape. Unknown means intent or behavior cannot be established from this repository snapshot.
 
@@ -101,7 +101,7 @@ Discoverability should be made explicit by introducing ranked retrieval inputs t
 
 The public heatmap path must operate only on obfuscated presence events and must not consume precise friend-location records directly. At ingest, every location update should fork into two channels. Channel A stores precise coordinates for authorized friend-sharing only. Channel B computes mandatory heatmap participation artifacts via spatial and temporal obfuscation before any durable write to heatmap event storage.
 
-Spatial obfuscation should apply randomized jitter bounded within a 1000-foot radius around the true coordinate. The jitter distribution should be cryptographically strong and unbiased by direction. Temporal obfuscation should delay events with a uniform random distribution in the closed range of 20 to 40 minutes, equivalent to a base 30-minute delay plus a per-event offset of minus 10 to plus 10 minutes generated server-side. Aggregation workers should consume only delayed, jittered events and aggregate by fixed geocells with minimum-k suppression before tile publication.
+Spatial obfuscation should apply randomized jitter bounded within a 1000-foot radius around the true coordinate, equivalent to 304.8 meters maximum displacement. The jitter distribution should be cryptographically strong and unbiased by direction, using a CSPRNG source such as `crypto.randomBytes` on Node.js services and never `Math.random`. Temporal obfuscation should delay events with a uniform random distribution in the closed range of 20 to 40 minutes, equivalent to a base 30-minute delay plus a per-event offset of minus 10 to plus 10 minutes generated server-side with the same CSPRNG requirement. Aggregation workers should consume only delayed, jittered events and aggregate by fixed geocells with minimum-k suppression before tile publication.
 
 Rendering should use subtle overlay intensity with progressively deeper red as density increases. Density normalization should be quantile-based per viewport to avoid exposing absolute raw counts at low density while retaining visual utility.
 
@@ -161,6 +161,16 @@ The hard requirement that users cannot opt out of heatmap participation should b
 | Phase 3 | Obfuscated heatmap pipeline launch | Implement jitter plus delayed ingestion worker, aggregation with minimum-k suppression, subtle red overlay rendering, and anti-scrape controls | Phase 0 and Phase 1 complete, worker deployment capacity | Heatmap tiles are generated only from obfuscated delayed events; no precise fields in tile stores; UI overlay renders progressive red intensity | Heatmap freshness SLO met, privacy leakage tests pass, scrape-attempt detection rate increases | Progressive region rollout under `maps_heatmap_v2`; rollback to previous heatmap endpoint while preserving write-ahead queue |
 | Phase 4 | Precise friend-sharing channel | Add audience selection via circles/top friends, pause dropdown presets up to one week, disable/re-enable controls, recipient authorization checks, and private map rendering for authorized viewers | Circles and top-friends API stability | Authorized recipients can see precise location; unauthorized recipients get denied; pause and disable state transitions enforced | Authorization denial accuracy, user control adoption rate, low false-positive abuse flags | Roll out to trusted beta cohort first; rollback by disabling precise read endpoints and retaining paused state metadata |
 | Phase 5 | Production hardening and operations | Define SLOs, alerts, dashboards, incident runbooks, backfill strategy, and retention enforcement jobs including heatmap cleanup scheduling | Prior phase completion | On-call playbooks validated in game day; SLO dashboards live; retention jobs verified | Heatmap availability and latency SLO met, incident MTTR target met | Full rollout with staged traffic ramps; rollback by flagging off new channels and serving cached safe tiles |
+
+## Phase 0 deliverable breakdown for implementation traceability
+
+| Phase 0 workstream | Deliverable |
+|---|---|
+| Data contracts | Versioned schema definitions for precise and obfuscated channels plus migration compatibility adapters |
+| Ingress hardening | Numeric validation, replay nonce validation, and scoped rate limiting for location submission endpoints |
+| Logging safety | Structured logger redaction policy with compile-time or test-time field denylist enforcement for coordinate fields |
+| Security verification | Automated regression tests for replay rejection, unauthorized access denial, and log redaction guarantees |
+| Deployment controls | Feature flag wiring, staged rollout plan, and reversible fallback to legacy presence path |
 
 ## Migration and backfill strategy
 
