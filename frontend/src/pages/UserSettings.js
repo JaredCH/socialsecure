@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useLocation } from 'react-router-dom';
-import { authAPI } from '../utils/api';
+import { authAPI, chatAPI } from '../utils/api';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
 import FriendsManager from '../components/FriendsManager';
 import RecoveryKitManager from '../components/RecoveryKitManager';
@@ -102,8 +102,14 @@ function UserSettings({
   });
   const [generatingPgpKey, setGeneratingPgpKey] = useState(false);
   const [generatedPrivateKey, setGeneratedPrivateKey] = useState('');
+  const [profileThreadId, setProfileThreadId] = useState('');
+  const [profileThreadMessages, setProfileThreadMessages] = useState([]);
+  const [profileThreadLoading, setProfileThreadLoading] = useState(false);
+  const [profileThreadInput, setProfileThreadInput] = useState('');
+  const [profileThreadSending, setProfileThreadSending] = useState(false);
 
   const hasEncryptionPassword = !!encryptionPasswordStatus?.hasEncryptionPassword;
+  const profileUserId = user?._id || null;
 
   useEffect(() => {
     if (!user) return;
@@ -124,6 +130,30 @@ function UserSettings({
       name: prev.name || user.realName || ''
     }));
   }, [user]);
+
+  useEffect(() => {
+    const loadProfileThread = async () => {
+      if (!profileUserId) return;
+      setProfileThreadLoading(true);
+      try {
+        const { data: threadData } = await chatAPI.getProfileThread(profileUserId);
+        const threadId = threadData?.conversation?._id ? String(threadData.conversation._id) : '';
+        setProfileThreadId(threadId);
+        if (!threadId) {
+          setProfileThreadMessages([]);
+          return;
+        }
+        const { data: messageData } = await chatAPI.getConversationMessages(threadId, 1, 20);
+        setProfileThreadMessages(Array.isArray(messageData?.messages) ? messageData.messages : []);
+      } catch (error) {
+        toast.error(error.response?.data?.error || 'Failed to load profile thread');
+      } finally {
+        setProfileThreadLoading(false);
+      }
+    };
+
+    loadProfileThread();
+  }, [profileUserId]);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -327,6 +357,23 @@ function UserSettings({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleSendProfileThreadMessage = async (event) => {
+    event.preventDefault();
+    const trimmed = profileThreadInput.trim();
+    if (!trimmed || !profileThreadId) return;
+
+    setProfileThreadSending(true);
+    try {
+      const { data } = await chatAPI.sendConversationMessage(profileThreadId, trimmed);
+      setProfileThreadMessages((prev) => [...prev, data.message]);
+      setProfileThreadInput('');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to send profile thread message');
+    } finally {
+      setProfileThreadSending(false);
+    }
   };
 
   if (!user) {
@@ -657,6 +704,46 @@ function UserSettings({
           {savingPgpPublicKey ? 'Saving...' : 'Save Public Key'}
         </button>
       </form>
+
+      <div className="space-y-3 border rounded p-4 bg-gray-50">
+        <h3 className="text-lg font-semibold text-gray-800">Profile Thread Chat</h3>
+        <p className="text-sm text-gray-600">
+          This is the same profile-specific thread available from the Chat hub.
+        </p>
+        <div className="max-h-48 overflow-y-auto border rounded p-2 bg-white space-y-2">
+          {profileThreadLoading ? (
+            <p className="text-sm text-gray-500">Loading profile thread...</p>
+          ) : profileThreadMessages.length === 0 ? (
+            <p className="text-sm text-gray-500">No profile thread messages yet.</p>
+          ) : (
+            profileThreadMessages.map((message) => (
+              <div key={String(message._id)} className="text-sm">
+                <div className="text-xs text-gray-500">
+                  @{message.userId?.username || message.userId?.realName || 'user'} · {new Date(message.createdAt).toLocaleString()}
+                </div>
+                <div className="whitespace-pre-wrap">{message.content}</div>
+              </div>
+            ))
+          )}
+        </div>
+        <form onSubmit={handleSendProfileThreadMessage} className="flex gap-2">
+          <input
+            value={profileThreadInput}
+            onChange={(event) => setProfileThreadInput(event.target.value)}
+            className="flex-1 border rounded p-2"
+            maxLength={2000}
+            placeholder="Message on your profile thread"
+            disabled={!profileThreadId || profileThreadSending}
+          />
+          <button
+            type="submit"
+            className="bg-blue-600 text-white rounded px-3 py-2 disabled:opacity-50"
+            disabled={!profileThreadId || !profileThreadInput.trim() || profileThreadSending}
+          >
+            {profileThreadSending ? 'Sending...' : 'Send'}
+          </button>
+        </form>
+      </div>
 
       {/* Friends Management Section */}
       <div className="mt-8">

@@ -9,19 +9,18 @@ const Friendship = require('../models/Friendship');
 const BlockList = require('../models/BlockList');
 const MuteList = require('../models/MuteList');
 const { createNotification } = require('../services/notifications');
+const { emitFeedInteraction, emitFeedPost } = require('../services/realtime');
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
 const VALID_VISIBILITY = ['public', 'friends', 'circles', 'specific_users', 'private'];
-const VALID_INTERACTION_TYPES = ['poll', 'quiz', 'countdown'];
-const VALID_INTERACTION_STATUS = ['active', 'closed', 'expired'];
-const INTERACTION_MAX_OPTIONS = 6;
-const INTERACTION_MAX_OPTION_LENGTH = 120;
-const INTERACTION_MAX_QUESTION_LENGTH = 280;
-const INTERACTION_MAX_EXPLANATION_LENGTH = 1000;
-const INTERACTION_MAX_COUNTDOWN_LABEL_LENGTH = 180;
-const INTERACTION_MAX_TIMEZONE_LENGTH = 80;
+const interactionRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: { error: 'Too many interaction requests, please slow down.' },
+  keyGenerator: (req) => String(req?.user?.userId || req.ip || req.socket?.remoteAddress || 'unknown')
+});
 
 const parseViewerCoordinates = (req) => {
   const latitude = Number.parseFloat(req.query.latitude);
@@ -81,6 +80,20 @@ const extractMentions = (content = '') => {
     usernames.add(mention.slice(1).toLowerCase());
   }
   return [...usernames];
+};
+
+const buildRealtimeAudience = async (...seedUserIds) => {
+  const normalizedSeedIds = [...new Set(seedUserIds.map((value) => String(value || '').trim()).filter(Boolean))];
+  const audience = new Set(normalizedSeedIds);
+
+  await Promise.all(normalizedSeedIds.map(async (seedUserId) => {
+    const friendIds = await getFriendIds(seedUserId);
+    for (const friendId of friendIds) {
+      audience.add(String(friendId));
+    }
+  }));
+
+  return [...audience];
 };
 
 const canViewerSeePost = (post, viewerId, friendIds, viewerCoordinates = null) => {
@@ -725,6 +738,12 @@ router.post('/post', [
     // Populate author and target user info
     await post.populate('authorId', 'username realName');
     await post.populate('targetFeedId', 'username realName');
+
+    const audienceUserIds = await buildRealtimeAudience(authorId, normalizedTargetFeedId);
+    emitFeedPost({
+      userIds: audienceUserIds,
+      post
+    });
     
     res.status(201).json({
       success: true,
@@ -766,7 +785,7 @@ router.delete('/post/:postId', authenticateToken, async (req, res) => {
 });
 
 // Like a post
-router.post('/post/:postId/like', authenticateToken, async (req, res) => {
+router.post('/post/:postId/like', interactionRateLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = req.user.userId;
@@ -800,6 +819,18 @@ router.post('/post/:postId/like', authenticateToken, async (req, res) => {
         }
       });
     }
+
+    const audienceUserIds = await buildRealtimeAudience(post.authorId, post.targetFeedId, userId);
+    emitFeedInteraction({
+      userIds: audienceUserIds,
+      interaction: {
+        type: 'like',
+        postId: String(post._id),
+        actorId: String(userId),
+        likesCount: post.likes.length,
+        commentsCount: post.comments.length
+      }
+    });
     
     res.json({
       success: true,
@@ -813,7 +844,7 @@ router.post('/post/:postId/like', authenticateToken, async (req, res) => {
 });
 
 // Unlike a post
-router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
+router.delete('/post/:postId/like', interactionRateLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = req.user.userId;
@@ -824,11 +855,23 @@ router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
     }
     
     await post.removeLike(userId);
+
+    const audienceUserIds = await buildRealtimeAudience(post.authorId, post.targetFeedId, userId);
+    emitFeedInteraction({
+      userIds: audienceUserIds,
+      interaction: {
+        type: 'unlike',
+        postId: String(post._id),
+        actorId: String(userId),
+        likesCount: post.likes.length,
+        commentsCount: post.comments.length
+      }
+    });
     
     res.json({
       success: true,
       message: 'Post unliked',
-      likesCount: post.likes.length
+      likesCount
     });
   } catch (error) {
     console.error('Error unliking post:', error);
@@ -838,6 +881,7 @@ router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
 
 // Add comment to post
 router.post('/post/:postId/comment', [
+  interactionRateLimiter,
   authenticateToken,
   body('content').trim().notEmpty().withMessage('Comment content is required').isLength({ max: 1000 }).withMessage('Comment too long')
 ], async (req, res) => {
@@ -906,6 +950,25 @@ router.post('/post/:postId/comment', [
         });
       }
     }
+
+    const audienceUserIds = await buildRealtimeAudience(post.authorId, post.targetFeedId, userId);
+    emitFeedInteraction({
+      userIds: audienceUserIds,
+      interaction: {
+        type: 'comment',
+        postId: String(post._id),
+        actorId: String(userId),
+        likesCount: post.likes.length,
+        commentsCount: post.comments.length,
+        comment: {
+          _id: newComment?._id,
+          userId: String(newComment?.userId || userId),
+          username: actor?.username || actor?.realName || 'user',
+          content: newComment?.content || content,
+          createdAt: newComment?.createdAt || new Date().toISOString()
+        }
+      }
+    });
     
     res.status(201).json({
       success: true,

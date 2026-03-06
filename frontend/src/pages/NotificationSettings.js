@@ -20,11 +20,19 @@ const defaultPreferences = {
   follows: { inApp: true, email: false, push: false },
   messages: { inApp: true, email: false, push: false },
   system: { inApp: true, email: true, push: false },
-  securityAlerts: { inApp: true, email: true, push: false }
+  securityAlerts: { inApp: true, email: true, push: false },
+  realtime: { enabled: true, typingIndicators: true, presence: true }
+};
+
+const defaultRealtimePreferences = {
+  enabled: true,
+  showPresence: true,
+  showLastSeen: true
 };
 
 const NotificationSettings = () => {
   const [preferences, setPreferences] = useState(defaultPreferences);
+  const [realtimePreferences, setRealtimePreferences] = useState(defaultRealtimePreferences);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +47,10 @@ const NotificationSettings = () => {
         const incoming = response.data?.preferences;
         if (incoming && typeof incoming === 'object') {
           setPreferences({ ...defaultPreferences, ...incoming });
+        }
+        const realtimeIncoming = response.data?.realtimePreferences;
+        if (realtimeIncoming && typeof realtimeIncoming === 'object') {
+          setRealtimePreferences({ ...defaultRealtimePreferences, ...realtimeIncoming });
         }
       } catch (requestError) {
         setError(requestError.response?.data?.error || 'Failed to load preferences');
@@ -60,12 +72,22 @@ const NotificationSettings = () => {
     }));
   };
 
+  const handleRealtimeToggle = (field) => {
+    setRealtimePreferences((prev) => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
+
   const save = async () => {
     setSaving(true);
     setError('');
     setSuccess('');
     try {
-      await notificationAPI.updatePreferences(preferences);
+      await notificationAPI.updatePreferences({
+        ...preferences,
+        realtime: realtimePreferences
+      });
       setSuccess('Notification preferences updated.');
     } catch (requestError) {
       setError(requestError.response?.data?.error || 'Failed to save preferences');
@@ -119,6 +141,40 @@ const NotificationSettings = () => {
       )}
 
       <div className="mt-6">
+        <div className="mb-6 rounded-lg border border-gray-200 p-4 bg-gray-50">
+          <h2 className="text-lg font-semibold text-gray-900">Real-time Social Updates</h2>
+          <p className="text-sm text-gray-600 mt-1">Control live feed updates, presence, and last-seen visibility.</p>
+
+          <div className="mt-4 space-y-3 text-sm">
+            <label className="flex items-center justify-between gap-3">
+              <span>Enable real-time updates</span>
+              <input
+                type="checkbox"
+                checked={Boolean(realtimePreferences.enabled)}
+                onChange={() => handleRealtimeToggle('enabled')}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3">
+              <span>Show my online/offline presence to friends</span>
+              <input
+                type="checkbox"
+                checked={Boolean(realtimePreferences.showPresence)}
+                onChange={() => handleRealtimeToggle('showPresence')}
+                disabled={!realtimePreferences.enabled}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3">
+              <span>Show my last-seen time to friends</span>
+              <input
+                type="checkbox"
+                checked={Boolean(realtimePreferences.showLastSeen)}
+                onChange={() => handleRealtimeToggle('showLastSeen')}
+                disabled={!realtimePreferences.enabled || !realtimePreferences.showPresence}
+              />
+            </label>
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={save}

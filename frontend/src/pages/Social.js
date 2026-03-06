@@ -1,10 +1,21 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authAPI, circlesAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
+import TypingIndicator from '../components/TypingIndicator';
+import {
+  emitTypingStart,
+  emitTypingStop,
+  getRealtimeSocket,
+  onFeedInteraction,
+  onFeedPost,
+  onTyping,
+  subscribeToPost,
+  unsubscribeFromPost
+} from '../utils/realtime';
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
@@ -12,6 +23,9 @@ const COMPOSER_CONTENT_TYPES = ['standard', 'poll', 'quiz', 'countdown'];
 const INTERACTION_MAX_OPTIONS = 6;
 const GALLERY_MAX_ITEMS = 24;
 const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
+const FEED_POLL_INTERVAL_MS = 30000;
+const TYPING_TIMEOUT_MS = 900;
+const REMOTE_TYPING_TTL_MS = 3000;
 
 const PRIVACY_BADGE_LABELS = {
   public: 'Public',
@@ -227,6 +241,7 @@ const Social = () => {
   const [circles, setCircles] = useState([]);
   const [friends, setFriends] = useState([]);
   const [commentInputs, setCommentInputs] = useState({});
+  const [typingByPost, setTypingByPost] = useState({});
   const [actionLoadingByPost, setActionLoadingByPost] = useState({});
   const [galleryItems, setGalleryItems] = useState([]);
   const [galleryTargetInput, setGalleryTargetInput] = useState(initialGuestUser);
@@ -247,10 +262,34 @@ const Social = () => {
     targetId: null,
     targetUserId: null
   });
-  const [nowMs, setNowMs] = useState(Date.now());
+  const [commentTypingByPostId, setCommentTypingByPostId] = useState({});
+  const localTypingTimeoutsRef = useRef({});
+  const remoteTypingTimeoutsRef = useRef({});
+
+  const realtimeEnabled = currentUser?.realtimePreferences?.enabled !== false;
+
+  const requestedProfileIdentifier = guestUser.trim();
+  const normalizedRequestedProfileIdentifier = requestedProfileIdentifier.toLowerCase();
+  const normalizedCurrentUserId = String(currentUser?._id || '').trim().toLowerCase();
+  const normalizedCurrentUsername = String(currentUser?.username || '').trim().toLowerCase();
+  const isViewingAnotherProfile = Boolean(
+    isAuthenticated
+      && normalizedRequestedProfileIdentifier
+      && normalizedRequestedProfileIdentifier !== normalizedCurrentUserId
+      && normalizedRequestedProfileIdentifier !== normalizedCurrentUsername
+  );
+  const isOwnSocialContext = isAuthenticated && !isViewingAnotherProfile;
 
   const galleryOwnerIdentifier = useMemo(() => {
-    // Authenticated users always see their own gallery on /social
+    // Profile context (/social?user=...) uses target user gallery
+    if (isViewingAnotherProfile) {
+      if (guestProfile?._id) {
+        return String(guestProfile._id);
+      }
+      return requestedProfileIdentifier;
+    }
+
+    // Authenticated users on own /social always see only their own gallery
     if (isAuthenticated && currentUser?._id) {
       return String(currentUser._id);
     }
@@ -264,13 +303,18 @@ const Social = () => {
       return String(guestProfile._id);
     }
 
-    return guestUser.trim();
-  }, [isAuthenticated, currentUser?._id, galleryTarget, guestProfile?._id, guestUser]);
+    return requestedProfileIdentifier;
+  }, [
+    isViewingAnotherProfile,
+    guestProfile?._id,
+    requestedProfileIdentifier,
+    isAuthenticated,
+    currentUser?._id,
+    galleryTarget
+  ]);
 
   const viewerCanReact = isAuthenticated && !isGuestPreview && Boolean(currentUser?._id);
   const normalizedGalleryOwnerIdentifier = String(galleryOwnerIdentifier || '').trim().toLowerCase();
-  const normalizedCurrentUserId = String(currentUser?._id || '').trim().toLowerCase();
-  const normalizedCurrentUsername = String(currentUser?.username || '').trim().toLowerCase();
 
   const canManageGallery =
     viewerCanReact
@@ -414,14 +458,20 @@ const Social = () => {
 
     setIsAuthenticated(true);
     try {
-      await loadAuthenticatedFeed();
+      if (isViewingAnotherProfile) {
+        await loadGuestFeed();
+      } else {
+        await loadAuthenticatedFeed();
+      }
     } catch (error) {
-      setFeedError(error.response?.data?.error || 'Failed to load timeline.');
+      setFeedError(error.response?.data?.error || (isViewingAnotherProfile
+        ? 'Failed to load public feed.'
+        : 'Failed to load timeline.'));
       setPosts([]);
     } finally {
       setLoadingFeed(false);
     }
-  }, [loadAuthenticatedFeed, loadGuestFeed]);
+  }, [loadAuthenticatedFeed, loadGuestFeed, isViewingAnotherProfile]);
 
   useEffect(() => {
     loadFeed();
@@ -437,6 +487,176 @@ const Social = () => {
   useEffect(() => {
     loadGallery();
   }, [loadGallery]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser?._id || realtimeEnabled) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      loadAuthenticatedFeed().catch(() => {
+        // keep polling fallback resilient
+      });
+    }, FEED_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [isAuthenticated, currentUser?._id, realtimeEnabled, loadAuthenticatedFeed]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser?._id || !realtimeEnabled) {
+      return undefined;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return undefined;
+    }
+
+    const socket = getRealtimeSocket({ token, userId: currentUser._id });
+    const subscribedPostIds = posts.map((post) => String(post._id || '')).filter(Boolean);
+    subscribedPostIds.forEach((postId) => subscribeToPost(postId));
+
+    const offFeedPost = onFeedPost((payload) => {
+      const incomingPost = payload?.post ? normalizePost(payload.post) : null;
+      if (!incomingPost?._id) return;
+
+      setPosts((prev) => {
+        const existingIndex = prev.findIndex((item) => String(item._id) === String(incomingPost._id));
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = { ...next[existingIndex], ...incomingPost };
+          return next;
+        }
+        return [incomingPost, ...prev];
+      });
+
+      subscribeToPost(incomingPost._id);
+    });
+
+    const offFeedInteraction = onFeedInteraction((payload) => {
+      const postId = String(payload?.postId || '').trim();
+      if (!postId) return;
+
+      setPosts((prev) => prev.map((item) => {
+        if (String(item._id) !== postId) return item;
+
+        const next = {
+          ...item,
+          likesCount: typeof payload?.likesCount === 'number' ? payload.likesCount : item.likesCount,
+          commentsCount: typeof payload?.commentsCount === 'number' ? payload.commentsCount : item.commentsCount
+        };
+
+        if (payload?.type === 'comment' && payload?.comment?._id) {
+          const alreadyExists = next.comments.some((comment) => String(comment._id) === String(payload.comment._id));
+          if (!alreadyExists) {
+            next.comments = [...next.comments, payload.comment];
+          }
+        }
+
+        return next;
+      }));
+    });
+
+    const offTyping = onTyping((payload) => {
+      if (payload?.scope !== 'comment' || !payload?.targetId || !payload?.userId) return;
+
+      const postId = String(payload.targetId);
+      const userId = String(payload.userId);
+      const timeoutKey = `${postId}:${userId}`;
+
+      if (payload.status === 'stop') {
+        const existingTimeout = remoteTypingTimeoutsRef.current[timeoutKey];
+        if (existingTimeout) {
+          window.clearTimeout(existingTimeout);
+          delete remoteTypingTimeoutsRef.current[timeoutKey];
+        }
+
+        setCommentTypingByPostId((prev) => {
+          const next = { ...prev };
+          const postTyping = { ...(next[postId] || {}) };
+          delete postTyping[userId];
+          if (Object.keys(postTyping).length === 0) {
+            delete next[postId];
+          } else {
+            next[postId] = postTyping;
+          }
+          return next;
+        });
+        return;
+      }
+
+      setCommentTypingByPostId((prev) => ({
+        ...prev,
+        [postId]: {
+          ...(prev[postId] || {}),
+          [userId]: payload.label || 'Someone'
+        }
+      }));
+
+      const existingTimeout = remoteTypingTimeoutsRef.current[timeoutKey];
+      if (existingTimeout) {
+        window.clearTimeout(existingTimeout);
+      }
+
+      remoteTypingTimeoutsRef.current[timeoutKey] = window.setTimeout(() => {
+        setCommentTypingByPostId((prev) => {
+          const next = { ...prev };
+          const postTyping = { ...(next[postId] || {}) };
+          delete postTyping[userId];
+          if (Object.keys(postTyping).length === 0) {
+            delete next[postId];
+          } else {
+            next[postId] = postTyping;
+          }
+          return next;
+        });
+        delete remoteTypingTimeoutsRef.current[timeoutKey];
+      }, REMOTE_TYPING_TTL_MS);
+    });
+
+    return () => {
+      subscribedPostIds.forEach((postId) => unsubscribeFromPost(postId));
+      offFeedPost();
+      offFeedInteraction();
+      offTyping();
+      void socket;
+    };
+  }, [isAuthenticated, currentUser?._id, realtimeEnabled, posts]);
+
+  useEffect(() => () => {
+    Object.values(localTypingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+    Object.values(remoteTypingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+  }, []);
+
+  const handleCommentInputChange = (postId, value) => {
+    setCommentInputs((prev) => ({ ...prev, [postId]: value }));
+
+    if (!isAuthenticated || !realtimeEnabled || !currentUser?._id) {
+      return;
+    }
+
+    subscribeToPost(postId);
+
+    if (!value.trim()) {
+      emitTypingStop({ scope: 'comment', targetId: postId });
+      if (localTypingTimeoutsRef.current[postId]) {
+        window.clearTimeout(localTypingTimeoutsRef.current[postId]);
+        delete localTypingTimeoutsRef.current[postId];
+      }
+      return;
+    }
+
+    emitTypingStart({ scope: 'comment', targetId: postId });
+
+    if (localTypingTimeoutsRef.current[postId]) {
+      window.clearTimeout(localTypingTimeoutsRef.current[postId]);
+    }
+
+    localTypingTimeoutsRef.current[postId] = window.setTimeout(() => {
+      emitTypingStop({ scope: 'comment', targetId: postId });
+      delete localTypingTimeoutsRef.current[postId];
+    }, TYPING_TIMEOUT_MS);
+  };
 
   const handleAddMediaUrl = () => {
     const value = postForm.mediaUrlInput.trim();
@@ -937,6 +1157,11 @@ const Social = () => {
       );
 
       setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
+      emitTypingStop({ scope: 'comment', targetId: postId });
+      if (localTypingTimeoutsRef.current[postId]) {
+        window.clearTimeout(localTypingTimeoutsRef.current[postId]);
+        delete localTypingTimeoutsRef.current[postId];
+      }
     } catch (error) {
       setFeedError(error.response?.data?.error || 'Failed to add comment.');
     } finally {
@@ -1205,13 +1430,15 @@ const Social = () => {
             Social
           </h2>
           <p className="text-sm leading-relaxed text-white/95 sm:text-base">
-            {isAuthenticated && isGuestPreview
+            {isViewingAnotherProfile
+              ? `Viewing public profile for @${requestedProfileIdentifier}. Gallery and posts are read-only in this view.`
+              : isAuthenticated && isGuestPreview
               ? 'Guest preview mode: interaction controls are hidden. This is how your page appears to visitors.'
               : isAuthenticated
                 ? 'Share updates, browse your timeline, and connect with your community.'
                 : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
           </p>
-          {isAuthenticated && (
+          {isOwnSocialContext && (
             <div className="pt-1">
               {isGuestPreview ? (
                 <button
@@ -1330,7 +1557,7 @@ const Social = () => {
             </div>
           )}
 
-          {isAuthenticated && !isGuestPreview && (
+          {isOwnSocialContext && !isGuestPreview && (
             <form onSubmit={handleSubmitPost} className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100">
               <h3 className="text-lg font-medium">Create Post</h3>
 
@@ -1583,7 +1810,7 @@ const Social = () => {
             </form>
           )}
 
-          {isAuthenticated && !isGuestPreview && (
+          {isOwnSocialContext && !isGuestPreview && (
             <CircleManager
               circles={circles}
               friends={friends}
@@ -1596,7 +1823,7 @@ const Social = () => {
 
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold">{(isAuthenticated && !isGuestPreview) ? 'Timeline' : 'Public Timeline'}</h3>
+              <h3 className="text-xl font-semibold">{(isOwnSocialContext && !isGuestPreview) ? 'Timeline' : 'Public Timeline'}</h3>
               <button
                 type="button"
                 onClick={loadFeed}
@@ -1608,6 +1835,11 @@ const Social = () => {
             </div>
 
             {feedError && <div className="text-red-700 bg-red-50 border border-red-200 rounded p-3">{feedError}</div>}
+            {isAuthenticated && !realtimeEnabled ? (
+              <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-3 text-sm">
+                Real-time social updates are disabled for this account. This feed will fall back to periodic refreshes.
+              </div>
+            ) : null}
 
             {loadingFeed ? (
               <div className="bg-white rounded-xl shadow p-6 text-gray-600 border border-gray-100">Loading feed...</div>
@@ -1908,9 +2140,8 @@ const Social = () => {
                             <input
                               type="text"
                               value={commentInputs[post._id] || ''}
-                              onChange={(event) =>
-                                setCommentInputs((prev) => ({ ...prev, [post._id]: event.target.value }))
-                              }
+                              onChange={(event) => handleCommentInputChange(post._id, event.target.value)}
+                              onBlur={() => emitTypingStop({ scope: 'comment', targetId: post._id })}
                               placeholder="Add a comment..."
                               className="flex-1 border rounded px-3 py-2 text-sm"
                               maxLength={1000}
@@ -1924,6 +2155,8 @@ const Social = () => {
                               Comment
                             </button>
                           </div>
+
+                          <TypingIndicator labels={Object.values(commentTypingByPostId[post._id] || {})} />
                         </div>
                       </div>
                     ) : (
