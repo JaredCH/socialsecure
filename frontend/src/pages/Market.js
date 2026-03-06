@@ -502,7 +502,7 @@ function ListingFormModal({ listing, onClose, onSaved }) {
   const handleImageSelection = (event) => {
     const files = Array.from(event.target.files || []);
     if (files.length > MAX_LISTING_IMAGES) {
-      toast.error(`You can upload up to ${MAX_LISTING_IMAGES} images.`);
+      toast.error(`You selected ${files.length} images. Only the first ${MAX_LISTING_IMAGES} will be used.`);
     }
     setForm(f => ({ ...f, imageFiles: files.slice(0, MAX_LISTING_IMAGES) }));
   };

@@ -244,14 +244,22 @@ const saveUploadedImages = async (files, ownerId) => {
   if (invalid) {
     return { ok: false, error: invalid.error };
   }
-  for (let index = 0; index < files.length; index += 1) {
-    const file = files[index];
-    const validation = validations[index];
-    const fileName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${validation.ext}`;
-    const absolutePath = path.join(ownerDir, fileName);
-    await fs.writeFile(absolutePath, file.buffer);
-    savedImages.push(`/uploads/market/${String(ownerId)}/${fileName}`);
+
+  const timestamp = Date.now();
+  try {
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      const validation = validations[index];
+      const fileName = `${timestamp}-${index}-${crypto.randomBytes(8).toString('hex')}${validation.ext}`;
+      const absolutePath = path.join(ownerDir, fileName);
+      await fs.writeFile(absolutePath, file.buffer);
+      savedImages.push(`/uploads/market/${String(ownerId)}/${fileName}`);
+    }
+  } catch (error) {
+    await removeMarketUploads(savedImages);
+    return { ok: false, error: 'Failed to save uploaded images' };
   }
+
   return { ok: true, images: savedImages };
 };
 
@@ -263,18 +271,19 @@ const getMarketUploadPath = (imageUrl) => {
   return path.join(marketUploadRoot, relativePath);
 };
 
-const removeMarketUploads = async (images = []) => {
+async function removeMarketUploads(images = []) {
   const paths = images.map(getMarketUploadPath).filter(Boolean);
   await Promise.all(
     paths.map((filePath) =>
       fs.unlink(filePath).catch((unlinkError) => {
         if (unlinkError?.code !== 'ENOENT') {
+          console.error('Failed to remove market upload:', unlinkError);
           throw unlinkError;
         }
       })
     )
   );
-};
+}
 
 const getCategoryRequirementErrors = ({ category, condition, additionalDetails }) => {
   const parentCategory = CATEGORY_PARENT_MAP[category];
