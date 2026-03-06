@@ -19,6 +19,12 @@ const STATE_ICONS = {
   public_glow: '✨'
 };
 
+export const resolveLeafletModule = (leafletModule) => (
+  leafletModule?.default && typeof leafletModule.default.map === 'function'
+    ? leafletModule.default
+    : leafletModule
+);
+
 function Maps() {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -75,7 +81,8 @@ function Maps() {
       }, 10000);
 
       try {
-        const L = await import('leaflet');
+        const leafletModule = await import('leaflet');
+        const L = resolveLeafletModule(leafletModule);
         await import('leaflet/dist/leaflet.css');
         if (cancelled) return;
 
@@ -118,7 +125,8 @@ function Maps() {
               if (cancelled || mapInstanceRef.current) return;
               // Default to center of US if geolocation fails
               createMap([39.8283, -98.5795], 4);
-            }
+            },
+            { timeout: 8000, maximumAge: 300000 }
           );
         } else {
           createMap([39.8283, -98.5795], 4);
