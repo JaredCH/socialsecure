@@ -221,6 +221,14 @@ const normalizeImageList = (value) => {
   return { ok: true, images: normalized };
 };
 
+const ensureImageLimit = (images) => {
+  if (!Array.isArray(images)) return { ok: true };
+  if (images.length > MAX_MARKET_IMAGES) {
+    return { ok: false, error: `You can upload up to ${MAX_MARKET_IMAGES} images` };
+  }
+  return { ok: true };
+};
+
 const validateUploadedImage = (file) => {
   const mimeType = String(file.mimetype || '').toLowerCase();
   const ext = path.extname(String(file.originalname || '')).toLowerCase();
@@ -245,12 +253,11 @@ const saveUploadedImages = async (files, ownerId) => {
     return { ok: false, error: invalid.error };
   }
 
-  const timestamp = Date.now();
   try {
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index];
       const validation = validations[index];
-      const fileName = `${timestamp}-${index}-${crypto.randomBytes(8).toString('hex')}${validation.ext}`;
+      const fileName = `${crypto.randomUUID()}${validation.ext}`;
       const absolutePath = path.join(ownerDir, fileName);
       await fs.writeFile(absolutePath, file.buffer);
       savedImages.push(`/uploads/market/${String(ownerId)}/${fileName}`);
@@ -277,8 +284,8 @@ async function removeMarketUploads(images = []) {
     paths.map((filePath) =>
       fs.unlink(filePath).catch((unlinkError) => {
         if (unlinkError?.code !== 'ENOENT') {
-          console.error('Failed to remove market upload:', unlinkError);
-          throw unlinkError;
+      console.error('Failed to remove market upload:', filePath, unlinkError);
+      throw unlinkError;
         }
       })
     )
@@ -530,8 +537,9 @@ router.post('/listings', [
     const images = uploadResult.images.length > 0
       ? uploadResult.images
       : (imageListResult.images || []);
-    if (images.length > MAX_MARKET_IMAGES) {
-      return res.status(400).json({ error: `You can upload up to ${MAX_MARKET_IMAGES} images` });
+    const imageLimitCheck = ensureImageLimit(images);
+    if (!imageLimitCheck.ok) {
+      return res.status(400).json({ error: imageLimitCheck.error });
     }
     
     const listingData = {
@@ -653,15 +661,19 @@ router.put('/listings/:listingId', [
     }
 
     const currentImages = Array.isArray(listing.images) ? listing.images : [];
+    const hasUploads = uploadResult.images.length > 0;
+    const hasImageList = imageListResult.images !== undefined;
     let nextImages;
-    if (uploadResult.images.length > 0) {
-      nextImages = uploadResult.images;
-    } else if (imageListResult.images !== undefined) {
+    if (hasUploads) {
+      const baseImages = hasImageList ? imageListResult.images : [];
+      nextImages = [...baseImages, ...uploadResult.images];
+    } else if (hasImageList) {
       nextImages = imageListResult.images;
     }
     if (nextImages) {
-      if (nextImages.length > MAX_MARKET_IMAGES) {
-        return res.status(400).json({ error: `You can upload up to ${MAX_MARKET_IMAGES} images` });
+      const imageLimitCheck = ensureImageLimit(nextImages);
+      if (!imageLimitCheck.ok) {
+        return res.status(400).json({ error: imageLimitCheck.error });
       }
       const removedImages = currentImages.filter((image) => !nextImages.includes(image));
       await removeMarketUploads(removedImages);

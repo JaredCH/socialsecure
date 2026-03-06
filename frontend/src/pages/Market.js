@@ -502,7 +502,10 @@ function ListingFormModal({ listing, onClose, onSaved }) {
   const handleImageSelection = (event) => {
     const files = Array.from(event.target.files || []);
     if (files.length > MAX_LISTING_IMAGES) {
-      toast.error(`You selected ${files.length} images. Only the first ${MAX_LISTING_IMAGES} will be used.`);
+      toast.error(`Please select up to ${MAX_LISTING_IMAGES} images.`);
+      event.target.value = '';
+      setForm(f => ({ ...f, imageFiles: [] }));
+      return;
     }
     setForm(f => ({ ...f, imageFiles: files.slice(0, MAX_LISTING_IMAGES) }));
   };
@@ -661,7 +664,7 @@ function ListingFormModal({ listing, onClose, onSaved }) {
               </div>
             )}
             {hasExistingImages && hasNewImages && (
-              <p className="text-xs text-amber-600 mb-2">Uploading new images will replace the existing ones.</p>
+              <p className="text-xs text-amber-600 mb-2">uploading new images will replace the existing ones.</p>
             )}
             {hasNewImages && (
               <ul className="mb-2 text-xs text-gray-600 space-y-1">
