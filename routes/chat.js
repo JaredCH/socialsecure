@@ -2186,7 +2186,10 @@ router.get('/conversations/:conversationId/messages', unifiedChatLimiter, authen
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
     const skip = (page - 1) * limit;
 
-    const conversation = await ChatConversation.findById(conversationId).lean();
+    const conversationQuery = ChatConversation.findById(conversationId);
+    const conversation = typeof conversationQuery?.lean === 'function'
+      ? await conversationQuery.lean()
+      : await conversationQuery;
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
@@ -2221,6 +2224,79 @@ router.get('/conversations/:conversationId/messages', unifiedChatLimiter, authen
   } catch (error) {
     console.error('Error fetching conversation messages:', error);
     return res.status(500).json({ error: 'Failed to fetch conversation messages' });
+  }
+});
+
+router.get('/conversations/:conversationId/users', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.userId;
+
+    const conversationQuery = ChatConversation.findById(conversationId);
+    const conversation = typeof conversationQuery?.lean === 'function'
+      ? await conversationQuery.lean()
+      : await conversationQuery;
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (!canAccessConversation(conversation, userId)) {
+      return res.status(403).json({ error: 'Access denied for this conversation' });
+    }
+
+    const participantIds = new Set(
+      Array.isArray(conversation.participants)
+        ? conversation.participants.map((participant) => String(participant))
+        : []
+    );
+
+    if (conversation.type === 'zip-room') {
+      const recentMessages = await ConversationMessage.find({ conversationId })
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .select('userId')
+        .lean();
+      recentMessages.forEach((message) => {
+        if (message?.userId) {
+          participantIds.add(String(message.userId));
+        }
+      });
+    }
+
+    if (participantIds.size === 0) {
+      participantIds.add(String(userId));
+    }
+
+    const users = await User.find({ _id: { $in: [...participantIds] } })
+      .select('_id username realName')
+      .lean();
+
+    const sortedUsers = users
+      .map((u) => ({
+        _id: u._id,
+        username: u.username || null,
+        realName: u.realName || null
+      }))
+      .sort((a, b) => {
+        const aName = (a.username || a.realName || '').toLowerCase();
+        const bName = (b.username || b.realName || '').toLowerCase();
+        if (aName < bName) return -1;
+        if (aName > bName) return 1;
+        return 0;
+      });
+
+    return res.json({
+      success: true,
+      conversation: {
+        _id: conversation._id,
+        type: conversation.type,
+        title: conversation.title || ''
+      },
+      users: sortedUsers
+    });
+  } catch (error) {
+    console.error('Error fetching conversation users:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversation users' });
   }
 });
 
