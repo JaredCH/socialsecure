@@ -188,6 +188,14 @@ describe('Discovery routes', () => {
     expect(accepted.status).toBe(202);
     expect(accepted.body.success).toBe(true);
 
+    const socialAccepted = await request(app)
+      .post('/api/discovery/events')
+      .set('Authorization', 'Bearer token')
+      .send({ eventType: 'social_profile_section_clicked', metadata: { sectionId: 'timeline' } });
+
+    expect(socialAccepted.status).toBe(202);
+    expect(socialAccepted.body.success).toBe(true);
+
     const rejected = await request(app)
       .post('/api/discovery/events')
       .set('Authorization', 'Bearer token')

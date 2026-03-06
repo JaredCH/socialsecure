@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI, circlesAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
+import { authAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
+import ProfileHeaderSection from '../components/social/ProfileHeaderSection';
+import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
+import SocialLeftRail from '../components/social/SocialLeftRail';
+import SocialRightRail from '../components/social/SocialRightRail';
+import { SOCIAL_SECTION_IDS } from '../components/social/sectionRegistry';
 import {
   emitTypingStart,
   emitTypingStop,
@@ -298,8 +303,10 @@ const Social = () => {
       },
     },
   });
+  const [nowMs, setNowMs] = useState(Date.now());
   const [circles, setCircles] = useState([]);
   const [friends, setFriends] = useState([]);
+  const [topFriends, setTopFriends] = useState([]);
   const [commentInputs, setCommentInputs] = useState({});
   const [typingByPost, setTypingByPost] = useState({});
   const [actionLoadingByPost, setActionLoadingByPost] = useState({});
@@ -404,6 +411,22 @@ const Social = () => {
       normalizedGalleryOwnerIdentifier === normalizedCurrentUserId
       || normalizedGalleryOwnerIdentifier === normalizedCurrentUsername
     );
+
+  const activeProfile = isViewingAnotherProfile ? guestProfile : currentUser;
+
+  const trackSocialEvent = useCallback((eventType, metadata = {}) => {
+    if (!isAuthenticated) return;
+    discoveryAPI.trackEvent(eventType, metadata).catch(() => {});
+  }, [isAuthenticated]);
+
+  const handleSectionClick = useCallback((sectionId) => {
+    trackSocialEvent('social_profile_section_clicked', { sectionId });
+  }, [trackSocialEvent]);
+
+  const handleGuestPreviewToggle = (enabled) => {
+    setIsGuestPreview(enabled);
+    trackSocialEvent('social_guest_preview_toggled', { enabled });
+  };
 
   const setGalleryActionLoading = (imageId, value) => {
     setGalleryActionLoadingByImage((prev) => {
@@ -567,6 +590,26 @@ const Social = () => {
   useEffect(() => {
     loadGallery();
   }, [loadGallery]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !galleryOwnerIdentifier) {
+      setTopFriends([]);
+      return;
+    }
+
+    friendsAPI.getTopFriends(galleryOwnerIdentifier)
+      .then((response) => {
+        setTopFriends(Array.isArray(response.data?.topFriends) ? response.data.topFriends : []);
+      })
+      .catch(() => {
+        setTopFriends([]);
+      });
+  }, [isAuthenticated, galleryOwnerIdentifier]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !galleryOwnerIdentifier) return;
+    trackSocialEvent('social_gallery_opened', { profile: galleryOwnerIdentifier });
+  }, [isAuthenticated, galleryOwnerIdentifier, trackSocialEvent]);
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser?._id || realtimeEnabled) {
@@ -1542,19 +1585,11 @@ const Social = () => {
         </div>
       </div>
 
-      {isGuestPreview && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <span className="font-semibold">Guest Preview</span>
-          <span className="text-amber-700">You are previewing how your profile appears to non-authenticated visitors. Controls that require sign-in are hidden.</span>
-          <button
-            type="button"
-            onClick={() => setIsGuestPreview(false)}
-            className="ml-auto shrink-0 rounded border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
-          >
-            Exit Preview
-          </button>
-        </div>
-      )}
+      <GuestPreviewNotice
+        sectionId={SOCIAL_SECTION_IDS.guest_preview_notice}
+        isGuestPreview={isGuestPreview}
+        onExitPreview={() => handleGuestPreviewToggle(false)}
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         <aside className="xl:col-span-3 flex flex-col gap-4 xl:sticky xl:top-6">
