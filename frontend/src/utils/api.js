@@ -294,7 +294,7 @@ export const discoveryAPI = {
   getPosts: (q = '', page = 1, limit = 10, latitude = null, longitude = null) => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (q) params.append('q', q);
-    if (latitude !== null && longitude !== null) {
+    if (latitude != null && longitude != null) {
       params.append('latitude', String(latitude));
       params.append('longitude', String(longitude));
     }
