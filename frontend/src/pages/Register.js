@@ -14,7 +14,7 @@ function Register({ onSuccess, onWelcomeRequired }) {
     username: '',
     email: '',
     password: '',
-    countryCode: '',
+    country: '',
     county: '',
     zipCode: '',
     referralCode: token || ''
@@ -38,8 +38,7 @@ function Register({ onSuccess, onWelcomeRequired }) {
     e.preventDefault();
     const county = form.county.trim();
     const zipCode = form.zipCode.trim().toUpperCase().replace(/\s+/g, '');
-    const countryCode = form.countryCode.trim().toUpperCase();
-    const selectedCountry = COUNTRY_CODE_OPTIONS.find((option) => option.code === countryCode);
+    const selectedCountry = COUNTRY_CODE_OPTIONS.find((option) => option.code === form.country);
 
     if (!selectedCountry) {
       toast.error('Please select a valid country');
@@ -186,8 +185,8 @@ function Register({ onSuccess, onWelcomeRequired }) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
             <select
-              name="countryCode"
-              value={form.countryCode}
+              name="country"
+              value={form.country}
               onChange={handleChange}
               className="border rounded p-2 w-full"
               required

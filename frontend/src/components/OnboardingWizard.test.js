@@ -21,7 +21,12 @@ jest.mock('../utils/pgp', () => ({
   validatePublicKey: jest.fn()
 }));
 
-import { createRecoveryPhraseQrCodeDataUrl, resolveInitialStep } from './OnboardingWizard';
+import {
+  createRecoveryPhraseQrCodeDataUrl,
+  getSessionTimeoutSelectValue,
+  resolveInitialStep,
+  SESSION_TIMEOUT_OPTIONS
+} from './OnboardingWizard';
 
 describe('OnboardingWizard helpers', () => {
   it('resolves initial step within supported onboarding bounds', () => {
@@ -37,5 +42,31 @@ describe('OnboardingWizard helpers', () => {
 
     expect(dataUrl).toMatch(/^data:image\/png;base64,/);
     await expect(createRecoveryPhraseQrCodeDataUrl('')).resolves.toBe('');
+  });
+
+  it('exposes the requested session timeout options and resolves select values safely', () => {
+    expect(SESSION_TIMEOUT_OPTIONS.map((option) => option.label)).toEqual([
+      'Per message - require password',
+      '10 minutes',
+      '30 minutes',
+      '60 minutes',
+      '2 hours',
+      '4 hours',
+      '6 Hours',
+      'Once Daily'
+    ]);
+
+    expect(getSessionTimeoutSelectValue({
+      requirePasswordForSensitive: true,
+      sessionTimeout: 5
+    })).toBe('per_message');
+    expect(getSessionTimeoutSelectValue({
+      requirePasswordForSensitive: false,
+      sessionTimeout: 60
+    })).toBe('60');
+    expect(getSessionTimeoutSelectValue({
+      requirePasswordForSensitive: false,
+      sessionTimeout: 999
+    })).toBe('60');
   });
 });
