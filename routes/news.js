@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const Parser = require('rss-parser');
+const NodeGeocoder = require('node-geocoder');
 const { v4: uuidv4 } = require('uuid');
 
 // Import models
@@ -46,6 +47,11 @@ const KEYWORD_MATCH_WEIGHT = 100;
 const SCOPE_TIER_WEIGHT = 10;
 const MAX_SCOPE_TIERS = 4;
 const MAX_FEED_CANDIDATES = 400;
+const newsGeocoder = NodeGeocoder({
+  provider: 'openstreetmap',
+  httpAdapter: 'https',
+  formatter: null
+});
 
 const TOPIC_FILTER_ALIASES = {
   technology: ['technology', 'tech'],
@@ -75,6 +81,7 @@ const SUPPORTED_RSS_PROVIDERS = [
 
 const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeTopicToken = (value) => String(value || '').trim().toLowerCase();
+const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 
 const toUniqueNonEmptyStrings = (values = []) => [...new Set(values
   .map((value) => String(value || '').trim())
@@ -218,7 +225,41 @@ const getUserLocationFallback = (user) => {
   return hasLocationContext(fallback) ? fallback : null;
 };
 
-const resolveLocationContext = ({ preferences, user }) => {
+const geocodeFromZipContext = async ({ zipCodeValues = [], countryValues = [] }) => {
+  const zipCandidates = toUniqueNonEmptyStrings(zipCodeValues.map(normalizeZipCode));
+  const countryCandidates = toUniqueNonEmptyStrings(countryValues);
+  if (!zipCandidates.length) return null;
+
+  const queryHints = [];
+  for (const zipCode of zipCandidates) {
+    if (!zipCode) continue;
+    if (countryCandidates.length > 0) {
+      for (const country of countryCandidates) {
+        queryHints.push(`${zipCode}, ${country}`);
+      }
+    }
+    queryHints.push(zipCode);
+  }
+
+  const attemptedQueries = new Set();
+  for (const query of queryHints) {
+    const normalizedQuery = String(query || '').trim();
+    if (!normalizedQuery || attemptedQueries.has(normalizedQuery)) continue;
+    attemptedQueries.add(normalizedQuery);
+    try {
+      const results = await newsGeocoder.geocode(normalizedQuery);
+      if (Array.isArray(results) && results.length > 0) {
+        return results[0];
+      }
+    } catch (error) {
+      continue;
+    }
+  }
+
+  return null;
+};
+
+const resolveLocationContext = async ({ preferences, user }) => {
   const primary = getPrimaryLocation(preferences);
   const fallback = getUserLocationFallback(user);
   const cityValues = collectLocationValues({ preferences, user, field: 'city' });
@@ -229,7 +270,7 @@ const resolveLocationContext = ({ preferences, user }) => {
 
   if (hasLocationContext(primary)) {
     const primaryLocation = primary.toObject?.() || primary;
-    return {
+    const context = {
       city: primaryLocation.city || fallback?.city || null,
       county: primaryLocation.county || fallback?.county || null,
       state: primaryLocation.state || fallback?.state || null,
@@ -242,9 +283,34 @@ const resolveLocationContext = ({ preferences, user }) => {
       zipCodeValues,
       source: 'preferences'
     };
+    if (context.zipCodeValues.length > 0 && (!context.cityValues.length || !context.countyValues.length || !context.stateValues.length)) {
+      const zipGeocode = await geocodeFromZipContext({
+        zipCodeValues: context.zipCodeValues,
+        countryValues: context.countryValues
+      });
+      if (zipGeocode) {
+        const derivedCity = zipGeocode.city || zipGeocode.town || zipGeocode.village || null;
+        const derivedCounty = zipGeocode.county || null;
+        const derivedState = zipGeocode.state || zipGeocode.stateCode || null;
+        const derivedCountry = zipGeocode.countryCode || zipGeocode.country || null;
+        return {
+          ...context,
+          city: context.city || derivedCity,
+          county: context.county || derivedCounty,
+          state: context.state || derivedState,
+          country: context.country || derivedCountry,
+          cityValues: toUniqueNonEmptyStrings([...context.cityValues, derivedCity]),
+          countyValues: toUniqueNonEmptyStrings([...context.countyValues, derivedCounty]),
+          stateValues: toUniqueNonEmptyStrings([...context.stateValues, zipGeocode.state, zipGeocode.stateCode]),
+          countryValues: toUniqueNonEmptyStrings([...context.countryValues, zipGeocode.country, zipGeocode.countryCode]),
+          source: `${context.source}+zipLookup`
+        };
+      }
+    }
+    return context;
   }
   if (fallback) {
-    return {
+    const context = {
       ...fallback,
       cityValues,
       countyValues,
@@ -253,6 +319,31 @@ const resolveLocationContext = ({ preferences, user }) => {
       zipCodeValues,
       source: 'profile'
     };
+    if (context.zipCodeValues.length > 0 && (!context.cityValues.length || !context.countyValues.length || !context.stateValues.length)) {
+      const zipGeocode = await geocodeFromZipContext({
+        zipCodeValues: context.zipCodeValues,
+        countryValues: context.countryValues
+      });
+      if (zipGeocode) {
+        const derivedCity = zipGeocode.city || zipGeocode.town || zipGeocode.village || null;
+        const derivedCounty = zipGeocode.county || null;
+        const derivedState = zipGeocode.state || zipGeocode.stateCode || null;
+        const derivedCountry = zipGeocode.countryCode || zipGeocode.country || null;
+        return {
+          ...context,
+          city: context.city || derivedCity,
+          county: context.county || derivedCounty,
+          state: context.state || derivedState,
+          country: context.country || derivedCountry,
+          cityValues: toUniqueNonEmptyStrings([...context.cityValues, derivedCity]),
+          countyValues: toUniqueNonEmptyStrings([...context.countyValues, derivedCounty]),
+          stateValues: toUniqueNonEmptyStrings([...context.stateValues, zipGeocode.state, zipGeocode.stateCode]),
+          countryValues: toUniqueNonEmptyStrings([...context.countryValues, zipGeocode.country, zipGeocode.countryCode]),
+          source: `${context.source}+zipLookup`
+        };
+      }
+    }
+    return context;
   }
 
   return {
@@ -771,7 +862,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
       User.findById(req.user.userId).select('city county state country zipCode')
     ]);
 
-    const locationContext = resolveLocationContext({ preferences, user });
+    const locationContext = await resolveLocationContext({ preferences, user });
     const defaultScope = resolveDefaultScope({ preferences, locationContext });
     const requestedScope = NEWS_SCOPE_VALUES.includes(scope) ? scope : defaultScope;
     const { activeScope, fallbackApplied } = resolveActiveScope({ requestedScope, locationContext });

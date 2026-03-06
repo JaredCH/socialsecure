@@ -1,5 +1,6 @@
 const request = require('supertest');
 const express = require('express');
+const mockGeocode = jest.fn();
 
 jest.mock('jsonwebtoken', () => ({
   verify: jest.fn()
@@ -29,6 +30,7 @@ jest.mock('../models/NewsPreferences', () => ({
 jest.mock('../models/User', () => ({
   findById: jest.fn()
 }));
+jest.mock('node-geocoder', () => jest.fn(() => ({ geocode: mockGeocode })));
 
 const jwt = require('jsonwebtoken');
 const Article = require('../models/Article');
@@ -66,6 +68,7 @@ describe('News scope routing', () => {
     jest.clearAllMocks();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'user-1' }));
     Article.countDocuments.mockResolvedValue(2);
+    mockGeocode.mockResolvedValue([]);
   });
 
   it('defaults to local scope when profile location exists and no explicit preference is stored', async () => {
@@ -337,5 +340,65 @@ describe('News scope routing', () => {
     expect(response.body.personalization.activeScope).toBe('local');
     expect(response.body.articles).toHaveLength(1);
     expect(response.body.articles[0]._id).toBe('local-ai-1');
+  });
+
+  it('uses zip geocoding to keep regional scope active and match state-level news', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'state-1',
+        title: 'Texas emergency update',
+        description: '',
+        source: 'State Wire',
+        sourceType: 'rss',
+        sourceId: 'state-wire',
+        topics: ['politics'],
+        locations: ['Texas', 'USA'],
+        localityLevel: 'state',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      },
+      {
+        _id: 'global-3',
+        title: 'Global market update',
+        description: '',
+        source: 'Global Wire',
+        sourceType: 'rss',
+        sourceId: 'global-wire',
+        topics: ['finance'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'regional',
+      locations: [{ country: 'US', zipCode: '78666', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: 'US', zipCode: '78666' }) });
+    mockGeocode.mockResolvedValue([{
+      city: 'San Marcos',
+      county: 'Hays County',
+      state: 'Texas',
+      stateCode: 'TX',
+      country: 'United States',
+      countryCode: 'US'
+    }]);
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=regional')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.requestedScope).toBe('regional');
+    expect(response.body.personalization.activeScope).toBe('regional');
+    expect(response.body.personalization.fallbackApplied).toBe(false);
+    expect(response.body.personalization.locationContext.hasState).toBe(true);
+    expect(response.body.personalization.locationContext.source).toBe('preferences+zipLookup');
+    expect(response.body.articles).toHaveLength(1);
+    expect(response.body.articles[0]._id).toBe('state-1');
   });
 });
