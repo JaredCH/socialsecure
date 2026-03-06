@@ -263,7 +263,11 @@ const saveUploadedImages = async (files, ownerId) => {
       savedImages.push(`/uploads/market/${String(ownerId)}/${fileName}`);
     }
   } catch (error) {
-    await removeMarketUploads(savedImages);
+    try {
+      await removeMarketUploads(savedImages);
+    } catch (cleanupError) {
+      console.error('Failed to clean up market uploads after save error:', cleanupError);
+    }
     return { ok: false, error: 'Failed to save uploaded images' };
   }
 
@@ -534,10 +538,12 @@ router.post('/listings', [
     if (!uploadResult.ok) {
       return res.status(400).json({ error: uploadResult.error });
     }
-    if (uploadResult.images.length > 0 && imageListResult.images !== undefined) {
+    const hasUploads = uploadResult.images.length > 0;
+    const hasImageList = imageListResult.images !== undefined;
+    if (hasUploads && hasImageList) {
       return res.status(400).json({ error: 'Provide either uploaded images or image URLs, not both' });
     }
-    const images = uploadResult.images.length > 0
+    const images = hasUploads
       ? uploadResult.images
       : (imageListResult.images || []);
     const imageLimitCheck = ensureImageLimit(images);

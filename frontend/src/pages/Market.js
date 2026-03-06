@@ -508,7 +508,7 @@ function ListingFormModal({ listing, onClose, onSaved }) {
       setForm(f => ({ ...f, imageFiles: [] }));
       return;
     }
-    setForm(f => ({ ...f, imageFiles: files.slice(0, MAX_LISTING_IMAGES) }));
+    setForm(f => ({ ...f, imageFiles: files }));
   };
 
   const clearImageSelection = () => {
