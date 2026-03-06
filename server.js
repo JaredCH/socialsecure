@@ -5,7 +5,24 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const User = require('./models/User');
+const Friendship = require('./models/Friendship');
+const {
+  setRealtimeIo,
+  attachUserSocket,
+  detachUserSocket,
+  isUserOnline,
+  setPresence,
+  getPresence,
+  emitToUsers,
+  getMissedEvents
+} = require('./services/realtime');
+
+const TYPING_THROTTLE_MS = 1000;
+const SOCKET_JWT_SECRET = process.env.JWT_SECRET || '';
+const MAX_FEED_SUBSCRIPTIONS = 200;
 
 const cleanEnv = (value) => {
   if (typeof value !== 'string') return value;
@@ -248,38 +265,26 @@ const io = require('socket.io')(server, {
 });
 
 const { setNotificationIo } = require('./services/notifications');
-const { startEventScheduleIngestionScheduler } = require('./services/eventScheduleIngestion');
-const { startEventRoomLifecycleScheduler } = require('./services/eventRoomLifecycle');
+const { initializeRealtime } = require('./services/realtime');
 setNotificationIo(io);
+setRealtimeIo(io);
 
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
+const getFriendIds = async (userId) => {
+  const friendships = await Friendship.find({
+    status: 'accepted',
+    $or: [{ requester: userId }, { recipient: userId }]
+  }).select('requester recipient').lean();
 
-  const authUserId = String(socket?.handshake?.auth?.userId || '').trim();
-  if (authUserId) {
-    socket.join(`user:${authUserId}`);
+  const ids = new Set();
+  for (const friendship of friendships) {
+    const requester = String(friendship.requester);
+    const recipient = String(friendship.recipient);
+    ids.add(requester === String(userId) ? recipient : requester);
   }
+  return [...ids];
+};
 
-  socket.on('join-user', (userId) => {
-    const normalizedUserId = String(userId || '').trim();
-    if (!normalizedUserId) return;
-    socket.join(`user:${normalizedUserId}`);
-  });
-  
-  socket.on('join-room', (roomId) => {
-    socket.join(roomId);
-    console.log(`Socket ${socket.id} joined room ${roomId}`);
-  });
-  
-  socket.on('send-message', (data) => {
-    io.to(data.roomId).emit('new-message', data);
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
-});
+initializeRealtime(io);
 
 if (process.env.NODE_ENV !== 'test') {
   try {

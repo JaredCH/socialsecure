@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
 const EventSchedule = require('../models/EventSchedule');
@@ -10,9 +11,11 @@ const DeviceKey = require('../models/DeviceKey');
 const SecurityEvent = require('../models/SecurityEvent');
 const BlockList = require('../models/BlockList');
 const RoomKeyPackage = require('../models/RoomKeyPackage');
+const ChatConversation = require('../models/ChatConversation');
+const ConversationMessage = require('../models/ConversationMessage');
 const User = require('../models/User');
 const { createNotification } = require('../services/notifications');
-const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
+const { emitChatMessage } = require('../services/realtime');
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -86,6 +89,15 @@ const E2EE_LIMITS = {
   hashAlgorithm: 32,
   publicKey: 16384
 };
+const NEARBY_ZIP_THRESHOLD = 25;
+const MAX_NEARBY_ZIP_ROOMS = 100;
+const unifiedChatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many chat requests, please slow down.' }
+});
 
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 500;
@@ -100,6 +112,19 @@ const COMMAND_DATA_LIMITS = {
   targetUsername: 64,
   nickname: 32
 };
+const AUDIO_MEDIA_TYPES = ['audio'];
+const AUDIO_MIME_TYPES = new Set(['audio/webm', 'audio/ogg', 'audio/mp4']);
+const MAX_AUDIO_DURATION_MS = 120000;
+const MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_AUDIO_WAVEFORM_BINS = 256;
+const AUDIO_UPLOAD_ROOT = path.join(__dirname, '..', 'private_uploads', 'chat-audio');
+const AUDIO_EXT_BY_MIME = {
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'mp4'
+};
+const AUDIO_STORAGE_KEY_PATTERN = /^[a-f0-9-]+\.(webm|ogg|mp4)$/;
+const isValidAudioStorageKey = (value) => typeof value === 'string' && value.length > 0 && value.length <= 255 && AUDIO_STORAGE_KEY_PATTERN.test(value);
 
 const isSafeString = (value, maxLength) => typeof value === 'string' && value.length > 0 && value.length <= maxLength;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -151,6 +176,92 @@ const decodeMessageCursor = (cursor) => {
   }
 };
 
+const normalizeZipCode = (zipCode) => {
+  if (typeof zipCode !== 'string') return null;
+  const digits = zipCode.replace(/\D/g, '');
+  if (digits.length < 5) return null;
+  return digits.slice(0, 5);
+};
+
+const areZipCodesNearby = (zipA, zipB) => {
+  if (!zipA || !zipB) return false;
+  const a = parseInt(zipA, 10);
+  const b = parseInt(zipB, 10);
+  if (!Number.isNaN(a) && !Number.isNaN(b)) {
+    return Math.abs(a - b) <= NEARBY_ZIP_THRESHOLD;
+  }
+  return zipA.slice(0, 3) === zipB.slice(0, 3);
+};
+
+const getNearbyActiveZipRooms = async (zipCode) => {
+  if (!zipCode) return [];
+  const rooms = await ChatConversation.find({
+    type: 'zip-room',
+    zipCode: { $ne: zipCode },
+    messageCount: { $gt: 0 }
+  })
+    .select('_id title zipCode messageCount lastMessageAt')
+    .sort({ lastMessageAt: -1 })
+    .limit(MAX_NEARBY_ZIP_ROOMS)
+    .lean();
+
+  return rooms.filter((room) => areZipCodesNearby(zipCode, room.zipCode));
+};
+
+const isConversationParticipant = (conversation, userId) => (
+  Array.isArray(conversation?.participants)
+    && conversation.participants.some((participantId) => String(participantId) === String(userId))
+);
+
+const canAccessConversation = (conversation, userId) => {
+  if (!conversation) return false;
+  if (conversation.type === 'zip-room') return true;
+  return isConversationParticipant(conversation, userId);
+};
+
+const formatConversationSummary = (conversation, usersById, currentUserId) => {
+  const base = {
+    _id: conversation._id,
+    type: conversation.type,
+    title: conversation.title || '',
+    zipCode: conversation.zipCode || null,
+    profileUserId: conversation.profileUserId || null,
+    participants: Array.isArray(conversation.participants)
+      ? conversation.participants.map((participant) => String(participant))
+      : [],
+    lastMessageAt: conversation.lastMessageAt || null,
+    messageCount: conversation.messageCount || 0
+  };
+
+  if (conversation.type === 'dm') {
+    const peerId = base.participants.find((participantId) => participantId !== String(currentUserId)) || null;
+    const peer = peerId ? usersById.get(peerId) : null;
+    return {
+      ...base,
+      peer: peer ? {
+        _id: peer._id,
+        username: peer.username,
+        realName: peer.realName
+      } : null
+    };
+  }
+
+  if (conversation.type === 'profile-thread') {
+    const profileId = String(conversation.profileUserId || '');
+    const profileUser = profileId ? usersById.get(profileId) : null;
+    return {
+      ...base,
+      profileUser: profileUser ? {
+        _id: profileUser._id,
+        username: profileUser.username,
+        realName: profileUser.realName
+      } : null
+    };
+  }
+
+  return base;
+};
+
 const isValidMessageType = (messageType) => MESSAGE_TYPES.includes(messageType);
 
 const normalizeMessageType = (messageType) => (isValidMessageType(messageType) ? messageType : 'text');
@@ -193,6 +304,110 @@ const sanitizeCommandData = (commandData) => {
 
   return Object.keys(sanitized).length > 0 ? sanitized : null;
 };
+
+const sanitizeWaveformBins = (waveformBins) => {
+  if (!Array.isArray(waveformBins)) return null;
+  if (waveformBins.length === 0 || waveformBins.length > MAX_AUDIO_WAVEFORM_BINS) return null;
+  const normalized = waveformBins.map((bin) => {
+    const value = Number(bin);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error('audio.waveformBins must contain numbers between 0 and 1');
+    }
+    return Number(value.toFixed(4));
+  });
+  return normalized;
+};
+
+const sanitizeAudioMetadata = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { error: 'audio metadata is required for audio messages' };
+  }
+
+  const storageKey = typeof payload.storageKey === 'string' ? payload.storageKey.trim() : '';
+  if (!isValidAudioStorageKey(storageKey)) {
+    return { error: 'audio.storageKey is invalid' };
+  }
+
+  const url = typeof payload.url === 'string' ? payload.url.trim() : '';
+  if (!url || url.length > 1024 || url !== `/api/chat/media/audio/${storageKey}`) {
+    return { error: 'audio.url is invalid' };
+  }
+
+  const durationMs = Number(payload.durationMs);
+  if (!Number.isInteger(durationMs) || durationMs < 1 || durationMs > MAX_AUDIO_DURATION_MS) {
+    return { error: `audio.durationMs must be between 1 and ${MAX_AUDIO_DURATION_MS}` };
+  }
+
+  const mimeType = typeof payload.mimeType === 'string' ? payload.mimeType.trim().toLowerCase() : '';
+  if (!AUDIO_MIME_TYPES.has(mimeType)) {
+    return { error: `audio.mimeType must be one of: ${Array.from(AUDIO_MIME_TYPES).join(', ')}` };
+  }
+
+  const sizeBytes = Number(payload.sizeBytes);
+  if (!Number.isInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > MAX_AUDIO_SIZE_BYTES) {
+    return { error: `audio.sizeBytes must be between 1 and ${MAX_AUDIO_SIZE_BYTES}` };
+  }
+
+  let waveformBins;
+  try {
+    waveformBins = sanitizeWaveformBins(payload.waveformBins);
+  } catch (error) {
+    return { error: error.message };
+  }
+  if (!waveformBins) {
+    return { error: `audio.waveformBins must contain 1-${MAX_AUDIO_WAVEFORM_BINS} normalized values` };
+  }
+
+  return {
+    value: {
+      storageKey,
+      url,
+      durationMs,
+      waveformBins,
+      mimeType,
+      sizeBytes
+    }
+  };
+};
+
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_AUDIO_SIZE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!AUDIO_MIME_TYPES.has(file.mimetype)) {
+      cb(new Error(`Unsupported audio mime type: ${file.mimetype}`));
+      return;
+    }
+    cb(null, true);
+  }
+});
+
+const roomMessageRateLimiter = rateLimit({
+  windowMs: 15 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many chat messages. Please wait before sending again.'
+  }
+});
+
+const mediaUploadRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many media uploads. Please wait before uploading another voice note.'
+  }
+});
+
+const mediaFetchRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 const createRoomEventMessage = async ({ roomId, userId, content, messageType = 'system', commandData = null }) => {
   const eventMessage = new ChatMessage({
@@ -608,11 +823,13 @@ router.get('/rooms/:roomId', roomReadLimiter, authenticateToken, async (req, res
 
 // Send message to chat room with rate limiting
 router.post('/rooms/:roomId/messages', [
+  roomMessageRateLimiter,
   authenticateToken,
-  roomWriteLimiter,
-  body('content').optional().trim().isLength({ max: 2000 }).withMessage('Message too long'),
+  body('content').optional({ nullable: true }).trim().isLength({ max: 2000 }).withMessage('Message too long'),
   body('encryptedContent').optional().trim(),
   body('messageType').optional().isIn(MESSAGE_TYPES).withMessage('Invalid message type'),
+  body('mediaType').optional({ nullable: true }).isIn(AUDIO_MEDIA_TYPES).withMessage('Invalid media type'),
+  body('audio').optional().isObject().withMessage('audio must be an object'),
   body('commandData').optional().isObject().withMessage('commandData must be an object'),
   body('latitude').optional().isFloat({ min: -90, max: 90 }),
   body('longitude').optional().isFloat({ min: -180, max: 180 })
@@ -628,11 +845,28 @@ router.post('/rooms/:roomId/messages', [
       content,
       encryptedContent,
       messageType,
+      mediaType,
+      audio,
       commandData,
       latitude,
       longitude
     } = req.body;
     const userId = req.user.userId;
+
+    if (!content && !encryptedContent && mediaType !== 'audio') {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    let normalizedAudio = null;
+    if (mediaType === 'audio') {
+      const parsedAudio = sanitizeAudioMetadata(audio);
+      if (parsedAudio.error) {
+        return res.status(400).json({ error: parsedAudio.error });
+      }
+      normalizedAudio = parsedAudio.value;
+    } else if (audio) {
+      return res.status(400).json({ error: 'audio metadata is only allowed when mediaType is audio' });
+    }
     
     // Get room
     const room = await ChatRoom.findById(roomId);
@@ -661,9 +895,9 @@ router.post('/rooms/:roomId/messages', [
     }
     
     // Check rate limit for non-resident cities
-    const userCity = user.city || '';
-    const roomCity = room.city || '';
-    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userCity, roomCity);
+    const userLocationKey = user.zipCode || user.city || '';
+    const roomLocationKey = room.zipCode || room.city || '';
+    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userLocationKey, roomLocationKey);
     
     if (!rateLimitCheck.allowed) {
       return res.status(429).json({ 
@@ -680,8 +914,10 @@ router.post('/rooms/:roomId/messages', [
       encryptedContent,
       isEncrypted: !!encryptedContent,
       messageType: normalizeMessageType(messageType),
+      mediaType: mediaType === 'audio' ? 'audio' : null,
+      audio: normalizedAudio,
       commandData: sanitizeCommandData(commandData),
-      rateLimitKey: userCity === roomCity ? null : `${userId}:${roomId}:external`
+      rateLimitKey: userLocationKey === roomLocationKey ? null : `${userId}:${roomId}:external`
     };
     
     // Add location if provided
@@ -711,12 +947,15 @@ router.post('/rooms/:roomId/messages', [
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message: savedMessage });
     
     // Broadcast message via WebSocket (handled in server.js)
-    // The WebSocket server will handle real-time broadcasting
+    emitChatMessage({
+      userIds: room.members,
+      message: message.toPublicMessage()
+    });
     
     res.status(201).json({
       success: true,
-      statusMessage: 'Message sent successfully',
-      message: savedMessage.toPublicMessage(),
+      message: 'Message sent successfully',
+      message: publicMessage,
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining
@@ -728,8 +967,138 @@ router.post('/rooms/:roomId/messages', [
   }
 });
 
+// Upload voice-note media (controlled endpoint)
+router.post('/media/audio/upload-url', mediaUploadRateLimiter, authenticateToken, (req, res) => {
+  audioUpload.single('audio')(req, res, async (uploadError) => {
+    if (uploadError instanceof multer.MulterError && uploadError.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: `Audio file exceeds ${MAX_AUDIO_SIZE_BYTES} bytes` });
+    }
+    if (uploadError) {
+      return res.status(400).json({ error: uploadError.message || 'Invalid audio upload' });
+    }
+
+    try {
+      const userId = req.user.userId;
+      const roomId = String(req.body?.roomId || '').trim();
+      const durationMs = parseInt(req.body?.durationMs, 10);
+      const file = req.file;
+
+      if (!roomId) {
+        return res.status(400).json({ error: 'roomId is required' });
+      }
+
+      if (!file) {
+        return res.status(400).json({ error: 'audio file is required' });
+      }
+
+      if (!Number.isInteger(durationMs) || durationMs < 1 || durationMs > MAX_AUDIO_DURATION_MS) {
+        return res.status(400).json({ error: `durationMs must be between 1 and ${MAX_AUDIO_DURATION_MS}` });
+      }
+
+      const room = await ChatRoom.findById(roomId).select('_id members');
+      if (!room) {
+        return res.status(404).json({ error: 'Chat room not found' });
+      }
+
+      if (!isRoomMember(room, userId)) {
+        return res.status(403).json({ error: 'You must be a room member to upload voice notes' });
+      }
+
+      let waveformBins = [];
+      if (typeof req.body?.waveformBins === 'string' && req.body.waveformBins.trim()) {
+        try {
+          waveformBins = JSON.parse(req.body.waveformBins);
+        } catch {
+          return res.status(400).json({ error: 'waveformBins must be valid JSON array' });
+        }
+      }
+
+      let normalizedBins;
+      try {
+        normalizedBins = sanitizeWaveformBins(waveformBins);
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+      if (!normalizedBins) {
+        return res.status(400).json({ error: `waveformBins must contain 1-${MAX_AUDIO_WAVEFORM_BINS} normalized values` });
+      }
+
+      const extension = AUDIO_EXT_BY_MIME[file.mimetype];
+      if (!extension) {
+        return res.status(400).json({ error: `Unsupported audio mime type: ${file.mimetype}` });
+      }
+
+      await fs.mkdir(AUDIO_UPLOAD_ROOT, { recursive: true });
+      const storageKey = `${crypto.randomUUID()}.${extension}`;
+      const destinationPath = path.join(AUDIO_UPLOAD_ROOT, storageKey);
+      await fs.writeFile(destinationPath, file.buffer);
+
+      return res.status(201).json({
+        success: true,
+        audio: {
+          storageKey,
+          url: `/api/chat/media/audio/${storageKey}`,
+          durationMs,
+          waveformBins: normalizedBins,
+          mimeType: file.mimetype,
+          sizeBytes: file.size
+        },
+        moderation: {
+          transcriptionQueued: false
+        }
+      });
+    } catch (error) {
+      console.error('Error uploading chat audio:', error?.message || error);
+      return res.status(500).json({ error: 'Failed to upload audio' });
+    }
+  });
+});
+
+// Authorized retrieval of stored chat media
+const handleGetAudioMedia = async (req, res) => {
+  try {
+    const mediaId = String(req.params.mediaId || '').trim();
+    if (!isValidAudioStorageKey(mediaId)) {
+      return res.status(400).json({ error: 'Invalid media id' });
+    }
+
+    const message = await ChatMessage.findOne({
+      mediaType: 'audio',
+      'audio.storageKey': mediaId
+    }).select('roomId audio').lean();
+
+    if (!message?.audio?.storageKey) {
+      return res.status(404).json({ error: 'Media not found' });
+    }
+
+    const room = await ChatRoom.findById(message.roomId).select('_id members').lean();
+    if (!room) {
+      return res.status(404).json({ error: 'Chat room not found' });
+    }
+
+    if (!isRoomMember(room, req.user.userId)) {
+      return res.status(403).json({ error: 'Not authorized to access this media' });
+    }
+
+    const filePath = path.join(AUDIO_UPLOAD_ROOT, mediaId);
+    await fs.access(filePath);
+    res.setHeader('Content-Type', message.audio.mimeType || 'application/octet-stream');
+    return res.sendFile(filePath);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return res.status(404).json({ error: 'Media not found' });
+    }
+    console.error('Error retrieving chat media:', error?.message || error);
+    return res.status(500).json({ error: 'Failed to retrieve media' });
+  }
+};
+
+router.get('/media/audio/:mediaId', mediaFetchRateLimiter, authenticateToken, handleGetAudioMedia);
+router.get('/media/:mediaId', mediaFetchRateLimiter, authenticateToken, handleGetAudioMedia);
+
 // Send E2EE message envelope only (no plaintext accepted)
 router.post('/rooms/:roomId/messages/e2ee', [
+  roomMessageRateLimiter,
   authenticateToken,
   roomWriteLimiter,
   body('content').not().exists().withMessage('Plaintext content is not allowed on E2EE endpoint'),
@@ -806,9 +1175,9 @@ router.post('/rooms/:roomId/messages/e2ee', [
       return res.status(409).json({ error: 'Duplicate clientMessageId for sender device' });
     }
 
-    const userCity = user.city || '';
-    const roomCity = room.city || '';
-    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userCity, roomCity);
+    const userLocationKey = user.zipCode || user.city || '';
+    const roomLocationKey = room.zipCode || room.city || '';
+    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userLocationKey, roomLocationKey);
 
     if (!rateLimitCheck.allowed) {
       return res.status(429).json({
@@ -825,7 +1194,7 @@ router.post('/rooms/:roomId/messages/e2ee', [
       isEncrypted: true,
       messageType: normalizeMessageType(messageType),
       commandData: sanitizeCommandData(commandData),
-      rateLimitKey: userCity === roomCity ? null : `${userId}:${roomId}:external`,
+      rateLimitKey: userLocationKey === roomLocationKey ? null : `${userId}:${roomId}:external`,
       e2ee: {
         enabled: true,
         migrationFlag: 'native-e2ee',
@@ -855,20 +1224,25 @@ router.post('/rooms/:roomId/messages/e2ee', [
       messageData.location = user.location;
     }
 
-    const message = new ChatMessage(messageData);
-    await message.save();
+    const savedMessage = new ChatMessage(messageData);
+    await savedMessage.save();
 
     await room.incrementMessageCount();
     await room.addMember(userId);
-    await message.populate('userId', 'username realName');
+    await savedMessage.populate('userId', 'username realName');
 
     const senderLabel = user.username || user.realName || 'Someone';
-    await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
+    await notifyRoomMembers({ room, senderId: userId, senderLabel, message: savedMessage });
+
+    emitChatMessage({
+      userIds: room.members,
+      message: message.toPublicMessage()
+    });
 
     return res.status(201).json({
       success: true,
       message: 'E2EE message envelope accepted',
-      messageData: message.toPublicMessage(),
+      messageData: publicMessage,
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining
@@ -1495,6 +1869,10 @@ router.post('/rooms/:roomId/join', authenticateToken, async (req, res) => {
       });
       await room.incrementMessageCount();
       systemMessage = event.toPublicMessage();
+      emitChatMessage({
+        userIds: room.members,
+        message: systemMessage
+      });
     }
     
     res.json({
@@ -1549,6 +1927,10 @@ router.post('/rooms/:roomId/leave', authenticateToken, async (req, res) => {
       });
       await room.incrementMessageCount();
       systemMessage = event.toPublicMessage();
+      emitChatMessage({
+        userIds: [userId, ...(Array.isArray(room.members) ? room.members : [])],
+        message: systemMessage
+      });
     }
     
     res.json({
@@ -1630,7 +2012,7 @@ router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
     
     // Get all rooms the user is now a member of (including existing ones)
     const userRooms = await ChatRoom.find({ members: userId })
-      .select('_id name type city state country location radius memberCount lastActivity')
+      .select('_id name type city state country zipCode location radius memberCount lastActivity')
       .lean();
     
     return res.json({
@@ -1645,6 +2027,7 @@ router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
         _id: room._id,
         name: room.name,
         type: room.type,
+        zipCode: room.zipCode,
         city: room.city,
         state: room.state,
         country: room.country,
@@ -1693,6 +2076,7 @@ router.get('/rooms/nearby', authenticateToken, async (req, res) => {
         _id: room._id,
         name: room.name,
         type: room.type,
+        zipCode: room.zipCode,
         city: room.city,
         state: room.state,
         country: room.country,
@@ -1706,6 +2090,314 @@ router.get('/rooms/nearby', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error finding nearby rooms:', error);
     return res.status(500).json({ error: 'Failed to find nearby rooms', details: error.message });
+  }
+});
+
+router.get('/zip/nearby', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const requester = await User.findById(req.user.userId).select('zipCode').lean();
+    const normalizedZipCode = normalizeZipCode(req.query.zipCode || requester?.zipCode);
+    if (!normalizedZipCode) {
+      return res.status(400).json({ error: 'A valid zip code is required' });
+    }
+
+    const nearbyRooms = await getNearbyActiveZipRooms(normalizedZipCode);
+    return res.json({
+      success: true,
+      zipCode: normalizedZipCode,
+      rooms: nearbyRooms.map((room) => ({
+        _id: room._id,
+        type: 'zip-room',
+        title: room.title || `Zip ${room.zipCode}`,
+        zipCode: room.zipCode,
+        messageCount: room.messageCount || 0,
+        lastMessageAt: room.lastMessageAt || null
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching nearby zip rooms:', error);
+    return res.status(500).json({ error: 'Failed to fetch nearby zip rooms' });
+  }
+});
+
+router.get('/conversations', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const user = await User.findById(userId).select('_id username realName zipCode').lean();
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const normalizedZipCode = normalizeZipCode(user.zipCode);
+    let currentZipConversation = null;
+    if (normalizedZipCode) {
+      currentZipConversation = await ChatConversation.findOneAndUpdate(
+        { type: 'zip-room', zipCode: normalizedZipCode },
+        { $setOnInsert: { title: `Zip ${normalizedZipCode}`, zipCode: normalizedZipCode, participants: [] } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean();
+    }
+
+    const [nearbyZipConversations, dmConversations, profileConversations] = await Promise.all([
+      getNearbyActiveZipRooms(normalizedZipCode),
+      ChatConversation.find({ type: 'dm', participants: userId }).sort({ lastMessageAt: -1 }).lean(),
+      ChatConversation.find({ type: 'profile-thread', participants: userId }).sort({ lastMessageAt: -1 }).lean()
+    ]);
+
+    const relatedUserIds = new Set();
+    [...dmConversations, ...profileConversations].forEach((conversation) => {
+      (conversation.participants || []).forEach((participantId) => relatedUserIds.add(String(participantId)));
+      if (conversation.profileUserId) {
+        relatedUserIds.add(String(conversation.profileUserId));
+      }
+    });
+
+    const relatedUsers = relatedUserIds.size > 0
+      ? await User.find({ _id: { $in: [...relatedUserIds] } }).select('_id username realName').lean()
+      : [];
+    const usersById = new Map(relatedUsers.map((relatedUser) => [String(relatedUser._id), relatedUser]));
+
+    return res.json({
+      success: true,
+      conversations: {
+        zip: {
+          current: currentZipConversation
+            ? formatConversationSummary(currentZipConversation, usersById, userId)
+            : null,
+          nearby: nearbyZipConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId))
+        },
+        dm: dmConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId)),
+        profile: profileConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId))
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+router.get('/conversations/:conversationId/messages', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.userId;
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const skip = (page - 1) * limit;
+
+    const conversation = await ChatConversation.findById(conversationId).lean();
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (!canAccessConversation(conversation, userId)) {
+      return res.status(403).json({ error: 'Access denied for this conversation' });
+    }
+
+    const messages = await ConversationMessage.find({ conversationId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('userId', '_id username realName')
+      .lean();
+
+    const total = await ConversationMessage.countDocuments({ conversationId });
+
+    return res.json({
+      success: true,
+      conversation: {
+        _id: conversation._id,
+        type: conversation.type,
+        title: conversation.title,
+        zipCode: conversation.zipCode || null,
+        profileUserId: conversation.profileUserId || null
+      },
+      messages: messages.reverse(),
+      page,
+      limit,
+      hasMore: skip + messages.length < total
+    });
+  } catch (error) {
+    console.error('Error fetching conversation messages:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversation messages' });
+  }
+});
+
+router.post(
+  '/conversations/:conversationId/messages',
+  unifiedChatLimiter,
+  authenticateToken,
+  body('content').trim().notEmpty().isLength({ max: 2000 }).withMessage('Message content is required and must be <= 2000 chars'),
+  async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.userId;
+    const content = req.body.content.trim();
+
+    const conversation = await ChatConversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (!canAccessConversation(conversation, userId)) {
+      return res.status(403).json({ error: 'Access denied for this conversation' });
+    }
+
+    if (conversation.type !== 'zip-room') {
+      const participantIds = (conversation.participants || []).map((participantId) => String(participantId));
+      const blockedRelation = await BlockList.findOne({
+        $or: [
+          { userId, blockedUserId: { $in: participantIds } },
+          { userId: { $in: participantIds }, blockedUserId: userId }
+        ]
+      }).select('_id').lean();
+      if (blockedRelation) {
+        return res.status(403).json({ error: 'Cannot send messages due to block settings' });
+      }
+    }
+
+    const message = await ConversationMessage.create({
+      conversationId: conversation._id,
+      userId,
+      content
+    });
+
+    conversation.lastMessageAt = new Date();
+    conversation.messageCount = (conversation.messageCount || 0) + 1;
+    await conversation.save();
+    await message.populate('userId', '_id username realName');
+
+    return res.status(201).json({
+      success: true,
+      message
+    });
+  } catch (error) {
+    console.error('Error sending conversation message:', error);
+    return res.status(500).json({ error: 'Failed to send conversation message' });
+  }
+  }
+);
+
+router.post(
+  '/dm/start',
+  unifiedChatLimiter,
+  authenticateToken,
+  body('targetUserId').isMongoId().withMessage('Valid targetUserId is required'),
+  async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const userId = String(req.user.userId);
+    const targetUserId = String(req.body.targetUserId);
+
+    if (userId === targetUserId) {
+      return res.status(400).json({ error: 'Cannot start a DM with yourself' });
+    }
+
+    const targetUser = await User.findById(targetUserId).select('_id username realName').lean();
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Target user not found' });
+    }
+
+    const blockedRelation = await BlockList.findOne({
+      $or: [
+        { userId, blockedUserId: targetUserId },
+        { userId: targetUserId, blockedUserId: userId }
+      ]
+    }).select('_id').lean();
+    if (blockedRelation) {
+      return res.status(403).json({ error: 'Cannot start DM due to block settings' });
+    }
+
+    let conversation = await ChatConversation.findOne({
+      type: 'dm',
+      participants: { $all: [userId, targetUserId], $size: 2 }
+    });
+
+    if (!conversation) {
+      conversation = await ChatConversation.create({
+        type: 'dm',
+        title: 'Direct message',
+        participants: [userId, targetUserId],
+        lastMessageAt: new Date()
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      conversation: {
+        _id: conversation._id,
+        type: conversation.type,
+        participants: conversation.participants,
+        lastMessageAt: conversation.lastMessageAt,
+        messageCount: conversation.messageCount || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error starting DM thread:', error);
+    return res.status(500).json({ error: 'Failed to start DM thread' });
+  }
+  }
+);
+
+router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const viewerId = String(req.user.userId);
+    const profileUserId = String(req.params.userId);
+
+    const profileUser = await User.findById(profileUserId).select('_id username realName').lean();
+    if (!profileUser) {
+      return res.status(404).json({ error: 'Profile user not found' });
+    }
+
+    const blockedRelation = await BlockList.findOne({
+      $or: [
+        { userId: viewerId, blockedUserId: profileUserId },
+        { userId: profileUserId, blockedUserId: viewerId }
+      ]
+    }).select('_id').lean();
+    if (blockedRelation) {
+      return res.status(404).json({ error: 'Profile thread is unavailable' });
+    }
+
+    let thread = await ChatConversation.findOne({
+      type: 'profile-thread',
+      profileUserId,
+      participants: { $all: [viewerId, profileUserId], $size: 2 }
+    });
+
+    if (!thread) {
+      thread = await ChatConversation.create({
+        type: 'profile-thread',
+        title: `Profile thread: @${profileUser.username}`,
+        profileUserId,
+        participants: [viewerId, profileUserId],
+        lastMessageAt: new Date()
+      });
+    }
+
+    return res.json({
+      success: true,
+      conversation: {
+        _id: thread._id,
+        type: thread.type,
+        title: thread.title,
+        profileUserId: thread.profileUserId,
+        participants: thread.participants,
+        lastMessageAt: thread.lastMessageAt,
+        messageCount: thread.messageCount || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error resolving profile thread:', error);
+    return res.status(500).json({ error: 'Failed to resolve profile thread' });
   }
 });
 

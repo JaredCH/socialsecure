@@ -21,6 +21,136 @@ const calculateMiles = (origin, destination) => {
   return EARTH_RADIUS_MILES * c;
 };
 
+const INTERACTION_TYPES = ['poll', 'quiz', 'countdown'];
+const INTERACTION_STATUS = ['active', 'closed', 'expired'];
+
+const interactionSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    enum: INTERACTION_TYPES
+  },
+  status: {
+    type: String,
+    enum: INTERACTION_STATUS,
+    default: 'active'
+  },
+  expiresAt: {
+    type: Date,
+    default: null
+  },
+  poll: {
+    question: {
+      type: String,
+      trim: true,
+      maxlength: 280
+    },
+    options: [{
+      type: String,
+      trim: true,
+      maxlength: 120
+    }],
+    allowMultiple: {
+      type: Boolean,
+      default: false
+    }
+  },
+  quiz: {
+    question: {
+      type: String,
+      trim: true,
+      maxlength: 280
+    },
+    options: [{
+      type: String,
+      trim: true,
+      maxlength: 120
+    }],
+    correctOptionIndex: {
+      type: Number,
+      min: 0,
+      default: null
+    },
+    explanation: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: ''
+    }
+  },
+  countdown: {
+    label: {
+      type: String,
+      trim: true,
+      maxlength: 180
+    },
+    targetAt: {
+      type: Date,
+      default: null
+    },
+    timezone: {
+      type: String,
+      trim: true,
+      maxlength: 80
+    },
+    linkUrl: {
+      type: String,
+      trim: true,
+      maxlength: 2048,
+      default: ''
+    }
+  }
+}, { _id: false, strict: true });
+
+const interactionResponsesSchema = new mongoose.Schema({
+  pollVotes: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    optionIndexes: [{
+      type: Number,
+      required: true,
+      min: 0
+    }],
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  quizAnswers: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    optionIndex: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    isCorrect: {
+      type: Boolean,
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  countdownFollowers: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
+}, { _id: false, strict: true });
+
 const postSchema = new mongoose.Schema({
   authorId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -117,6 +247,19 @@ const postSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  interaction: {
+    type: interactionSchema,
+    default: null
+  },
+  interactionResponses: {
+    type: interactionResponsesSchema,
+    default: () => ({
+      pollVotes: [],
+      quizAnswers: [],
+      countdownFollowers: []
+    }),
+    select: false
+  },
   createdAt: {
     type: Date,
     default: Date.now,
