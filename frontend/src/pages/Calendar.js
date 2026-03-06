@@ -338,9 +338,9 @@ function Calendar() {
   }, [anchorDate, sortedEvents]);
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-6">
-        <aside className="bg-white rounded-xl shadow border border-gray-100 p-4 space-y-4">
+    <div data-testid="calendar-page-shell" className="h-full min-h-0 flex flex-col">
+      <div data-testid="calendar-page-grid" className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-4 lg:gap-6">
+        <aside data-testid="calendar-sidebar" className="bg-white rounded-xl shadow border border-gray-100 p-4 space-y-4 min-h-0 overflow-y-auto">
           <div>
             <h2 className="text-2xl font-semibold text-gray-900">Calendar</h2>
             <p className="text-sm text-gray-600 mt-1">
@@ -418,7 +418,7 @@ function Calendar() {
           ) : null}
         </aside>
 
-        <section className="bg-white rounded-xl shadow border border-gray-100 p-4 md:p-6 space-y-4">
+        <section data-testid="calendar-main-panel" className="bg-white rounded-xl shadow border border-gray-100 p-4 md:p-6 space-y-4 flex min-h-0 flex-col overflow-hidden">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => navigatePeriod(-1)} className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">←</button>
@@ -443,13 +443,13 @@ function Calendar() {
           {loading || loadingEvents ? <p className="text-sm text-gray-600">Loading events…</p> : null}
 
           {!loading && viewMode === 'month' ? (
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div data-testid="calendar-month-grid" className="border border-gray-200 rounded-xl overflow-hidden flex min-h-0 flex-1 flex-col">
               <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
                 {WEEKDAY_LABELS.map((label) => (
-                  <div key={label} className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+                  <div key={label} className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
                 ))}
               </div>
-              <div className="grid grid-cols-7">
+              <div className="grid grid-cols-7 auto-rows-fr flex-1 min-h-0">
                 {monthDays.map((day) => {
                   const dayEvents = sortedEvents.filter((event) => eventOverlapsDay(event, day));
                   const inActiveMonth = day.getMonth() === anchorDate.getMonth();
@@ -459,7 +459,7 @@ function Calendar() {
                       key={day.toISOString()}
                       type="button"
                       onClick={() => handleDayClick(day, dayEvents)}
-                      className={`min-h-[120px] border-b border-r border-gray-100 p-2 text-left align-top ${inActiveMonth ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50`}
+                      className={`min-h-0 h-full border-b border-r border-gray-100 p-1.5 text-left align-top ${inActiveMonth ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50`}
                     >
                       <p className={`text-xs font-semibold ${isToday ? 'text-blue-700' : 'text-gray-500'}`}>{day.getDate()}</p>
                       <div className="mt-1 space-y-1">
@@ -478,11 +478,11 @@ function Calendar() {
           ) : null}
 
           {!loading && viewMode === 'week' ? (
-            <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-7 gap-3 flex-1 min-h-0 overflow-y-auto">
               {weekDays.map((day) => {
                 const dayEvents = sortedEvents.filter((event) => eventOverlapsDay(event, day));
                 return (
-                  <div key={day.toISOString()} className="border border-gray-200 rounded-lg p-2 min-h-[220px]">
+                  <div key={day.toISOString()} className="border border-gray-200 rounded-lg p-2 min-h-0">
                     <p className="text-xs uppercase tracking-wide text-gray-500">{day.toLocaleDateString(undefined, { weekday: 'short' })}</p>
                     <p className="text-sm font-semibold text-gray-900">{day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
                     <div className="mt-2 space-y-2">
@@ -506,7 +506,7 @@ function Calendar() {
           ) : null}
 
           {!loading && viewMode === 'agenda' ? (
-            <div className="space-y-3">
+            <div className="space-y-3 flex-1 min-h-0 overflow-y-auto">
               {agendaEvents.length === 0 ? <p className="text-sm text-gray-600">No events in this month.</p> : null}
               {agendaEvents.map((event) => (
                 <button

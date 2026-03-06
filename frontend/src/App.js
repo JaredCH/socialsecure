@@ -55,9 +55,15 @@ const ProtectedRoute = ({
 const RouteMain = ({ children }) => {
   const location = useLocation();
   const isChatRoute = location.pathname === '/chat';
+  const isCalendarRoute = location.pathname === '/calendar';
 
   return (
-    <main className={isChatRoute ? 'flex-1 min-h-0 overflow-hidden' : 'container mx-auto mt-8'}>
+    <main className={isChatRoute
+      ? 'flex-1 min-h-0 overflow-hidden'
+      : isCalendarRoute
+        ? 'container mx-auto mt-4 mb-4 flex-1 min-h-0 overflow-hidden'
+        : 'container mx-auto mt-8'}
+    >
       {children}
     </main>
   );
