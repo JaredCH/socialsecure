@@ -655,7 +655,7 @@ function ListingFormModal({ listing, onClose, onSaved }) {
               <div className="flex gap-2 overflow-x-auto mb-2">
                 {form.images.map((img, index) => (
                   <img
-                    key={`${img}-${index}`}
+                    key={img}
                     src={img}
                     alt={`Existing listing ${index + 1}`}
                     className="h-20 w-28 rounded object-cover flex-shrink-0 border border-gray-200"

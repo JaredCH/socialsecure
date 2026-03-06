@@ -632,8 +632,6 @@ router.put('/listings/:listingId', [
     const { listingId } = req.params;
     const userId = req.user.userId;
     const updateData = { ...req.body };
-    delete updateData.images;
-    delete updateData.additionalDetails;
     
     const listing = await MarketListing.findById(listingId);
     if (!listing) {
@@ -649,13 +647,14 @@ router.put('/listings/:listingId', [
     if (parsedAdditionalDetails === null) {
       return res.status(400).json({ error: 'Additional details must be an object' });
     }
-    if (parsedAdditionalDetails !== undefined) {
-      updateData.additionalDetails = sanitizeAdditionalDetails(parsedAdditionalDetails);
-    }
-
     const imageListResult = normalizeImageList(req.body.images);
     if (!imageListResult.ok) {
       return res.status(400).json({ error: imageListResult.error });
+    }
+    delete updateData.images;
+    delete updateData.additionalDetails;
+    if (parsedAdditionalDetails !== undefined) {
+      updateData.additionalDetails = sanitizeAdditionalDetails(parsedAdditionalDetails);
     }
 
     const uploadResult = await saveUploadedImages(req.files, userId);
