@@ -44,6 +44,7 @@ describe('Chat zip room indicator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
     chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
     chatAPI.getConversationUsers.mockResolvedValue({ data: { users: [] } });
     container = document.createElement('div');
@@ -62,6 +63,7 @@ describe('Chat zip room indicator', () => {
     }
     container = null;
     root = null;
+    localStorage.clear();
   });
 
   it('shows default zip room from chat hub when profile zip is missing', async () => {
@@ -210,5 +212,83 @@ describe('Chat zip room indicator', () => {
     const sidebars = container.querySelectorAll('aside');
     expect(sidebars.length).toBeGreaterThanOrEqual(2);
     expect(sidebars[0].className).toContain('overflow-y-auto');
+  });
+
+  it('persists the selected theme to localStorage', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const themeSelect = container.querySelector('select');
+    expect(themeSelect).not.toBeNull();
+    expect(themeSelect.value).toBe('classic');
+    expect(localStorage.getItem('chatTheme')).toBeNull();
+
+    await act(async () => {
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      nativeInputValueSetter.call(themeSelect, 'midnight');
+      themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+
+    expect(themeSelect.value).toBe('midnight');
+    expect(localStorage.getItem('chatTheme')).toBe('midnight');
+  });
+
+  it('restores the theme from localStorage on mount', async () => {
+    localStorage.setItem('chatTheme', 'ocean');
+
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const themeSelect = container.querySelector('select');
+    expect(themeSelect).not.toBeNull();
+    expect(themeSelect.value).toBe('ocean');
+  });
+
+  it('falls back to default theme when localStorage has invalid value', async () => {
+    localStorage.setItem('chatTheme', 'nonexistent');
+
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const themeSelect = container.querySelector('select');
+    expect(themeSelect).not.toBeNull();
+    expect(themeSelect.value).toBe('classic');
   });
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { authAPI, chatAPI, userAPI } from '../utils/api';
 
@@ -115,9 +115,21 @@ function Chat() {
   const [dmSearchLoading, setDmSearchLoading] = useState(false);
 
   const [roomQuery, setRoomQuery] = useState('');
-  const [theme, setTheme] = useState(CHAT_THEMES[0].key);
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('chatTheme');
+      if (saved && CHAT_THEMES.some((t) => t.key === saved)) return saved;
+    } catch { /* ignore localStorage errors */ }
+    return CHAT_THEMES[0].key;
+  });
   const [roomUsers, setRoomUsers] = useState([]);
   const [roomUsersLoading, setRoomUsersLoading] = useState(false);
+
+  const handleThemeChange = useCallback((nextTheme) => {
+    if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
+    setTheme(nextTheme);
+    try { localStorage.setItem('chatTheme', nextTheme); } catch { /* ignore */ }
+  }, []);
 
   const conversationList = useMemo(() => {
     if (activeChannel === 'zip') {
@@ -384,7 +396,7 @@ function Chat() {
           Theme
           <select
             value={theme}
-            onChange={(event) => setTheme(event.target.value)}
+            onChange={(event) => handleThemeChange(event.target.value)}
             className={`border rounded px-2 py-1 text-sm ${activeTheme.input}`}
           >
             {CHAT_THEMES.map((themeOption) => (
