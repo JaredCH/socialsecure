@@ -73,6 +73,37 @@ const ALL_CATEGORY_MAP = CATEGORIES.reduce((acc, cat) => {
 }, {});
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY'];
+const CONDITION_OPTIONS = [
+  { value: '', label: 'Select condition' },
+  { value: 'new', label: 'New' },
+  { value: 'like_new', label: 'Like New' },
+  { value: 'good', label: 'Good' },
+  { value: 'fair', label: 'Fair' },
+  { value: 'poor', label: 'Poor' },
+  { value: 'not_applicable', label: 'Not Applicable' },
+];
+const CATEGORY_DETAIL_FIELDS = {
+  'for-sale': [
+    { key: 'itemType', label: 'Item Type', placeholder: 'e.g., Laptop, Sofa, Bicycle' },
+    { key: 'pickupDetails', label: 'Pickup / Delivery Details', placeholder: 'Pickup location, delivery options, timing' },
+  ],
+  services: [
+    { key: 'serviceType', label: 'Service Type', placeholder: 'e.g., Plumbing, Graphic Design' },
+    { key: 'availability', label: 'Availability', placeholder: 'Days/hours available' },
+  ],
+  housing: [
+    { key: 'propertyType', label: 'Property Type', placeholder: 'e.g., Apartment, Room, Office' },
+    { key: 'availability', label: 'Availability', placeholder: 'Move-in date or lease window' },
+  ],
+  jobs: [
+    { key: 'jobType', label: 'Job Type', placeholder: 'e.g., Full-time, Part-time, Contract' },
+    { key: 'compensation', label: 'Compensation', placeholder: 'Hourly rate, salary range, stipend' },
+  ],
+  community: [
+    { key: 'activityType', label: 'Activity Type', placeholder: 'e.g., Event, Volunteer, Class' },
+    { key: 'schedule', label: 'Schedule', placeholder: 'Date/time and recurring details' },
+  ],
+};
 
 const STATUS_LABELS = { active: 'Active', sold: 'Sold', expired: 'Expired', pending: 'Pending' };
 const STATUS_COLORS = {
@@ -118,13 +149,35 @@ const getCategoryIcon = (id) => {
   return '\u{1F4E6}';
 };
 
+const getParentCategoryId = (categoryId) => {
+  if (!categoryId) return '';
+  const parentCategory = CATEGORIES.find(cat => cat.id === categoryId || cat.subcategories.some(sub => sub.id === categoryId));
+  return parentCategory ? parentCategory.id : '';
+};
+
+const getRequiredCategoryDetails = (categoryId) => {
+  const parent = getParentCategoryId(categoryId);
+  return CATEGORY_DETAIL_FIELDS[parent] || [];
+};
+
+const normalizeAdditionalDetails = (details) => {
+  if (!details || typeof details !== 'object') return {};
+  return Object.entries(details).reduce((acc, [key, value]) => {
+    const normalized = typeof value === 'string' ? value : String(value || '');
+    acc[key] = normalized;
+    return acc;
+  }, {});
+};
+
 const emptyListingForm = {
   title: '',
   description: '',
   category: '',
+  condition: '',
   price: '',
   currency: 'USD',
   externalLink: '',
+  additionalDetails: {},
   images: '',
   city: '',
   state: '',
@@ -260,6 +313,9 @@ function ListingDetailModal({ listing, currentUserId, onClose, onEdit, onMarkSol
   if (!listing) return null;
   const isOwner = currentUserId && String(listing.sellerId && (listing.sellerId._id || listing.sellerId)) === String(currentUserId);
   const seller = listing.sellerId;
+  const categoryDetails = getRequiredCategoryDetails(listing.category);
+  const additionalDetails = normalizeAdditionalDetails(listing.additionalDetails);
+  const conditionLabel = (CONDITION_OPTIONS.find(option => option.value === listing.condition) || {}).label;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -283,8 +339,18 @@ function ListingDetailModal({ listing, currentUserId, onClose, onEdit, onMarkSol
             </span>
           </div>
           <p className="text-xs text-gray-500 mb-1">Category: {getCategoryLabel(listing.category)}</p>
+          {conditionLabel && conditionLabel !== 'Not Applicable' && (
+            <p className="text-xs text-gray-500 mb-1">Condition: {conditionLabel}</p>
+          )}
           {(listing.city || listing.state) && (
             <p className="text-xs text-gray-500 mb-1">{'\u{1F4CD}'} {[listing.city, listing.state, listing.country].filter(Boolean).join(', ')}</p>
+          )}
+          {categoryDetails.length > 0 && (
+            <div className="mt-2 text-xs text-gray-600 space-y-1">
+              {categoryDetails.map(field => additionalDetails[field.key] ? (
+                <p key={field.key}><span className="font-medium">{field.label}:</span> {additionalDetails[field.key]}</p>
+              ) : null)}
+            </div>
           )}
           <p className="text-sm text-gray-700 mt-3 whitespace-pre-wrap">{listing.description}</p>
           {listing.externalLink && (
@@ -332,9 +398,11 @@ function ListingFormModal({ listing, onClose, onSaved }) {
         title: listing.title || '',
         description: listing.description || '',
         category: listing.category || '',
+        condition: listing.condition || '',
         price: listing.price != null ? String(listing.price) : '',
         currency: listing.currency || 'USD',
         externalLink: listing.externalLink || '',
+        additionalDetails: normalizeAdditionalDetails(listing.additionalDetails),
         images: (listing.images || []).join('\n'),
         city: listing.city || '',
         state: listing.state || '',
@@ -348,12 +416,20 @@ function ListingFormModal({ listing, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
   const [expandedCat, setExpandedCat] = useState('');
+  const requiredCategoryDetails = getRequiredCategoryDetails(form.category);
+  const parentCategoryId = getParentCategoryId(form.category);
 
   const validate = () => {
     const errs = {};
     if (!form.title.trim()) errs.title = 'Title is required';
     if (!form.description.trim()) errs.description = 'Description is required';
     if (!form.category) errs.category = 'Category is required';
+    if (parentCategoryId === 'for-sale' && (!form.condition || form.condition === 'not_applicable')) errs.condition = 'Condition is required';
+    requiredCategoryDetails.forEach(field => {
+      if (!(form.additionalDetails[field.key] || '').trim()) {
+        errs['additionalDetails.' + field.key] = field.label + ' is required';
+      }
+    });
     if (form.price === '' || isNaN(parseFloat(form.price)) || parseFloat(form.price) < 0) errs.price = 'Valid price is required';
     if (form.externalLink && !/^https?:\/\/.+/.test(form.externalLink)) errs.externalLink = 'Must be a valid URL (https://...)';
     return errs;
@@ -373,8 +449,10 @@ function ListingFormModal({ listing, onClose, onSaved }) {
         title: form.title.trim(),
         description: form.description.trim(),
         category: form.category,
+        condition: form.condition,
         price: parseFloat(form.price),
         currency: form.currency,
+        additionalDetails: normalizeAdditionalDetails(form.additionalDetails),
         images,
         city: form.city.trim() || undefined,
         state: form.state.trim() || undefined,
@@ -464,6 +542,18 @@ function ListingFormModal({ listing, onClose, onSaved }) {
             {errors.category && <p className="text-red-500 text-xs mt-1">{errors.category}</p>}
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Condition {parentCategoryId === 'for-sale' ? '*' : '(if applicable)'}</label>
+            <select
+              value={form.condition}
+              onChange={e => setForm(f => ({ ...f, condition: e.target.value }))}
+              className={'w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ' + (errors.condition ? 'border-red-400' : 'border-gray-300')}
+            >
+              {CONDITION_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            {errors.condition && <p className="text-red-500 text-xs mt-1">{errors.condition}</p>}
+          </div>
+
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
@@ -489,6 +579,30 @@ function ListingFormModal({ listing, onClose, onSaved }) {
               </select>
             </div>
           </div>
+
+          {requiredCategoryDetails.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-gray-700">Additional category details *</p>
+              {requiredCategoryDetails.map(field => (
+                <div key={field.key}>
+                  <label className="block text-sm text-gray-700 mb-1">{field.label} *</label>
+                  <input
+                    type="text"
+                    value={form.additionalDetails[field.key] || ''}
+                    onChange={e => setForm(f => ({
+                      ...f,
+                      additionalDetails: { ...f.additionalDetails, [field.key]: e.target.value }
+                    }))}
+                    className={'w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ' + (errors['additionalDetails.' + field.key] ? 'border-red-400' : 'border-gray-300')}
+                    placeholder={field.placeholder}
+                  />
+                  {errors['additionalDetails.' + field.key] && (
+                    <p className="text-red-500 text-xs mt-1">{errors['additionalDetails.' + field.key]}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
@@ -825,7 +939,7 @@ function Market() {
   });
 
   useEffect(() => {
-    authAPI.getProfile().then(res => setCurrentUserres.data?.user).catch(() => setCurrentUser(null));
+    authAPI.getProfile().then(res => setCurrentUser(res.data?.user)).catch(() => setCurrentUser(null));
   }, []);
 
   useEffect(() => {
@@ -1028,7 +1142,7 @@ function Market() {
               onClick={() => setShowCreateForm(true)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 flex-shrink-0"
             >
-              + New Listing
+              + Add a Listing
             </button>
           )}
         </div>
@@ -1172,7 +1286,7 @@ function Market() {
                 <p className="text-sm mt-1">Try adjusting your filters or search terms</p>
                 {currentUser && (
                   <button onClick={() => setShowCreateForm(true)} className="mt-4 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">
-                    Post a Listing
+                    Add a Listing
                   </button>
                 )}
               </div>
@@ -1215,7 +1329,7 @@ function Market() {
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">My Listings</h2>
-            <button onClick={() => setShowCreateForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">+ New Listing</button>
+            <button onClick={() => setShowCreateForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">+ Add a Listing</button>
           </div>
           {loadingMyListings ? (
             <p className="text-gray-500 text-center py-8">Loading...</p>
@@ -1223,7 +1337,7 @@ function Market() {
             <div className="text-center py-12 text-gray-500">
               <p className="font-medium">No listings yet</p>
               <p className="text-sm mt-1">Create your first listing to start selling</p>
-              <button onClick={() => setShowCreateForm(true)} className="mt-4 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">Create Listing</button>
+              <button onClick={() => setShowCreateForm(true)} className="mt-4 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">Add a Listing</button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
