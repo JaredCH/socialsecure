@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { authAPI } from '../utils/api';
+import { authAPI, evaluateRegisterPassword } from '../utils/api';
 
 function Register({ onSuccess, onWelcomeRequired }) {
   const navigate = useNavigate();
@@ -18,9 +18,18 @@ function Register({ onSuccess, onWelcomeRequired }) {
     referralCode: token || ''
   });
   const [submitting, setSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const passwordEvaluation = useMemo(
+    () => evaluateRegisterPassword(form.password),
+    [form.password]
+  );
 
   const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -59,6 +68,13 @@ function Register({ onSuccess, onWelcomeRequired }) {
       navigate('/welcome');
     } catch (error) {
       const apiError = error.response?.data;
+      const nextFieldErrors = (apiError?.errors || []).reduce((acc, currentError) => {
+        if (currentError?.path && !acc[currentError.path]) {
+          acc[currentError.path] = currentError.msg;
+        }
+        return acc;
+      }, {});
+      setFieldErrors(nextFieldErrors);
       const message = apiError?.error || apiError?.errors?.[0]?.msg || 'Registration failed';
       toast.error(message);
     } finally {
@@ -125,6 +141,35 @@ function Register({ onSuccess, onWelcomeRequired }) {
             minLength={8}
             required
           />
+          <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
+            <p className="text-sm font-medium text-gray-700">Password requirements</p>
+            <ul className="mt-2 space-y-1 text-sm">
+              {passwordEvaluation.requirementChecks.map((requirement) => (
+                <li
+                  key={requirement.id}
+                  className={`flex items-center justify-between gap-2 ${
+                    requirement.met ? 'text-green-700' : 'text-gray-600'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span aria-hidden="true">{requirement.met ? '✓' : '○'}</span>
+                    <span>{requirement.label}</span>
+                  </span>
+                  <span className="text-xs">{requirement.met ? 'Met' : 'Not met'}</span>
+                </li>
+              ))}
+            </ul>
+            <p
+              className="mt-2 text-sm text-gray-700"
+              aria-live="polite"
+              role="status"
+            >
+              Strength: <span className="font-medium">{passwordEvaluation.strengthLabel}</span>
+            </p>
+            {fieldErrors.password && (
+              <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -169,11 +214,17 @@ function Register({ onSuccess, onWelcomeRequired }) {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !passwordEvaluation.allRequirementsMet}
+          aria-describedby="password-submit-hint"
           className="w-full bg-blue-600 text-white rounded p-2 disabled:opacity-50"
         >
           {submitting ? 'Creating account...' : 'Create Account'}
         </button>
+        <p id="password-submit-hint" className="text-sm text-gray-600" aria-live="polite">
+          {passwordEvaluation.allRequirementsMet
+            ? 'Password requirements satisfied.'
+            : 'Complete all password requirements to enable account creation.'}
+        </p>
       </form>
 
       <p className="text-sm text-gray-600 mt-4">
