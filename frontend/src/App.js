@@ -19,6 +19,7 @@ import SecurityCenter from './pages/SecurityCenter';
 import ModerationDashboard from './pages/ModerationDashboard';
 import NotificationCenter from './components/NotificationCenter';
 import NotificationSettings from './pages/NotificationSettings';
+import ResumePublic from './pages/ResumePublic';
 import { authAPI, notificationAPI } from './utils/api';
 import { initRealtime, disconnectRealtime } from './utils/realtime';
 
@@ -510,6 +511,7 @@ function App() {
             )} />
             <Route path="/profile" element={<Navigate to="/settings" replace />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route path="/resume/:username" element={<ResumePublic />} />
             <Route
               path="/security"
               element={(

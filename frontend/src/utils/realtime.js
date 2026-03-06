@@ -71,6 +71,15 @@ export const getRealtimeSocket = ({ token, userId }) => {
   return socket;
 };
 
+export const initRealtime = ({ token, userId }) => getRealtimeSocket({ token, userId });
+
+export const disconnectRealtime = () => {
+  if (!socket) return;
+  socket.disconnect();
+  socket = null;
+  activeAuthKey = null;
+};
+
 const bindListener = (eventName, callback) => {
   if (!socket || typeof callback !== 'function') {
     return () => {};
