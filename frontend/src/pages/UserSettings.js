@@ -928,8 +928,8 @@ function UserSettings({
               >
                 {savingPgpPublicKey ? 'Saving...' : 'Save Public Key'}
               </button>
-            </form>
           </section>
+            </form>
 
           <section id="settings-section-messages" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="space-y-3">
