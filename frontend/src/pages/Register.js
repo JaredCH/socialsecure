@@ -3,7 +3,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { authAPI } from '../utils/api';
 
-function Register({ onSuccess }) {
+function Register({ onSuccess, onWelcomeRequired }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = useMemo(() => searchParams.get('token'), [searchParams]);
@@ -54,8 +54,9 @@ function Register({ onSuccess }) {
 
       const { data } = await authAPI.register(payload);
       onSuccess(data);
+      onWelcomeRequired?.(data.user || null);
       toast.success('Registration successful');
-      navigate('/');
+      navigate('/welcome');
     } catch (error) {
       const apiError = error.response?.data;
       const message = apiError?.error || apiError?.errors?.[0]?.msg || 'Registration failed';
