@@ -191,7 +191,8 @@ router.put('/preferences', [
   body('follows').optional().isObject(),
   body('messages').optional().isObject(),
   body('system').optional().isObject(),
-  body('securityAlerts').optional().isObject()
+  body('securityAlerts').optional().isObject(),
+  body('realtime').optional().isObject()
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -222,7 +223,18 @@ router.put('/preferences', [
       follows: mergePreference('follows'),
       messages: mergePreference('messages'),
       system: mergePreference('system'),
-      securityAlerts: mergePreference('securityAlerts')
+      securityAlerts: mergePreference('securityAlerts'),
+      realtime: {
+        enabled: typeof input?.realtime?.enabled === 'boolean'
+          ? input.realtime.enabled
+          : Boolean(existing?.realtime?.enabled ?? true),
+        typingIndicators: typeof input?.realtime?.typingIndicators === 'boolean'
+          ? input.realtime.typingIndicators
+          : Boolean(existing?.realtime?.typingIndicators ?? true),
+        presence: typeof input?.realtime?.presence === 'boolean'
+          ? input.realtime.presence
+          : Boolean(existing?.realtime?.presence ?? true)
+      }
     };
 
     await User.updateOne(

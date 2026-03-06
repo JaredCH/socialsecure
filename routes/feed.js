@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const Post = require('../models/Post');
 const User = require('../models/User');
@@ -8,11 +9,18 @@ const Friendship = require('../models/Friendship');
 const BlockList = require('../models/BlockList');
 const MuteList = require('../models/MuteList');
 const { createNotification } = require('../services/notifications');
+const { emitToUsers, emitToRoom } = require('../services/realtime');
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
 const VALID_VISIBILITY = ['public', 'friends', 'circles', 'specific_users', 'private'];
+const interactionRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: { error: 'Too many interaction requests, please slow down.' },
+  keyGenerator: (req) => String(req?.user?.userId || req.ip || req.socket?.remoteAddress || 'unknown')
+});
 
 const parseViewerCoordinates = (req) => {
   const latitude = Number.parseFloat(req.query.latitude);
@@ -384,6 +392,13 @@ router.post('/post', [
     // Populate author and target user info
     await post.populate('authorId', 'username realName');
     await post.populate('targetFeedId', 'username realName');
+
+    const friendIds = await getFriendIds(authorId);
+    const recipients = [...new Set([authorId, normalizedTargetFeedId, ...friendIds])];
+    const realtimePayload = { post: post.toObject ? post.toObject() : post };
+    emitToUsers(recipients, 'new_post', realtimePayload);
+    emitToRoom(`feed:${authorId}`, 'new_post', realtimePayload);
+    emitToRoom(`feed:${normalizedTargetFeedId}`, 'new_post', realtimePayload);
     
     res.status(201).json({
       success: true,
@@ -425,7 +440,7 @@ router.delete('/post/:postId', authenticateToken, async (req, res) => {
 });
 
 // Like a post
-router.post('/post/:postId/like', authenticateToken, async (req, res) => {
+router.post('/post/:postId/like', interactionRateLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = req.user.userId;
@@ -459,6 +474,15 @@ router.post('/post/:postId/like', authenticateToken, async (req, res) => {
         }
       });
     }
+
+    const interactionPayload = {
+      type: 'like',
+      postId: String(post._id),
+      userId: String(userId),
+      likesCount: post.likes.length
+    };
+    emitToRoom(`post:${postId}`, 'interaction', interactionPayload);
+    emitToUsers([String(post.authorId), String(post.targetFeedId)], 'interaction', interactionPayload);
     
     res.json({
       success: true,
@@ -472,7 +496,7 @@ router.post('/post/:postId/like', authenticateToken, async (req, res) => {
 });
 
 // Unlike a post
-router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
+router.delete('/post/:postId/like', interactionRateLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = req.user.userId;
@@ -483,11 +507,26 @@ router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
     }
     
     await post.removeLike(userId);
+    const refreshedPost = await Post.findById(postId).select('likes authorId targetFeedId').lean();
+    const likesCount = Array.isArray(refreshedPost?.likes) ? refreshedPost.likes.length : post.likes.length;
+
+    const interactionPayload = {
+      type: 'like',
+      postId: String(post._id),
+      userId: String(userId),
+      likesCount
+    };
+    emitToRoom(`post:${postId}`, 'interaction', interactionPayload);
+    emitToUsers(
+      [String(refreshedPost?.authorId || post.authorId), String(refreshedPost?.targetFeedId || post.targetFeedId)],
+      'interaction',
+      interactionPayload
+    );
     
     res.json({
       success: true,
       message: 'Post unliked',
-      likesCount: post.likes.length
+      likesCount
     });
   } catch (error) {
     console.error('Error unliking post:', error);
@@ -497,6 +536,7 @@ router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
 
 // Add comment to post
 router.post('/post/:postId/comment', [
+  interactionRateLimiter,
   authenticateToken,
   body('content').trim().notEmpty().withMessage('Comment content is required').isLength({ max: 1000 }).withMessage('Comment too long')
 ], async (req, res) => {
@@ -565,6 +605,16 @@ router.post('/post/:postId/comment', [
         });
       }
     }
+
+    const commentPayload = {
+      type: 'comment',
+      postId: String(post._id),
+      userId: String(userId),
+      comment: newComment,
+      commentsCount: post.comments.length
+    };
+    emitToRoom(`post:${postId}`, 'interaction', commentPayload);
+    emitToUsers([String(post.authorId), String(post.targetFeedId)], 'interaction', commentPayload);
     
     res.status(201).json({
       success: true,

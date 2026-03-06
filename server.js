@@ -5,7 +5,24 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const User = require('./models/User');
+const Friendship = require('./models/Friendship');
+const {
+  setRealtimeIo,
+  attachUserSocket,
+  detachUserSocket,
+  isUserOnline,
+  setPresence,
+  getPresence,
+  emitToUsers,
+  getMissedEvents
+} = require('./services/realtime');
+
+const TYPING_THROTTLE_MS = 1000;
+const SOCKET_JWT_SECRET = process.env.JWT_SECRET || '';
+const MAX_FEED_SUBSCRIPTIONS = 200;
 
 const cleanEnv = (value) => {
   if (typeof value !== 'string') return value;
@@ -249,14 +266,83 @@ const io = require('socket.io')(server, {
 
 const { setNotificationIo } = require('./services/notifications');
 setNotificationIo(io);
+setRealtimeIo(io);
+
+const getFriendIds = async (userId) => {
+  const friendships = await Friendship.find({
+    status: 'accepted',
+    $or: [{ requester: userId }, { recipient: userId }]
+  }).select('requester recipient').lean();
+
+  const ids = new Set();
+  for (const friendship of friendships) {
+    const requester = String(friendship.requester);
+    const recipient = String(friendship.recipient);
+    ids.add(requester === String(userId) ? recipient : requester);
+  }
+  return [...ids];
+};
 
 // Socket.io connection handling
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   console.log('New client connected:', socket.id);
 
-  const authUserId = String(socket?.handshake?.auth?.userId || '').trim();
+  const authToken = String(socket?.handshake?.auth?.token || '').trim();
+  const fallbackUserId = String(socket?.handshake?.auth?.userId || '').trim();
+  let authUserId = '';
+
+  if (authToken) {
+    if (!SOCKET_JWT_SECRET) {
+      socket.emit('realtime_error', { error: 'Socket authentication is unavailable' });
+      socket.disconnect(true);
+      return;
+    }
+    try {
+      const decoded = jwt.verify(authToken, SOCKET_JWT_SECRET);
+      authUserId = String(decoded?.userId || '').trim();
+    } catch (error) {
+      socket.emit('realtime_error', { error: 'Invalid socket authentication token' });
+      socket.disconnect(true);
+      return;
+    }
+  } else {
+    authUserId = fallbackUserId;
+  }
+
   if (authUserId) {
+    const user = await User.findById(authUserId).select('username realName notificationPreferences').lean();
+    const realtimeEnabled = user?.notificationPreferences?.realtime?.enabled !== false;
+    if (!user || !realtimeEnabled) {
+      socket.disconnect(true);
+      return;
+    }
+
+    socket.userId = authUserId;
+    socket.username = user.username || user.realName || 'user';
     socket.join(`user:${authUserId}`);
+    attachUserSocket(authUserId, socket.id);
+
+    const nowIso = new Date().toISOString();
+    setPresence(authUserId, { status: 'online', lastSeen: nowIso, lastActivity: nowIso });
+
+    const friendIds = await getFriendIds(authUserId);
+    const friendPresence = friendIds.map((friendId) => ({
+      userId: friendId,
+      ...(getPresence(friendId) || { status: 'offline', lastSeen: nowIso })
+    }));
+    socket.emit('presence_snapshot', { friends: friendPresence });
+
+    const replayEvents = getMissedEvents(authUserId, socket?.handshake?.auth?.lastEventTimestamp);
+    if (replayEvents.length > 0) {
+      socket.emit('realtime_events_replay', { events: replayEvents });
+    }
+
+    emitToUsers(friendIds, 'friend_online', {
+      userId: authUserId,
+      username: socket.username,
+      status: 'online',
+      lastSeen: nowIso
+    });
   }
 
   socket.on('join-user', (userId) => {
@@ -266,15 +352,96 @@ io.on('connection', (socket) => {
   });
   
   socket.on('join-room', (roomId) => {
-    socket.join(roomId);
+    const normalizedRoomId = String(roomId || '').trim();
+    if (!normalizedRoomId) return;
+    socket.join(normalizedRoomId);
+    socket.join(`room:${normalizedRoomId}`);
     console.log(`Socket ${socket.id} joined room ${roomId}`);
+  });
+
+  socket.on('subscribe_feed', (targetUserIds) => {
+    if (!Array.isArray(targetUserIds)) return;
+    targetUserIds
+      .slice(0, MAX_FEED_SUBSCRIPTIONS)
+      .map((userId) => String(userId || '').trim())
+      .filter(Boolean)
+      .forEach((userId) => socket.join(`feed:${userId}`));
+  });
+
+  socket.on('subscribe_post', (postId) => {
+    const normalizedPostId = String(postId || '').trim();
+    if (!normalizedPostId) return;
+    socket.join(`post:${normalizedPostId}`);
+  });
+
+  socket.on('typing_start', async ({ roomId, postId, type } = {}) => {
+    const userId = socket.userId;
+    if (!userId) return;
+
+    const user = await User.findById(userId).select('notificationPreferences').lean();
+    if (user?.notificationPreferences?.realtime?.typingIndicators === false) return;
+
+    const now = Date.now();
+    const lastTypingAt = Number(socket.data?.lastTypingAt || 0);
+    if (now - lastTypingAt < TYPING_THROTTLE_MS) return;
+    socket.data.lastTypingAt = now;
+
+    const normalizedType = type === 'comment' ? 'comment' : 'chat';
+    const targetId = normalizedType === 'comment'
+      ? String(postId || roomId || '').trim()
+      : String(roomId || '').trim();
+    if (!targetId) return;
+
+    const targetRoom = normalizedType === 'comment' ? `post:${targetId}` : `room:${targetId}`;
+    socket.to(targetRoom).emit('typing', {
+      userId,
+      username: socket.username,
+      type: normalizedType,
+      targetId,
+      status: 'start'
+    });
+  });
+
+  socket.on('typing_stop', ({ roomId, postId, type } = {}) => {
+    const userId = socket.userId;
+    if (!userId) return;
+
+    const normalizedType = type === 'comment' ? 'comment' : 'chat';
+    const targetId = normalizedType === 'comment'
+      ? String(postId || roomId || '').trim()
+      : String(roomId || '').trim();
+    if (!targetId) return;
+
+    const targetRoom = normalizedType === 'comment' ? `post:${targetId}` : `room:${targetId}`;
+    socket.to(targetRoom).emit('typing', {
+      userId,
+      username: socket.username,
+      type: normalizedType,
+      targetId,
+      status: 'stop'
+    });
   });
   
   socket.on('send-message', (data) => {
     io.to(data.roomId).emit('new-message', data);
   });
   
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
+    const userId = socket.userId;
+    if (userId) {
+      detachUserSocket(userId, socket.id);
+      if (!isUserOnline(userId)) {
+        const lastSeen = new Date().toISOString();
+        setPresence(userId, { status: 'offline', lastSeen, lastActivity: lastSeen });
+        const friendIds = await getFriendIds(userId);
+        emitToUsers(friendIds, 'friend_offline', {
+          userId,
+          username: socket.username,
+          status: 'offline',
+          lastSeen
+        });
+      }
+    }
     console.log('Client disconnected:', socket.id);
   });
 });

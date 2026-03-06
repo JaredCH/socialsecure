@@ -1,15 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authAPI, circlesAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
+import TypingIndicator from '../components/TypingIndicator';
+import {
+  onRealtimeEvent,
+  subscribeFeed,
+  subscribePost,
+  emitTypingStart,
+  emitTypingStop
+} from '../utils/realtime';
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const GALLERY_MAX_ITEMS = 24;
 const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
+const COMMENT_TYPING_STOP_DELAY_MS = 1200;
 
 const PRIVACY_BADGE_LABELS = {
   public: 'Public',
@@ -165,6 +174,7 @@ const Social = () => {
   const [circles, setCircles] = useState([]);
   const [friends, setFriends] = useState([]);
   const [commentInputs, setCommentInputs] = useState({});
+  const [typingByPost, setTypingByPost] = useState({});
   const [actionLoadingByPost, setActionLoadingByPost] = useState({});
   const [galleryItems, setGalleryItems] = useState([]);
   const [galleryTargetInput, setGalleryTargetInput] = useState(initialGuestUser);
@@ -185,6 +195,7 @@ const Social = () => {
     targetId: null,
     targetUserId: null
   });
+  const commentTypingTimeoutRef = useRef({});
 
   const galleryOwnerIdentifier = useMemo(() => {
     // Authenticated users always see their own gallery on /social
@@ -340,6 +351,83 @@ const Social = () => {
   useEffect(() => {
     loadGallery();
   }, [loadGallery]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser?._id || isGuestPreview) return () => {};
+
+    const followedIds = Array.isArray(friends)
+      ? friends
+        .map((friend) => String(friend?.user?._id || friend?._id || '').trim())
+        .filter(Boolean)
+      : [];
+    subscribeFeed([...new Set([String(currentUser._id), ...followedIds])]);
+
+    const offNewPost = onRealtimeEvent('new_post', (data) => {
+      const incoming = data?.post ? normalizePost(data.post) : null;
+      if (!incoming?._id) return;
+      setPosts((prev) => {
+        if (prev.some((post) => String(post._id) === String(incoming._id))) return prev;
+        return [incoming, ...prev];
+      });
+    });
+
+    const offInteraction = onRealtimeEvent('interaction', (data) => {
+      const postId = String(data?.postId || '');
+      if (!postId) return;
+      setPosts((prev) => prev.map((post) => {
+        if (String(post._id) !== postId) return post;
+        if (data.type === 'like') {
+          return {
+            ...post,
+            likesCount: typeof data.likesCount === 'number' ? data.likesCount : post.likesCount
+          };
+        }
+        if (data.type === 'comment') {
+          const currentComments = Array.isArray(post.comments) ? post.comments : [];
+          const hasComment = data?.comment?._id
+            ? currentComments.some((comment) => String(comment._id) === String(data.comment._id))
+            : false;
+          return {
+            ...post,
+            comments: hasComment || !data.comment ? currentComments : [...currentComments, data.comment],
+            commentsCount: typeof data.commentsCount === 'number' ? data.commentsCount : post.commentsCount
+          };
+        }
+        return post;
+      }));
+    });
+
+    const offTyping = onRealtimeEvent('typing', (data) => {
+      if (data?.type !== 'comment') return;
+      const postId = String(data?.targetId || '');
+      const userId = String(data?.userId || '');
+      if (!postId || !userId || userId === String(currentUser._id)) return;
+      setTypingByPost((prev) => {
+        const existing = prev[postId] || [];
+        if (data.status === 'stop') {
+          return { ...prev, [postId]: existing.filter((entry) => entry.userId !== userId) };
+        }
+        if (existing.some((entry) => entry.userId === userId)) return prev;
+        const username = data.username || 'Someone';
+        return { ...prev, [postId]: [...existing, { userId, username }] };
+      });
+    });
+
+    return () => {
+      offNewPost();
+      offInteraction();
+      offTyping();
+    };
+  }, [isAuthenticated, currentUser?._id, isGuestPreview, friends]);
+
+  useEffect(() => {
+    if (!isAuthenticated || isGuestPreview || posts.length === 0) return;
+    posts.forEach((post) => subscribePost(post._id));
+  }, [isAuthenticated, isGuestPreview, posts]);
+
+  useEffect(() => () => {
+    Object.values(commentTypingTimeoutRef.current).forEach((timer) => clearTimeout(timer));
+  }, []);
 
   const handleAddMediaUrl = () => {
     const value = postForm.mediaUrlInput.trim();
@@ -660,6 +748,8 @@ const Social = () => {
       );
 
       setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
+      emitTypingStop({ postId, type: 'comment' });
+      setTypingByPost((prev) => ({ ...prev, [postId]: [] }));
     } catch (error) {
       setFeedError(error.response?.data?.error || 'Failed to add comment.');
     } finally {
@@ -1236,9 +1326,17 @@ const Social = () => {
                             <input
                               type="text"
                               value={commentInputs[post._id] || ''}
-                              onChange={(event) =>
-                                setCommentInputs((prev) => ({ ...prev, [post._id]: event.target.value }))
-                              }
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setCommentInputs((prev) => ({ ...prev, [post._id]: value }));
+                                emitTypingStart({ postId: post._id, type: 'comment' });
+                                if (commentTypingTimeoutRef.current[post._id]) {
+                                  clearTimeout(commentTypingTimeoutRef.current[post._id]);
+                                }
+                                commentTypingTimeoutRef.current[post._id] = setTimeout(() => {
+                                  emitTypingStop({ postId: post._id, type: 'comment' });
+                                }, COMMENT_TYPING_STOP_DELAY_MS);
+                              }}
                               placeholder="Add a comment..."
                               className="flex-1 border rounded px-3 py-2 text-sm"
                               maxLength={1000}
@@ -1252,6 +1350,7 @@ const Social = () => {
                               Comment
                             </button>
                           </div>
+                          <TypingIndicator users={(typingByPost[post._id] || []).map((entry) => entry.username)} />
                         </div>
                       </div>
                     ) : (

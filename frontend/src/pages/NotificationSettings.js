@@ -20,7 +20,8 @@ const defaultPreferences = {
   follows: { inApp: true, email: false, push: false },
   messages: { inApp: true, email: false, push: false },
   system: { inApp: true, email: true, push: false },
-  securityAlerts: { inApp: true, email: true, push: false }
+  securityAlerts: { inApp: true, email: true, push: false },
+  realtime: { enabled: true, typingIndicators: true, presence: true }
 };
 
 const NotificationSettings = () => {
@@ -119,6 +120,27 @@ const NotificationSettings = () => {
       )}
 
       <div className="mt-6">
+        <div className="mb-4 p-3 rounded border bg-gray-50">
+          <h2 className="font-semibold text-sm text-gray-800">Real-time updates</h2>
+          <p className="text-xs text-gray-600 mb-2">
+            Disable to opt out of live feed/chat updates and fall back to manual refresh.
+          </p>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={Boolean(preferences.realtime?.enabled)}
+              onChange={() => setPreferences((prev) => ({
+                ...prev,
+                realtime: {
+                  ...(prev.realtime || {}),
+                  enabled: !prev.realtime?.enabled
+                }
+              }))}
+            />
+            <span>Enable real-time updates</span>
+          </label>
+        </div>
+
         <button
           type="button"
           onClick={save}

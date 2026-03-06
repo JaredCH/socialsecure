@@ -276,6 +276,11 @@ const userSchema = new mongoose.Schema({
       inApp: { type: Boolean, default: true },
       email: { type: Boolean, default: true },
       push: { type: Boolean, default: false }
+    },
+    realtime: {
+      enabled: { type: Boolean, default: true },
+      typingIndicators: { type: Boolean, default: true },
+      presence: { type: Boolean, default: true }
     }
   },
   unreadNotificationCount: {

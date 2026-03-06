@@ -10,6 +10,7 @@ const BlockList = require('../models/BlockList');
 const RoomKeyPackage = require('../models/RoomKeyPackage');
 const User = require('../models/User');
 const { createNotification } = require('../services/notifications');
+const { emitToRoom, emitToUsers } = require('../services/realtime');
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -574,14 +575,19 @@ router.post('/rooms/:roomId/messages', [
 
     const senderLabel = user.username || user.realName || 'Someone';
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
-    
-    // Broadcast message via WebSocket (handled in server.js)
-    // The WebSocket server will handle real-time broadcasting
+
+    const publicMessage = message.toPublicMessage();
+    emitToRoom(`room:${roomId}`, 'chat-message', publicMessage);
+    emitToUsers(
+      Array.isArray(room.members) ? room.members.map((member) => String(member)) : [],
+      'chat-message',
+      publicMessage
+    );
     
     res.status(201).json({
       success: true,
       message: 'Message sent successfully',
-      message: message.toPublicMessage(),
+      message: publicMessage,
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining
@@ -729,10 +735,18 @@ router.post('/rooms/:roomId/messages/e2ee', [
     const senderLabel = user.username || user.realName || 'Someone';
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
 
+    const publicMessage = message.toPublicMessage();
+    emitToRoom(`room:${roomId}`, 'chat-message', publicMessage);
+    emitToUsers(
+      Array.isArray(room.members) ? room.members.map((member) => String(member)) : [],
+      'chat-message',
+      publicMessage
+    );
+
     return res.status(201).json({
       success: true,
       message: 'E2EE message envelope accepted',
-      messageData: message.toPublicMessage(),
+      messageData: publicMessage,
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining

@@ -17,6 +17,14 @@ import {
   unlockOrCreateVault
 } from '../utils/e2ee';
 import EncryptionUnlockModal from '../components/EncryptionUnlockModal';
+import TypingIndicator from '../components/TypingIndicator';
+import PresenceIndicator from '../components/PresenceIndicator';
+import {
+  joinChatRoom,
+  onRealtimeEvent,
+  emitTypingStart,
+  emitTypingStop
+} from '../utils/realtime';
 
 const MESSAGE_PAGE_SIZE = {
   INITIAL_LOAD: 500,
@@ -25,6 +33,7 @@ const MESSAGE_PAGE_SIZE = {
 const MAX_MESSAGES_IN_MEMORY = 1200;
 const MAX_VISIBLE_DECRYPT = 120;
 const SCROLL_BOTTOM_THRESHOLD = 48;
+const CHAT_TYPING_STOP_DELAY_MS = 900;
 
 const getMessageId = (message) => String(message?._id || `${message?.e2ee?.clientMessageId || 'msg'}:${message?.createdAt || ''}`);
 
@@ -94,6 +103,9 @@ const Chat = () => {
   const [useMonospace, setUseMonospace] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [typingUsersByRoom, setTypingUsersByRoom] = useState({});
+  const [roomUsers, setRoomUsers] = useState([]);
+  const [presenceByUserId, setPresenceByUserId] = useState({});
 
   const [decrypting, setDecrypting] = useState(false);
   const [decryptErrors, setDecryptErrors] = useState({});
@@ -103,6 +115,7 @@ const Chat = () => {
   const latestPackageSyncByRoomRef = useRef({});
   const messageViewportRef = useRef(null);
   const messageCountRef = useRef(0);
+  const typingStopTimerRef = useRef(null);
 
   const isUnlocked = Boolean(session);
   const activeRoom = useMemo(
@@ -435,6 +448,87 @@ const Chat = () => {
   }, [activeRoomId]);
 
   useEffect(() => {
+    if (!activeRoomId) {
+      setRoomUsers([]);
+      return;
+    }
+
+    joinChatRoom(activeRoomId);
+    chatAPI.getRoomUsers(activeRoomId)
+      .then((response) => {
+        const users = Array.isArray(response.data?.users) ? response.data.users : [];
+        setRoomUsers(users);
+      })
+      .catch(() => {
+        setRoomUsers([]);
+      });
+  }, [activeRoomId]);
+
+  useEffect(() => {
+    const offMessage = onRealtimeEvent('chat-message', (incoming) => {
+      if (!incoming?.roomId || String(incoming.roomId) !== String(activeRoomId)) return;
+      appendMessage(incoming);
+    });
+
+    const offTyping = onRealtimeEvent('typing', (payload) => {
+      if (payload?.type !== 'chat') return;
+      if (String(payload?.targetId || '') !== String(activeRoomId)) return;
+      const userId = String(payload?.userId || '');
+      if (!userId || userId === String(profile?._id)) return;
+      setTypingUsersByRoom((prev) => {
+        const roomKey = String(activeRoomId || '');
+        const current = prev[roomKey] || [];
+        if (payload.status === 'stop') {
+          return { ...prev, [roomKey]: current.filter((entry) => entry.userId !== userId) };
+        }
+        if (current.some((entry) => entry.userId === userId)) return prev;
+        const username = payload.username || 'Someone';
+        return { ...prev, [roomKey]: [...current, { userId, username }] };
+      });
+    });
+
+    const offFriendOnline = onRealtimeEvent('friend_online', (payload) => {
+      const userId = String(payload?.userId || '');
+      if (!userId) return;
+      setPresenceByUserId((prev) => ({
+        ...prev,
+        [userId]: { status: 'online', lastSeen: payload?.lastSeen || null }
+      }));
+    });
+
+    const offFriendOffline = onRealtimeEvent('friend_offline', (payload) => {
+      const userId = String(payload?.userId || '');
+      if (!userId) return;
+      setPresenceByUserId((prev) => ({
+        ...prev,
+        [userId]: { status: 'offline', lastSeen: payload?.lastSeen || null }
+      }));
+    });
+
+    const offPresenceSnapshot = onRealtimeEvent('presence_snapshot', (payload) => {
+      const friends = Array.isArray(payload?.friends) ? payload.friends : [];
+      if (friends.length === 0) return;
+      setPresenceByUserId((prev) => {
+        const next = { ...prev };
+        friends.forEach((friend) => {
+          const friendId = String(friend?.userId || '');
+          if (!friendId) return;
+          next[friendId] = { status: friend?.status || 'offline', lastSeen: friend?.lastSeen || null };
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      offMessage();
+      offTyping();
+      offFriendOnline();
+      offFriendOffline();
+      offPresenceSnapshot();
+    };
+  }, [activeRoomId, profile?._id]);
+
+  useEffect(() => {
     const decryptVisible = async () => {
       if (!session || !activeRoomId || messages.length === 0) return;
 
@@ -517,6 +611,12 @@ const Chat = () => {
 
     messageCountRef.current = messages.length;
   }, [messages, isAtBottom]);
+
+  useEffect(() => () => {
+    if (typingStopTimerRef.current) {
+      clearTimeout(typingStopTimerRef.current);
+    }
+  }, []);
 
   const sendEncryptedPayload = async ({ plaintext, messageType = 'text', commandData = null }) => {
     await loadKeyPackages(activeRoomId, session);
@@ -670,6 +770,7 @@ const Chat = () => {
         await sendEncryptedPayload({ plaintext: trimmed, messageType: 'text' });
       }
       setSendValue('');
+      emitTypingStop({ roomId: activeRoomId, type: 'chat' });
       if (isAtBottom) {
         requestAnimationFrame(() => scrollToBottom());
       }
@@ -774,6 +875,22 @@ const Chat = () => {
             </div>
           </div>
 
+          {roomUsers.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {roomUsers.slice(0, 6).map((roomUser) => {
+                const userId = String(roomUser?._id || '');
+                const presence = presenceByUserId[userId] || { status: 'offline', lastSeen: null };
+                const label = roomUser?.username || roomUser?.realName || userId;
+                return (
+                  <span key={userId} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-gray-100">
+                    <span>{label}</span>
+                    <PresenceIndicator status={presence.status} lastSeen={presence.lastSeen} />
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
+
           <div
             ref={messageViewportRef}
             onScroll={(event) => {
@@ -862,6 +979,8 @@ const Chat = () => {
             </div>
           ) : null}
 
+          <TypingIndicator users={(typingUsersByRoom[String(activeRoomId)] || []).map((entry) => entry.username)} />
+
           <div className="flex gap-2">
             <button
               type="button"
@@ -878,7 +997,17 @@ const Chat = () => {
             <input
               type="text"
               value={sendValue}
-              onChange={(event) => setSendValue(event.target.value)}
+              onChange={(event) => {
+                setSendValue(event.target.value);
+                if (!activeRoomId) return;
+                emitTypingStart({ roomId: activeRoomId, type: 'chat' });
+                if (typingStopTimerRef.current) {
+                  clearTimeout(typingStopTimerRef.current);
+                }
+                typingStopTimerRef.current = setTimeout(() => {
+                  emitTypingStop({ roomId: activeRoomId, type: 'chat' });
+                }, CHAT_TYPING_STOP_DELAY_MS);
+              }}
               disabled={!isUnlocked || !activeRoomId || sending}
               className="flex-1 border rounded p-2"
               maxLength={2000}
