@@ -188,13 +188,13 @@ const Discovery = () => {
     setUsersLoading(true);
     setUsersError('');
     try {
-      const { data } = await discoveryAPI.getUsers(page);
+      const { data } = await discoveryAPI.getUsers('', page, 20);
       if (page === 1) {
         setUsers(data.users || []);
       } else {
         setUsers((prev) => [...prev, ...(data.users || [])]);
       }
-      setUsersHasMore(data.pagination?.hasMore ?? false);
+      setUsersHasMore(data.hasMore ?? false);
       setUsersPage(page);
     } catch (err) {
       setUsersError(err?.response?.data?.error || 'Failed to load suggestions. Please try again.');
@@ -209,13 +209,13 @@ const Discovery = () => {
     try {
       const lat = viewerCoords?.latitude ?? null;
       const lon = viewerCoords?.longitude ?? null;
-      const { data } = await discoveryAPI.getPosts(page, 20, lat, lon);
+      const { data } = await discoveryAPI.getPosts('', page, 20, lat, lon);
       if (page === 1) {
         setPosts(data.posts || []);
       } else {
         setPosts((prev) => [...prev, ...(data.posts || [])]);
       }
-      setPostsHasMore(data.pagination?.hasMore ?? false);
+      setPostsHasMore(data.hasMore ?? false);
       setPostsPage(page);
     } catch (err) {
       setPostsError(err?.response?.data?.error || 'Failed to load posts. Please try again.');
@@ -239,8 +239,8 @@ const Discovery = () => {
 
   const handleSendFriendRequest = async (userId) => {
     await friendsAPI.sendRequest(userId);
-    // Emit impression analytics in the background (non-blocking)
-    discoveryAPI.trackUserImpression(userId).catch(() => {});
+    // Emit follow analytics in the background (non-blocking)
+    discoveryAPI.trackEvent('follow_click', { targetUserId: userId }).catch(() => {});
   };
 
   const handleLoadMoreUsers = () => loadUsers(usersPage + 1);

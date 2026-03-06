@@ -8,7 +8,6 @@ import Register from './pages/Register';
 import UserSettings from './pages/UserSettings';
 import ReferFriend from './pages/ReferFriend';
 import Social from './pages/Social';
-import Discover from './pages/Discover';
 import Chat from './pages/Chat';
 import Market from './pages/Market';
 import News from './pages/News';
@@ -447,7 +446,7 @@ function App() {
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
                 >
-                  <Discover />
+                  <Discovery />
                 </ProtectedRoute>
               )}
             />
@@ -472,18 +471,6 @@ function App() {
                   encryptionPasswordRequired={encryptionPasswordRequired}
                 >
                   <NotificationSettings />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/discover"
-              element={(
-                <ProtectedRoute
-                  isAuthenticated={isAuthenticated}
-                  onboardingRequired={onboardingRequired}
-                  encryptionPasswordRequired={encryptionPasswordRequired}
-                >
-                  <Discovery />
                 </ProtectedRoute>
               )}
             />
