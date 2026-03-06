@@ -108,6 +108,14 @@ function UserSettings({
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [savingAccountPassword, setSavingAccountPassword] = useState(false);
+  const [accountPasswordError, setAccountPasswordError] = useState('');
+  const [accountPasswordSuccess, setAccountPasswordSuccess] = useState('');
   const [encryptionForm, setEncryptionForm] = useState({
     currentEncryptionPassword: '',
     encryptionPassword: '',
@@ -223,6 +231,42 @@ function UserSettings({
 
   const handleEncryptionFieldChange = (e) => {
     setEncryptionForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handlePasswordFieldChange = (e) => {
+    setPasswordForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSaveAccountPassword = async (e) => {
+    e.preventDefault();
+    setSavingAccountPassword(true);
+    setAccountPasswordError('');
+    setAccountPasswordSuccess('');
+
+    try {
+      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+        setAccountPasswordError('Password confirmation does not match.');
+        return;
+      }
+
+      const { data } = await authAPI.changePassword(passwordForm);
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      setAccountPasswordSuccess('Login password updated successfully.');
+      if (typeof setUser === 'function' && data?.user) {
+        setUser(data.user);
+      }
+      toast.success('Password changed');
+    } catch (error) {
+      const message = error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Failed to change account password';
+      setAccountPasswordError(message);
+      toast.error(message);
+    } finally {
+      setSavingAccountPassword(false);
+    }
   };
 
   const clearEncryptionForm = () => {
@@ -538,6 +582,61 @@ function UserSettings({
               <p className="rounded border border-gray-200 bg-gray-50 p-3"><span className="font-semibold">PGP Enabled:</span> {user.hasPGP ? 'Yes' : 'No'}</p>
               <p className="rounded border border-gray-200 bg-gray-50 p-3"><span className="font-semibold">Encryption Password:</span> {hasEncryptionPassword ? 'Set' : 'Not set'}</p>
             </div>
+            {user.mustResetPassword ? (
+              <div className="mt-3 text-sm text-red-800 bg-red-50 border border-red-200 rounded p-3" role="alert">
+                Your password was reset by an administrator. You must set a new password now.
+              </div>
+            ) : null}
+            <form onSubmit={handleSaveAccountPassword} className="mt-4 space-y-3">
+              <h4 className="text-sm font-semibold text-gray-900">Change login password</h4>
+              {accountPasswordError ? (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" role="alert">
+                  {accountPasswordError}
+                </div>
+              ) : null}
+              {accountPasswordSuccess ? (
+                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3" role="status">
+                  {accountPasswordSuccess}
+                </div>
+              ) : null}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input
+                  type="password"
+                  name="currentPassword"
+                  placeholder="Current password"
+                  value={passwordForm.currentPassword}
+                  onChange={handlePasswordFieldChange}
+                  className="border rounded p-2"
+                  autoComplete="current-password"
+                  required
+                />
+                <input
+                  type="password"
+                  name="newPassword"
+                  placeholder="New password"
+                  value={passwordForm.newPassword}
+                  onChange={handlePasswordFieldChange}
+                  className="border rounded p-2"
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  placeholder="Confirm new password"
+                  value={passwordForm.confirmPassword}
+                  onChange={handlePasswordFieldChange}
+                  className="border rounded p-2"
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+              </div>
+              <button type="submit" disabled={savingAccountPassword} className="rounded bg-indigo-600 text-white px-4 py-2 disabled:opacity-50">
+                {savingAccountPassword ? 'Updating...' : 'Update login password'}
+              </button>
+            </form>
           </section>
 
           <section id="settings-section-encryption" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">

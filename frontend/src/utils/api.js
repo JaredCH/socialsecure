@@ -102,6 +102,7 @@ export const authAPI = {
   getEncryptionPasswordStatus: () => api.get('/auth/encryption-password/status'),
   setEncryptionPassword: (data) => api.post('/auth/encryption-password/set', data),
   changeEncryptionPassword: (data) => api.post('/auth/encryption-password/change', data),
+  changePassword: (data) => api.post('/auth/password/change', data),
   // 12-hour unlock session
   verifyEncryptionPassword: (password) => api.post('/auth/encryption-password/verify', { encryptionPassword: password }),
   getEncryptionUnlockStatus: () => api.get('/auth/encryption-password/status/unlock'),
@@ -516,7 +517,17 @@ export const moderationAPI = {
   applyAction: (data) => api.post('/moderation/actions', data),
   submitAppeal: (data) => api.post('/moderation/appeals', data),
   getAppeals: () => api.get('/moderation/appeals'),
-  processAppeal: (reportId, data) => api.put(`/moderation/appeals/${encodeURIComponent(reportId)}`, data)
+  processAppeal: (reportId, data) => api.put(`/moderation/appeals/${encodeURIComponent(reportId)}`, data),
+  getControlPanelOverview: () => api.get('/moderation/control-panel/overview'),
+  getControlPanelDetails: (params = {}) => api.get('/moderation/control-panel/details', { params }),
+  resetUserPassword: (userId) => api.post(`/moderation/control-panel/users/${encodeURIComponent(userId)}/reset-password`),
+  muteUserByAdmin: (userId, data) => api.post(`/moderation/control-panel/users/${encodeURIComponent(userId)}/mute`, data),
+  unmuteUserByAdmin: (userId) => api.delete(`/moderation/control-panel/users/${encodeURIComponent(userId)}/mute`),
+  addInfraction: (userId, data) => api.post(`/moderation/control-panel/users/${encodeURIComponent(userId)}/infractions`, data),
+  removeInfraction: (userId, infractionIndex) => api.delete(`/moderation/control-panel/users/${encodeURIComponent(userId)}/infractions/${encodeURIComponent(infractionIndex)}`),
+  deletePostByAdmin: (postId) => api.delete(`/moderation/control-panel/posts/${encodeURIComponent(postId)}`),
+  deleteMessageByAdmin: (messageId, type = 'room') => api.delete(`/moderation/control-panel/messages/${encodeURIComponent(messageId)}?type=${encodeURIComponent(type)}`),
+  deleteUserByAdmin: (userId) => api.delete(`/moderation/control-panel/users/${encodeURIComponent(userId)}`)
 };
 
 export default api;

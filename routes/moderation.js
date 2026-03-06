@@ -1,5 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const Report = require('../models/Report');
@@ -7,9 +10,44 @@ const BlockList = require('../models/BlockList');
 const MuteList = require('../models/MuteList');
 const User = require('../models/User');
 const Post = require('../models/Post');
+const ChatMessage = require('../models/ChatMessage');
+const ConversationMessage = require('../models/ConversationMessage');
+const ChatRoom = require('../models/ChatRoom');
+const ChatConversation = require('../models/ChatConversation');
 
 const REPORT_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const REPORT_LIMIT_MAX = 5;
+const CONTROL_PANEL_MUTE_DURATIONS = {
+  '24h': 24,
+  '48h': 48,
+  '72h': 72,
+  '5d': 120,
+  '7d': 168,
+  '1m': 720,
+  forever: null
+};
+const moderationRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many moderation requests. Please try again later.' }
+});
+
+router.use(moderationRateLimiter);
+
+const toUserSummary = (user) => ({
+  _id: user?._id,
+  username: user?.username || '',
+  realName: user?.realName || '',
+  isAdmin: !!user?.isAdmin,
+  registrationStatus: user?.registrationStatus || 'pending',
+  moderationStatus: user?.moderationStatus || 'active',
+  mutedUntil: user?.mutedUntil || null,
+  muteReason: user?.muteReason || '',
+  mustResetPassword: !!user?.mustResetPassword,
+  createdAt: user?.createdAt || null
+});
 
 const authenticateToken = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -259,6 +297,452 @@ router.delete('/mute/:userId', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Unmute user error:', error);
     return res.status(500).json({ error: 'Failed to unmute user' });
+  }
+});
+
+router.get('/control-panel/overview', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const [
+      userCount,
+      postCount,
+      chatMessageCount,
+      directMessageCount,
+      reportCount,
+      blockCount,
+      muteCount,
+      roomCount,
+      conversationCount,
+      recentUsers,
+      recentPosts,
+      recentRoomMessages,
+      recentDirectMessages
+    ] = await Promise.all([
+      User.countDocuments({}),
+      Post.countDocuments({}),
+      ChatMessage.countDocuments({}),
+      ConversationMessage.countDocuments({}),
+      Report.countDocuments({}),
+      BlockList.countDocuments({}),
+      MuteList.countDocuments({}),
+      ChatRoom.countDocuments({}),
+      ChatConversation.countDocuments({}),
+      User.find({}).sort({ createdAt: -1 }).limit(12).select('_id username realName isAdmin registrationStatus moderationStatus mutedUntil muteReason mustResetPassword createdAt').lean(),
+      Post.find({})
+        .sort({ createdAt: -1 })
+        .limit(12)
+        .populate('authorId', 'username realName')
+        .populate('targetFeedId', 'username realName')
+        .lean(),
+      ChatMessage.find({})
+        .sort({ createdAt: -1 })
+        .limit(12)
+        .populate('userId', 'username realName')
+        .populate('roomId', 'name')
+        .lean(),
+      ConversationMessage.find({})
+        .sort({ createdAt: -1 })
+        .limit(12)
+        .populate('userId', 'username realName')
+        .populate('conversationId', 'type title')
+        .lean()
+    ]);
+
+    return res.json({
+      totals: {
+        users: userCount,
+        posts: postCount,
+        chatRoomMessages: chatMessageCount,
+        directMessages: directMessageCount,
+        allMessages: chatMessageCount + directMessageCount,
+        reports: reportCount,
+        blocks: blockCount,
+        mutes: muteCount,
+        rooms: roomCount,
+        conversations: conversationCount
+      },
+      recents: {
+        users: recentUsers.map(toUserSummary),
+        posts: recentPosts.map((post) => ({
+          _id: post._id,
+          content: post.content || '',
+          createdAt: post.createdAt,
+          author: post.authorId ? { _id: post.authorId._id, username: post.authorId.username, realName: post.authorId.realName } : null,
+          targetFeed: post.targetFeedId ? { _id: post.targetFeedId._id, username: post.targetFeedId.username, realName: post.targetFeedId.realName } : null
+        })),
+        messages: [
+          ...recentRoomMessages.map((message) => ({
+            _id: message._id,
+            type: 'room',
+            content: message.content || '',
+            createdAt: message.createdAt,
+            user: message.userId ? { _id: message.userId._id, username: message.userId.username, realName: message.userId.realName } : null,
+            room: message.roomId ? { _id: message.roomId._id, name: message.roomId.name || '' } : null
+          })),
+          ...recentDirectMessages.map((message) => ({
+            _id: message._id,
+            type: 'conversation',
+            content: message.content || '',
+            createdAt: message.createdAt,
+            user: message.userId ? { _id: message.userId._id, username: message.userId.username, realName: message.userId.realName } : null,
+            conversation: message.conversationId ? { _id: message.conversationId._id, type: message.conversationId.type, title: message.conversationId.title || '' } : null
+          }))
+        ]
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 20)
+      },
+      muteDurations: Object.keys(CONTROL_PANEL_MUTE_DURATIONS)
+    });
+  } catch (error) {
+    console.error('Control panel overview error:', error);
+    return res.status(500).json({ error: 'Failed to load control panel overview' });
+  }
+});
+
+router.get('/control-panel/details', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const section = String(req.query.section || 'users');
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+    const skip = (page - 1) * limit;
+
+    if (section === 'users') {
+      const [users, total] = await Promise.all([
+        User.find({})
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .select('_id username realName isAdmin registrationStatus moderationStatus mutedUntil muteReason mustResetPassword moderationHistory createdAt')
+          .lean(),
+        User.countDocuments({})
+      ]);
+      return res.json({
+        section,
+        rows: users.map((user) => ({ ...toUserSummary(user), moderationHistory: Array.isArray(user.moderationHistory) ? user.moderationHistory : [] })),
+        pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
+      });
+    }
+
+    if (section === 'posts') {
+      const [posts, total] = await Promise.all([
+        Post.find({})
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('authorId', 'username realName')
+          .populate('targetFeedId', 'username realName')
+          .lean(),
+        Post.countDocuments({})
+      ]);
+      return res.json({
+        section,
+        rows: posts.map((post) => ({
+          _id: post._id,
+          content: post.content || '',
+          createdAt: post.createdAt,
+          visibility: post.visibility,
+          author: post.authorId ? { _id: post.authorId._id, username: post.authorId.username, realName: post.authorId.realName } : null,
+          targetFeed: post.targetFeedId ? { _id: post.targetFeedId._id, username: post.targetFeedId.username, realName: post.targetFeedId.realName } : null
+        })),
+        pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
+      });
+    }
+
+    if (section === 'messages') {
+      const [roomMessages, directMessages] = await Promise.all([
+        ChatMessage.find({})
+          .sort({ createdAt: -1 })
+          .limit(limit * 2)
+          .populate('userId', 'username realName')
+          .populate('roomId', 'name')
+          .lean(),
+        ConversationMessage.find({})
+          .sort({ createdAt: -1 })
+          .limit(limit * 2)
+          .populate('userId', 'username realName')
+          .populate('conversationId', 'title type')
+          .lean()
+      ]);
+
+      const merged = [
+        ...roomMessages.map((message) => ({
+          _id: message._id,
+          type: 'room',
+          content: message.content || '',
+          createdAt: message.createdAt,
+          user: message.userId ? { _id: message.userId._id, username: message.userId.username, realName: message.userId.realName } : null,
+          room: message.roomId ? { _id: message.roomId._id, name: message.roomId.name || '' } : null
+        })),
+        ...directMessages.map((message) => ({
+          _id: message._id,
+          type: 'conversation',
+          content: message.content || '',
+          createdAt: message.createdAt,
+          user: message.userId ? { _id: message.userId._id, username: message.userId.username, realName: message.userId.realName } : null,
+          conversation: message.conversationId
+            ? { _id: message.conversationId._id, title: message.conversationId.title || '', type: message.conversationId.type || '' }
+            : null
+        }))
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      const total = await Promise.all([ChatMessage.countDocuments({}), ConversationMessage.countDocuments({})])
+        .then(([roomTotal, directTotal]) => roomTotal + directTotal);
+      return res.json({
+        section,
+        rows: merged.slice(skip, skip + limit),
+        pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
+      });
+    }
+
+    if (section === 'infractions') {
+      const users = await User.find({ 'moderationHistory.0': { $exists: true } })
+        .select('_id username realName moderationHistory')
+        .sort({ updatedAt: -1 })
+        .lean();
+
+      const infractions = users.flatMap((user) => (user.moderationHistory || []).map((entry, index) => ({
+        userId: user._id,
+        username: user.username || '',
+        realName: user.realName || '',
+        index,
+        ...entry
+      })));
+
+      return res.json({
+        section,
+        rows: infractions.slice(skip, skip + limit),
+        pagination: { page, limit, total: infractions.length, totalPages: Math.max(Math.ceil(infractions.length / limit), 1) }
+      });
+    }
+
+    return res.status(400).json({ error: 'Unsupported control panel section' });
+  } catch (error) {
+    console.error('Control panel details error:', error);
+    return res.status(500).json({ error: 'Failed to load control panel details' });
+  }
+});
+
+router.post('/control-panel/users/:userId/reset-password', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const temporaryPassword = Array.from({ length: 8 }, () => String(crypto.randomInt(0, 10))).join('');
+    user.passwordHash = await bcrypt.hash(temporaryPassword, 12);
+    user.mustResetPassword = true;
+    user.moderationHistory.push({
+      action: 'password_reset',
+      reason: 'Admin initiated one-time login password reset',
+      duration: null,
+      appliedBy: req.user._id,
+      expiresAt: null
+    });
+    await user.save();
+
+    return res.json({
+      success: true,
+      temporaryPassword,
+      message: 'Temporary password generated. User must change password after login.'
+    });
+  } catch (error) {
+    console.error('Control panel reset password error:', error);
+    return res.status(500).json({ error: 'Failed to reset user password' });
+  }
+});
+
+router.post('/control-panel/users/:userId/mute', [
+  authenticateToken,
+  requireAdmin,
+  body('durationKey').isIn(Object.keys(CONTROL_PANEL_MUTE_DURATIONS)),
+  body('reason').optional().isString().isLength({ max: 1000 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const durationHours = CONTROL_PANEL_MUTE_DURATIONS[req.body.durationKey];
+    const mutedUntil = durationHours === null ? null : new Date(Date.now() + durationHours * 60 * 60 * 1000);
+
+    user.mutedUntil = mutedUntil;
+    user.muteReason = req.body.reason || '';
+    user.moderationStatus = 'suspended';
+    user.moderationHistory.push({
+      action: 'mute',
+      reason: req.body.reason || `Muted (${req.body.durationKey})`,
+      duration: durationHours === null ? null : durationHours / 24,
+      appliedBy: req.user._id,
+      expiresAt: mutedUntil
+    });
+    await user.save();
+
+    return res.json({
+      success: true,
+      mutedUntil,
+      durationKey: req.body.durationKey
+    });
+  } catch (error) {
+    console.error('Control panel mute user error:', error);
+    return res.status(500).json({ error: 'Failed to mute user' });
+  }
+});
+
+router.delete('/control-panel/users/:userId/mute', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    user.mutedUntil = null;
+    user.muteReason = '';
+    if (user.moderationStatus === 'suspended') {
+      user.moderationStatus = 'active';
+    }
+    user.moderationHistory.push({
+      action: 'unmute',
+      reason: 'Mute removed by admin',
+      duration: null,
+      appliedBy: req.user._id,
+      expiresAt: null
+    });
+    await user.save();
+
+    return res.json({ success: true, message: 'User unmuted' });
+  } catch (error) {
+    console.error('Control panel unmute user error:', error);
+    return res.status(500).json({ error: 'Failed to unmute user' });
+  }
+});
+
+router.post('/control-panel/users/:userId/infractions', [
+  authenticateToken,
+  requireAdmin,
+  body('action').isIn(['warning', 'suspension', 'ban']),
+  body('reason').optional().isString().isLength({ max: 1000 }),
+  body('durationDays').optional().isInt({ min: 1, max: 3650 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const durationDays = req.body.durationDays ? Number(req.body.durationDays) : null;
+    user.moderationStatus = req.body.action === 'warning' ? 'warned' : req.body.action === 'suspension' ? 'suspended' : 'banned';
+    user.registrationStatus = req.body.action === 'warning' ? 'active' : 'suspended';
+    user.moderationHistory.push({
+      action: req.body.action,
+      reason: req.body.reason || '',
+      duration: durationDays,
+      appliedBy: req.user._id,
+      expiresAt: durationDays ? new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000) : null
+    });
+    await user.save();
+
+    return res.json({ success: true, moderationStatus: user.moderationStatus });
+  } catch (error) {
+    console.error('Control panel add infraction error:', error);
+    return res.status(500).json({ error: 'Failed to add infraction' });
+  }
+});
+
+router.delete('/control-panel/users/:userId/infractions/:infractionIndex', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const index = Number.parseInt(req.params.infractionIndex, 10);
+    if (!Number.isInteger(index) || index < 0 || index >= user.moderationHistory.length) {
+      return res.status(400).json({ error: 'Invalid infraction index' });
+    }
+
+    user.moderationHistory.splice(index, 1);
+    user.moderationHistory.push({
+      action: 'infraction_removed',
+      reason: 'Admin removed infraction record',
+      duration: null,
+      appliedBy: req.user._id,
+      expiresAt: null
+    });
+    await user.save();
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Control panel remove infraction error:', error);
+    return res.status(500).json({ error: 'Failed to remove infraction' });
+  }
+});
+
+router.delete('/control-panel/posts/:postId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const deleted = await Post.findByIdAndDelete(req.params.postId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Control panel delete post error:', error);
+    return res.status(500).json({ error: 'Failed to delete post' });
+  }
+});
+
+router.delete('/control-panel/messages/:messageId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const messageType = String(req.query.type || 'room');
+    const deleted = messageType === 'conversation'
+      ? await ConversationMessage.findByIdAndDelete(req.params.messageId)
+      : await ChatMessage.findByIdAndDelete(req.params.messageId);
+
+    if (!deleted) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Control panel delete message error:', error);
+    return res.status(500).json({ error: 'Failed to delete message' });
+  }
+});
+
+router.delete('/control-panel/users/:userId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    if (String(req.user._id) === String(req.params.userId)) {
+      return res.status(400).json({ error: 'Admin cannot delete their own account' });
+    }
+
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await Promise.all([
+      Post.deleteMany({ $or: [{ authorId: user._id }, { targetFeedId: user._id }] }),
+      ChatMessage.deleteMany({ userId: user._id }),
+      ConversationMessage.deleteMany({ userId: user._id }),
+      Report.deleteMany({ $or: [{ reporterId: user._id }, { targetUserId: user._id }] }),
+      BlockList.deleteMany({ $or: [{ userId: user._id }, { blockedUserId: user._id }] }),
+      MuteList.deleteMany({ $or: [{ userId: user._id }, { mutedUserId: user._id }] }),
+      User.findByIdAndDelete(user._id)
+    ]);
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Control panel delete user error:', error);
+    return res.status(500).json({ error: 'Failed to delete user' });
   }
 });
 

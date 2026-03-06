@@ -235,7 +235,7 @@ const userSchema = new mongoose.Schema({
   moderationHistory: [{
     action: {
       type: String,
-      enum: ['warning', 'suspension', 'ban']
+      enum: ['warning', 'suspension', 'ban', 'mute', 'unmute', 'infraction_added', 'infraction_removed', 'password_reset']
     },
     reason: {
       type: String,
@@ -262,6 +262,19 @@ const userSchema = new mongoose.Schema({
   isAdmin: {
     type: Boolean,
     default: false
+  },
+  mustResetPassword: {
+    type: Boolean,
+    default: false
+  },
+  mutedUntil: {
+    type: Date,
+    default: null
+  },
+  muteReason: {
+    type: String,
+    trim: true,
+    default: ''
   },
   notificationPreferences: {
     likes: {
@@ -353,7 +366,8 @@ userSchema.index({ registrationStatus: 1, createdAt: -1 });
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
-  if (this.isModified('passwordHash') && this.passwordHash) {
+  const looksLikeBcryptHash = typeof this.passwordHash === 'string' && /^\$2[aby]\$\d{2}\$/.test(this.passwordHash);
+  if (this.isModified('passwordHash') && this.passwordHash && !looksLikeBcryptHash) {
     this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
   }
   const normalizedSocialPreferences = normalizeSocialPagePreferences(this.socialPagePreferences, {
@@ -415,6 +429,9 @@ userSchema.methods.toPublicProfile = function() {
     hasEncryptionPassword,
     isAdmin: !!this.isAdmin,
     moderationStatus: this.moderationStatus || 'active',
+    mustResetPassword: !!this.mustResetPassword,
+    mutedUntil: this.mutedUntil || null,
+    muteReason: this.muteReason || '',
     unreadNotificationCount: this.unreadNotificationCount || 0,
     notificationPreferences: this.notificationPreferences || {
       likes: { inApp: true, email: false, push: false },
