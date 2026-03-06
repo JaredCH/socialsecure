@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const User = require('../models/User');
 const Post = require('../models/Post');
@@ -18,6 +19,13 @@ const sanitizeSourceParam = (value) => {
   const trimmed = value.trim().slice(0, 120);
   return trimmed || 'unknown';
 };
+const publicReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 180,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many public requests, please try again shortly.' }
+});
 
 const parsePagination = (query) => {
   const page = Number.parseInt(query.page, 10);
@@ -195,7 +203,7 @@ const toPublicPost = (post) => ({
 });
 
 // GET /api/public/users/:username
-router.get('/users/:username', async (req, res) => {
+router.get('/users/:username', publicReadLimiter, async (req, res) => {
   try {
     const user = await findUserByIdOrUsername(req.params.username);
 
@@ -228,7 +236,7 @@ router.get('/users/:username', async (req, res) => {
 });
 
 // GET /api/public/users/:username/resume
-router.get('/users/:username/resume', async (req, res) => {
+router.get('/users/:username/resume', publicReadLimiter, async (req, res) => {
   try {
     const user = await findUserByIdOrUsername(req.params.username);
 
@@ -289,7 +297,7 @@ router.get('/users/:username/resume', async (req, res) => {
 });
 
 // POST /api/public/users/:username/resume/link-click
-router.post('/users/:username/resume/link-click', async (req, res) => {
+router.post('/users/:username/resume/link-click', publicReadLimiter, async (req, res) => {
   try {
     const user = await findUserByIdOrUsername(req.params.username);
     if (!user) {
@@ -327,7 +335,7 @@ router.post('/users/:username/resume/link-click', async (req, res) => {
 });
 
 // GET /api/public/users/:userId/feed?page=&limit=
-router.get('/users/:userId/feed', async (req, res) => {
+router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
   try {
     const user = await findUserByIdOrUsername(req.params.userId);
     if (!user) {

@@ -395,11 +395,12 @@ const Social = () => {
   }, []);
 
   const loadAuthenticatedFeed = useCallback(async () => {
-    const profileResponse = await authAPI.getProfile();
+    const [profileResponse, resumeMetaResponse] = await Promise.all([
+      authAPI.getProfile(),
+      resumeAPI.getMyResume().catch(() => null)
+    ]);
     const user = profileResponse.data?.user;
     setCurrentUser(user || null);
-
-    const resumeMetaResponse = await resumeAPI.getMyResume().catch(() => null);
     setOwnerResumeMeta(resumeMetaResponse?.data?.resume || null);
 
     const [circlesResponse, friendsResponse] = await Promise.all([

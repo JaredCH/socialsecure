@@ -1,9 +1,17 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const Resume = require('../models/Resume');
 const User = require('../models/User');
 
 const router = express.Router();
+const resumeOwnerLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many resume requests, please try again shortly.' }
+});
 
 const sanitizeString = (value, maxLength = 200) => {
   if (typeof value !== 'string') return '';
@@ -46,12 +54,17 @@ const sanitizeResumePayload = (input = {}) => {
 };
 
 const authenticateToken = (req, res, next) => {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return res.status(500).json({ error: 'Server authentication is not configured' });
+  }
+
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', (err, decoded) => {
+  jwt.verify(token, jwtSecret, (err, decoded) => {
     if (err || !decoded?.userId) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
@@ -60,7 +73,7 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-const toOwnerResumePayload = (resumeDoc, username = '') => {
+const toOwnerResumePayload = (resumeDoc, ownerUsername = '') => {
   if (!resumeDoc) {
     return {
       hasResume: false,
@@ -74,7 +87,7 @@ const toOwnerResumePayload = (resumeDoc, username = '') => {
   return {
     hasResume: true,
     visibility: resumeDoc.visibility || 'private',
-    resumeUrl: username ? `/resume/${encodeURIComponent(String(username))}` : null,
+    resumeUrl: ownerUsername ? `/resume/${encodeURIComponent(String(ownerUsername))}` : null,
     resumeHeadline: resumeDoc?.basics?.headline || null,
     updatedAt: resumeDoc.updatedAt || null,
     basics: {
@@ -97,7 +110,7 @@ const logResumeEvent = ({ eventType, userId, req, metadata = {} }) => {
   console.log('[resume-event]', JSON.stringify(payload));
 };
 
-router.get('/me', authenticateToken, async (req, res) => {
+router.get('/me', resumeOwnerLimiter, authenticateToken, async (req, res) => {
   try {
     const [resume, user] = await Promise.all([
       Resume.findOne({ userId: req.user.userId })
@@ -114,7 +127,7 @@ router.get('/me', authenticateToken, async (req, res) => {
   }
 });
 
-router.put('/me', authenticateToken, async (req, res) => {
+router.put('/me', resumeOwnerLimiter, authenticateToken, async (req, res) => {
   try {
     const existingResume = await Resume.findOne({ userId: req.user.userId }).select('visibility').lean();
     const update = sanitizeResumePayload(req.body || {});
