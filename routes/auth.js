@@ -25,6 +25,8 @@ const PGP_PUBLIC_KEY_END = '-----END PGP PUBLIC KEY BLOCK-----';
 const PGP_PRIVATE_KEY_BEGIN = '-----BEGIN PGP PRIVATE KEY BLOCK-----';
 const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
 const ONBOARDING_TOTAL_STEPS = 4;
+const LOCATION_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const LOCATION_CHANGE_FIELDS = ['city', 'state', 'country'];
 
 const isSafeHttpUrl = (value) => {
   try {
@@ -55,6 +57,7 @@ const normalizeLinks = (links) => {
 
 const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 const isValidZipCode = (zipCode) => /^(?:\d{5}(?:-\d{4})?|[A-Z]\d[A-Z]\d[A-Z]\d)$/.test(zipCode);
+const normalizeLocationValue = (value) => (typeof value === 'string' ? value.trim() : '');
 
 const normalizePgpPublicKey = (value) => {
   if (typeof value !== 'string') return '';
@@ -326,6 +329,7 @@ router.post('/register', [
       country: countryCode,
       county: normalizedCounty || undefined,
       zipCode: normalizeZipCode(zipCode),
+      locationLastUpdatedAt: new Date(),
       registrationStatus: 'active',
       referralCode: referralCode || require('crypto').randomBytes(4).toString('hex')
     });
@@ -1164,10 +1168,45 @@ router.put('/profile', [
 
     // Update allowed fields
     const { realName, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme, socialPagePreferences } = req.body;
+    const now = Date.now();
+
+    const requestedLocation = {
+      city: normalizeLocationValue(city),
+      state: normalizeLocationValue(state),
+      country: normalizeLocationValue(country)
+    };
+    const hasLocationUpdates = LOCATION_CHANGE_FIELDS.some((field) =>
+      Object.prototype.hasOwnProperty.call(req.body, field) && requestedLocation[field]
+    );
+    if (hasLocationUpdates) {
+      const currentLocation = {
+        city: normalizeLocationValue(user.city),
+        state: normalizeLocationValue(user.state),
+        country: normalizeLocationValue(user.country)
+      };
+      const nextLocation = {
+        city: requestedLocation.city || currentLocation.city,
+        state: requestedLocation.state || currentLocation.state,
+        country: requestedLocation.country || currentLocation.country
+      };
+      const locationChanged = LOCATION_CHANGE_FIELDS.some((field) => nextLocation[field] !== currentLocation[field]);
+
+      if (locationChanged) {
+        const lastLocationUpdateTime = user.locationLastUpdatedAt ? new Date(user.locationLastUpdatedAt).getTime() : null;
+        if (lastLocationUpdateTime && !Number.isNaN(lastLocationUpdateTime) && now - lastLocationUpdateTime < LOCATION_CHANGE_COOLDOWN_MS) {
+          return res.status(429).json({
+            error: 'Location can only be changed once every 7 days'
+          });
+        }
+
+        user.city = nextLocation.city;
+        user.state = nextLocation.state;
+        user.country = nextLocation.country;
+        user.locationLastUpdatedAt = new Date(now);
+      }
+    }
+
     if (realName) user.realName = realName;
-    if (city) user.city = city;
-    if (state) user.state = state;
-    if (country) user.country = country;
 
     if (Object.prototype.hasOwnProperty.call(req.body, 'bio')) {
       user.bio = (bio || '').trim();

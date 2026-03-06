@@ -119,6 +119,10 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: null
   },
+  locationLastUpdatedAt: {
+    type: Date,
+    default: null
+  },
   registrationStatus: {
     type: String,
     enum: ['pending', 'active', 'suspended'],
