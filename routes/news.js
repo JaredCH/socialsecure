@@ -252,11 +252,36 @@ const geocodeFromZipContext = async ({ zipCodeValues = [], countryValues = [] })
         return results[0];
       }
     } catch (error) {
+      console.warn('News zip geocode lookup failed:', normalizedQuery, error.message);
       continue;
     }
   }
 
   return null;
+};
+
+const shouldEnrichWithZipGeocode = (context) => (
+  context.zipCodeValues.length > 0
+  && (!context.cityValues.length || !context.countyValues.length || !context.stateValues.length)
+);
+
+const applyZipGeocodeToLocationContext = (context, zipGeocode) => {
+  const derivedCity = zipGeocode.city || zipGeocode.town || zipGeocode.village || null;
+  const derivedCounty = zipGeocode.county || null;
+  const derivedState = zipGeocode.state || zipGeocode.stateCode || null;
+  const derivedCountry = zipGeocode.countryCode || zipGeocode.country || null;
+  return {
+    ...context,
+    city: context.city || derivedCity,
+    county: context.county || derivedCounty,
+    state: context.state || derivedState,
+    country: context.country || derivedCountry,
+    cityValues: toUniqueNonEmptyStrings([...context.cityValues, derivedCity]),
+    countyValues: toUniqueNonEmptyStrings([...context.countyValues, derivedCounty]),
+    stateValues: toUniqueNonEmptyStrings([...context.stateValues, zipGeocode.state, zipGeocode.stateCode]),
+    countryValues: toUniqueNonEmptyStrings([...context.countryValues, zipGeocode.country, zipGeocode.countryCode]),
+    source: `${context.source}+zipLookup`
+  };
 };
 
 const resolveLocationContext = async ({ preferences, user }) => {
@@ -283,28 +308,13 @@ const resolveLocationContext = async ({ preferences, user }) => {
       zipCodeValues,
       source: 'preferences'
     };
-    if (context.zipCodeValues.length > 0 && (!context.cityValues.length || !context.countyValues.length || !context.stateValues.length)) {
+    if (shouldEnrichWithZipGeocode(context)) {
       const zipGeocode = await geocodeFromZipContext({
         zipCodeValues: context.zipCodeValues,
         countryValues: context.countryValues
       });
       if (zipGeocode) {
-        const derivedCity = zipGeocode.city || zipGeocode.town || zipGeocode.village || null;
-        const derivedCounty = zipGeocode.county || null;
-        const derivedState = zipGeocode.state || zipGeocode.stateCode || null;
-        const derivedCountry = zipGeocode.countryCode || zipGeocode.country || null;
-        return {
-          ...context,
-          city: context.city || derivedCity,
-          county: context.county || derivedCounty,
-          state: context.state || derivedState,
-          country: context.country || derivedCountry,
-          cityValues: toUniqueNonEmptyStrings([...context.cityValues, derivedCity]),
-          countyValues: toUniqueNonEmptyStrings([...context.countyValues, derivedCounty]),
-          stateValues: toUniqueNonEmptyStrings([...context.stateValues, zipGeocode.state, zipGeocode.stateCode]),
-          countryValues: toUniqueNonEmptyStrings([...context.countryValues, zipGeocode.country, zipGeocode.countryCode]),
-          source: `${context.source}+zipLookup`
-        };
+        return applyZipGeocodeToLocationContext(context, zipGeocode);
       }
     }
     return context;
@@ -319,28 +329,13 @@ const resolveLocationContext = async ({ preferences, user }) => {
       zipCodeValues,
       source: 'profile'
     };
-    if (context.zipCodeValues.length > 0 && (!context.cityValues.length || !context.countyValues.length || !context.stateValues.length)) {
+    if (shouldEnrichWithZipGeocode(context)) {
       const zipGeocode = await geocodeFromZipContext({
         zipCodeValues: context.zipCodeValues,
         countryValues: context.countryValues
       });
       if (zipGeocode) {
-        const derivedCity = zipGeocode.city || zipGeocode.town || zipGeocode.village || null;
-        const derivedCounty = zipGeocode.county || null;
-        const derivedState = zipGeocode.state || zipGeocode.stateCode || null;
-        const derivedCountry = zipGeocode.countryCode || zipGeocode.country || null;
-        return {
-          ...context,
-          city: context.city || derivedCity,
-          county: context.county || derivedCounty,
-          state: context.state || derivedState,
-          country: context.country || derivedCountry,
-          cityValues: toUniqueNonEmptyStrings([...context.cityValues, derivedCity]),
-          countyValues: toUniqueNonEmptyStrings([...context.countyValues, derivedCounty]),
-          stateValues: toUniqueNonEmptyStrings([...context.stateValues, zipGeocode.state, zipGeocode.stateCode]),
-          countryValues: toUniqueNonEmptyStrings([...context.countryValues, zipGeocode.country, zipGeocode.countryCode]),
-          source: `${context.source}+zipLookup`
-        };
+        return applyZipGeocodeToLocationContext(context, zipGeocode);
       }
     }
     return context;
