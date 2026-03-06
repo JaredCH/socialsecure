@@ -181,10 +181,16 @@ function Register({ onSuccess }) {
         <button
           type="submit"
           disabled={submitting || !passwordEvaluation.allRequirementsMet}
+          aria-describedby="password-submit-hint"
           className="w-full bg-blue-600 text-white rounded p-2 disabled:opacity-50"
         >
           {submitting ? 'Creating account...' : 'Create Account'}
         </button>
+        <p id="password-submit-hint" className="text-sm text-gray-600" aria-live="polite">
+          {passwordEvaluation.allRequirementsMet
+            ? 'Password requirements satisfied.'
+            : 'Complete all password requirements to enable account creation.'}
+        </p>
       </form>
 
       <p className="text-sm text-gray-600 mt-4">

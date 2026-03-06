@@ -58,8 +58,12 @@ export const evaluateRegisterPassword = (password = '') => {
   }));
 
   const metCount = requirementChecks.filter((requirement) => requirement.met).length;
-  const lengthBonus = password.length >= 12 ? 1 : 0;
-  const strengthScore = Math.min(metCount + lengthBonus, PASSWORD_STRENGTH_LABELS.length - 1);
+  let strengthScore = 0;
+  if (metCount >= 1) strengthScore = 1;
+  if (metCount >= 2) strengthScore = 2;
+  if (metCount === REGISTER_PASSWORD_REQUIREMENTS.length && password.length >= 12) {
+    strengthScore = 3;
+  }
 
   return {
     requirementChecks,

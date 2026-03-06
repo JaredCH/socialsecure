@@ -1,3 +1,12 @@
+jest.mock('axios', () => ({
+  create: () => ({
+    interceptors: {
+      request: { use: jest.fn() },
+      response: { use: jest.fn() }
+    }
+  })
+}));
+
 import { evaluateRegisterPassword } from './api';
 
 describe('evaluateRegisterPassword', () => {
@@ -15,6 +24,13 @@ describe('evaluateRegisterPassword', () => {
     expect(evaluation.allRequirementsMet).toBe(true);
     expect(evaluation.requirementChecks.every((requirement) => requirement.met)).toBe(true);
     expect(evaluation.strengthLabel).toBe('Good');
+  });
+
+  it('returns fair when only one requirement is satisfied', () => {
+    const evaluation = evaluateRegisterPassword('abcdefgh');
+
+    expect(evaluation.allRequirementsMet).toBe(false);
+    expect(evaluation.strengthLabel).toBe('Fair');
   });
 
   it('returns strong when requirements are met and password is longer', () => {
