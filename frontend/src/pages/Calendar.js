@@ -304,6 +304,16 @@ function Calendar() {
     });
   };
 
+  const handleDayClick = (day, dayEvents) => {
+    if (dayEvents[0]) {
+      openEventModal(dayEvents[0]);
+      return;
+    }
+    if (isOwner) {
+      openCreateModal(day);
+    }
+  };
+
   const monthDays = useMemo(() => buildMonthGrid(anchorDate), [anchorDate]);
   const weekDays = useMemo(() => {
     const weekStart = getWeekStart(anchorDate);
@@ -448,7 +458,7 @@ function Calendar() {
                     <button
                       key={day.toISOString()}
                       type="button"
-                      onClick={() => (dayEvents[0] ? openEventModal(dayEvents[0]) : isOwner ? openCreateModal(day) : null)}
+                      onClick={() => handleDayClick(day, dayEvents)}
                       className={`min-h-[120px] border-b border-r border-gray-100 p-2 text-left align-top ${inActiveMonth ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50`}
                     >
                       <p className={`text-xs font-semibold ${isToday ? 'text-blue-700' : 'text-gray-500'}`}>{day.getDate()}</p>

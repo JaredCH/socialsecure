@@ -272,6 +272,11 @@ const buildEventPayload = (input) => {
   const startAt = new Date(input.startAt);
   const endAt = new Date(input.endAt);
 
+  const announceTarget = ['feed', 'post'].includes(input.announceTarget) ? input.announceTarget : 'none';
+  const announceToFeed = typeof input.announceToFeed === 'boolean'
+    ? input.announceToFeed
+    : announceTarget !== 'none';
+
   return {
     title,
     description,
@@ -288,8 +293,8 @@ const buildEventPayload = (input) => {
         .filter(Boolean)
         .slice(0, 20)
       : [],
-    announceToFeed: Boolean(input.announceToFeed || ['feed', 'post'].includes(input.announceTarget)),
-    announceTarget: ['feed', 'post'].includes(input.announceTarget) ? input.announceTarget : 'none',
+    announceToFeed,
+    announceTarget,
     relationshipAudience: normalizeRelationshipAudience(input.relationshipAudience)
   };
 };
