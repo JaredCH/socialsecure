@@ -17,6 +17,16 @@ import {
   unlockOrCreateVault
 } from '../utils/e2ee';
 import EncryptionUnlockModal from '../components/EncryptionUnlockModal';
+import TypingIndicator from '../components/TypingIndicator';
+import {
+  emitTypingStart,
+  emitTypingStop,
+  getRealtimeSocket,
+  joinRealtimeRoom,
+  leaveRealtimeRoom,
+  onChatMessage,
+  onTyping
+} from '../utils/realtime';
 
 const MESSAGE_PAGE_SIZE = {
   INITIAL_LOAD: 500,
@@ -25,6 +35,9 @@ const MESSAGE_PAGE_SIZE = {
 const MAX_MESSAGES_IN_MEMORY = 1200;
 const MAX_VISIBLE_DECRYPT = 120;
 const SCROLL_BOTTOM_THRESHOLD = 48;
+const CHAT_POLL_INTERVAL_MS = 15000;
+const TYPING_TIMEOUT_MS = 900;
+const REMOTE_TYPING_TTL_MS = 3000;
 
 const getMessageId = (message) => String(message?._id || `${message?.e2ee?.clientMessageId || 'msg'}:${message?.createdAt || ''}`);
 
@@ -94,6 +107,7 @@ const Chat = () => {
   const [useMonospace, setUseMonospace] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [typingLabelsByRoom, setTypingLabelsByRoom] = useState({});
 
   const [decrypting, setDecrypting] = useState(false);
   const [decryptErrors, setDecryptErrors] = useState({});
@@ -103,8 +117,11 @@ const Chat = () => {
   const latestPackageSyncByRoomRef = useRef({});
   const messageViewportRef = useRef(null);
   const messageCountRef = useRef(0);
+  const localTypingTimeoutRef = useRef(null);
+  const remoteTypingTimeoutsRef = useRef({});
 
   const isUnlocked = Boolean(session);
+  const realtimeEnabled = profile?.realtimePreferences?.enabled !== false;
   const activeRoom = useMemo(
     () => rooms.find((room) => String(room._id) === String(activeRoomId)) || null,
     [rooms, activeRoomId]
@@ -416,6 +433,7 @@ const Chat = () => {
       setNextCursor(null);
       setHasMore(true);
       setUnreadCount(0);
+      setTypingLabelsByRoom({});
       return;
     }
 
@@ -433,6 +451,113 @@ const Chat = () => {
       });
     }
   }, [activeRoomId]);
+
+  useEffect(() => {
+    if (!profile?._id || !realtimeEnabled) {
+      return undefined;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return undefined;
+    }
+
+    getRealtimeSocket({ token, userId: profile._id });
+
+    const offChatMessage = onChatMessage((payload) => {
+      const incoming = payload?.message;
+      if (!incoming?._id) return;
+
+      if (String(incoming.roomId) !== String(activeRoomId)) {
+        return;
+      }
+
+      appendMessage(incoming);
+    });
+
+    const offTyping = onTyping((payload) => {
+      if (payload?.scope !== 'chat' || String(payload?.targetId) !== String(activeRoomId) || !payload?.userId) {
+        return;
+      }
+
+      const timeoutKey = String(payload.userId);
+      if (payload.status === 'stop') {
+        const timeoutId = remoteTypingTimeoutsRef.current[timeoutKey];
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+          delete remoteTypingTimeoutsRef.current[timeoutKey];
+        }
+        setTypingLabelsByRoom((prev) => {
+          const next = { ...(prev[String(activeRoomId)] || {}) };
+          delete next[timeoutKey];
+          return {
+            ...prev,
+            [String(activeRoomId)]: next
+          };
+        });
+        return;
+      }
+
+      setTypingLabelsByRoom((prev) => ({
+        ...prev,
+        [String(activeRoomId)]: {
+          ...(prev[String(activeRoomId)] || {}),
+          [timeoutKey]: payload.label || 'Someone'
+        }
+      }));
+
+      const existingTimeout = remoteTypingTimeoutsRef.current[timeoutKey];
+      if (existingTimeout) {
+        window.clearTimeout(existingTimeout);
+      }
+      remoteTypingTimeoutsRef.current[timeoutKey] = window.setTimeout(() => {
+        setTypingLabelsByRoom((prev) => {
+          const next = { ...(prev[String(activeRoomId)] || {}) };
+          delete next[timeoutKey];
+          return {
+            ...prev,
+            [String(activeRoomId)]: next
+          };
+        });
+        delete remoteTypingTimeoutsRef.current[timeoutKey];
+      }, REMOTE_TYPING_TTL_MS);
+    });
+
+    return () => {
+      offChatMessage();
+      offTyping();
+    };
+  }, [profile?._id, realtimeEnabled, activeRoomId]);
+
+  useEffect(() => {
+    if (!activeRoomId || !profile?._id || !realtimeEnabled) {
+      return undefined;
+    }
+
+    joinRealtimeRoom(activeRoomId);
+    return () => {
+      leaveRealtimeRoom(activeRoomId);
+    };
+  }, [activeRoomId, profile?._id, realtimeEnabled]);
+
+  useEffect(() => {
+    if (!activeRoomId || realtimeEnabled) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      fetchMessagesPage(activeRoomId, null, true);
+    }, CHAT_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeRoomId, realtimeEnabled]);
+
+  useEffect(() => () => {
+    if (localTypingTimeoutRef.current) {
+      window.clearTimeout(localTypingTimeoutRef.current);
+    }
+    Object.values(remoteTypingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+  }, []);
 
   useEffect(() => {
     const decryptVisible = async () => {
@@ -670,6 +795,11 @@ const Chat = () => {
         await sendEncryptedPayload({ plaintext: trimmed, messageType: 'text' });
       }
       setSendValue('');
+      emitTypingStop({ scope: 'chat', targetId: activeRoomId });
+      if (localTypingTimeoutRef.current) {
+        window.clearTimeout(localTypingTimeoutRef.current);
+        localTypingTimeoutRef.current = null;
+      }
       if (isAtBottom) {
         requestAnimationFrame(() => scrollToBottom());
       }
@@ -694,6 +824,33 @@ const Chat = () => {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleInputChange = (value) => {
+    setSendValue(value);
+
+    if (!activeRoomId || !realtimeEnabled || !profile?._id) {
+      return;
+    }
+
+    if (!value.trim()) {
+      emitTypingStop({ scope: 'chat', targetId: activeRoomId });
+      if (localTypingTimeoutRef.current) {
+        window.clearTimeout(localTypingTimeoutRef.current);
+        localTypingTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    emitTypingStart({ scope: 'chat', targetId: activeRoomId });
+    if (localTypingTimeoutRef.current) {
+      window.clearTimeout(localTypingTimeoutRef.current);
+    }
+
+    localTypingTimeoutRef.current = window.setTimeout(() => {
+      emitTypingStop({ scope: 'chat', targetId: activeRoomId });
+      localTypingTimeoutRef.current = null;
+    }, TYPING_TIMEOUT_MS);
   };
 
   return (
@@ -874,11 +1031,20 @@ const Chat = () => {
             {decrypting ? <span className="text-xs text-gray-500 self-center">Decrypting visible messages...</span> : null}
           </div>
 
+          {!realtimeEnabled ? (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+              Real-time chat updates are disabled. This room will fall back to periodic refreshes.
+            </div>
+          ) : null}
+
+          <TypingIndicator labels={Object.values(typingLabelsByRoom[String(activeRoomId)] || {})} />
+
           <form onSubmit={handleSend} className="flex gap-2">
             <input
               type="text"
               value={sendValue}
-              onChange={(event) => setSendValue(event.target.value)}
+              onChange={(event) => handleInputChange(event.target.value)}
+              onBlur={() => emitTypingStop({ scope: 'chat', targetId: activeRoomId })}
               disabled={!isUnlocked || !activeRoomId || sending}
               className="flex-1 border rounded p-2"
               maxLength={2000}

@@ -248,35 +248,9 @@ const io = require('socket.io')(server, {
 });
 
 const { setNotificationIo } = require('./services/notifications');
+const { initializeRealtime } = require('./services/realtime');
 setNotificationIo(io);
 
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
-
-  const authUserId = String(socket?.handshake?.auth?.userId || '').trim();
-  if (authUserId) {
-    socket.join(`user:${authUserId}`);
-  }
-
-  socket.on('join-user', (userId) => {
-    const normalizedUserId = String(userId || '').trim();
-    if (!normalizedUserId) return;
-    socket.join(`user:${normalizedUserId}`);
-  });
-  
-  socket.on('join-room', (roomId) => {
-    socket.join(roomId);
-    console.log(`Socket ${socket.id} joined room ${roomId}`);
-  });
-  
-  socket.on('send-message', (data) => {
-    io.to(data.roomId).emit('new-message', data);
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
-});
+initializeRealtime(io);
 
 module.exports = { app, server };

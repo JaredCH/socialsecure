@@ -10,6 +10,7 @@ const BlockList = require('../models/BlockList');
 const RoomKeyPackage = require('../models/RoomKeyPackage');
 const User = require('../models/User');
 const { createNotification } = require('../services/notifications');
+const { emitChatMessage } = require('../services/realtime');
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -576,7 +577,10 @@ router.post('/rooms/:roomId/messages', [
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
     
     // Broadcast message via WebSocket (handled in server.js)
-    // The WebSocket server will handle real-time broadcasting
+    emitChatMessage({
+      userIds: room.members,
+      message: message.toPublicMessage()
+    });
     
     res.status(201).json({
       success: true,
@@ -728,6 +732,11 @@ router.post('/rooms/:roomId/messages/e2ee', [
 
     const senderLabel = user.username || user.realName || 'Someone';
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
+
+    emitChatMessage({
+      userIds: room.members,
+      message: message.toPublicMessage()
+    });
 
     return res.status(201).json({
       success: true,
@@ -1358,6 +1367,10 @@ router.post('/rooms/:roomId/join', authenticateToken, async (req, res) => {
       });
       await room.incrementMessageCount();
       systemMessage = event.toPublicMessage();
+      emitChatMessage({
+        userIds: room.members,
+        message: systemMessage
+      });
     }
     
     res.json({
@@ -1412,6 +1425,10 @@ router.post('/rooms/:roomId/leave', authenticateToken, async (req, res) => {
       });
       await room.incrementMessageCount();
       systemMessage = event.toPublicMessage();
+      emitChatMessage({
+        userIds: [userId, ...(Array.isArray(room.members) ? room.members : [])],
+        message: systemMessage
+      });
     }
     
     res.json({
