@@ -45,6 +45,7 @@ const buildDefaultSocialPagePreferences = (profileTheme = 'default') => {
     sectionOrder: [...SOCIAL_DEFAULT_SECTION_ORDER],
     hiddenSections: [],
     hiddenModules: [],
+    // Version is persisted for future safe migrations when preference shape evolves.
     version: SOCIAL_PREFERENCES_VERSION
   };
 };

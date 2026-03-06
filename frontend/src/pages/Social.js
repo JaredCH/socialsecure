@@ -37,6 +37,7 @@ const PRIVACY_BADGE_LABELS = {
 
 const SOCIAL_SECTION_IDS = ['header', 'shortcuts', 'snapshot', 'guestLookup', 'composer', 'circles', 'timeline', 'gallery', 'moderation', 'chatPanel', 'communityNotes'];
 const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
+const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest'];
 const THEME_TO_DEFAULT_ACCENT = {
   default: 'blue',
   light: 'violet',
@@ -72,9 +73,9 @@ const uniqueStrings = (items) => {
 };
 
 const normalizeSocialPreferences = (input, profileTheme = 'default') => {
-  const themePreset = ['default', 'light', 'dark', 'sunset', 'forest'].includes(input?.themePreset)
+  const themePreset = SOCIAL_THEME_PRESETS.includes(input?.themePreset)
     ? input.themePreset
-    : (['default', 'light', 'dark', 'sunset', 'forest'].includes(profileTheme) ? profileTheme : 'default');
+    : (SOCIAL_THEME_PRESETS.includes(profileTheme) ? profileTheme : 'default');
   const allowedAccents = THEME_TO_ALLOWED_ACCENTS[themePreset] || THEME_TO_ALLOWED_ACCENTS.default;
   const accentColorToken = allowedAccents.includes(input?.accentColorToken)
     ? input.accentColorToken
@@ -83,10 +84,6 @@ const normalizeSocialPreferences = (input, profileTheme = 'default') => {
   const requestedOrder = uniqueStrings(input?.sectionOrder).filter((id) => SOCIAL_SECTION_IDS.includes(id));
   const sectionOrder = [...requestedOrder, ...SOCIAL_SECTION_IDS.filter((id) => !requestedOrder.includes(id))];
   const hiddenSections = uniqueStrings(input?.hiddenSections).filter((id) => SOCIAL_SECTION_IDS.includes(id) && id !== 'header');
-  if (hiddenSections.includes('timeline') && hiddenSections.includes('gallery')) {
-    const index = hiddenSections.indexOf('timeline');
-    if (index >= 0) hiddenSections.splice(index, 1);
-  }
   const hiddenModules = uniqueStrings(input?.hiddenModules).filter((id) => SOCIAL_MODULE_IDS.includes(id));
 
   return {

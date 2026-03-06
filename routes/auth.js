@@ -13,6 +13,7 @@ const {
   SOCIAL_ACCENT_TOKENS,
   SOCIAL_SECTION_IDS,
   SOCIAL_MODULE_IDS,
+  SOCIAL_PRIMARY_SECTION_IDS,
   THEME_TO_ALLOWED_ACCENTS,
   normalizeSocialPagePreferences
 } = require('../utils/socialPagePreferences');
@@ -1117,8 +1118,8 @@ router.put('/profile', [
         throw new Error('Header section cannot be hidden');
       }
 
-      const visiblePrimaryCount = ['timeline', 'gallery']
-        .filter((sectionId) => SOCIAL_SECTION_IDS.includes(sectionId) && !hiddenSections.includes(sectionId))
+      const visiblePrimaryCount = SOCIAL_PRIMARY_SECTION_IDS
+        .filter((sectionId) => !hiddenSections.includes(sectionId))
         .length;
       if (visiblePrimaryCount === 0) {
         throw new Error('At least one primary section must remain visible');
@@ -1174,7 +1175,7 @@ router.put('/profile', [
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'socialPagePreferences')) {
       const normalizedSocialPreferences = normalizeSocialPagePreferences(socialPagePreferences, {
-        profileTheme: user.profileTheme || profileTheme || 'default',
+        profileTheme: user.profileTheme || 'default',
         strict: true
       });
       if (normalizedSocialPreferences.error || !normalizedSocialPreferences.value) {

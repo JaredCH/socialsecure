@@ -110,8 +110,9 @@ const normalizeSocialPreferences = (input, profileTheme = 'default') => {
     .filter((id) => SOCIAL_SECTION_IDS.includes(id))
     .filter((id) => !SOCIAL_MANDATORY_SECTION_IDS.includes(id));
   if (SOCIAL_PRIMARY_SECTION_IDS.every((id) => hiddenSections.includes(id))) {
-    const timelineIndex = hiddenSections.indexOf('timeline');
-    if (timelineIndex >= 0) hiddenSections.splice(timelineIndex, 1);
+    const restoreSectionId = SOCIAL_PRIMARY_SECTION_IDS[0];
+    const restoreIndex = hiddenSections.indexOf(restoreSectionId);
+    if (restoreIndex >= 0) hiddenSections.splice(restoreIndex, 1);
   }
   const hiddenModules = uniqueStrings(value.hiddenModules).filter((id) => SOCIAL_MODULE_IDS.includes(id));
   return {
@@ -271,8 +272,10 @@ function UserSettings({
   const trackCustomizationEvent = async (eventType, metadata = {}) => {
     try {
       await discoveryAPI.trackEvent(eventType, metadata);
-    } catch {
-      // best-effort telemetry
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('Failed to track customization event', eventType, error?.message || error);
+      }
     }
   };
 
