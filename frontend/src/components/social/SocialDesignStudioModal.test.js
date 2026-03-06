@@ -94,4 +94,41 @@ describe('SocialDesignStudioModal layout studio', () => {
     );
   });
 
+  it('keeps explicit grid placements ahead of auto-placed panels', async () => {
+    await act(async () => {
+      root.render(
+        <SocialDesignStudioModal
+          isOpen
+          onClose={jest.fn()}
+          preferences={{ panels: { timeline: { gridPlacement: { row: 0, col: 0 } } } }}
+          configs={[]}
+          activeConfigId=""
+          sharedDesigns={[]}
+          favoriteDesigns={[]}
+          onApplyTemplate={jest.fn()}
+          onGlobalStylesChange={jest.fn()}
+          onPanelOverrideToggle={jest.fn()}
+          onPanelStyleChange={jest.fn()}
+          onPanelLayoutChange={jest.fn()}
+          onCreateConfig={jest.fn()}
+          onUpdateConfig={jest.fn()}
+          onApplyConfig={jest.fn()}
+          onDuplicateConfig={jest.fn()}
+          onDeleteConfig={jest.fn()}
+          onFavoriteShared={jest.fn()}
+          onCloneShared={jest.fn()}
+          busy={false}
+          error=""
+          successMessage=""
+        />
+      );
+    });
+
+    const timelinePreview = Array.from(container.querySelectorAll('div[draggable="true"]'))
+      .find((element) => element.textContent && element.textContent.includes('Timeline'));
+    expect(timelinePreview).toBeTruthy();
+    expect(timelinePreview.style.left).toBe('calc(0% + 4px)');
+    expect(timelinePreview.style.top).toBe('calc(0% + 4px)');
+  });
+
 });
