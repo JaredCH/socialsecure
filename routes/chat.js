@@ -2,12 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
 const DeviceKey = require('../models/DeviceKey');
 const SecurityEvent = require('../models/SecurityEvent');
 const BlockList = require('../models/BlockList');
 const RoomKeyPackage = require('../models/RoomKeyPackage');
+const ChatConversation = require('../models/ChatConversation');
+const ConversationMessage = require('../models/ConversationMessage');
 const User = require('../models/User');
 const { createNotification } = require('../services/notifications');
 const { emitChatMessage } = require('../services/realtime');
@@ -84,6 +87,15 @@ const E2EE_LIMITS = {
   hashAlgorithm: 32,
   publicKey: 16384
 };
+const NEARBY_ZIP_THRESHOLD = 25;
+const MAX_NEARBY_ZIP_ROOMS = 100;
+const unifiedChatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many chat requests, please slow down.' }
+});
 
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 500;
@@ -130,6 +142,92 @@ const decodeMessageCursor = (cursor) => {
   } catch (error) {
     return { error: 'Malformed cursor' };
   }
+};
+
+const normalizeZipCode = (zipCode) => {
+  if (typeof zipCode !== 'string') return null;
+  const digits = zipCode.replace(/\D/g, '');
+  if (digits.length < 5) return null;
+  return digits.slice(0, 5);
+};
+
+const areZipCodesNearby = (zipA, zipB) => {
+  if (!zipA || !zipB) return false;
+  const a = parseInt(zipA, 10);
+  const b = parseInt(zipB, 10);
+  if (!Number.isNaN(a) && !Number.isNaN(b)) {
+    return Math.abs(a - b) <= NEARBY_ZIP_THRESHOLD;
+  }
+  return zipA.slice(0, 3) === zipB.slice(0, 3);
+};
+
+const getNearbyActiveZipRooms = async (zipCode) => {
+  if (!zipCode) return [];
+  const rooms = await ChatConversation.find({
+    type: 'zip-room',
+    zipCode: { $ne: zipCode },
+    messageCount: { $gt: 0 }
+  })
+    .select('_id title zipCode messageCount lastMessageAt')
+    .sort({ lastMessageAt: -1 })
+    .limit(MAX_NEARBY_ZIP_ROOMS)
+    .lean();
+
+  return rooms.filter((room) => areZipCodesNearby(zipCode, room.zipCode));
+};
+
+const isConversationParticipant = (conversation, userId) => (
+  Array.isArray(conversation?.participants)
+    && conversation.participants.some((participantId) => String(participantId) === String(userId))
+);
+
+const canAccessConversation = (conversation, userId) => {
+  if (!conversation) return false;
+  if (conversation.type === 'zip-room') return true;
+  return isConversationParticipant(conversation, userId);
+};
+
+const formatConversationSummary = (conversation, usersById, currentUserId) => {
+  const base = {
+    _id: conversation._id,
+    type: conversation.type,
+    title: conversation.title || '',
+    zipCode: conversation.zipCode || null,
+    profileUserId: conversation.profileUserId || null,
+    participants: Array.isArray(conversation.participants)
+      ? conversation.participants.map((participant) => String(participant))
+      : [],
+    lastMessageAt: conversation.lastMessageAt || null,
+    messageCount: conversation.messageCount || 0
+  };
+
+  if (conversation.type === 'dm') {
+    const peerId = base.participants.find((participantId) => participantId !== String(currentUserId)) || null;
+    const peer = peerId ? usersById.get(peerId) : null;
+    return {
+      ...base,
+      peer: peer ? {
+        _id: peer._id,
+        username: peer.username,
+        realName: peer.realName
+      } : null
+    };
+  }
+
+  if (conversation.type === 'profile-thread') {
+    const profileId = String(conversation.profileUserId || '');
+    const profileUser = profileId ? usersById.get(profileId) : null;
+    return {
+      ...base,
+      profileUser: profileUser ? {
+        _id: profileUser._id,
+        username: profileUser.username,
+        realName: profileUser.realName
+      } : null
+    };
+  }
+
+  return base;
 };
 
 const isValidMessageType = (messageType) => MESSAGE_TYPES.includes(messageType);
@@ -1588,6 +1686,314 @@ router.get('/rooms/nearby', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error finding nearby rooms:', error);
     return res.status(500).json({ error: 'Failed to find nearby rooms', details: error.message });
+  }
+});
+
+router.get('/zip/nearby', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const requester = await User.findById(req.user.userId).select('zipCode').lean();
+    const normalizedZipCode = normalizeZipCode(req.query.zipCode || requester?.zipCode);
+    if (!normalizedZipCode) {
+      return res.status(400).json({ error: 'A valid zip code is required' });
+    }
+
+    const nearbyRooms = await getNearbyActiveZipRooms(normalizedZipCode);
+    return res.json({
+      success: true,
+      zipCode: normalizedZipCode,
+      rooms: nearbyRooms.map((room) => ({
+        _id: room._id,
+        type: 'zip-room',
+        title: room.title || `Zip ${room.zipCode}`,
+        zipCode: room.zipCode,
+        messageCount: room.messageCount || 0,
+        lastMessageAt: room.lastMessageAt || null
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching nearby zip rooms:', error);
+    return res.status(500).json({ error: 'Failed to fetch nearby zip rooms' });
+  }
+});
+
+router.get('/conversations', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const user = await User.findById(userId).select('_id username realName zipCode').lean();
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const normalizedZipCode = normalizeZipCode(user.zipCode);
+    let currentZipConversation = null;
+    if (normalizedZipCode) {
+      currentZipConversation = await ChatConversation.findOneAndUpdate(
+        { type: 'zip-room', zipCode: normalizedZipCode },
+        { $setOnInsert: { title: `Zip ${normalizedZipCode}`, zipCode: normalizedZipCode, participants: [] } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean();
+    }
+
+    const [nearbyZipConversations, dmConversations, profileConversations] = await Promise.all([
+      getNearbyActiveZipRooms(normalizedZipCode),
+      ChatConversation.find({ type: 'dm', participants: userId }).sort({ lastMessageAt: -1 }).lean(),
+      ChatConversation.find({ type: 'profile-thread', participants: userId }).sort({ lastMessageAt: -1 }).lean()
+    ]);
+
+    const relatedUserIds = new Set();
+    [...dmConversations, ...profileConversations].forEach((conversation) => {
+      (conversation.participants || []).forEach((participantId) => relatedUserIds.add(String(participantId)));
+      if (conversation.profileUserId) {
+        relatedUserIds.add(String(conversation.profileUserId));
+      }
+    });
+
+    const relatedUsers = relatedUserIds.size > 0
+      ? await User.find({ _id: { $in: [...relatedUserIds] } }).select('_id username realName').lean()
+      : [];
+    const usersById = new Map(relatedUsers.map((relatedUser) => [String(relatedUser._id), relatedUser]));
+
+    return res.json({
+      success: true,
+      conversations: {
+        zip: {
+          current: currentZipConversation
+            ? formatConversationSummary(currentZipConversation, usersById, userId)
+            : null,
+          nearby: nearbyZipConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId))
+        },
+        dm: dmConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId)),
+        profile: profileConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId))
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+router.get('/conversations/:conversationId/messages', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.userId;
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const skip = (page - 1) * limit;
+
+    const conversation = await ChatConversation.findById(conversationId).lean();
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (!canAccessConversation(conversation, userId)) {
+      return res.status(403).json({ error: 'Access denied for this conversation' });
+    }
+
+    const messages = await ConversationMessage.find({ conversationId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('userId', '_id username realName')
+      .lean();
+
+    const total = await ConversationMessage.countDocuments({ conversationId });
+
+    return res.json({
+      success: true,
+      conversation: {
+        _id: conversation._id,
+        type: conversation.type,
+        title: conversation.title,
+        zipCode: conversation.zipCode || null,
+        profileUserId: conversation.profileUserId || null
+      },
+      messages: messages.reverse(),
+      page,
+      limit,
+      hasMore: skip + messages.length < total
+    });
+  } catch (error) {
+    console.error('Error fetching conversation messages:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversation messages' });
+  }
+});
+
+router.post(
+  '/conversations/:conversationId/messages',
+  unifiedChatLimiter,
+  authenticateToken,
+  body('content').trim().notEmpty().isLength({ max: 2000 }).withMessage('Message content is required and must be <= 2000 chars'),
+  async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.userId;
+    const content = req.body.content.trim();
+
+    const conversation = await ChatConversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (!canAccessConversation(conversation, userId)) {
+      return res.status(403).json({ error: 'Access denied for this conversation' });
+    }
+
+    if (conversation.type !== 'zip-room') {
+      const participantIds = (conversation.participants || []).map((participantId) => String(participantId));
+      const blockedRelation = await BlockList.findOne({
+        $or: [
+          { userId, blockedUserId: { $in: participantIds } },
+          { userId: { $in: participantIds }, blockedUserId: userId }
+        ]
+      }).select('_id').lean();
+      if (blockedRelation) {
+        return res.status(403).json({ error: 'Cannot send messages due to block settings' });
+      }
+    }
+
+    const message = await ConversationMessage.create({
+      conversationId: conversation._id,
+      userId,
+      content
+    });
+
+    conversation.lastMessageAt = new Date();
+    conversation.messageCount = (conversation.messageCount || 0) + 1;
+    await conversation.save();
+    await message.populate('userId', '_id username realName');
+
+    return res.status(201).json({
+      success: true,
+      message
+    });
+  } catch (error) {
+    console.error('Error sending conversation message:', error);
+    return res.status(500).json({ error: 'Failed to send conversation message' });
+  }
+  }
+);
+
+router.post(
+  '/dm/start',
+  unifiedChatLimiter,
+  authenticateToken,
+  body('targetUserId').isMongoId().withMessage('Valid targetUserId is required'),
+  async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const userId = String(req.user.userId);
+    const targetUserId = String(req.body.targetUserId);
+
+    if (userId === targetUserId) {
+      return res.status(400).json({ error: 'Cannot start a DM with yourself' });
+    }
+
+    const targetUser = await User.findById(targetUserId).select('_id username realName').lean();
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Target user not found' });
+    }
+
+    const blockedRelation = await BlockList.findOne({
+      $or: [
+        { userId, blockedUserId: targetUserId },
+        { userId: targetUserId, blockedUserId: userId }
+      ]
+    }).select('_id').lean();
+    if (blockedRelation) {
+      return res.status(403).json({ error: 'Cannot start DM due to block settings' });
+    }
+
+    let conversation = await ChatConversation.findOne({
+      type: 'dm',
+      participants: { $all: [userId, targetUserId], $size: 2 }
+    });
+
+    if (!conversation) {
+      conversation = await ChatConversation.create({
+        type: 'dm',
+        title: 'Direct message',
+        participants: [userId, targetUserId],
+        lastMessageAt: new Date()
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      conversation: {
+        _id: conversation._id,
+        type: conversation.type,
+        participants: conversation.participants,
+        lastMessageAt: conversation.lastMessageAt,
+        messageCount: conversation.messageCount || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error starting DM thread:', error);
+    return res.status(500).json({ error: 'Failed to start DM thread' });
+  }
+  }
+);
+
+router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const viewerId = String(req.user.userId);
+    const profileUserId = String(req.params.userId);
+
+    const profileUser = await User.findById(profileUserId).select('_id username realName').lean();
+    if (!profileUser) {
+      return res.status(404).json({ error: 'Profile user not found' });
+    }
+
+    const blockedRelation = await BlockList.findOne({
+      $or: [
+        { userId: viewerId, blockedUserId: profileUserId },
+        { userId: profileUserId, blockedUserId: viewerId }
+      ]
+    }).select('_id').lean();
+    if (blockedRelation) {
+      return res.status(404).json({ error: 'Profile thread is unavailable' });
+    }
+
+    let thread = await ChatConversation.findOne({
+      type: 'profile-thread',
+      profileUserId,
+      participants: { $all: [viewerId, profileUserId], $size: 2 }
+    });
+
+    if (!thread) {
+      thread = await ChatConversation.create({
+        type: 'profile-thread',
+        title: `Profile thread: @${profileUser.username}`,
+        profileUserId,
+        participants: [viewerId, profileUserId],
+        lastMessageAt: new Date()
+      });
+    }
+
+    return res.json({
+      success: true,
+      conversation: {
+        _id: thread._id,
+        type: thread.type,
+        title: thread.title,
+        profileUserId: thread.profileUserId,
+        participants: thread.participants,
+        lastMessageAt: thread.lastMessageAt,
+        messageCount: thread.messageCount || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error resolving profile thread:', error);
+    return res.status(500).json({ error: 'Failed to resolve profile thread' });
   }
 });
 

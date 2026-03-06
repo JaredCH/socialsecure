@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { authAPI, chatAPI } from '../utils/api';
 import {
@@ -60,47 +60,34 @@ const formatCompactTimestamp = (timestamp) => {
   if (isSameDay) {
     return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
   }
-
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[date.getMonth()]} ${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-};
-
-const hashString = (value = '') => {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = value.charCodeAt(i) + ((hash << 5) - hash);
-    hash |= 0;
+  if (conversation.type === 'dm') {
+    return conversation.peer?.username
+      ? `@${conversation.peer.username}`
+      : (conversation.peer?.realName || 'Direct message');
   }
-  return Math.abs(hash);
+  if (conversation.type === 'profile-thread') {
+    return conversation.profileUser?.username
+      ? `@${conversation.profileUser.username}`
+      : (conversation.title || 'Profile thread');
+  }
+  return conversation.title || 'Conversation';
 };
 
-const stringToColor = (value = '') => {
-  const hash = hashString(value || 'user');
-  const hue = hash % 360;
-  const saturation = 60 + (hash % 12);
-  const lightness = 42 + (hash % 14);
-  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-};
-
-const Chat = () => {
+function Chat() {
   const [profile, setProfile] = useState(null);
-  const [rooms, setRooms] = useState([]);
-  const [roomsLoading, setRoomsLoading] = useState(true);
-  const [activeRoomId, setActiveRoomId] = useState('');
-
-  const [unlockPassword, setUnlockPassword] = useState('');
-  const [unlocking, setUnlocking] = useState(false);
-  const [unlockError, setUnlockError] = useState('');
-  const [session, setSession] = useState(null);
-  const [showUnlockModal, setShowUnlockModal] = useState(false);
-  const [serverUnlocked, setServerUnlocked] = useState(false);
+  const [loadingHub, setLoadingHub] = useState(true);
+  const [activeChannel, setActiveChannel] = useState('zip');
+  const [hubData, setHubData] = useState({
+    zip: { current: null, nearby: [] },
+    dm: [],
+    profile: []
+  });
+  const [activeConversationId, setActiveConversationId] = useState('');
 
   const [messages, setMessages] = useState([]);
-  const [nextCursor, setNextCursor] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
-  const [olderLoading, setOlderLoading] = useState(false);
-  const [sendValue, setSendValue] = useState('');
+  const [messagesError, setMessagesError] = useState('');
+  const [composerValue, setComposerValue] = useState('');
   const [sending, setSending] = useState(false);
   const [nickByUserId, setNickByUserId] = useState({});
   const [localNickname, setLocalNickname] = useState('');
@@ -127,17 +114,24 @@ const Chat = () => {
     [rooms, activeRoomId]
   );
 
-  const appendMessage = (incoming) => {
-    if (!incoming) return;
-    const incomingId = getMessageId(incoming);
-    setMessages((prev) => {
-      if (prev.some((item) => getMessageId(item) === incomingId)) {
-        return prev;
+  const [dmQuery, setDmQuery] = useState('');
+  const [dmSearchLoading, setDmSearchLoading] = useState(false);
+  const [dmResults, setDmResults] = useState([]);
+
+  const conversationList = useMemo(() => {
+    if (activeChannel === 'zip') {
+      const entries = [];
+      if (hubData.zip.current) entries.push(hubData.zip.current);
+      if (Array.isArray(hubData.zip.nearby)) {
+        entries.push(...hubData.zip.nearby);
       }
-      const next = [...prev, incoming];
-      return next.length > MAX_MESSAGES_IN_MEMORY ? next.slice(next.length - MAX_MESSAGES_IN_MEMORY) : next;
-    });
-  };
+      return entries;
+    }
+    if (activeChannel === 'dm') {
+      return Array.isArray(hubData.dm) ? hubData.dm : [];
+    }
+    return Array.isArray(hubData.profile) ? hubData.profile : [];
+  }, [activeChannel, hubData]);
 
   const scrollToBottom = () => {
     const viewport = messageViewportRef.current;
@@ -155,201 +149,80 @@ const Chat = () => {
     if (profile?._id && messageUserId && String(profile._id) === messageUserId && localNickname) {
       return localNickname;
     }
-    return message?.userId?.username || message?.userId?.realName || 'user';
   };
 
   useEffect(() => {
     const bootstrap = async () => {
+      setLoadingHub(true);
       try {
-        const [{ data: profileData }, location] = await Promise.all([
-          authAPI.getProfile(),
-          new Promise((resolve) => {
-            if (!navigator.geolocation) {
-              resolve({ latitude: 0, longitude: 0 });
-              return;
-            }
-            navigator.geolocation.getCurrentPosition(
-              (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-              () => resolve({ latitude: 0, longitude: 0 }),
-              { timeout: 5000 }
-            );
-          })
-        ]);
-
-        setProfile(profileData.user || null);
-        setLocalNickname(profileData.user?.username || profileData.user?.realName || '');
-
-        // Check if encryption is already unlocked via 12h session
-        if (profileData.user?.hasEncryptionPassword) {
-          try {
-            const unlockStatus = await authAPI.getEncryptionUnlockStatus();
-            if (unlockStatus.data?.unlocked) {
-              setServerUnlocked(true);
-              // Show modal but don't require password - user can proceed with session
-              setShowUnlockModal(true);
-            }
-          } catch (unlockCheckError) {
-            console.warn('Could not check unlock status:', unlockCheckError);
-          }
-        }
-
-        // Try to sync location rooms first, then get nearby rooms
-        try {
-          await chatAPI.syncLocationRooms();
-        } catch (syncError) {
-          // Continue even if sync fails - user may not have location set
-          console.warn('Location room sync skipped:', syncError.response?.data?.error);
-        }
-
-        // Get nearby rooms using user's location or browser geolocation
-        const nearby = await chatAPI.getNearbyRooms(location.latitude, location.longitude, 100);
-        const roomList = Array.isArray(nearby.data?.rooms) ? nearby.data.rooms : [];
-        setRooms(roomList);
-        if (roomList.length > 0) {
-          setActiveRoomId(String(roomList[0]._id));
-        }
+        await refreshHub('zip');
       } catch (error) {
-        toast.error(error.response?.data?.error || 'Failed to load chat rooms.');
+        toast.error(error.response?.data?.error || 'Failed to load chat hub');
       } finally {
-        setRoomsLoading(false);
+        setLoadingHub(false);
       }
     };
 
     bootstrap();
   }, []);
 
-  const loadKeyPackages = async (roomId, unlockedSession) => {
-    if (!unlockedSession) return;
-    const since = latestPackageSyncByRoomRef.current[roomId] || null;
-    const response = await chatAPI.syncRoomKeyPackages(roomId, unlockedSession.deviceId, since, 100);
-    const incoming = Array.isArray(response.data?.packages) ? response.data.packages : [];
-    for (const pkg of incoming) {
+  useEffect(() => {
+    applyDefaultConversationSelection(activeChannel, hubData);
+  }, [activeChannel, hubData]);
+
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (!activeConversationId) {
+        setMessages([]);
+        setMessagesError('');
+        return;
+      }
+
+      setMessagesLoading(true);
+      setMessagesError('');
       try {
-        await ingestWrappedRoomKeyPackage({ session: unlockedSession, pkg });
-      } catch {
-        // Security-critical: ignore tampered key package but keep sync process alive.
+        const { data } = await chatAPI.getConversationMessages(activeConversationId, 1, 100);
+        setMessages(Array.isArray(data.messages) ? data.messages : []);
+      } catch (error) {
+        setMessages([]);
+        setMessagesError(error.response?.data?.error || 'Failed to load conversation messages');
+      } finally {
+        setMessagesLoading(false);
       }
-    }
-    if (incoming.length > 0) {
-      latestPackageSyncByRoomRef.current[roomId] = incoming[incoming.length - 1].createdAt;
-      await unlockedSession.persist();
-    }
-  };
+    };
 
-  const ensureRoomKey = async (roomId, unlockedSession) => {
-    const known = unlockedSession.getLatestRoomKey(roomId);
-    if (known) {
-      return known;
-    }
+    loadMessages();
+  }, [activeConversationId]);
 
-    const newKeyVersion = 1;
-    const roomKey = unlockedSession.createRoomKey();
-    unlockedSession.setRoomKey(roomId, newKeyVersion, roomKey);
-
-    if (profile?._id) {
-      const pkg = await createWrappedRoomKeyPackage({
-        session: unlockedSession,
-        roomId,
-        keyVersion: newKeyVersion,
-        roomKey,
-        recipientUserId: profile._id,
-        recipientDeviceId: unlockedSession.deviceId
-      });
-      await chatAPI.publishRoomKeyPackages(roomId, [pkg]);
-    }
-
-    await unlockedSession.persist();
-    return { keyVersion: newKeyVersion, keyBytes: roomKey };
-  };
-
-  const handleUnlock = async (event) => {
+  const handleSend = async (event) => {
     event.preventDefault();
-    if (!profile?._id) {
-      setUnlockError('User profile is unavailable. Please re-login.');
-      return;
-    }
+    const trimmed = composerValue.trim();
+    if (!trimmed || !activeConversationId) return;
 
-    setUnlocking(true);
-    setUnlockError('');
-
+    setSending(true);
     try {
-      const { session: unlockedSession, created } = await unlockOrCreateVault({
-        userId: profile._id,
-        password: unlockPassword
-      });
-
-      await chatAPI.registerDeviceKeys(await unlockedSession.getRegisterPayload());
-      if (activeRoomId) {
-        await loadKeyPackages(activeRoomId, unlockedSession);
-      }
-
-      setSession(unlockedSession);
-      setUnlockPassword('');
-      toast.success(created ? 'Encryption vault created and unlocked.' : 'Encryption unlocked.');
+      const { data } = await chatAPI.sendConversationMessage(activeConversationId, trimmed);
+      setMessages((prev) => [...prev, data.message]);
+      setComposerValue('');
+      await refreshHub(activeChannel);
     } catch (error) {
-      const message = error?.message || error.response?.data?.error || 'Failed to unlock encryption vault.';
-      setUnlockError(message);
-      toast.error(message);
+      toast.error(error.response?.data?.error || 'Failed to send message');
     } finally {
-      setUnlocking(false);
+      setSending(false);
     }
   };
 
-  // Handle unlock from modal (with 12h session) - called after modal successfully verifies password
-  const handleModalUnlock = async (password) => {
-    if (!profile?._id) {
-      toast.error('User profile is unavailable. Please re-login.');
-      return;
-    }
-
-    if (!password) {
-      toast.error('Password is required');
-      return;
-    }
-
-    setUnlocking(true);
-    setUnlockError('');
-
+  const handleStartDM = async (targetUserId) => {
     try {
-      // Unlock local vault with the password from modal
-      const { session: unlockedSession, created } = await unlockOrCreateVault({
-        userId: profile._id,
-        password: password
-      });
-
-      await chatAPI.registerDeviceKeys(await unlockedSession.getRegisterPayload());
-      if (activeRoomId) {
-        await loadKeyPackages(activeRoomId, unlockedSession);
-      }
-
-      setSession(unlockedSession);
-      setShowUnlockModal(false);
-      setServerUnlocked(true);
-      toast.success(created ? 'Encryption vault created and unlocked for 12h.' : 'Encryption unlocked for 12h.');
+      const { data } = await chatAPI.startDM(targetUserId);
+      await refreshHub('dm');
+      setActiveChannel('dm');
+      setActiveConversationId(String(data.conversation._id));
+      setDmResults([]);
+      setDmQuery('');
     } catch (error) {
-      const message = error?.message || error.response?.data?.error || 'Failed to unlock encryption vault.';
-      setUnlockError(message);
-      toast.error(message);
-    } finally {
-      setUnlocking(false);
+      toast.error(error.response?.data?.error || 'Failed to start DM');
     }
-  };
-
-  const handleLock = async () => {
-    setSession(null);
-    setPlaintextById({});
-    setServerUnlocked(false);
-    
-    // Tell backend to clear the unlock cookie
-    try {
-      await authAPI.lockEncryption();
-    } catch (error) {
-      console.warn('Failed to lock on server:', error);
-    }
-    setSession(null);
-    setPlaintextById({});
-    setDecryptErrors({});
-    plaintextCacheRef.current.clear();
   };
 
   const fetchMessagesPage = async (roomId, cursor, reset = false) => {
@@ -701,25 +574,9 @@ const Chat = () => {
         requestAnimationFrame(() => scrollToBottom());
       }
     } catch (error) {
-      // Handle rate limit response
-      if (error.response?.status === 429) {
-        const rateData = error.response?.data?.rateLimit;
-        if (rateData) {
-          setRateLimitInfo({
-            allowed: false,
-            bucket: rateData.bucket || 'remote',
-            limit: rateData.limit,
-            remaining: 0,
-            retryAfter: rateData.retryAfter,
-            windowSeconds: rateData.windowSeconds
-          });
-          toast.error(`Rate limited. Try again in ${rateData.retryAfter} seconds.`);
-          return;
-        }
-      }
-      toast.error(error.response?.data?.error || error.message || 'Failed to send encrypted message.');
+      toast.error(error.response?.data?.error || 'Failed to search users');
     } finally {
-      setSending(false);
+      setDmSearchLoading(false);
     }
   };
 
@@ -752,81 +609,105 @@ const Chat = () => {
 
   return (
     <div className="bg-white rounded-lg shadow p-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold">Chat (E2EE)</h2>
-          <p className="text-gray-600 text-sm">
-            IRC-like compact chat with slash commands. Content remains client-side encrypted.
-          </p>
-        </div>
-        {isUnlocked ? (
-          <button type="button" onClick={handleLock} className="px-3 py-2 rounded border text-sm">
-            Lock Encryption
-          </button>
-        ) : null}
+      <div>
+        <h2 className="text-2xl font-semibold">Unified Chat Hub</h2>
+        <p className="text-sm text-gray-600">
+          Zip rooms, direct messages, and profile threads in one workspace.
+        </p>
+        {profile?.zipCode ? (
+          <p className="text-xs text-gray-500 mt-1">Your default zip room: {profile.zipCode}</p>
+        ) : (
+          <p className="text-xs text-amber-700 mt-1">Add a zip code in your profile to enable default zip-room chat.</p>
+        )}
       </div>
 
-      {!isUnlocked && profile?.hasEncryptionPassword ? (
-        <div className="border rounded p-4 bg-gray-50 space-y-3">
-          <h3 className="font-semibold">Encryption Password Required</h3>
-          <p className="text-sm text-gray-700">
-            Enter your Encryption Password to unlock local device keys and room keys.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowUnlockModal(true)}
-            className="bg-blue-600 text-white rounded px-4 py-2 hover:bg-blue-700"
-          >
-            Unlock Encryption
-          </button>
-        </div>
-      ) : null}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <aside className="lg:col-span-3 border rounded p-3 space-y-3">
+          <h3 className="font-semibold">Channels</h3>
+          <div className="space-y-2">
+            {CHANNELS.map((channel) => (
+              <button
+                key={channel.key}
+                type="button"
+                onClick={() => setActiveChannel(channel.key)}
+                className={`w-full text-left border rounded px-2 py-2 text-sm ${activeChannel === channel.key ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
+              >
+                {channel.label}
+              </button>
+            ))}
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <aside className="md:col-span-1 border rounded p-3">
-          <h3 className="font-semibold mb-2">Nearby Rooms</h3>
-          {roomsLoading ? (
-            <p className="text-sm text-gray-500">Loading rooms...</p>
-          ) : rooms.length === 0 ? (
-            <p className="text-sm text-gray-500">No rooms found for current location.</p>
+          {activeChannel === 'zip' ? (
+            <div className="text-xs text-gray-600 border-t pt-3">
+              Nearby zip rooms are shown only when active rooms exist.
+            </div>
+          ) : null}
+
+          {activeChannel === 'dm' ? (
+            <form onSubmit={runDmSearch} className="space-y-2 border-t pt-3">
+              <label className="text-xs font-medium text-gray-700 block">Start DM</label>
+              <input
+                value={dmQuery}
+                onChange={(event) => setDmQuery(event.target.value)}
+                className="w-full border rounded p-2 text-sm"
+                placeholder="Search users"
+              />
+              <button type="submit" className="w-full bg-blue-600 text-white rounded px-3 py-2 text-sm" disabled={dmSearchLoading}>
+                {dmSearchLoading ? 'Searching...' : 'Search'}
+              </button>
+              {dmResults.length > 0 ? (
+                <ul className="max-h-40 overflow-auto border rounded divide-y">
+                  {dmResults.map((user) => (
+                    <li key={String(user._id)} className="p-2 text-xs flex justify-between items-center gap-2">
+                      <span>@{user.username || user.realName || 'user'}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleStartDM(user._id)}
+                        className="border rounded px-2 py-1 hover:bg-gray-50"
+                      >
+                        DM
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </form>
+          ) : null}
+        </aside>
+
+        <section className="lg:col-span-4 border rounded p-3">
+          <h3 className="font-semibold mb-2">Conversations</h3>
+          {conversationList.length === 0 ? (
+            <p className="text-sm text-gray-500">No conversations in this channel yet.</p>
           ) : (
             <ul className="space-y-2">
-              {rooms.map((room) => {
-                const selected = String(room._id) === String(activeRoomId);
+              {conversationList.map((conversation) => {
+                const selected = String(conversation._id) === String(activeConversationId);
                 return (
-                  <li key={String(room._id)}>
+                  <li key={String(conversation._id)}>
                     <button
                       type="button"
-                      onClick={() => setActiveRoomId(String(room._id))}
-                      className={`w-full text-left rounded border px-2 py-2 text-sm ${selected ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
+                      onClick={() => setActiveConversationId(String(conversation._id))}
+                      className={`w-full text-left border rounded px-2 py-2 text-sm ${selected ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
                     >
-                      <div className="font-medium">{normalizeRoomLabel(room)}</div>
-                      <div className="text-xs text-gray-500">{room.memberCount || 0} members</div>
+                      <div className="font-medium">{getConversationLabel(conversation)}</div>
+                      {conversation.lastMessageAt ? (
+                        <div className="text-xs text-gray-500">Last active {new Date(conversation.lastMessageAt).toLocaleString()}</div>
+                      ) : null}
                     </button>
                   </li>
                 );
               })}
             </ul>
           )}
-        </aside>
+        </section>
 
-        <section className="md:col-span-3 border rounded p-3 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-semibold">
-              {activeRoom ? normalizeRoomLabel(activeRoom) : 'Select a room'}
-            </h3>
-            <div className="flex items-center gap-3 text-xs text-gray-500">
-              <label className="inline-flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  checked={useMonospace}
-                  onChange={(event) => setUseMonospace(event.target.checked)}
-                />
-                <span>Monospace</span>
-              </label>
-              <span>Decrypt cache: {plaintextCacheRef.current.size}/{getCacheLimit()}</span>
-            </div>
-          </div>
+        <section className="lg:col-span-5 border rounded p-3 space-y-3">
+          <h3 className="font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a conversation'}</h3>
+
+          {messagesError ? (
+            <div className="text-sm bg-red-50 border border-red-200 text-red-700 rounded p-2">{messagesError}</div>
+          ) : null}
 
           <div className="flex gap-2">
             <button
@@ -854,41 +735,11 @@ const Chat = () => {
           >
             {messages.length === 0 && !messagesLoading ? (
               <p className="text-sm text-gray-500">No messages yet.</p>
-            ) : null}
-
-            {messagesLoading && messages.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-500">Loading recent messages...</div>
-            ) : null}
-
-            {olderLoading ? (
-              <div className="py-1 text-center text-xs text-gray-500">Loading older messages...</div>
-            ) : null}
-
-            {messages.map((message) => {
-              const id = getMessageId(message);
-              const plaintext = plaintextById[id];
-              const decryptError = decryptErrors[id];
-              const isE2EE = Boolean(message?.e2ee?.enabled);
-              const author = getDisplayName(message);
-              const messageType = message?.messageType || 'text';
-              const compactTs = formatCompactTimestamp(message.createdAt);
-              const fullTs = new Date(message.createdAt).toLocaleString();
-
-              let bodyText = message.content || '';
-              if (isE2EE) {
-                if (plaintext) {
-                  bodyText = plaintext;
-                } else if (decryptError) {
-                  bodyText = decryptError;
-                } else {
-                  bodyText = 'Encrypted message (locked or pending decrypt)';
-                }
-              }
-
-              if (messageType === 'system') {
-                return (
-                  <div key={id} className="text-center text-xs text-gray-500 py-0.5" title={fullTs}>
-                    [{compactTs}] {bodyText || 'System event'}
+            ) : (
+              messages.map((message) => (
+                <div key={String(message._id)} className="text-sm">
+                  <div className="text-xs text-gray-500">
+                    @{message.userId?.username || message.userId?.realName || 'user'} · {new Date(message.createdAt).toLocaleString()}
                   </div>
                 );
               }
@@ -954,15 +805,17 @@ const Chat = () => {
               onBlur={() => emitTypingStop({ scope: 'chat', targetId: activeRoomId })}
               disabled={!isUnlocked || !activeRoomId || sending}
               className="flex-1 border rounded p-2"
+              value={composerValue}
+              onChange={(event) => setComposerValue(event.target.value)}
               maxLength={2000}
               placeholder={isUnlocked ? `Type encrypted message or ${SUPPORTED_COMMANDS.map((name) => `/${name}`).join(' ')}` : 'Unlock encryption to send'}
             />
             <button
               type="submit"
-              disabled={!isUnlocked || !activeRoomId || !sendValue.trim() || sending}
+              disabled={!activeConversationId || !composerValue.trim() || sending}
               className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
             >
-              {sending ? 'Sending...' : 'Send E2EE'}
+              {sending ? 'Sending...' : 'Send'}
             </button>
           </form>
 
@@ -997,16 +850,8 @@ const Chat = () => {
           </p>
         </section>
       </div>
-
-      {/* Encryption Unlock Modal */}
-      <EncryptionUnlockModal
-        isOpen={showUnlockModal}
-        onUnlock={handleModalUnlock}
-        onClose={() => setShowUnlockModal(false)}
-        showCloseButton={serverUnlocked}
-      />
     </div>
   );
-};
+}
 
 export default Chat;
