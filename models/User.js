@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { DEFAULT_REALTIME_PREFERENCES, normalizeRealtimePreferences } = require('../utils/realtimePreferences');
 
 const userSchema = new mongoose.Schema({
   universalId: {
@@ -283,6 +284,20 @@ const userSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  realtimePreferences: {
+    enabled: {
+      type: Boolean,
+      default: DEFAULT_REALTIME_PREFERENCES.enabled
+    },
+    showPresence: {
+      type: Boolean,
+      default: DEFAULT_REALTIME_PREFERENCES.showPresence
+    },
+    showLastSeen: {
+      type: Boolean,
+      default: DEFAULT_REALTIME_PREFERENCES.showLastSeen
+    }
+  },
   // Friend count (cached for performance)
   friendCount: {
     type: Number,
@@ -374,6 +389,7 @@ userSchema.methods.toPublicProfile = function() {
       system: { inApp: true, email: true, push: false },
       securityAlerts: { inApp: true, email: true, push: false }
     },
+    realtimePreferences: normalizeRealtimePreferences(this.realtimePreferences),
     onboardingStatus: this.onboardingStatus || 'pending',
     onboardingStep: this.onboardingStep || 1,
     securityPreferences: this.securityPreferences || {
