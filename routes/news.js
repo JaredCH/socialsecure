@@ -21,6 +21,20 @@ const parser = new Parser({
   timeout: 10000,
   headers: {
     'User-Agent': 'SocialSecure-NewsBot/1.0'
+  },
+  customFields: {
+    feed: [
+      ['media:thumbnail', 'mediaThumbnail', { keepArray: true }],
+      ['media:content', 'mediaContent', { keepArray: true }]
+    ],
+    item: [
+      ['content:encoded', 'contentEncoded'],
+      ['media:content', 'mediaContent', { keepArray: true }],
+      ['media:thumbnail', 'mediaThumbnail', { keepArray: true }],
+      ['dc:creator', 'dcCreator'],
+      ['geo:lat', 'geoLat'],
+      ['geo:long', 'geoLong']
+    ]
   }
 });
 
@@ -31,8 +45,146 @@ const NEWS_SCOPE_VALUES = ['local', 'regional', 'national', 'global'];
 const KEYWORD_MATCH_WEIGHT = 100;
 const SCOPE_TIER_WEIGHT = 10;
 const MAX_SCOPE_TIERS = 4;
+const MAX_FEED_CANDIDATES = 400;
+
+const TOPIC_FILTER_ALIASES = {
+  technology: ['technology', 'tech'],
+  science: ['science'],
+  health: ['health'],
+  business: ['business'],
+  sports: ['sports', 'sport'],
+  entertainment: ['entertainment'],
+  politics: ['politics', 'political'],
+  finance: ['finance', 'financial'],
+  gaming: ['gaming', 'games', 'game'],
+  ai: ['ai', 'artificial intelligence', 'machine learning']
+};
+
+const SUPPORTED_RSS_PROVIDERS = [
+  { id: 'google-news', label: 'Google News', hostPatterns: ['news.google.com'] },
+  { id: 'reuters', label: 'Reuters', hostPatterns: ['reuters.com'] },
+  { id: 'bbc', label: 'BBC', hostPatterns: ['bbc.co.uk', 'bbc.com'] },
+  { id: 'cnn', label: 'CNN', hostPatterns: ['cnn.com'] },
+  { id: 'npr', label: 'NPR', hostPatterns: ['npr.org'] },
+  { id: 'associated-press', label: 'Associated Press', hostPatterns: ['apnews.com'] },
+  { id: 'guardian', label: 'The Guardian', hostPatterns: ['theguardian.com'] },
+  { id: 'new-york-times', label: 'New York Times', hostPatterns: ['nytimes.com'] },
+  { id: 'wall-street-journal', label: 'Wall Street Journal', hostPatterns: ['wsj.com'] },
+  { id: 'techcrunch', label: 'TechCrunch', hostPatterns: ['techcrunch.com'] }
+];
 
 const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase();
+const normalizeTopicToken = (value) => String(value || '').trim().toLowerCase();
+
+const toUniqueNonEmptyStrings = (values = []) => [...new Set(values
+  .map((value) => String(value || '').trim())
+  .filter(Boolean))];
+
+const toUniqueNonEmptyLocationTokens = (values = []) => [...new Set(values
+  .map((value) => normalizeLocationToken(value))
+  .filter(Boolean))];
+
+const getTopicAliases = (topic) => {
+  const normalized = normalizeTopicToken(topic);
+  if (!normalized) return [];
+  return TOPIC_FILTER_ALIASES[normalized] || [normalized];
+};
+
+const detectProviderIdFromUrl = (url) => {
+  try {
+    const hostname = new URL(String(url || '')).hostname.toLowerCase();
+    const provider = SUPPORTED_RSS_PROVIDERS.find((candidate) =>
+      candidate.hostPatterns.some((pattern) => hostname.includes(pattern))
+    );
+    return provider?.id || 'generic-rss';
+  } catch (error) {
+    return 'generic-rss';
+  }
+};
+
+const getTextContent = (item = {}) => {
+  return [
+    item.title,
+    item.contentSnippet,
+    item.content,
+    item.contentEncoded,
+    item.summary,
+    item.isoDate,
+    item.dcCreator,
+    ...(Array.isArray(item.categories) ? item.categories : [])
+  ]
+    .filter(Boolean)
+    .map((value) => String(value))
+    .join(' ');
+};
+
+const inferLocationTokensFromText = (input = '') => {
+  const text = String(input || '');
+  const lower = text.toLowerCase();
+  const tokens = [];
+
+  const usZipMatches = text.match(/\b\d{5}(?:-\d{4})?\b/g) || [];
+  const canadaZipMatches = text.match(/\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/gi) || [];
+  tokens.push(...usZipMatches, ...canadaZipMatches.map((zip) => zip.replace(/\s+/g, '').toUpperCase()));
+
+  const locationPhrases = lower.match(/\b(?:in|at|from|near)\s+([a-z][a-z\s\-]{1,40})\b/g) || [];
+  for (const phrase of locationPhrases) {
+    const normalized = phrase
+      .replace(/\b(?:in|at|from|near)\s+/i, '')
+      .replace(/[^a-z\s\-]/g, '')
+      .trim();
+    if (normalized.length >= 3) {
+      tokens.push(normalized);
+    }
+  }
+
+  if (lower.includes(' united states') || lower.includes(' usa') || lower.includes(' us ')) tokens.push('us', 'usa', 'united states');
+  if (lower.includes(' canada')) tokens.push('canada');
+  if (lower.includes(' united kingdom') || lower.includes(' uk ')) tokens.push('uk', 'united kingdom');
+
+  return toUniqueNonEmptyLocationTokens(tokens);
+};
+
+const buildArticleLocationTokens = ({ source = {}, item = {}, query = null }) => {
+  const baseTokens = [
+    source.name,
+    source.category,
+    query,
+    ...(Array.isArray(item.categories) ? item.categories : [])
+  ];
+
+  const textTokens = inferLocationTokensFromText(getTextContent(item));
+  return toUniqueNonEmptyLocationTokens([...baseTokens, ...textTokens]);
+};
+
+const getItemDescription = (item = {}) => {
+  return item.contentSnippet
+    || item.contentEncoded
+    || item.content
+    || item.summary
+    || '';
+};
+
+const getItemPublishedAt = (item = {}) => {
+  const candidates = [item.isoDate, item.pubDate, item.published, item.updated];
+  for (const candidate of candidates) {
+    const parsed = candidate ? new Date(candidate) : null;
+    if (parsed && !Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return new Date();
+};
+
+const getItemImageUrl = (item = {}) => {
+  const mediaContent = Array.isArray(item.mediaContent) ? item.mediaContent[0] : item.mediaContent;
+  const mediaThumbnail = Array.isArray(item.mediaThumbnail) ? item.mediaThumbnail[0] : item.mediaThumbnail;
+  return item.enclosure?.url
+    || mediaContent?.url
+    || mediaThumbnail?.url
+    || extractImageFromContent(item.contentEncoded || item.content)
+    || null;
+};
 
 const hasLocationContext = (location = {}) => Boolean(
   location?.city
@@ -45,6 +197,13 @@ const hasLocationContext = (location = {}) => Boolean(
 const getPrimaryLocation = (preferences) => {
   if (!preferences?.locations?.length) return null;
   return preferences.locations.find((loc) => loc.isPrimary) || preferences.locations[0] || null;
+};
+
+const collectLocationValues = ({ preferences, user, field }) => {
+  const preferenceValues = Array.isArray(preferences?.locations)
+    ? preferences.locations.map((location) => location?.[field])
+    : [];
+  return toUniqueNonEmptyStrings([...preferenceValues, user?.[field]]);
 };
 
 const getUserLocationFallback = (user) => {
@@ -62,6 +221,12 @@ const getUserLocationFallback = (user) => {
 const resolveLocationContext = ({ preferences, user }) => {
   const primary = getPrimaryLocation(preferences);
   const fallback = getUserLocationFallback(user);
+  const cityValues = collectLocationValues({ preferences, user, field: 'city' });
+  const countyValues = collectLocationValues({ preferences, user, field: 'county' });
+  const stateValues = collectLocationValues({ preferences, user, field: 'state' });
+  const countryValues = collectLocationValues({ preferences, user, field: 'country' });
+  const zipCodeValues = collectLocationValues({ preferences, user, field: 'zipCode' });
+
   if (hasLocationContext(primary)) {
     const primaryLocation = primary.toObject?.() || primary;
     return {
@@ -70,11 +235,24 @@ const resolveLocationContext = ({ preferences, user }) => {
       state: primaryLocation.state || fallback?.state || null,
       country: primaryLocation.country || fallback?.country || null,
       zipCode: primaryLocation.zipCode || fallback?.zipCode || null,
+      cityValues,
+      countyValues,
+      stateValues,
+      countryValues,
+      zipCodeValues,
       source: 'preferences'
     };
   }
   if (fallback) {
-    return { ...fallback, source: 'profile' };
+    return {
+      ...fallback,
+      cityValues,
+      countyValues,
+      stateValues,
+      countryValues,
+      zipCodeValues,
+      source: 'profile'
+    };
   }
 
   return {
@@ -83,6 +261,11 @@ const resolveLocationContext = ({ preferences, user }) => {
     state: null,
     country: null,
     zipCode: null,
+    cityValues,
+    countyValues,
+    stateValues,
+    countryValues,
+    zipCodeValues,
     source: 'none'
   };
 };
@@ -108,9 +291,9 @@ const getFallbackScopeOrder = (scope) => {
 };
 
 const scopeCanUseContext = (scope, locationContext) => {
-  if (scope === 'local') return Boolean(locationContext?.city || locationContext?.county || locationContext?.zipCode);
-  if (scope === 'regional') return Boolean(locationContext?.state);
-  if (scope === 'national') return Boolean(locationContext?.country);
+  if (scope === 'local') return Boolean(locationContext?.cityValues?.length || locationContext?.countyValues?.length || locationContext?.zipCodeValues?.length);
+  if (scope === 'regional') return Boolean(locationContext?.stateValues?.length);
+  if (scope === 'national') return Boolean(locationContext?.countryValues?.length);
   return true;
 };
 
@@ -138,17 +321,17 @@ const articleMentionsLocationToken = (articleLocationToken, userToken) => {
 
 const articleMatchesLocation = (article, locationContext) => {
   const articleLocations = Array.isArray(article.locations) ? article.locations.map(normalizeLocationToken) : [];
-  const zipCode = normalizeLocationToken(locationContext?.zipCode);
-  const city = normalizeLocationToken(locationContext?.city);
-  const county = normalizeLocationToken(locationContext?.county);
-  const state = normalizeLocationToken(locationContext?.state);
-  const country = normalizeLocationToken(locationContext?.country);
 
-  const hasZipCode = zipCode && articleLocations.some((token) => articleMentionsLocationToken(token, zipCode));
-  const hasCity = city && articleLocations.some((token) => articleMentionsLocationToken(token, city));
-  const hasCounty = county && articleLocations.some((token) => articleMentionsLocationToken(token, county));
-  const hasState = state && articleLocations.some((token) => articleMentionsLocationToken(token, state));
-  const hasCountry = country && articleLocations.some((token) => articleMentionsLocationToken(token, country));
+  const matchesAnyLocationValue = (values = []) => values
+    .map(normalizeLocationToken)
+    .filter(Boolean)
+    .some((value) => articleLocations.some((token) => articleMentionsLocationToken(token, value)));
+
+  const hasZipCode = matchesAnyLocationValue(locationContext?.zipCodeValues || [locationContext?.zipCode]);
+  const hasCity = matchesAnyLocationValue(locationContext?.cityValues || [locationContext?.city]);
+  const hasCounty = matchesAnyLocationValue(locationContext?.countyValues || [locationContext?.county]);
+  const hasState = matchesAnyLocationValue(locationContext?.stateValues || [locationContext?.state]);
+  const hasCountry = matchesAnyLocationValue(locationContext?.countryValues || [locationContext?.country]);
 
   return {
     zipCode: Boolean(hasZipCode),
@@ -225,25 +408,35 @@ async function fetchRssSource(source) {
     return feed.items.map(item => {
       // Determine locality level from content
       let localityLevel = 'global';
-      const content = `${item.title || ''} ${item.contentSnippet || ''}`.toLowerCase();
+      const content = `${item.title || ''} ${getItemDescription(item)}`.toLowerCase();
       
       if (content.includes('local') || content.includes('city') || 
           item.categories?.some(c => ['local', 'city'].includes(c.toLowerCase()))) {
         localityLevel = 'city';
+      } else if (content.includes('county')) {
+        localityLevel = 'county';
+      } else if (content.includes('state')) {
+        localityLevel = 'state';
+      } else if (content.includes('country') || content.includes('national')) {
+        localityLevel = 'country';
       }
+
+      const providerId = detectProviderIdFromUrl(source.url);
       
       return {
         title: item.title || 'Untitled',
-        description: item.contentSnippet || item.content || '',
+        description: getItemDescription(item),
         source: source.name,
         sourceId: item.guid || item.link,
         url: item.link,
-        imageUrl: item.enclosure?.url || extractImageFromContent(item.content) || null,
-        publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
-        topics: item.categories?.map(c => c.toLowerCase()) || [],
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        topics: toUniqueNonEmptyStrings(item.categories?.map(c => normalizeTopicToken(c)) || []),
+        locations: buildArticleLocationTokens({ source, item }),
         sourceType: 'rss',
         localityLevel,
-        language: item.isoLanguage || 'en'
+        language: item.isoLanguage || feed.language || 'en',
+        providerId
       };
     });
   } catch (error) {
@@ -292,14 +485,14 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
       
       return {
         title: item.title || 'Untitled',
-        description: item.contentSnippet || '',
+        description: getItemDescription(item),
         source: sourceName,
         sourceId: item.guid || item.link,
         url: item.link,
-        imageUrl: null,
-        publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
-        topics: [queryLower],
-        locations: [query],
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        topics: toUniqueNonEmptyStrings([queryLower, ...(item.categories || []).map((category) => normalizeTopicToken(category))]),
+        locations: buildArticleLocationTokens({ source: { name: sourceName, category: query }, item, query }),
         sourceType,
         localityLevel,
         language: 'en'
@@ -329,13 +522,14 @@ async function fetchYoutubeSource(channelUrl) {
     return feed.items.map(item => {
       return {
         title: item.title || 'Untitled',
-        description: item.content || item.contentSnippet || '',
+        description: getItemDescription(item),
         source: 'YouTube',
         sourceId: item.id,
         url: item.links?.[0]?.href || item.link,
         imageUrl: item.mediaGroup?.mediaContents?.[0]?.url || null,
-        publishedAt: item.published ? new Date(item.published) : new Date(),
+        publishedAt: getItemPublishedAt(item),
         topics: ['youtube', 'video'],
+        locations: buildArticleLocationTokens({ source: { name: 'YouTube' }, item }),
         sourceType: 'youtube',
         localityLevel: 'global',
         language: 'en'
@@ -358,13 +552,14 @@ async function fetchPodcastSource(feedUrl) {
     return feed.items.map(item => {
       return {
         title: item.title || 'Untitled',
-        description: item.contentSnippet || item.content || '',
+        description: getItemDescription(item),
         source: feed.title || 'Podcast',
         sourceId: item.guid || item.enclosure?.url,
         url: item.enclosure?.url || item.link,
         imageUrl: feed.image?.url || null,
-        publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
+        publishedAt: getItemPublishedAt(item),
         topics: ['podcast', 'audio'],
+        locations: buildArticleLocationTokens({ source: { name: feed.title || 'Podcast' }, item }),
         sourceType: 'podcast',
         localityLevel: 'global',
         language: feed.language || 'en'
@@ -597,7 +792,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
     // Extract followed keywords for personalization
     const followedKeywords = preferences?.followedKeywords?.map(k => k.keyword) || [];
     
-    // Build query
+    // Build base query
     const query = { isActive: true };
     
     // Filter by source type
@@ -605,54 +800,16 @@ router.get('/feed', authenticateToken, async (req, res) => {
       query.sourceType = sourceType;
     }
     
-    // Filter by topic - if no specific topic provided, use user's preferences
-    if (topic) {
-      query.topics = topic.toLowerCase();
-    } else if (preferences?.googleNewsTopics?.length > 0 || preferences?.gdletCategories?.length > 0) {
-      // Use user's preferred topics/categories when no specific topic filter is selected
-      const userTopics = [
-        ...(preferences.googleNewsTopics || []),
-        ...(preferences.gdletCategories || [])
-      ];
-      if (userTopics.length > 0) {
-        query.$or = [
-          { topics: { $in: userTopics.map(t => t.toLowerCase()) } },
-          { topics: { $exists: false } }
-        ];
-      }
-    }
-    
     // Filter by location
     if (location) {
       query.locations = location.toLowerCase();
     }
-    
-    // Filter out hidden categories if user has preferences
-    if (preferences?.hiddenCategories?.length > 0) {
-      const hiddenCategories = preferences.hiddenCategories.map(c => c.toLowerCase());
-      if (query.topics) {
-        const existingTopicFilter = query.topics;
-        delete query.topics;
-        query.$and = query.$and || [];
-        query.$and.push({ topics: existingTopicFilter });
-        query.$and.push({ topics: { $nin: hiddenCategories } });
-      } else if (query.$or) {
-        const existingOrFilter = query.$or;
-        delete query.$or;
-        query.$and = query.$and || [];
-        query.$and.push({ $or: existingOrFilter });
-        query.$and.push({ topics: { $nin: hiddenCategories } });
-      } else {
-        query.topics = { $nin: hiddenCategories };
-      }
-    }
 
     // Fetch scope-aware candidate set (larger for location scopes to support deterministic fallback fill)
     const candidateMultiplier = activeScope === 'global' ? 2 : 4;
-    const candidateLimit = Math.min(200, parsedLimit * candidateMultiplier);
+    const candidateLimit = Math.min(MAX_FEED_CANDIDATES, parsedPage * parsedLimit * candidateMultiplier);
     let articles = await Article.find(query)
       .sort({ publishedAt: -1, freshnessScore: -1 })
-      .skip(skip)
       .limit(candidateLimit)
       .lean();
     
@@ -671,6 +828,15 @@ router.get('/feed', authenticateToken, async (req, res) => {
       });
     }
     
+    const topicAliases = getTopicAliases(topic);
+    const hiddenCategorySet = new Set((preferences?.hiddenCategories || []).map((category) => normalizeTopicToken(category)));
+    const preferredTopicAliases = !topic && (preferences?.googleNewsTopics?.length > 0 || preferences?.gdletCategories?.length > 0)
+      ? [...new Set([
+          ...(preferences.googleNewsTopics || []),
+          ...(preferences.gdletCategories || [])
+        ].flatMap((value) => getTopicAliases(value)))]
+      : [];
+
     articles = articles.map((article) => {
       const articleText = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
       const matchedKeywords = followedKeywords.filter((keyword) => articleText.includes(keyword.toLowerCase()));
@@ -693,6 +859,38 @@ router.get('/feed', authenticateToken, async (req, res) => {
       };
     });
 
+    articles = articles.filter((article) => {
+      if (topicAliases.length > 0) {
+        const text = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
+        if (!topicAliases.some((alias) => text.includes(alias.toLowerCase()))) {
+          return false;
+        }
+      } else if (preferredTopicAliases.length > 0) {
+        const text = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
+        if (!preferredTopicAliases.some((alias) => text.includes(alias.toLowerCase()))) {
+          return false;
+        }
+      }
+
+      if (hiddenCategorySet.size > 0) {
+        const articleTopics = (article.topics || []).map((item) => normalizeTopicToken(item));
+        if (articleTopics.some((item) => hiddenCategorySet.has(item))) {
+          return false;
+        }
+      }
+
+      if (activeScope === 'local') {
+        return Boolean(article._scopeTier <= 2);
+      }
+      if (activeScope === 'regional') {
+        return Boolean(article._scopeTier === 0);
+      }
+      if (activeScope === 'national') {
+        return Boolean(article._scopeTier === 0);
+      }
+      return true;
+    });
+
     articles.sort((a, b) => {
       if (a._scopeTier !== b._scopeTier) return a._scopeTier - b._scopeTier;
       if (a._boostScore !== b._boostScore) return b._boostScore - a._boostScore;
@@ -702,11 +900,9 @@ router.get('/feed', authenticateToken, async (req, res) => {
       return String(a._id).localeCompare(String(b._id));
     });
     
-    // Limit to requested number after re-ranking
-    articles = articles.slice(0, parsedLimit);
-    
-    // Get total count
-    const total = await Article.countDocuments(query);
+    const total = articles.length;
+    const startIndex = Math.max(0, skip);
+    articles = articles.slice(startIndex, startIndex + parsedLimit);
 
     const promotedLimit = Math.min(DEFAULT_PROMOTED_ITEMS, FEED_PROMOTED_MAX_ITEMS);
     const promotedArticles = await Article.find({ isActive: true, isPromoted: true })
@@ -814,8 +1010,32 @@ router.get('/sources', authenticateToken, async (req, res) => {
   try {
     const sources = await RssSource.find({ isActive: true })
       .sort({ priority: -1, name: 1 });
+
+    const topUsedSources = [...sources]
+      .sort((a, b) => {
+        if ((b.fetchCount || 0) !== (a.fetchCount || 0)) {
+          return (b.fetchCount || 0) - (a.fetchCount || 0);
+        }
+        return new Date(b.lastFetchAt || 0).getTime() - new Date(a.lastFetchAt || 0).getTime();
+      })
+      .slice(0, 10)
+      .map((source) => ({
+        _id: source._id,
+        name: source.name,
+        url: source.url,
+        type: source.type,
+        category: source.category,
+        fetchCount: source.fetchCount || 0,
+        lastFetchAt: source.lastFetchAt,
+        lastFetchStatus: source.lastFetchStatus,
+        providerId: detectProviderIdFromUrl(source.url)
+      }));
     
-    res.json({ sources });
+    res.json({
+      sources,
+      topUsedSources,
+      supportedRssProviders: SUPPORTED_RSS_PROVIDERS
+    });
   } catch (error) {
     console.error('Error fetching sources:', error);
     res.status(500).json({ error: 'Failed to fetch sources' });
@@ -838,6 +1058,7 @@ router.get('/preferences', authenticateToken, async (req, res) => {
       const seededLocations = userFallbackLocation
         ? [{
             city: userFallbackLocation.city,
+            zipCode: userFallbackLocation.zipCode,
             state: userFallbackLocation.state,
             country: userFallbackLocation.country,
             isPrimary: true
@@ -859,6 +1080,7 @@ router.get('/preferences', authenticateToken, async (req, res) => {
       if (!preferences.locations?.length) {
         updatePayload.locations = [{
           city: userFallbackLocation.city,
+          zipCode: userFallbackLocation.zipCode,
           state: userFallbackLocation.state,
           country: userFallbackLocation.country,
           isPrimary: true
@@ -1013,14 +1235,15 @@ router.delete('/preferences/keywords/:keyword', authenticateToken, async (req, r
  */
 router.post('/preferences/locations', authenticateToken, async (req, res) => {
   try {
-    const { city, county, state, country, isPrimary = false } = req.body;
+    const { city, zipCode, county, state, country, isPrimary = false } = req.body;
     
-    if (!city && !county && !state && !country) {
+    if (!city && !zipCode && !county && !state && !country) {
       return res.status(400).json({ error: 'At least one location field is required' });
     }
     
     const locationData = {
       city: city || null,
+      zipCode: zipCode || null,
       county: county || null,
       state: state || null,
       country: country || null,
@@ -1143,6 +1366,18 @@ router.post('/sources', authenticateToken, async (req, res) => {
     const existing = await RssSource.findOne({ url });
     if (existing) {
       return res.status(400).json({ error: 'Source already exists' });
+    }
+
+    if (type === 'rss' || type === 'googleNews' || type === 'government' || type === 'podcast') {
+      try {
+        const previewFeed = await parser.parseURL(url);
+        const itemCount = Array.isArray(previewFeed?.items) ? previewFeed.items.length : 0;
+        if (itemCount === 0) {
+          return res.status(400).json({ error: 'Feed is reachable but returned no parseable items' });
+        }
+      } catch (parseError) {
+        return res.status(400).json({ error: `Unable to parse this feed URL: ${parseError.message}` });
+      }
     }
     
     const source = await RssSource.create({

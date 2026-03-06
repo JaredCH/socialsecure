@@ -72,6 +72,7 @@ function News() {
   const [activeScope, setActiveScope] = useState('global');
   const [scopeFallbackMessage, setScopeFallbackMessage] = useState('');
   const [availableSources, setAvailableSources] = useState([]);
+  const [topUsedSources, setTopUsedSources] = useState([]);
   const [newSource, setNewSource] = useState({
     name: '',
     url: '',
@@ -83,6 +84,7 @@ function News() {
   // Location form state
   const [newLocation, setNewLocation] = useState({
     city: '',
+    zipCode: '',
     state: '',
     country: ''
   });
@@ -139,6 +141,7 @@ function News() {
       setTopics(topicsRes.data.topics);
       setPromotedArticles(promotedRes.data.items || []);
       setAvailableSources(sourcesRes.data.sources || []);
+      setTopUsedSources(sourcesRes.data.topUsedSources || []);
       setPromotedError(null);
       
       // Set hidden categories from preferences
@@ -281,12 +284,12 @@ function News() {
   // Add location
   const handleAddLocation = async (e) => {
     e.preventDefault();
-    if (!newLocation.city.trim() && !newLocation.state.trim() && !newLocation.country.trim()) return;
+    if (!newLocation.city.trim() && !newLocation.zipCode.trim() && !newLocation.state.trim() && !newLocation.country.trim()) return;
     
     try {
       const res = await newsAPI.addLocation(newLocation);
       setPreferences(res.data.preferences);
-      setNewLocation({ city: '', state: '', country: '' });
+      setNewLocation({ city: '', zipCode: '', state: '', country: '' });
     } catch (err) {
       console.error('Error adding location:', err);
     }
@@ -585,6 +588,19 @@ function News() {
                 Choose which catalog sources are enabled and add your own feed links to fully customize your news mix.
               </p>
               <div className="space-y-2 mb-4">
+                {topUsedSources.length > 0 && (
+                  <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
+                    <p className="text-sm font-medium text-blue-800 mb-2">Top 10 active RSS sources</p>
+                    <div className="space-y-1">
+                      {topUsedSources.map((source, index) => (
+                        <div key={source._id} className="text-xs text-blue-700 flex items-center justify-between gap-2">
+                          <span className="truncate">{index + 1}. {source.name}</span>
+                          <span className="shrink-0">{source.fetchCount || 0} fetches</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {availableSources.map((source) => {
                   const enabled = isSourceEnabled(source._id);
                   return (
@@ -669,7 +685,7 @@ function News() {
                     className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
                   >
                     <span className="text-gray-700">
-                      {loc.city || loc.county || loc.state || loc.country}
+                      {loc.city || loc.zipCode || loc.county || loc.state || loc.country}
                       {loc.isPrimary && <span className="ml-2 text-xs text-blue-600">Primary</span>}
                     </span>
                     <button
@@ -693,6 +709,13 @@ function News() {
                     value={newLocation.city}
                     onChange={(e) => setNewLocation({ ...newLocation, city: e.target.value })}
                     placeholder="City"
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={newLocation.zipCode}
+                    onChange={(e) => setNewLocation({ ...newLocation, zipCode: e.target.value })}
+                    placeholder="ZIP / Postal"
                     className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
                   />
                   <input

@@ -260,4 +260,82 @@ describe('News scope routing', () => {
     );
     expect(response.body.preferences.defaultScope).toBe('local');
   });
+
+  it('seeds zip code into default location when profile has zipCode', async () => {
+    const app = buildApp();
+    const seededPrefs = {
+      _id: 'prefs-2',
+      user: 'user-1',
+      defaultScope: 'local',
+      locations: [{ city: null, zipCode: '10001', state: null, country: 'US', isPrimary: true }]
+    };
+
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, state: null, country: 'US', zipCode: '10001' }) });
+    NewsPreferences.findOne.mockReturnValue({ populate: jest.fn().mockResolvedValue(null) });
+    NewsPreferences.create.mockResolvedValue(seededPrefs);
+
+    const response = await request(app)
+      .get('/api/news/preferences')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(NewsPreferences.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locations: [
+          expect.objectContaining({
+            zipCode: '10001',
+            country: 'US'
+          })
+        ]
+      })
+    );
+  });
+
+  it('filters local scope feed to location matches and keeps topic aliases stacked', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'local-ai-1',
+        title: 'AI startup expands in Austin',
+        description: 'Machine learning company opens a new office.',
+        source: 'Austin Tech Wire',
+        sourceType: 'rss',
+        sourceId: 'austin-tech-wire',
+        topics: ['artificial intelligence'],
+        locations: ['Austin', 'Texas', 'USA'],
+        localityLevel: 'city',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      },
+      {
+        _id: 'remote-ai-1',
+        title: 'AI policy update in London',
+        description: 'International machine learning policy update.',
+        source: 'Global Tech',
+        sourceType: 'rss',
+        sourceId: 'global-tech',
+        topics: ['artificial intelligence'],
+        locations: ['London', 'UK'],
+        localityLevel: 'city',
+        publishedAt: new Date('2026-03-01T01:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'local',
+      locations: [{ city: 'Austin', state: 'Texas', country: 'USA', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'Austin', county: null, state: 'Texas', country: 'USA', zipCode: null }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=local&topic=ai')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.activeScope).toBe('local');
+    expect(response.body.articles).toHaveLength(1);
+    expect(response.body.articles[0]._id).toBe('local-ai-1');
+  });
 });

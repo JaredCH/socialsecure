@@ -6,6 +6,10 @@ const newsLocationSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  zipCode: {
+    type: String,
+    default: null
+  },
   county: {
     type: String,
     default: null
@@ -140,6 +144,7 @@ newsPreferencesSchema.methods.addLocation = async function(location) {
   // Check if location already exists
   const exists = this.locations.some(loc => 
     loc.city === location.city && 
+    loc.zipCode === location.zipCode &&
     loc.state === location.state && 
     loc.country === location.country
   );
