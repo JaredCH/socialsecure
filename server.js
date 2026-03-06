@@ -83,7 +83,8 @@ app.set('trust proxy', normalizedTrustProxyHops);
 const cspDirectives = helmet.contentSecurityPolicy.getDefaultDirectives();
 const openStreetMapTileSources = ['https://*.tile.openstreetmap.org'];
 cspDirectives['img-src'] = [
-  ...new Set([...(cspDirectives['img-src'] || []), ...openStreetMapTileSources])
+  ...(cspDirectives['img-src'] || []),
+  ...openStreetMapTileSources
 ];
 
 app.use(helmet({
