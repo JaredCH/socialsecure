@@ -377,18 +377,18 @@ function App() {
         <nav className="bg-white shadow-md p-4">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
-            <div className="flex flex-nowrap items-center gap-3 overflow-x-auto whitespace-nowrap">
-              {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600">Home</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600">Social</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600">Discover</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600">Chat</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600">Market</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600">Maps</Link>}
-              <Link to="/calendar" className="text-gray-600 hover:text-blue-600">Calendar</Link>
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/resume" className="text-gray-600 hover:text-blue-600">Resume</Link>}
-              {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/control-panel" className="text-gray-600 hover:text-blue-600">Control Panel</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
+            <div className="flex flex-nowrap items-center gap-3 overflow-x-auto">
+              {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Home</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Social</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Discover</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Chat</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Market</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">News</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Maps</Link>}
+              <Link to="/calendar" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Calendar</Link>
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/resume" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Resume</Link>}
+              {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/control-panel" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Control Panel</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Refer Friend</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && (
                 <NotificationCenter
                   unreadCount={unreadNotificationCount}
@@ -396,16 +396,16 @@ function App() {
                   incomingNotification={incomingNotification}
                 />
               )}
-              {isAuthenticated && onboardingRequired && <Link to="/onboarding" className="text-blue-600 font-medium">Onboarding</Link>}
+              {isAuthenticated && onboardingRequired && <Link to="/onboarding" className="text-blue-600 font-medium whitespace-nowrap">Onboarding</Link>}
               {isAuthenticated ? (
                 <>
-                  <Link to="/settings" className="text-gray-600 hover:text-blue-600">User Settings</Link>
-                  <button onClick={handleLogout} className="text-red-600 font-medium">Logout</button>
+                  <Link to="/settings" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">User Settings</Link>
+                  <button onClick={handleLogout} className="text-red-600 font-medium whitespace-nowrap">Logout</button>
                 </>
               ) : (
                 <>
-                  <Link to="/login" className="text-blue-600 font-medium">Login</Link>
-                  <Link to="/register" className="text-blue-600 font-medium">Register</Link>
+                  <Link to="/login" className="text-blue-600 font-medium whitespace-nowrap">Login</Link>
+                  <Link to="/register" className="text-blue-600 font-medium whitespace-nowrap">Register</Link>
                 </>
               )}
             </div>
