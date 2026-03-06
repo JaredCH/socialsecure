@@ -797,7 +797,7 @@ const Chat = () => {
               disabled={!isUnlocked || !activeRoomId || sending}
               className="flex-1 border rounded p-2"
               maxLength={2000}
-              placeholder={isUnlocked ? 'Type encrypted message or /me /sing /shout /cry /dice /diceN' : 'Unlock encryption to send'}
+              placeholder={isUnlocked ? `Type encrypted message or ${SUPPORTED_COMMANDS.map((name) => `/${name}`).join(' ')}` : 'Unlock encryption to send'}
             />
             <button
               type="submit"

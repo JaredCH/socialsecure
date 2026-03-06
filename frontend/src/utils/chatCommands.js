@@ -15,9 +15,8 @@ export const parseSlashCommand = (input = '') => {
 };
 
 const rollDice = (sides) => {
-  const normalizedSides = Math.max(1, Math.floor(Number(sides) || 6));
-  const roll = Math.floor(Math.random() * normalizedSides) + 1;
-  return { sides: normalizedSides, roll };
+  const roll = Math.floor(Math.random() * sides) + 1;
+  return { sides, roll };
 };
 
 const ensureArgs = (args, usage) => {
