@@ -33,6 +33,9 @@ const scrollNavTo = (target, left) => {
 };
 const handleNavScrollKeyDown = (event) => {
   const target = event.currentTarget;
+  if (target !== event.target) {
+    return;
+  }
   if (event.key === 'Home') {
     event.preventDefault();
     scrollNavTo(target, 0);
@@ -415,7 +418,6 @@ function App() {
               className="flex flex-nowrap items-center gap-3 overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
               tabIndex={0}
               aria-label="Primary navigation links"
-              role="navigation"
               aria-describedby="nav-scroll-hint"
               onKeyDown={handleNavScrollKeyDown}
             >
