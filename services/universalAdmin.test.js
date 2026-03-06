@@ -33,9 +33,12 @@ describe('services/universalAdmin', () => {
     expect(bcrypt.hash).toHaveBeenNthCalledWith(1, 'AdminPass123', 12);
     expect(bcrypt.hash).toHaveBeenNthCalledWith(2, 'EncryptionPass123', 12);
     expect(mockUser).toHaveBeenCalledWith(expect.objectContaining({
+      realName: 'Jared Hicks',
       username: 'admin',
       email: 'admin@socialsecure.local',
       passwordHash: 'hashed-admin-password',
+      country: 'US',
+      zipCode: '78666',
       encryptionPasswordHash: 'hashed-encryption-password',
       encryptionPasswordVersion: 1
     }));
@@ -46,8 +49,11 @@ describe('services/universalAdmin', () => {
 
   it('sets encryption password hash when existing admin account lacks one', async () => {
     const adminUser = {
+      realName: 'System Administrator',
       isAdmin: true,
       registrationStatus: 'active',
+      country: null,
+      zipCode: null,
       encryptionPasswordHash: null,
       save: jest.fn().mockResolvedValue(true)
     };
@@ -65,6 +71,9 @@ describe('services/universalAdmin', () => {
     expect(adminUser.encryptionPasswordHash).toBe('hashed-encryption-password');
     expect(adminUser.encryptionPasswordVersion).toBe(1);
     expect(adminUser.encryptionPasswordSetAt).toEqual(expect.any(Date));
+    expect(adminUser.realName).toBe('Jared Hicks');
+    expect(adminUser.country).toBe('US');
+    expect(adminUser.zipCode).toBe('78666');
     expect(adminUser.save).toHaveBeenCalled();
     expect(result.encryptionPasswordUpdated).toBe(true);
   });

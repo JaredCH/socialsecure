@@ -1,12 +1,37 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
+const resolveAdminProfile = () => {
+  const defaultProfile = {
+    realName: 'Jared Hicks',
+    country: 'US',
+    zipCode: '78666'
+  };
+
+  const resolvedRealName = typeof process.env.UNIVERSAL_ADMIN_REAL_NAME === 'string'
+    ? process.env.UNIVERSAL_ADMIN_REAL_NAME.trim()
+    : '';
+  const resolvedCountry = typeof process.env.UNIVERSAL_ADMIN_COUNTRY === 'string'
+    ? process.env.UNIVERSAL_ADMIN_COUNTRY.trim().toUpperCase()
+    : '';
+  const resolvedZipCode = typeof process.env.UNIVERSAL_ADMIN_ZIP === 'string'
+    ? process.env.UNIVERSAL_ADMIN_ZIP.trim()
+    : '';
+
+  return {
+    realName: resolvedRealName || defaultProfile.realName,
+    country: resolvedCountry || defaultProfile.country,
+    zipCode: resolvedZipCode || defaultProfile.zipCode
+  };
+};
+
 const ensureUniversalAdminAccount = async ({
   username,
   email,
   password,
   encryptionPassword
 } = {}) => {
+  const adminProfile = resolveAdminProfile();
   const normalizedUsername = String(username || '').trim().toLowerCase();
   if (!normalizedUsername) {
     throw new Error('Universal admin username is required');
@@ -33,11 +58,12 @@ const ensureUniversalAdminAccount = async ({
       : null;
 
     adminUser = new User({
-      realName: 'System Administrator',
+      realName: adminProfile.realName,
       username: normalizedUsername,
       email: resolvedEmail,
       passwordHash,
-      country: 'US',
+      country: adminProfile.country,
+      zipCode: adminProfile.zipCode,
       registrationStatus: 'active',
       isAdmin: true,
       onboardingStatus: 'completed',
@@ -58,6 +84,13 @@ const ensureUniversalAdminAccount = async ({
   let updated = false;
   let privilegesRepaired = false;
   let encryptionPasswordUpdated = false;
+
+  Object.entries(adminProfile).forEach(([key, value]) => {
+    if (adminUser[key] !== value) {
+      adminUser[key] = value;
+      updated = true;
+    }
+  });
 
   if (!adminUser.isAdmin || adminUser.registrationStatus !== 'active') {
     adminUser.isAdmin = true;
