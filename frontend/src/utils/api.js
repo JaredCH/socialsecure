@@ -1,6 +1,18 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || '/api';
+export const normalizeApiBaseUrl = (apiUrl) => {
+  const trimmedApiUrl = (apiUrl || '').trim();
+  if (!trimmedApiUrl) return '/api';
+
+  const isAbsoluteUrl = /^(https?:)?\/\//i.test(trimmedApiUrl);
+  const normalizedApiUrl = isAbsoluteUrl
+    ? trimmedApiUrl
+    : `/${trimmedApiUrl.replace(/^\/+/, '')}`;
+
+  return normalizedApiUrl.replace(/\/+$/, '') || '/api';
+};
+
+const API_URL = normalizeApiBaseUrl(process.env.REACT_APP_API_URL);
 
 const api = axios.create({
   baseURL: API_URL,
