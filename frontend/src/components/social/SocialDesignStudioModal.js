@@ -111,14 +111,17 @@ const buildPanelLayoutMap = (normalized) => {
     placed.push(candidate);
   };
 
-  allPanels.forEach((panel) => {
-    const candidate = panelWithPlacement(panel, 0, getColumnBoundsForArea(panel.area).min);
-    if (canPlaceAt(candidate, candidate.gridPlacement.row, candidate.gridPlacement.col)) {
+  const hasGridPlacement = (panel) => Number.isFinite(panel.gridPlacement?.row)
+    && Number.isFinite(panel.gridPlacement?.col);
+
+  const placePanel = (panel, preferPlacement) => {
+    const bounds = getColumnBoundsForArea(panel.area);
+    const candidate = panelWithPlacement(panel, 0, bounds.min);
+    if (preferPlacement && canPlaceAt(candidate, candidate.gridPlacement.row, candidate.gridPlacement.col)) {
       markPlaced(candidate);
       return;
     }
 
-    const bounds = getColumnBoundsForArea(panel.area);
     let found = false;
     for (let row = 0; row < GRID_ROWS && !found; row += 1) {
       for (let col = bounds.min; col <= bounds.max; col += 1) {
@@ -135,7 +138,13 @@ const buildPanelLayoutMap = (normalized) => {
       candidate.gridPlacement = { row: 0, col: bounds.min };
       placed.push(candidate);
     }
-  });
+  };
+
+  const panelsWithPlacement = allPanels.filter((panel) => hasGridPlacement(panel));
+  const panelsWithoutPlacement = allPanels.filter((panel) => !hasGridPlacement(panel));
+
+  panelsWithPlacement.forEach((panel) => placePanel(panel, true));
+  panelsWithoutPlacement.forEach((panel) => placePanel(panel, false));
 
   return { placed, occupied };
 };
