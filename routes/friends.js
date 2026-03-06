@@ -8,6 +8,19 @@ const TopFriend = require('../models/TopFriend');
 const Presence = require('../models/Presence');
 const { createNotification } = require('../services/notifications');
 const { buildPresencePayload, getPresenceMapForUsers } = require('../services/realtime');
+const VALID_FRIEND_CATEGORIES = ['social', 'secure'];
+const TOP_FRIENDS_LIMIT = 5;
+
+const logFriendEvent = ({ eventType, userId, metadata = {}, req }) => {
+  console.log('[friend-event]', JSON.stringify({
+    eventType,
+    userId: String(userId),
+    metadata,
+    ipAddress: req.ip,
+    userAgent: req.get('user-agent') || null,
+    createdAt: new Date().toISOString()
+  }));
+};
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -93,6 +106,8 @@ router.post('/request', authenticateToken, async (req, res) => {
         existingFriendship.declinedAt = null;
         existingFriendship.blockedAt = null;
         existingFriendship.removedAt = null;
+        existingFriendship.requesterCategory = 'social';
+        existingFriendship.recipientCategory = 'social';
         await existingFriendship.save();
 
         await createNotification({
@@ -119,7 +134,9 @@ router.post('/request', authenticateToken, async (req, res) => {
       requester: req.user._id,
       recipient: userId,
       status: 'pending',
-      message: message || null
+      message: message || null,
+      requesterCategory: 'social',
+      recipientCategory: 'social'
     });
     
     await friendship.save();
@@ -177,6 +194,12 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
     // Update friendship status
     friendship.status = 'accepted';
     friendship.acceptedAt = new Date();
+    if (!VALID_FRIEND_CATEGORIES.includes(friendship.requesterCategory)) {
+      friendship.requesterCategory = 'social';
+    }
+    if (!VALID_FRIEND_CATEGORIES.includes(friendship.recipientCategory)) {
+      friendship.recipientCategory = 'social';
+    }
     await friendship.save();
     
     // Update friend counts for both users
@@ -285,14 +308,25 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       );
       
       // Remove from top friends if present
-      await TopFriend.updateOne(
+      const requesterTopRemoval = await TopFriend.updateOne(
         { user: friendship.requester },
         { $pull: { friends: friendship.recipient } }
       );
-      await TopFriend.updateOne(
+      const recipientTopRemoval = await TopFriend.updateOne(
         { user: friendship.recipient },
         { $pull: { friends: friendship.requester } }
       );
+      if ((requesterTopRemoval?.modifiedCount || 0) > 0 || (recipientTopRemoval?.modifiedCount || 0) > 0) {
+        logFriendEvent({
+          eventType: 'top5_entry_removed',
+          userId: req.user._id,
+          metadata: {
+            friendshipId: friendship._id.toString(),
+            reason: 'friend_removed'
+          },
+          req
+        });
+      }
     }
     
     friendship.status = 'removed';
@@ -331,6 +365,8 @@ router.post('/:id/block', authenticateToken, async (req, res) => {
     if (!isRequester && !isRecipient) {
       return res.status(403).json({ error: 'Not authorized' });
     }
+
+    const wasAcceptedFriendship = friendship.status === 'accepted';
     
     // Update or create block
     friendship.status = 'blocked';
@@ -340,7 +376,7 @@ router.post('/:id/block', authenticateToken, async (req, res) => {
     await friendship.save();
     
     // If was friends, decrease friend counts
-    if (friendship.acceptedAt) {
+    if (wasAcceptedFriendship) {
       await User.updateOne(
         { _id: friendship.requester },
         { $inc: { friendCount: -1 } }
@@ -349,6 +385,26 @@ router.post('/:id/block', authenticateToken, async (req, res) => {
         { _id: friendship.recipient },
         { $inc: { friendCount: -1 } }
       );
+
+      const requesterTopRemoval = await TopFriend.updateOne(
+        { user: friendship.requester },
+        { $pull: { friends: friendship.recipient } }
+      );
+      const recipientTopRemoval = await TopFriend.updateOne(
+        { user: friendship.recipient },
+        { $pull: { friends: friendship.requester } }
+      );
+      if ((requesterTopRemoval?.modifiedCount || 0) > 0 || (recipientTopRemoval?.modifiedCount || 0) > 0) {
+        logFriendEvent({
+          eventType: 'top5_entry_removed',
+          userId: req.user._id,
+          metadata: {
+            friendshipId: friendship._id.toString(),
+            reason: 'friend_blocked'
+          },
+          req
+        });
+      }
     }
     
     res.json({
@@ -358,6 +414,60 @@ router.post('/:id/block', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error blocking user:', error);
     res.status(500).json({ error: 'Failed to block user' });
+  }
+});
+
+// PUT /api/friends/:id/category - Update viewer-owned friend category
+router.put('/:id/category', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { category } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid friendship ID' });
+    }
+    if (!VALID_FRIEND_CATEGORIES.includes(category)) {
+      return res.status(400).json({ error: 'Category must be social or secure' });
+    }
+
+    const friendship = await Friendship.findById(id);
+    if (!friendship) {
+      return res.status(404).json({ error: 'Friendship not found' });
+    }
+    if (friendship.status !== 'accepted') {
+      return res.status(400).json({ error: 'Category can only be updated for accepted friendships' });
+    }
+
+    const isRequester = friendship.requester.toString() === req.user._id.toString();
+    const isRecipient = friendship.recipient.toString() === req.user._id.toString();
+    if (!isRequester && !isRecipient) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    if (isRequester) {
+      friendship.requesterCategory = category;
+    } else {
+      friendship.recipientCategory = category;
+    }
+    await friendship.save();
+
+    logFriendEvent({
+      eventType: 'friend_category_changed',
+      userId: req.user._id,
+      metadata: {
+        friendshipId: friendship._id.toString(),
+        category
+      },
+      req
+    });
+
+    res.json({
+      success: true,
+      category
+    });
+  } catch (error) {
+    console.error('Error updating friend category:', error);
+    res.status(500).json({ error: 'Failed to update friend category' });
   }
 });
 
@@ -487,6 +597,12 @@ router.get('/top/:userIdOrUsername', authenticateToken, async (req, res) => {
     
     const topFriend = await TopFriend.findOne({ user: targetUser._id })
       .populate('friends', 'username realName avatarUrl city state country');
+
+    if (topFriend && (topFriend.maxFriends !== TOP_FRIENDS_LIMIT || topFriend.friends.length > TOP_FRIENDS_LIMIT)) {
+      topFriend.maxFriends = TOP_FRIENDS_LIMIT;
+      topFriend.friends = topFriend.friends.slice(0, TOP_FRIENDS_LIMIT);
+      await topFriend.save();
+    }
     
     res.json({
       success: true,
@@ -508,9 +624,32 @@ router.put('/top', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'friendIds must be an array' });
     }
     
+    const existingTopFriend = await TopFriend.getOrCreate(req.user._id);
+    const previousCount = existingTopFriend.friends.length;
     const topFriend = await TopFriend.updateOrder(req.user._id, friendIds);
     
     await topFriend.populate('friends', 'username realName avatarUrl city state country');
+
+    if (topFriend.friends.length < previousCount) {
+      logFriendEvent({
+        eventType: 'top5_entry_removed',
+        userId: req.user._id,
+        metadata: {
+          removedCount: previousCount - topFriend.friends.length,
+          reason: 'manual_update'
+        },
+        req
+      });
+    }
+
+    logFriendEvent({
+      eventType: 'top5_updated',
+      userId: req.user._id,
+      metadata: {
+        count: topFriend.friends.length
+      },
+      req
+    });
     
     res.json({
       success: true,
@@ -597,8 +736,14 @@ router.get('/relationship/:userId', authenticateToken, async (req, res) => {
     const friendship = await Friendship.findFriendship(req.user._id, userId);
     
     let relationship = 'none';
+    let category = null;
     if (friendship) {
       relationship = friendship.status;
+      if (friendship.requester.toString() === req.user._id.toString()) {
+        category = friendship.requesterCategory || 'social';
+      } else if (friendship.recipient.toString() === req.user._id.toString()) {
+        category = friendship.recipientCategory || 'social';
+      }
     }
     
     const isOwner = req.user._id.toString() === userId;
@@ -606,6 +751,7 @@ router.get('/relationship/:userId', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       relationship,
+      category,
       isOwner,
       friendshipId: friendship ? friendship._id : null
     });

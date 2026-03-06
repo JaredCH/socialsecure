@@ -240,6 +240,7 @@ const Social = () => {
   });
   const [circles, setCircles] = useState([]);
   const [friends, setFriends] = useState([]);
+  const [topFriends, setTopFriends] = useState([]);
   const [commentInputs, setCommentInputs] = useState({});
   const [typingByPost, setTypingByPost] = useState({});
   const [actionLoadingByPost, setActionLoadingByPost] = useState({});
@@ -403,7 +404,13 @@ const Social = () => {
       friendsAPI.getFriends().catch(() => ({ data: { friends: [] } }))
     ]);
     setCircles(Array.isArray(circlesResponse.data?.circles) ? circlesResponse.data.circles : []);
-    setFriends(Array.isArray(friendsResponse.data?.friends) ? friendsResponse.data.friends : []);
+    const nextFriends = Array.isArray(friendsResponse.data?.friends) ? friendsResponse.data.friends : [];
+    setFriends(nextFriends);
+
+    const topFriendsResponse = await friendsAPI
+      .getTopFriends(user?.username || user?._id)
+      .catch(() => ({ data: { topFriends: [] } }));
+    setTopFriends(Array.isArray(topFriendsResponse.data?.topFriends) ? topFriendsResponse.data.topFriends : []);
 
     const [blocksResponse, mutesResponse, reportsResponse] = await Promise.all([
       moderationAPI.getBlocks().catch(() => ({ data: { blockedUsers: [] } })),
@@ -2382,6 +2389,41 @@ const Social = () => {
         </section>
 
         <aside className="xl:col-span-3 space-y-4 xl:sticky xl:top-6">
+          {isOwnSocialContext && !isGuestPreview && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
+              <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Friends</h3>
+              <div className="mt-3 space-y-2">
+                {topFriends.slice(0, 5).map((friend, index) => (
+                  <div key={`top-${friend._id}`} className="flex items-center justify-between rounded-lg border-2 border-blue-200 bg-blue-50 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">@{friend.username}</p>
+                      <p className="text-xs text-gray-600">{friend.realName || 'Top Friend'}</p>
+                    </div>
+                    <span className="inline-flex items-center rounded-full bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">
+                      Top {index + 1}
+                    </span>
+                  </div>
+                ))}
+                {friends
+                  .filter((friend) => !topFriends.some((topFriend) => String(topFriend._id) === String(friend._id)))
+                  .map((friend) => (
+                    <div key={`friend-${friend._id}`} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">@{friend.username}</p>
+                        <p className="text-xs text-gray-600">{friend.realName || 'Friend'}</p>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {friend.category === 'secure' ? 'Secure' : 'Social'}
+                      </span>
+                    </div>
+                  ))}
+                {friends.length === 0 && (
+                  <p className="text-sm text-gray-500">No friends to display.</p>
+                )}
+              </div>
+            </section>
+          )}
+
           <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
             <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Chat Panel</h3>
             <p className="mt-3 text-sm text-gray-700">

@@ -53,6 +53,17 @@ const friendshipSchema = new mongoose.Schema({
     type: String,
     maxlength: 500,
     default: null
+  },
+  // Per-user category selections (private to each participant)
+  requesterCategory: {
+    type: String,
+    enum: ['social', 'secure'],
+    default: 'social'
+  },
+  recipientCategory: {
+    type: String,
+    enum: ['social', 'secure'],
+    default: 'social'
   }
 }, {
   timestamps: true
@@ -97,7 +108,8 @@ friendshipSchema.statics.getFriends = async function(userId) {
       state: friend.state,
       country: friend.country,
       friendshipId: f._id,
-      friendsSince: f.acceptedAt
+      friendsSince: f.acceptedAt,
+      category: (f.requester._id.toString() === userId.toString() ? f.requesterCategory : f.recipientCategory) || 'social'
     };
   });
 };

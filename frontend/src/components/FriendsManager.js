@@ -140,6 +140,20 @@ function FriendsManager({ currentUser, onUserUpdate }) {
     }
   };
 
+  const handleUpdateFriendCategory = async (friendshipId, category) => {
+    try {
+      await friendsAPI.updateFriendCategory(friendshipId, category);
+      setFriends((prev) => prev.map((friend) => (
+        friend.friendshipId === friendshipId
+          ? { ...friend, category }
+          : friend
+      )));
+      toast.success('Friend category updated');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update friend category');
+    }
+  };
+
   const handleUpdatePrivacy = async (newSettings) => {
     try {
       await friendsAPI.updatePrivacySettings(newSettings);
@@ -166,8 +180,8 @@ function FriendsManager({ currentUser, onUserUpdate }) {
   };
 
   const addToTopFriends = (friend) => {
-    if (topFriends.length >= 12) {
-      toast.error('Maximum 12 top friends allowed');
+    if (topFriends.length >= 5) {
+      toast.error('Maximum 5 top friends allowed');
       return;
     }
     if (topFriends.some(f => f._id === friend._id)) {
@@ -222,10 +236,24 @@ function FriendsManager({ currentUser, onUserUpdate }) {
                   <div>
                     <p className="font-medium">@{friend.username}</p>
                     <p className="text-sm text-gray-500">{friend.realName}</p>
+                    <div className="mt-1">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${friend.category === 'secure' ? 'bg-purple-100 text-purple-700' : 'bg-sky-100 text-sky-700'}`}>
+                        {friend.category === 'secure' ? 'Secure' : 'Social'}
+                      </span>
+                    </div>
                     <PresenceIndicator presence={friend.presence} />
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <select
+                    value={friend.category || 'social'}
+                    onChange={(event) => handleUpdateFriendCategory(friend.friendshipId, event.target.value)}
+                    className="text-sm border rounded px-2 py-1 bg-white"
+                    aria-label={`Category for ${friend.username}`}
+                  >
+                    <option value="social">Social</option>
+                    <option value="secure">Secure</option>
+                  </select>
                   <button
                     onClick={() => addToTopFriends(friend)}
                     className="text-sm px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
@@ -320,7 +348,7 @@ function FriendsManager({ currentUser, onUserUpdate }) {
       {/* Top Friends */}
       {activeTab === 'top' && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500 mb-2">Drag to reorder or remove from top friends (max 12)</p>
+          <p className="text-sm text-gray-500 mb-2">Drag to reorder or remove from top friends (max 5)</p>
           {topFriends.length === 0 ? (
             <p className="text-gray-500">No top friends set</p>
           ) : (
