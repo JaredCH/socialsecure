@@ -53,6 +53,7 @@ const KEYWORD_MATCH_WEIGHT = 100;
 const SCOPE_TIER_WEIGHT = 10;
 const MAX_SCOPE_TIERS = 4;
 const MAX_FEED_CANDIDATES = 400;
+const DETERMINISTIC_SCOPE_WEIGHT = 2;
 const LOCATION_GEOCODE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_LOCATION_QUERY_HINTS = 30;
 const NEWS_LOCATION_TAGGER_V2_ENABLED = String(process.env.NEWS_LOCATION_TAGGER_V2 || 'true').toLowerCase() !== 'false';
@@ -275,12 +276,22 @@ const extractCityStateQueryFromTitle = (title = '') => {
 const parseCityStateFromTitle = (title = '') => {
   const cityStateQuery = extractCityStateQueryFromTitle(title);
   if (!cityStateQuery) return null;
-  const [cityPart, statePart] = cityStateQuery.split(',').map((value) => String(value || '').trim());
+  const parts = cityStateQuery.split(',').map((value) => String(value || '').trim()).filter(Boolean);
+  if (parts.length !== 2) return null;
+  const [cityPart, statePart] = parts;
   if (!cityPart || !statePart) return null;
   return {
     city: cityPart,
     state: statePart
   };
+};
+
+const isLikelyLocationQuery = (value = '') => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  if (extractCityStateQueryFromTitle(normalized)) return true;
+  if (extractZipTokens([normalized]).length > 0) return true;
+  return false;
 };
 
 const resolveAssignedZipCode = async ({ locationTokens = [], source = {}, item = {}, query = null }) => {
@@ -312,7 +323,10 @@ const resolveAssignedZipCode = async ({ locationTokens = [], source = {}, item =
 
   const titleQuery = extractCityStateQueryFromTitle(item.title);
   const sourceQuery = source.location || source.address || '';
-  const geocodeQuery = titleQuery || sourceQuery || '';
+  // Intentionally omit source.name to avoid noisy per-article geocode lookups
+  // against generic publisher names (for example, "BBC News").
+  const queryHint = isLikelyLocationQuery(query) ? query : '';
+  const geocodeQuery = titleQuery || sourceQuery || queryHint || '';
   if (!geocodeQuery) return null;
 
   try {
@@ -411,6 +425,25 @@ const deriveScopeMetadata = ({ locationTags = {}, localityLevel = 'global', loca
     return { scopeReason: 'nlp_only', scopeConfidence: 0.35 };
   }
   return { scopeReason: 'source_default', scopeConfidence: 0.1 };
+};
+
+const mergeLocationTagValues = (existing = {}, incoming = {}, key) => {
+  const existingValues = Array.isArray(existing[key]) ? existing[key] : [];
+  const incomingValues = Array.isArray(incoming[key]) ? incoming[key] : [];
+  return toUniqueNonEmptyStrings([...existingValues, ...incomingValues]);
+};
+
+const mergeLocationTags = (existing = {}, incoming = {}, assignedZipCode = null) => {
+  return {
+    zipCodes: toUniqueNonEmptyStrings([
+      ...mergeLocationTagValues(existing, incoming, 'zipCodes'),
+      assignedZipCode
+    ]),
+    cities: mergeLocationTagValues(existing, incoming, 'cities'),
+    counties: mergeLocationTagValues(existing, incoming, 'counties'),
+    states: mergeLocationTagValues(existing, incoming, 'states'),
+    countries: mergeLocationTagValues(existing, incoming, 'countries')
+  };
 };
 
 const getItemPublishedAt = (item = {}) => {
@@ -1215,37 +1248,15 @@ async function processArticles(articles, options = {}) {
               locations: mergedLocations,
               assignedZipCode: scoredArticle.assignedZipCode || existing.assignedZipCode || null,
               locationTags: NEWS_LOCATION_TAGGER_V2_ENABLED
-                ? {
-                    zipCodes: toUniqueNonEmptyStrings([
-                      ...((existing.locationTags && Array.isArray(existing.locationTags.zipCodes)) ? existing.locationTags.zipCodes : []),
-                      ...((scoredArticle.locationTags && Array.isArray(scoredArticle.locationTags.zipCodes)) ? scoredArticle.locationTags.zipCodes : []),
-                      scoredArticle.assignedZipCode
-                    ]),
-                    cities: toUniqueNonEmptyStrings([
-                      ...((existing.locationTags && Array.isArray(existing.locationTags.cities)) ? existing.locationTags.cities : []),
-                      ...((scoredArticle.locationTags && Array.isArray(scoredArticle.locationTags.cities)) ? scoredArticle.locationTags.cities : [])
-                    ]),
-                    counties: toUniqueNonEmptyStrings([
-                      ...((existing.locationTags && Array.isArray(existing.locationTags.counties)) ? existing.locationTags.counties : []),
-                      ...((scoredArticle.locationTags && Array.isArray(scoredArticle.locationTags.counties)) ? scoredArticle.locationTags.counties : [])
-                    ]),
-                    states: toUniqueNonEmptyStrings([
-                      ...((existing.locationTags && Array.isArray(existing.locationTags.states)) ? existing.locationTags.states : []),
-                      ...((scoredArticle.locationTags && Array.isArray(scoredArticle.locationTags.states)) ? scoredArticle.locationTags.states : [])
-                    ]),
-                    countries: toUniqueNonEmptyStrings([
-                      ...((existing.locationTags && Array.isArray(existing.locationTags.countries)) ? existing.locationTags.countries : []),
-                      ...((scoredArticle.locationTags && Array.isArray(scoredArticle.locationTags.countries)) ? scoredArticle.locationTags.countries : [])
-                    ])
-                  }
+                ? mergeLocationTags(existing.locationTags, scoredArticle.locationTags, scoredArticle.assignedZipCode)
                 : existing.locationTags,
               scopeReason: NEWS_LOCATION_TAGGER_V2_ENABLED
                 ? (scoredArticle.scopeReason || existing.scopeReason || 'source_default')
                 : existing.scopeReason,
               scopeConfidence: NEWS_LOCATION_TAGGER_V2_ENABLED
                 ? Math.max(
-                  Number(existing.scopeConfidence) || 0,
-                  Number(scoredArticle.scopeConfidence) || 0
+                  Number.isFinite(existing.scopeConfidence) ? existing.scopeConfidence : 0,
+                  Number.isFinite(scoredArticle.scopeConfidence) ? scoredArticle.scopeConfidence : 0
                 )
                 : existing.scopeConfidence,
               viralScore: scoredArticle.viralScore,
@@ -1652,7 +1663,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
           const recencyScore = scoreRecency(article.publishedAt, article.freshnessScore);
           const localityLevelScore = scoreLocalityLevel(scopeValue, article.localityLevel);
           const deterministicScopeScore = NEWS_LOCATION_TAGGER_V2_ENABLED
-            ? (Number(article.scopeConfidence) || 0)
+            ? ((Number(article.scopeConfidence) || 0) * DETERMINISTIC_SCOPE_WEIGHT)
             : 0;
 
           return {

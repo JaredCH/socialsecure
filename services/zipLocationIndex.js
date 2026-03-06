@@ -26,7 +26,11 @@ const STATIC_ZIP_LOCATION_INDEX = Object.freeze({
   }
 });
 
-const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '').split('-')[0];
+const escapeRegexCharacters = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const normalizeZipCode = (value) => {
+  if (typeof value !== 'string' && typeof value !== 'number') return '';
+  return String(value).trim().toUpperCase().replace(/\s+/g, '').split('-')[0];
+};
 const normalizeToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeCountryCode = (value) => {
   const token = normalizeToken(value);
@@ -41,9 +45,7 @@ const toZipIndexShape = (entry = {}) => {
     entry.city,
     entry.county,
     entry.state,
-    entry.stateCode,
     entry.country,
-    entry.countryCode,
     ...(Array.isArray(entry.aliases) ? entry.aliases : [])
   ].map(normalizeToken).filter(Boolean))];
   return {
@@ -84,12 +86,15 @@ const findZipLocationByCityState = async ({ city, state, countryCode } = {}) => 
   if (!normalizedCity || !normalizedState) return null;
 
   if (mongoose.connection?.readyState === 1) {
-    const regex = new RegExp(`^${normalizedCity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const escapedCity = escapeRegexCharacters(normalizedCity);
+    const escapedState = escapeRegexCharacters(normalizedState);
+    const cityRegex = new RegExp(`^${escapedCity}$`, 'i');
+    const stateRegex = new RegExp(`^${escapedState}$`, 'i');
     const dbEntry = await ZipLocationIndex.findOne({
-      city: { $regex: regex },
+      city: { $regex: cityRegex },
       $or: [
-        { state: new RegExp(`^${normalizedState.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-        { stateCode: new RegExp(`^${normalizedState.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+        { state: stateRegex },
+        { stateCode: stateRegex }
       ]
     }).lean();
     if (dbEntry && (!normalizedCountry || normalizeCountryCode(dbEntry.countryCode || dbEntry.country) === normalizedCountry)) {
