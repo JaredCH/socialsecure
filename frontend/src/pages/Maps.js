@@ -18,6 +18,8 @@ const STATE_ICONS = {
   trending: '🔥',
   public_glow: '✨'
 };
+const GEOLOCATION_TIMEOUT_MS = 8000;
+const GEOLOCATION_MAX_AGE_MS = 300000;
 
 export const resolveLeafletModule = (leafletModule) => (
   leafletModule?.default && typeof leafletModule.default.map === 'function'
@@ -126,7 +128,7 @@ function Maps() {
               // Default to center of US if geolocation fails
               createMap([39.8283, -98.5795], 4);
             },
-            { timeout: 8000, maximumAge: 300000 }
+            { timeout: GEOLOCATION_TIMEOUT_MS, maximumAge: GEOLOCATION_MAX_AGE_MS }
           );
         } else {
           createMap([39.8283, -98.5795], 4);

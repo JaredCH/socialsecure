@@ -15,4 +15,10 @@ describe('resolveLeafletModule', () => {
 
     expect(resolveLeafletModule(moduleShape)).toBe(moduleShape);
   });
+
+  it('falls back to module object when default export has no map function', () => {
+    const moduleShape = { default: { map: null }, map: jest.fn() };
+
+    expect(resolveLeafletModule(moduleShape)).toBe(moduleShape);
+  });
 });
