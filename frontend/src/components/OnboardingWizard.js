@@ -108,7 +108,7 @@ function OnboardingWizard({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'socialsecure-private-key.asc';
+    link.download = 'SocialSecure-private-key.asc';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -182,7 +182,7 @@ function OnboardingWizard({
         }
 
         const identityName = user?.realName || user?.username || 'SocialSecure User';
-        const identityEmail = user?.email || `${user?._id || 'user'}@socialsecure.local`;
+        const identityEmail = user?.email || 'user@socialsecure.local';
         const { privateKey, publicKey } = await generatePGPKeyPair(identityName, identityEmail, pgpPassphrase);
 
         setGeneratedPrivateKey(privateKey);
