@@ -9,6 +9,12 @@ const Article = require('../models/Article');
 const RssSource = require('../models/RssSource');
 const NewsPreferences = require('../models/NewsPreferences');
 const User = require('../models/User');
+const {
+  calculateViralScore,
+  createMomentumMap,
+  getArticleMomentumSignal,
+  summarizeSignals
+} = require('../services/newsViralScore');
 
 // Initialize RSS parser with timeout
 const parser = new Parser({
@@ -214,8 +220,22 @@ async function processArticles(articles) {
     duplicates: 0
   };
   
+  const scoredArticles = [];
+  const momentumMap = createMomentumMap(articles, new Date());
+
   for (const article of articles) {
     try {
+      const sourceMomentum = getArticleMomentumSignal(article, momentumMap);
+      const scoring = calculateViralScore(article, { sourceMomentum });
+      const scoredArticle = {
+        ...article,
+        viralScore: scoring.score,
+        viralScoreVersion: scoring.scoreVersion,
+        viralSignals: scoring.signals,
+        isPromoted: scoring.isPromoted,
+        lastScoredAt: scoring.lastScoredAt
+      };
+
       // Check for duplicate by URL hash
       const existing = await Article.findOne({ normalizedUrlHash: article.normalizedUrlHash });
       
@@ -224,15 +244,21 @@ async function processArticles(articles) {
         if (article.publishedAt > existing.publishedAt) {
           await Article.findByIdAndUpdate(existing._id, {
             $set: {
-              title: article.title,
-              description: article.description,
-              imageUrl: article.imageUrl,
-              publishedAt: article.publishedAt,
-              topics: [...new Set([...existing.topics, ...article.topics])],
-              locations: article.locations ? [...new Set([...existing.locations, ...article.locations])] : existing.locations
+              title: scoredArticle.title,
+              description: scoredArticle.description,
+              imageUrl: scoredArticle.imageUrl,
+              publishedAt: scoredArticle.publishedAt,
+              topics: [...new Set([...existing.topics, ...scoredArticle.topics])],
+              locations: scoredArticle.locations ? [...new Set([...existing.locations, ...scoredArticle.locations])] : existing.locations,
+              viralScore: scoredArticle.viralScore,
+              viralScoreVersion: scoredArticle.viralScoreVersion,
+              viralSignals: scoredArticle.viralSignals,
+              isPromoted: scoredArticle.isPromoted,
+              lastScoredAt: scoredArticle.lastScoredAt
             }
           });
           results.updated++;
+          scoredArticles.push(scoredArticle);
         } else {
           results.duplicates++;
         }
@@ -240,9 +266,10 @@ async function processArticles(articles) {
       }
       
       // Create new article
-      const newArticle = new Article(article);
+      const newArticle = new Article(scoredArticle);
       await newArticle.save();
       results.inserted++;
+      scoredArticles.push(scoredArticle);
     } catch (error) {
       if (error.code === 11000) {
         results.duplicates++;
@@ -252,6 +279,18 @@ async function processArticles(articles) {
     }
   }
   
+  const scoreValues = scoredArticles.map(a => Number(a.viralScore) || 0);
+  if (scoreValues.length > 0) {
+    const scoreDistribution = {
+      count: scoreValues.length,
+      min: Math.min(...scoreValues),
+      max: Math.max(...scoreValues),
+      avg: Number((scoreValues.reduce((sum, score) => sum + score, 0) / scoreValues.length).toFixed(2)),
+      promotedCount: scoredArticles.filter(a => a.isPromoted).length
+    };
+    console.log('[news-viral-score-distribution]', JSON.stringify(scoreDistribution));
+  }
+
   return results;
 }
 
@@ -477,9 +516,20 @@ router.get('/feed', authenticateToken, async (req, res) => {
     
     // Get total count
     const total = await Article.countDocuments(query);
+
+    const promotedLimit = Math.max(1, Math.min(parseInt(process.env.NEWS_PROMOTED_MAX_ITEMS || '5', 10), 20));
+    const promotedArticles = await Article.find({ isActive: true, isPromoted: true })
+      .sort({ viralScore: -1, publishedAt: -1 })
+      .limit(promotedLimit)
+      .lean();
     
     res.json({
       articles,
+      promoted: promotedArticles.map((article) => ({
+        article,
+        viralScore: article.viralScore || 0,
+        viralSignalsSummary: summarizeSignals(article.viralSignals)
+      })),
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -494,6 +544,43 @@ router.get('/feed', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching news feed:', error);
     res.status(500).json({ error: 'Failed to fetch news feed' });
+  }
+});
+
+/**
+ * GET /api/news/promoted
+ * Get promoted news ranked by viral score
+ */
+router.get('/promoted', authenticateToken, async (req, res) => {
+  try {
+    const requestedLimit = parseInt(req.query.limit || process.env.NEWS_PROMOTED_MAX_ITEMS || '10', 10);
+    const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) ? requestedLimit : 10, 50));
+    const topic = req.query.topic ? String(req.query.topic).toLowerCase() : null;
+
+    const query = {
+      isActive: true,
+      isPromoted: true
+    };
+
+    if (topic) {
+      query.topics = topic;
+    }
+
+    const promotedArticles = await Article.find(query)
+      .sort({ viralScore: -1, publishedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    return res.json({
+      items: promotedArticles.map((article) => ({
+        article,
+        viralScore: article.viralScore || 0,
+        viralSignalsSummary: summarizeSignals(article.viralSignals)
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching promoted news:', error);
+    return res.status(500).json({ error: 'Failed to fetch promoted news' });
   }
 });
 
@@ -829,6 +916,76 @@ router.post('/ingest', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error during ingestion:', error);
     res.status(500).json({ error: 'Ingestion failed' });
+  }
+});
+
+/**
+ * POST /api/news/promoted/rescore
+ * Re-score recent articles (admin only)
+ */
+router.post('/promoted/rescore', authenticateToken, async (req, res) => {
+  try {
+    const requester = await User.findById(req.user.userId).select('_id isAdmin');
+    if (!requester?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const hours = Math.max(1, Math.min(parseInt(req.body.hours || '48', 10), 168));
+    const limit = Math.max(1, Math.min(parseInt(req.body.limit || '200', 10), 1000));
+    const cutoff = new Date(Date.now() - (hours * 60 * 60 * 1000));
+
+    const recentArticles = await Article.find({
+      isActive: true,
+      publishedAt: { $gte: cutoff }
+    })
+      .sort({ publishedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const momentumMap = createMomentumMap(recentArticles, new Date());
+    const bulkOps = [];
+    const rescoredValues = [];
+
+    for (const article of recentArticles) {
+      const sourceMomentum = getArticleMomentumSignal(article, momentumMap);
+      const scoring = calculateViralScore(article, { sourceMomentum });
+      rescoredValues.push(scoring.score);
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: article._id },
+          update: {
+            $set: {
+              viralScore: scoring.score,
+              viralScoreVersion: scoring.scoreVersion,
+              viralSignals: scoring.signals,
+              isPromoted: scoring.isPromoted,
+              lastScoredAt: scoring.lastScoredAt
+            }
+          }
+        }
+      });
+    }
+
+    if (bulkOps.length > 0) {
+      await Article.bulkWrite(bulkOps);
+      const scoreDistribution = {
+        count: rescoredValues.length,
+        min: Math.min(...rescoredValues),
+        max: Math.max(...rescoredValues),
+        avg: Number((rescoredValues.reduce((sum, score) => sum + score, 0) / rescoredValues.length).toFixed(2)),
+        promotedCount: bulkOps.length ? bulkOps.filter((_, index) => rescoredValues[index] >= (parseInt(process.env.NEWS_VIRAL_PROMOTED_THRESHOLD || '65', 10))).length : 0
+      };
+      console.log('[news-viral-rescore-distribution]', JSON.stringify(scoreDistribution));
+    }
+
+    return res.json({
+      rescored: bulkOps.length,
+      hours,
+      limit
+    });
+  } catch (error) {
+    console.error('Error rescoring promoted news:', error);
+    return res.status(500).json({ error: 'Failed to rescore promoted news' });
   }
 });
 

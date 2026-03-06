@@ -311,6 +311,8 @@ export const discoveryAPI = {
 export const newsAPI = {
   // Get personalized news feed
   getFeed: (params = {}) => api.get('/news/feed', { params }),
+  // Get promoted news ranked by viral potential
+  getPromoted: (params = {}) => api.get('/news/promoted', { params }),
   // Get available RSS sources
   getSources: () => api.get('/news/sources'),
   // Add new RSS source
