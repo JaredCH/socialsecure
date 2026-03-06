@@ -22,6 +22,14 @@ const NEWS_SCOPES = [
   { id: 'global', label: 'Global' }
 ];
 
+const SOURCE_FORMAT_GUIDANCE = {
+  rss: 'Standard RSS/Atom feed URL (usually ends in /rss, /feed, or .xml)',
+  podcast: 'Podcast RSS feed URL from Apple, Spotify, or publisher-hosted feed',
+  youtube: 'YouTube channel URL (we auto-convert it to the channel RSS format)',
+  googleNews: 'Google News query feed URL',
+  government: 'Official government or public-service feed URL'
+};
+
 // Format relative time (e.g., "2 hours ago")
 const formatRelativeTime = (dateString) => {
   const date = new Date(dateString);
@@ -63,6 +71,14 @@ function News() {
   const [newKeyword, setNewKeyword] = useState('');
   const [activeScope, setActiveScope] = useState('global');
   const [scopeFallbackMessage, setScopeFallbackMessage] = useState('');
+  const [availableSources, setAvailableSources] = useState([]);
+  const [newSource, setNewSource] = useState({
+    name: '',
+    url: '',
+    type: 'rss',
+    category: 'general'
+  });
+  const [sourceStatusMessage, setSourceStatusMessage] = useState('');
   
   // Location form state
   const [newLocation, setNewLocation] = useState({
@@ -109,6 +125,7 @@ function News() {
         newsAPI.getTopics(),
         newsAPI.getPromoted({ limit: 8 }).catch(() => ({ data: { items: [] } }))
       ]);
+      const sourcesRes = await newsAPI.getSources().catch(() => ({ data: { sources: [] } }));
       
       setArticles(feedRes.data.articles);
       setPagination(feedRes.data.pagination);
@@ -121,6 +138,7 @@ function News() {
       }
       setTopics(topicsRes.data.topics);
       setPromotedArticles(promotedRes.data.items || []);
+      setAvailableSources(sourcesRes.data.sources || []);
       setPromotedError(null);
       
       // Set hidden categories from preferences
@@ -288,9 +306,20 @@ function News() {
   const handleToggleSource = async (sourceId, currentEnabled) => {
     if (!preferences) return;
     
-    const updatedSources = preferences.rssSources.map(s => 
-      s.sourceId === sourceId ? { ...s, enabled: !currentEnabled } : s
-    );
+    const normalizedSourceId = String(sourceId);
+    const currentSourcePrefs = preferences.rssSources || [];
+    const existingIndex = currentSourcePrefs.findIndex((sourcePref) => {
+      const prefSourceId = typeof sourcePref.sourceId === 'object'
+        ? sourcePref.sourceId?._id
+        : sourcePref.sourceId;
+      return String(prefSourceId) === normalizedSourceId;
+    });
+    const updatedSources = [...currentSourcePrefs];
+    if (existingIndex >= 0) {
+      updatedSources[existingIndex] = { ...updatedSources[existingIndex], enabled: !currentEnabled };
+    } else {
+      updatedSources.push({ sourceId: normalizedSourceId, enabled: !currentEnabled });
+    }
     
     try {
       const res = await newsAPI.updatePreferences({ rssSources: updatedSources });
@@ -298,6 +327,43 @@ function News() {
     } catch (err) {
       console.error('Error updating source:', err);
     }
+  };
+
+  const handleAddSource = async (e) => {
+    e.preventDefault();
+    if (!newSource.name.trim() || !newSource.url.trim()) return;
+
+    try {
+      await newsAPI.addSource({
+        name: newSource.name.trim(),
+        url: newSource.url.trim(),
+        type: newSource.type,
+        category: newSource.category.trim() || 'general'
+      });
+      const sourcesRes = await newsAPI.getSources();
+      setAvailableSources(sourcesRes.data.sources || []);
+      setNewSource({
+        name: '',
+        url: '',
+        type: 'rss',
+        category: 'general'
+      });
+      setSourceStatusMessage('Source saved successfully.');
+    } catch (err) {
+      console.error('Error adding source:', err);
+      setSourceStatusMessage('Failed to add source. Please verify feed URL and try again.');
+    }
+  };
+
+  const isSourceEnabled = (sourceId) => {
+    const sourcePreference = preferences?.rssSources?.find((sourcePref) => {
+      const prefSourceId = typeof sourcePref.sourceId === 'object'
+        ? sourcePref.sourceId?._id
+        : sourcePref.sourceId;
+      return String(prefSourceId) === String(sourceId);
+    });
+    if (!sourcePreference) return true;
+    return sourcePreference.enabled !== false;
   };
 
   // Toggle category visibility
@@ -508,6 +574,87 @@ function News() {
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                 >
                   Add
+                </button>
+              </form>
+            </div>
+
+            {/* RSS Source Catalog + Custom Source Input */}
+            <div className="py-3 border-b border-gray-200">
+              <h3 className="font-medium mb-3">RSS Sources & Feed Catalog</h3>
+              <p className="text-sm text-gray-500 mb-3">
+                Choose which catalog sources are enabled and add your own feed links to fully customize your news mix.
+              </p>
+              <div className="space-y-2 mb-4">
+                {availableSources.map((source) => {
+                  const enabled = isSourceEnabled(source._id);
+                  return (
+                    <div key={source._id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{source.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {getSourceTypeLabel(source.type)} • {source.category || 'general'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleToggleSource(source._id, enabled)}
+                        className={`w-12 h-6 rounded-full transition-colors shrink-0 ${enabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+                        aria-label={`Toggle ${source.name}`}
+                      >
+                        <div className={`w-5 h-5 bg-white rounded-full transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                      </button>
+                    </div>
+                  );
+                })}
+                {availableSources.length === 0 && (
+                  <p className="text-sm text-gray-500">No shared sources are available yet.</p>
+                )}
+              </div>
+              <form onSubmit={handleAddSource} className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={newSource.name}
+                    onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
+                    placeholder="Source name"
+                    className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                  <input
+                    type="url"
+                    value={newSource.url}
+                    onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
+                    placeholder="Feed URL"
+                    className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                  <select
+                    value={newSource.type}
+                    onChange={(e) => setNewSource({ ...newSource, type: e.target.value })}
+                    className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="rss">RSS / Atom</option>
+                    <option value="podcast">Podcast</option>
+                    <option value="youtube">YouTube</option>
+                    <option value="googleNews">Google News</option>
+                    <option value="government">Government</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={newSource.category}
+                    onChange={(e) => setNewSource({ ...newSource, category: e.target.value })}
+                    placeholder="Category (news, sports, podcast)"
+                    className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <p className="text-xs text-gray-500">
+                  Format hint: {SOURCE_FORMAT_GUIDANCE[newSource.type] || SOURCE_FORMAT_GUIDANCE.rss}
+                </p>
+                {sourceStatusMessage && (
+                  <p className="text-xs text-gray-600">{sourceStatusMessage}</p>
+                )}
+                <button
+                  type="submit"
+                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  Add Source
                 </button>
               </form>
             </div>
