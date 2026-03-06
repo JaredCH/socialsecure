@@ -53,7 +53,8 @@ describe('Friends presence response', () => {
         _id: 'friend-1',
         username: 'alice',
         realName: 'Alice',
-        friendshipId: 'friendship-1'
+        friendshipId: 'friendship-1',
+        category: 'secure'
       }
     ]);
     getPresenceMapForUsers.mockResolvedValue(new Map([
@@ -92,6 +93,7 @@ describe('Friends presence response', () => {
     expect(response.body.friends[0]).toMatchObject({
       _id: 'friend-1',
       username: 'alice',
+      category: 'secure',
       presence: {
         userId: 'friend-1',
         status: 'online',

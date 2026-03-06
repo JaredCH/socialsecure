@@ -349,6 +349,8 @@ export const friendsAPI = {
   removeFriend: (friendshipId) => api.delete(`/friends/${friendshipId}`),
   // Block user
   blockUser: (friendshipId, reason = null) => api.post(`/friends/${friendshipId}/block`, { reason }),
+  // Update friend category
+  updateFriendCategory: (friendshipId, category) => api.put(`/friends/${friendshipId}/category`, { category }),
   // Get top friends
   getTopFriends: (userIdOrUsername) => api.get(`/friends/top/${userIdOrUsername}`),
   // Update top friends order

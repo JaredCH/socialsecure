@@ -420,6 +420,10 @@ const Social = () => {
       normalizedGalleryOwnerIdentifier === normalizedCurrentUserId
       || normalizedGalleryOwnerIdentifier === normalizedCurrentUsername
     );
+  const topFriendIdSet = useMemo(
+    () => new Set(topFriends.map((friend) => String(friend._id))),
+    [topFriends]
+  );
 
   const activeProfile = isViewingAnotherProfile ? guestProfile : currentUser;
 
@@ -519,7 +523,13 @@ const Social = () => {
       friendsAPI.getFriends().catch(() => ({ data: { friends: [] } }))
     ]);
     setCircles(Array.isArray(circlesResponse.data?.circles) ? circlesResponse.data.circles : []);
-    setFriends(Array.isArray(friendsResponse.data?.friends) ? friendsResponse.data.friends : []);
+    const nextFriends = Array.isArray(friendsResponse.data?.friends) ? friendsResponse.data.friends : [];
+    setFriends(nextFriends);
+
+    const topFriendsResponse = await friendsAPI
+      .getTopFriends(user?.username || user?._id)
+      .catch(() => ({ data: { topFriends: [] } }));
+    setTopFriends(Array.isArray(topFriendsResponse.data?.topFriends) ? topFriendsResponse.data.topFriends : []);
 
     const [blocksResponse, mutesResponse, reportsResponse] = await Promise.all([
       moderationAPI.getBlocks().catch(() => ({ data: { blockedUsers: [] } })),

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const TOP_FRIENDS_LIMIT = 5;
 
 const topFriendSchema = new mongoose.Schema({
   user: {
@@ -8,7 +9,7 @@ const topFriendSchema = new mongoose.Schema({
     unique: true,
     index: true
   },
-  // Ordered array of friend IDs (max configurable, default 12)
+  // Ordered array of friend IDs (max configurable, default 5)
   friends: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -16,7 +17,7 @@ const topFriendSchema = new mongoose.Schema({
   // Maximum number of top friends allowed
   maxFriends: {
     type: Number,
-    default: 12
+    default: TOP_FRIENDS_LIMIT
   }
 }, {
   timestamps: true
@@ -36,7 +37,15 @@ topFriendSchema.pre('save', async function(next) {
 topFriendSchema.statics.getOrCreate = async function(userId) {
   let topFriend = await this.findOne({ user: userId });
   if (!topFriend) {
-    topFriend = await this.create({ user: userId, friends: [] });
+    topFriend = await this.create({ user: userId, friends: [], maxFriends: TOP_FRIENDS_LIMIT });
+  } else {
+    const existingMax = Number.isFinite(topFriend.maxFriends) ? topFriend.maxFriends : TOP_FRIENDS_LIMIT;
+    const normalizedFriends = topFriend.friends.slice(0, TOP_FRIENDS_LIMIT);
+    if (existingMax !== TOP_FRIENDS_LIMIT || normalizedFriends.length !== topFriend.friends.length) {
+      topFriend.maxFriends = TOP_FRIENDS_LIMIT;
+      topFriend.friends = normalizedFriends;
+      await topFriend.save();
+    }
   }
   return topFriend;
 };
@@ -44,12 +53,18 @@ topFriendSchema.statics.getOrCreate = async function(userId) {
 // Static method to update top friends order
 topFriendSchema.statics.updateOrder = async function(userId, friendIds) {
   const topFriend = await this.getOrCreate(userId);
+  const uniqueFriendIds = [...new Set(friendIds.map(id => id.toString()))];
+  if (uniqueFriendIds.length > TOP_FRIENDS_LIMIT) {
+    const error = new Error(`Cannot have more than ${TOP_FRIENDS_LIMIT} top friends`);
+    error.status = 400;
+    throw error;
+  }
   
   // Validate all friends are accepted
   const Friendship = require('./Friendship');
   const userObjectId = mongoose.Types.ObjectId(userId);
   
-  for (const friendId of friendIds) {
+  for (const friendId of uniqueFriendIds) {
     const friendship = await Friendship.findFriendship(userObjectId, friendId);
     if (!friendship || friendship.status !== 'accepted') {
       const error = new Error('All top friends must be accepted friends');
@@ -59,7 +74,8 @@ topFriendSchema.statics.updateOrder = async function(userId, friendIds) {
   }
   
   // Update the order (removes duplicates, keeps order)
-  topFriend.friends = [...new Set(friendIds.map(id => id.toString()))].map(id => 
+  topFriend.maxFriends = TOP_FRIENDS_LIMIT;
+  topFriend.friends = uniqueFriendIds.map(id => 
     mongoose.Types.ObjectId(id)
   );
   
@@ -69,8 +85,11 @@ topFriendSchema.statics.updateOrder = async function(userId, friendIds) {
 
 // Method to add a friend to top friends
 topFriendSchema.methods.addFriend = async function(friendId) {
-  if (this.friends.length >= this.maxFriends) {
-    const error = new Error(`Top friends list is full (max ${this.maxFriends})`);
+  if (this.maxFriends !== TOP_FRIENDS_LIMIT) {
+    this.maxFriends = TOP_FRIENDS_LIMIT;
+  }
+  if (this.friends.length >= TOP_FRIENDS_LIMIT) {
+    const error = new Error(`Top friends list is full (max ${TOP_FRIENDS_LIMIT})`);
     error.status = 400;
     throw error;
   }
