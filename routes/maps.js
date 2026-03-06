@@ -8,6 +8,16 @@ const Spotlight = require('../models/Spotlight');
 const HeatmapAggregation = require('../models/HeatmapAggregation');
 const User = require('../models/User');
 
+const parseCoordinate = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parsePositiveInteger = (value, fallbackValue) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackValue;
+};
+
 // ============================================
 // AUTHENTICATION MIDDLEWARE
 // ============================================
@@ -65,20 +75,25 @@ router.post('/presence', authenticateToken, async (req, res) => {
       country,
       deviceType
     } = req.body;
+
+    const parsedLatitude = parseCoordinate(latitude);
+    const parsedLongitude = parseCoordinate(longitude);
     
-    if (!latitude || !longitude) {
+    if (parsedLatitude === null || parsedLongitude === null) {
       return res.status(400).json({ error: 'Latitude and longitude are required' });
     }
     
     // Validate coordinates
-    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    if (parsedLatitude < -90 || parsedLatitude > 90 || parsedLongitude < -180 || parsedLongitude > 180) {
       return res.status(400).json({ error: 'Invalid coordinates' });
     }
     
     const presence = await LocationPresence.updatePresence(
       req.user.userId,
-      { latitude, longitude },
+      { latitude: parsedLatitude, longitude: parsedLongitude },
       {
+        latitude: parsedLatitude,
+        longitude: parsedLongitude,
         precisionLevel,
         locationName,
         city,
@@ -209,8 +224,11 @@ router.post('/spotlight', authenticateToken, async (req, res) => {
       description, 
       category 
     } = req.body;
+
+    const parsedLatitude = parseCoordinate(latitude);
+    const parsedLongitude = parseCoordinate(longitude);
     
-    if (!latitude || !longitude || !locationName) {
+    if (parsedLatitude === null || parsedLongitude === null || !locationName) {
       return res.status(400).json({ error: 'Latitude, longitude, and locationName are required' });
     }
     
@@ -222,8 +240,8 @@ router.post('/spotlight', authenticateToken, async (req, res) => {
     }
     
     const spotlight = await Spotlight.createSpotlight(req.user.userId, {
-      latitude,
-      longitude,
+      latitude: parsedLatitude,
+      longitude: parsedLongitude,
       locationName,
       description,
       category
@@ -274,16 +292,30 @@ router.post('/spotlight/:id/react', authenticateToken, async (req, res) => {
 router.get('/spotlight/nearby', optionalAuth, async (req, res) => {
   try {
     const { lat, lng, radius = 5000, state, category } = req.query;
+
+    const parsedLat = parseCoordinate(lat);
+    const parsedLng = parseCoordinate(lng);
+    const parsedRadius = parsePositiveInteger(radius, 5000);
     
-    if (!lat || !lng) {
+    if (parsedLat === null || parsedLng === null) {
       return res.status(400).json({ error: 'Lat and lng are required' });
+    }
+
+    const publicStates = ['trending', 'public_glow'];
+    const requestedStates = Array.isArray(state)
+      ? state
+      : typeof state === 'string' ? state.split(',').map((part) => part.trim()).filter(Boolean) : [];
+    const requestedPublicStates = requestedStates.filter((candidate) => publicStates.includes(candidate));
+    let resolvedStates = publicStates;
+    if (requestedStates.length > 0 && requestedPublicStates.length > 0) {
+      resolvedStates = requestedPublicStates;
     }
     
     const spotlights = await Spotlight.getByLocation(
-      parseFloat(lat),
-      parseFloat(lng),
-      parseInt(radius),
-      { state, category, limit: 50 }
+      parsedLat,
+      parsedLng,
+      parsedRadius,
+      { state: resolvedStates, category, limit: 50 }
     );
     
     res.json({ spotlights });
@@ -342,25 +374,36 @@ router.delete('/spotlight/:id', authenticateToken, async (req, res) => {
 router.get('/heatmap', optionalAuth, async (req, res) => {
   try {
     const { north, south, east, west, precision = 5 } = req.query;
+
+    const parsedNorth = parseCoordinate(north);
+    const parsedSouth = parseCoordinate(south);
+    const parsedEast = parseCoordinate(east);
+    const parsedWest = parseCoordinate(west);
+    const parsedPrecision = parsePositiveInteger(precision, 5);
     
-    if (!north || !south || !east || !west) {
+    if (
+      parsedNorth === null ||
+      parsedSouth === null ||
+      parsedEast === null ||
+      parsedWest === null
+    ) {
       return res.status(400).json({ error: 'Bounding box coordinates required (north, south, east, west)' });
     }
     
     const bounds = {
-      north: parseFloat(north),
-      south: parseFloat(south),
-      east: parseFloat(east),
-      west: parseFloat(west)
+      north: parsedNorth,
+      south: parsedSouth,
+      east: parsedEast,
+      west: parsedWest
     };
     
     // Try to get cached aggregation first
-    let tiles = await HeatmapAggregation.getTiles(bounds, parseInt(precision));
+    let tiles = await HeatmapAggregation.getTiles(bounds, parsedPrecision);
     
     // If no cached data, compute on-the-fly
     if (tiles.length === 0) {
-      await HeatmapAggregation.recomputeRegion(bounds, parseInt(precision));
-      tiles = await HeatmapAggregation.getTiles(bounds, parseInt(precision));
+      await HeatmapAggregation.recomputeRegion(bounds, parsedPrecision);
+      tiles = await HeatmapAggregation.getTiles(bounds, parsedPrecision);
     }
     
     // Format response - anonymized, no user IDs
@@ -390,25 +433,29 @@ router.get('/heatmap', optionalAuth, async (req, res) => {
 router.get('/local', optionalAuth, async (req, res) => {
   try {
     const { lat, lng, radius = 50000 } = req.query; // 50km default
+
+    const parsedLat = parseCoordinate(lat);
+    const parsedLng = parseCoordinate(lng);
+    const parsedRadius = parsePositiveInteger(radius, 50000);
     
-    if (!lat || !lng) {
+    if (parsedLat === null || parsedLng === null) {
       return res.status(400).json({ error: 'Lat and lng are required' });
     }
     
     // Get active spotlights in area
     const spotlights = await Spotlight.getByLocation(
-      parseFloat(lat),
-      parseFloat(lng),
-      parseInt(radius),
+      parsedLat,
+      parsedLng,
+      parsedRadius,
       { state: 'public_glow', limit: 20 }
     );
     
     // Get heatmap for area
     const bounds = {
-      north: parseFloat(lat) + 1,
-      south: parseFloat(lat) - 1,
-      east: parseFloat(lng) + 1,
-      west: parseFloat(lng) - 1
+      north: parsedLat + 1,
+      south: parsedLat - 1,
+      east: parsedLng + 1,
+      west: parsedLng - 1
     };
     
     let heatmapTiles = await HeatmapAggregation.getTiles(bounds, 5);
@@ -451,25 +498,29 @@ router.get('/local', optionalAuth, async (req, res) => {
 router.get('/community', optionalAuth, async (req, res) => {
   try {
     const { lat, lng, radius = 200000 } = req.query; // 200km default
+
+    const parsedLat = parseCoordinate(lat);
+    const parsedLng = parseCoordinate(lng);
+    const parsedRadius = parsePositiveInteger(radius, 200000);
     
-    if (!lat || !lng) {
+    if (parsedLat === null || parsedLng === null) {
       return res.status(400).json({ error: 'Lat and lng are required' });
     }
     
     // Get trending and public spotlights
     const spotlights = await Spotlight.getByLocation(
-      parseFloat(lat),
-      parseFloat(lng),
-      parseInt(radius),
+      parsedLat,
+      parsedLng,
+      parsedRadius,
       { state: ['trending', 'public_glow'], limit: 50 }
     );
     
     // Get heatmap for larger area
     const bounds = {
-      north: parseFloat(lat) + 5,
-      south: parseFloat(lat) - 5,
-      east: parseFloat(lng) + 5,
-      west: parseFloat(lng) - 5
+      north: parsedLat + 5,
+      south: parsedLat - 5,
+      east: parsedLng + 5,
+      west: parsedLng - 5
     };
     
     let heatmapTiles = await HeatmapAggregation.getTiles(bounds, 4);

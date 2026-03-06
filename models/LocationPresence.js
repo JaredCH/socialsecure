@@ -139,9 +139,13 @@ function encodeGeohash(lat, lng, precision) {
 
 // Static method to update or create presence
 locationPresenceSchema.statics.updatePresence = async function(userId, locationData, options = {}) {
+  const {
+    latitude: locationLatitude,
+    longitude: locationLongitude
+  } = locationData || {};
   const { 
-    latitude, 
-    longitude, 
+    latitude: optionsLatitude = locationLatitude,
+    longitude: optionsLongitude = locationLongitude,
     precisionLevel = 5, 
     locationName,
     city,
@@ -152,7 +156,7 @@ locationPresenceSchema.statics.updatePresence = async function(userId, locationD
   } = options;
   
   // Round coordinates based on precision level
-  const roundedCoords = roundCoordinates(longitude, latitude, precisionLevel);
+  const roundedCoords = roundCoordinates(optionsLongitude, optionsLatitude, precisionLevel);
   
   const presence = await this.findOneAndUpdate(
     { user: userId },
