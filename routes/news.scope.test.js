@@ -338,7 +338,7 @@ describe('News scope routing', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.personalization.activeScope).toBe('local');
-    expect(response.body.articles).toHaveLength(1);
+    expect(response.body.articles.length).toBeGreaterThanOrEqual(1);
     expect(response.body.articles[0]._id).toBe('local-ai-1');
   });
 
@@ -398,11 +398,11 @@ describe('News scope routing', () => {
     expect(response.body.personalization.fallbackApplied).toBe(false);
     expect(response.body.personalization.locationContext.hasState).toBe(true);
     expect(response.body.personalization.locationContext.source).toBe('preferences+zipLookup');
-    expect(response.body.articles).toHaveLength(1);
+    expect(response.body.articles.length).toBeGreaterThanOrEqual(1);
     expect(response.body.articles[0]._id).toBe('state-1');
   });
 
-  it('falls back to national scope when regional scope has no matching local articles', async () => {
+  it('includes country-level articles in regional scope without falling back', async () => {
     const app = buildApp();
     const feedArticles = [
       {
@@ -454,10 +454,144 @@ describe('News scope routing', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.personalization.requestedScope).toBe('regional');
-    expect(response.body.personalization.activeScope).toBe('national');
-    expect(response.body.personalization.fallbackApplied).toBe(true);
-    expect(response.body.personalization.fallbackReason).toBe('no_scope_matches');
-    expect(response.body.articles).toHaveLength(1);
+    expect(response.body.personalization.activeScope).toBe('regional');
+    expect(response.body.personalization.fallbackApplied).toBe(false);
+    expect(response.body.articles.length).toBeGreaterThanOrEqual(1);
     expect(response.body.articles[0]._id).toBe('us-1');
+  });
+
+  it('mixes global articles into local scope results', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'local-1',
+        title: 'Austin city council update',
+        description: 'Local government news in Austin',
+        source: 'Austin Daily',
+        sourceType: 'rss',
+        sourceId: 'austin-daily',
+        topics: ['politics'],
+        locations: ['Austin', 'Texas', 'USA'],
+        localityLevel: 'city',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      },
+      {
+        _id: 'global-mix-1',
+        title: 'International climate summit',
+        description: 'Leaders gather for climate talks',
+        source: 'World Wire',
+        sourceType: 'rss',
+        sourceId: 'world-wire',
+        topics: ['politics'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-01T01:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'local',
+      locations: [{ city: 'Austin', state: 'Texas', country: 'USA', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'Austin', county: null, state: 'Texas', country: 'USA', zipCode: null }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=local')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.activeScope).toBe('local');
+    // Local article should be first, global mixed in after
+    expect(response.body.articles.length).toBe(2);
+    expect(response.body.articles[0]._id).toBe('local-1');
+    expect(response.body.articles[1]._id).toBe('global-mix-1');
+  });
+
+  it('infers location from article title text at query time', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'inferred-1',
+        title: 'New tech hub opens in Austin, TX',
+        description: 'A major technology company expands',
+        source: 'Tech News',
+        sourceType: 'rss',
+        sourceId: 'tech-news',
+        topics: ['technology'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      },
+      {
+        _id: 'unrelated-1',
+        title: 'Stock market closes higher',
+        description: 'Wall Street had a good day',
+        source: 'Finance Wire',
+        sourceType: 'rss',
+        sourceId: 'finance-wire',
+        topics: ['finance'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'local',
+      locations: [{ city: 'Austin', state: 'Texas', country: 'USA', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'Austin', county: null, state: 'Texas', country: 'USA', zipCode: null }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=local')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.activeScope).toBe('local');
+    // The "Austin, TX" article should be detected as local even with empty locations array
+    expect(response.body.articles.some(a => a._id === 'inferred-1')).toBe(true);
+    expect(response.body.articles[0]._id).toBe('inferred-1');
+  });
+
+  it('matches articles mentioning US state names to regional scope', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'state-name-1',
+        title: 'California wildfire update',
+        description: 'Fires continue to spread in California',
+        source: 'State News',
+        sourceType: 'rss',
+        sourceId: 'state-news',
+        topics: ['politics'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'regional',
+      locations: [{ state: 'California', country: 'USA', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: 'California', country: 'USA', zipCode: null }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=regional')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.activeScope).toBe('regional');
+    expect(response.body.articles.length).toBeGreaterThanOrEqual(1);
+    expect(response.body.articles[0]._id).toBe('state-name-1');
   });
 });
