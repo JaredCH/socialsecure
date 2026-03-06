@@ -70,7 +70,7 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).not.toContain('Add a zip code in your profile to enable default zip-room chat.');
   });
 
-  it('shows add-zip warning when neither profile nor hub has zip information', async () => {
+  it('does not show zip warning when neither profile nor hub has zip information', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: null } }
     });
@@ -86,6 +86,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    expect(container.textContent).toContain('Add a zip code in your profile to enable default zip-room chat.');
+    expect(container.textContent).not.toContain('Add a zip code in your profile to enable default zip-room chat.');
+    expect(container.textContent).not.toContain('Your default zip room:');
   });
 });

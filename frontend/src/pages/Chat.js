@@ -228,9 +228,7 @@ function Chat() {
         </p>
         {defaultZipCode ? (
           <p className="text-xs text-gray-500 mt-1">Your default zip room: {defaultZipCode}</p>
-        ) : (
-          <p className="text-xs text-amber-700 mt-1">Add a zip code in your profile to enable default zip-room chat.</p>
-        )}
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
