@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI, circlesAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
+import { authAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
+import ProfileHeaderSection from '../components/social/ProfileHeaderSection';
+import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
+import SocialLeftRail from '../components/social/SocialLeftRail';
+import SocialRightRail from '../components/social/SocialRightRail';
+import { SOCIAL_SECTION_IDS } from '../components/social/sectionRegistry';
 import {
   emitTypingStart,
   emitTypingStop,
@@ -238,8 +243,10 @@ const Social = () => {
       },
     },
   });
+  const [nowMs, setNowMs] = useState(Date.now());
   const [circles, setCircles] = useState([]);
   const [friends, setFriends] = useState([]);
+  const [topFriends, setTopFriends] = useState([]);
   const [commentInputs, setCommentInputs] = useState({});
   const [typingByPost, setTypingByPost] = useState({});
   const [actionLoadingByPost, setActionLoadingByPost] = useState({});
@@ -324,6 +331,22 @@ const Social = () => {
       normalizedGalleryOwnerIdentifier === normalizedCurrentUserId
       || normalizedGalleryOwnerIdentifier === normalizedCurrentUsername
     );
+
+  const activeProfile = isViewingAnotherProfile ? guestProfile : currentUser;
+
+  const trackSocialEvent = useCallback((eventType, metadata = {}) => {
+    if (!isAuthenticated) return;
+    discoveryAPI.trackEvent(eventType, metadata).catch(() => {});
+  }, [isAuthenticated]);
+
+  const handleSectionClick = useCallback((sectionId) => {
+    trackSocialEvent('social_profile_section_clicked', { sectionId });
+  }, [trackSocialEvent]);
+
+  const handleGuestPreviewToggle = (enabled) => {
+    setIsGuestPreview(enabled);
+    trackSocialEvent('social_guest_preview_toggled', { enabled });
+  };
 
   const setGalleryActionLoading = (imageId, value) => {
     setGalleryActionLoadingByImage((prev) => {
@@ -487,6 +510,26 @@ const Social = () => {
   useEffect(() => {
     loadGallery();
   }, [loadGallery]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !galleryOwnerIdentifier) {
+      setTopFriends([]);
+      return;
+    }
+
+    friendsAPI.getTopFriends(galleryOwnerIdentifier)
+      .then((response) => {
+        setTopFriends(Array.isArray(response.data?.topFriends) ? response.data.topFriends : []);
+      })
+      .catch(() => {
+        setTopFriends([]);
+      });
+  }, [isAuthenticated, galleryOwnerIdentifier]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !galleryOwnerIdentifier) return;
+    trackSocialEvent('social_gallery_opened', { profile: galleryOwnerIdentifier });
+  }, [isAuthenticated, galleryOwnerIdentifier, trackSocialEvent]);
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser?._id || realtimeEnabled) {
@@ -1421,120 +1464,45 @@ const Social = () => {
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-700 to-violet-700 p-5 text-white shadow-lg ring-1 ring-white/20 sm:p-6 md:p-8">
-        <div className="max-w-3xl space-y-2 sm:space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100/95">
-            Community Hub
-          </p>
-          <h2 className="text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
-            Social
-          </h2>
-          <p className="text-sm leading-relaxed text-white/95 sm:text-base">
-            {isViewingAnotherProfile
-              ? `Viewing public profile for @${requestedProfileIdentifier}. Gallery and posts are read-only in this view.`
-              : isAuthenticated && isGuestPreview
-              ? 'Guest preview mode: interaction controls are hidden. This is how your page appears to visitors.'
-              : isAuthenticated
-                ? 'Share updates, browse your timeline, and connect with your community.'
-                : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
-          </p>
-          {isOwnSocialContext && (
-            <div className="pt-1">
-              {isGuestPreview ? (
-                <button
-                  type="button"
-                  onClick={() => setIsGuestPreview(false)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30"
-                >
-                  ← Exit Guest Preview
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsGuestPreview(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30"
-                >
-                  👁 View as Guest
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      <ProfileHeaderSection
+        sectionId={SOCIAL_SECTION_IDS.profile_header}
+        profile={activeProfile}
+        isAuthenticated={isAuthenticated}
+        isGuestPreview={isGuestPreview}
+        isOwnSocialContext={isOwnSocialContext}
+        isViewingAnotherProfile={isViewingAnotherProfile}
+        requestedProfileIdentifier={requestedProfileIdentifier}
+        postsCount={posts.length}
+        onEnterGuestPreview={() => handleGuestPreviewToggle(true)}
+        onExitGuestPreview={() => handleGuestPreviewToggle(false)}
+        onSectionClick={handleSectionClick}
+      />
 
-      {isGuestPreview && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <span className="font-semibold">Guest Preview</span>
-          <span className="text-amber-700">You are previewing how your profile appears to non-authenticated visitors. Controls that require sign-in are hidden.</span>
-          <button
-            type="button"
-            onClick={() => setIsGuestPreview(false)}
-            className="ml-auto shrink-0 rounded border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
-          >
-            Exit Preview
-          </button>
-        </div>
-      )}
+      <GuestPreviewNotice
+        sectionId={SOCIAL_SECTION_IDS.guest_preview_notice}
+        isGuestPreview={isGuestPreview}
+        onExitPreview={() => handleGuestPreviewToggle(false)}
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        <aside className="xl:col-span-3 space-y-4 xl:sticky xl:top-6">
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Shortcuts</h3>
-            <ul className="mt-3 space-y-2 text-sm">
-              <li>
-                <Link to="/social" className="block px-3 py-2 rounded-lg bg-blue-50 text-blue-700 font-medium">
-                  Social Stream
-                </Link>
-              </li>
-              <li>
-                <Link to="/market" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                  Marketplace
-                </Link>
-              </li>
-              <li>
-                <Link to="/calendar" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                  Calendar
-                </Link>
-              </li>
-              <li>
-                <Link to="/settings" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                  User Settings
-                </Link>
-              </li>
-              <li>
-                <Link to="/refer" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                  Refer Friend
-                </Link>
-              </li>
-            </ul>
-          </section>
-
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Social Snapshot</h3>
-            <div className="mt-3 space-y-3 text-sm text-gray-700">
-              <p>
-                Active profile:{' '}
-                <span className="font-medium">
-                  {currentUser?.username ? `@${currentUser.username}` : 'Guest'}
-                </span>
-              </p>
-              <p>
-                Loaded posts:{' '}
-                <span className="font-medium">{posts.length}</span>
-              </p>
-              {!isAuthenticated && guestProfile?.username && (
-                <p>
-                  Viewing public profile:{' '}
-                  <span className="font-medium">@{guestProfile.username}</span>
-                </p>
-              )}
-            </div>
-          </section>
-        </aside>
+        <SocialLeftRail
+          sectionId={SOCIAL_SECTION_IDS.left_profile_rail}
+          currentUser={currentUser}
+          guestProfile={guestProfile}
+          isAuthenticated={isAuthenticated}
+          postsCount={posts.length}
+          friendsCount={friends.length}
+          onSectionClick={handleSectionClick}
+        />
 
         <section className="xl:col-span-6 space-y-6">
           {!isAuthenticated && (
-            <div className="bg-white rounded-xl shadow p-6 space-y-3 border border-gray-100">
+            <div
+              id={SOCIAL_SECTION_IDS.guest_lookup}
+              data-social-section={SOCIAL_SECTION_IDS.guest_lookup}
+              className="bg-white rounded-xl shadow p-6 space-y-3 border border-gray-100"
+              onClick={() => handleSectionClick(SOCIAL_SECTION_IDS.guest_lookup)}
+            >
               <h3 className="text-lg font-medium">Guest Public Feed</h3>
               <p className="text-sm text-gray-600">Enter a username or user ID to load a public feed.</p>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -1571,7 +1539,13 @@ const Social = () => {
           )}
 
           {isOwnSocialContext && !isGuestPreview && (
-            <form onSubmit={handleSubmitPost} className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100">
+            <form
+              id={SOCIAL_SECTION_IDS.composer}
+              data-social-section={SOCIAL_SECTION_IDS.composer}
+              onClick={() => handleSectionClick(SOCIAL_SECTION_IDS.composer)}
+              onSubmit={handleSubmitPost}
+              className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100"
+            >
               <h3 className="text-lg font-medium">Create Post</h3>
 
               <textarea
@@ -1824,17 +1798,24 @@ const Social = () => {
           )}
 
           {isOwnSocialContext && !isGuestPreview && (
-            <CircleManager
-              circles={circles}
-              friends={friends}
-              onCreateCircle={handleCreateCircle}
-              onDeleteCircle={handleDeleteCircle}
-              onAddMember={handleAddCircleMember}
-              onRemoveMember={handleRemoveCircleMember}
-            />
+            <section id={SOCIAL_SECTION_IDS.circles} data-social-section={SOCIAL_SECTION_IDS.circles}>
+              <CircleManager
+                circles={circles}
+                friends={friends}
+                onCreateCircle={handleCreateCircle}
+                onDeleteCircle={handleDeleteCircle}
+                onAddMember={handleAddCircleMember}
+                onRemoveMember={handleRemoveCircleMember}
+              />
+            </section>
           )}
 
-          <section className="space-y-4">
+          <section
+            id={SOCIAL_SECTION_IDS.timeline}
+            data-social-section={SOCIAL_SECTION_IDS.timeline}
+            className="space-y-4"
+            onClick={() => handleSectionClick(SOCIAL_SECTION_IDS.timeline)}
+          >
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-semibold">{(isOwnSocialContext && !isGuestPreview) ? 'Timeline' : 'Public Timeline'}</h3>
               <button
@@ -2096,7 +2077,11 @@ const Social = () => {
                     )}
 
           {isAuthenticated && !isGuestPreview && (
-            <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-3">
+            <section
+              id={SOCIAL_SECTION_IDS.moderation_status}
+              data-social-section={SOCIAL_SECTION_IDS.moderation_status}
+              className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-3"
+            >
               <h3 className="text-lg font-semibold">Moderation Transparency</h3>
               <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
               {myReports.length === 0 ? (
@@ -2181,7 +2166,12 @@ const Social = () => {
             )}
           </section>
 
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-4">
+          <section
+            id={SOCIAL_SECTION_IDS.gallery}
+            data-social-section={SOCIAL_SECTION_IDS.gallery}
+            className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-4"
+            onClick={() => handleSectionClick(SOCIAL_SECTION_IDS.gallery)}
+          >
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-xl font-semibold">Gallery</h3>
               <span className="text-xs text-gray-500">{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
@@ -2381,29 +2371,11 @@ const Social = () => {
           </section>
         </section>
 
-        <aside className="xl:col-span-3 space-y-4 xl:sticky xl:top-6">
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Chat Panel</h3>
-            <p className="mt-3 text-sm text-gray-700">
-              Jump into direct or room conversations without leaving the social experience.
-            </p>
-            <Link
-              to="/chat"
-              className="mt-4 inline-flex items-center justify-center w-full bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-800"
-            >
-              Open Chat
-            </Link>
-          </section>
-
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Community Notes</h3>
-            <ul className="mt-3 space-y-2 text-sm text-gray-700 list-disc list-inside">
-              <li>Keep posts constructive and clear.</li>
-              <li>Use visibility settings to control reach.</li>
-              <li>Switch to chat for real-time discussion.</li>
-            </ul>
-          </section>
-        </aside>
+        <SocialRightRail
+          sectionId={SOCIAL_SECTION_IDS.right_rail}
+          topFriends={topFriends}
+          onSectionClick={handleSectionClick}
+        />
       </div>
 
       <ReportModal
