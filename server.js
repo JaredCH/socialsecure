@@ -174,6 +174,7 @@ registerRoute('/api/moderation', () => require('./routes/moderation'));
 registerRoute('/api/notifications', () => require('./routes/notifications'));
 registerRoute('/api/discovery', () => require('./routes/discovery'));
 registerRoute('/api/calendar', () => require('./routes/calendar'));
+registerRoute('/api/resume', () => require('./routes/resume'));
 
 let newsRoutes = null;
 let mapsRoutes = null;

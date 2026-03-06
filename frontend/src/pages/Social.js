@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI, circlesAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
+import { authAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
+import ProfileHeaderSection from '../components/social/ProfileHeaderSection';
+import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
+import SocialLeftRail from '../components/social/SocialLeftRail';
+import SocialRightRail from '../components/social/SocialRightRail';
+import { SOCIAL_SECTION_IDS } from '../components/social/sectionRegistry';
 import {
   emitTypingStart,
   emitTypingStop,
@@ -33,6 +38,70 @@ const PRIVACY_BADGE_LABELS = {
   circles: 'Circles',
   specific_users: 'Specific Users',
   private: 'Private'
+};
+const RELATIONSHIP_AUDIENCE_LABELS = {
+  social: 'Social',
+  secure: 'Secure'
+};
+
+const SOCIAL_SECTION_IDS = ['header', 'shortcuts', 'snapshot', 'guestLookup', 'composer', 'circles', 'timeline', 'gallery', 'moderation', 'chatPanel', 'communityNotes'];
+const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
+const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest'];
+const THEME_TO_DEFAULT_ACCENT = {
+  default: 'blue',
+  light: 'violet',
+  dark: 'emerald',
+  sunset: 'rose',
+  forest: 'emerald'
+};
+const THEME_TO_ALLOWED_ACCENTS = {
+  default: ['blue', 'violet', 'emerald', 'rose'],
+  light: ['blue', 'violet', 'emerald'],
+  dark: ['blue', 'violet', 'emerald', 'rose', 'amber'],
+  sunset: ['rose', 'amber', 'violet'],
+  forest: ['emerald', 'blue', 'amber']
+};
+const THEME_ACCENT_TO_HEADER_CLASS = {
+  blue: 'from-blue-700 via-indigo-700 to-violet-700',
+  violet: 'from-violet-700 via-fuchsia-700 to-purple-700',
+  emerald: 'from-emerald-700 via-teal-700 to-cyan-700',
+  rose: 'from-rose-700 via-pink-700 to-orange-600',
+  amber: 'from-amber-700 via-orange-700 to-red-700'
+};
+const THEME_TO_PAGE_CLASS = {
+  default: 'bg-slate-50 text-gray-900',
+  light: 'bg-white text-gray-900',
+  dark: 'bg-slate-900 text-slate-100',
+  sunset: 'bg-orange-50 text-gray-900',
+  forest: 'bg-emerald-50 text-gray-900'
+};
+
+const uniqueStrings = (items) => {
+  if (!Array.isArray(items)) return [];
+  return [...new Set(items.filter((item) => typeof item === 'string').map((item) => item.trim()).filter(Boolean))];
+};
+
+const normalizeSocialPreferences = (input, profileTheme = 'default') => {
+  const themePreset = SOCIAL_THEME_PRESETS.includes(input?.themePreset)
+    ? input.themePreset
+    : (SOCIAL_THEME_PRESETS.includes(profileTheme) ? profileTheme : 'default');
+  const allowedAccents = THEME_TO_ALLOWED_ACCENTS[themePreset] || THEME_TO_ALLOWED_ACCENTS.default;
+  const accentColorToken = allowedAccents.includes(input?.accentColorToken)
+    ? input.accentColorToken
+    : (allowedAccents.includes(THEME_TO_DEFAULT_ACCENT[themePreset]) ? THEME_TO_DEFAULT_ACCENT[themePreset] : allowedAccents[0]);
+
+  const requestedOrder = uniqueStrings(input?.sectionOrder).filter((id) => SOCIAL_SECTION_IDS.includes(id));
+  const sectionOrder = [...requestedOrder, ...SOCIAL_SECTION_IDS.filter((id) => !requestedOrder.includes(id))];
+  const hiddenSections = uniqueStrings(input?.hiddenSections).filter((id) => SOCIAL_SECTION_IDS.includes(id) && id !== 'header');
+  const hiddenModules = uniqueStrings(input?.hiddenModules).filter((id) => SOCIAL_MODULE_IDS.includes(id));
+
+  return {
+    themePreset,
+    accentColorToken,
+    sectionOrder,
+    hiddenSections,
+    hiddenModules
+  };
 };
 
 const isRenderableMediaUrl = (value) => {
@@ -171,6 +240,7 @@ const normalizePost = (post) => {
       typeof post.commentsCount === 'number'
         ? post.commentsCount
         : normalizedComments.length,
+    relationshipAudience: post.relationshipAudience === 'secure' ? 'secure' : 'social',
     mediaUrls: normalizeMediaUrls(post.mediaUrls),
     interaction: post.interaction
       ? {
@@ -188,6 +258,7 @@ const normalizeGalleryItem = (item) => ({
   viewerReaction: item?.viewerReaction || null,
   caption: item?.caption || '',
   mediaType: item?.mediaType || 'url',
+  relationshipAudience: item?.relationshipAudience === 'secure' ? 'secure' : 'social',
 });
 
 const Social = () => {
@@ -201,6 +272,7 @@ const Social = () => {
   const [isGuestPreview, setIsGuestPreview] = useState(false);
   const [guestUser, setGuestUser] = useState(initialGuestUser);
   const [guestProfile, setGuestProfile] = useState(null);
+  const [ownerResumeMeta, setOwnerResumeMeta] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [feedError, setFeedError] = useState('');
@@ -210,6 +282,7 @@ const Social = () => {
     mediaUrlInput: '',
     mediaUrls: [],
     visibility: 'public',
+    relationshipAudience: 'social',
     visibleToCircles: [],
     visibleToUsers: [],
     excludeUsers: [],
@@ -238,6 +311,7 @@ const Social = () => {
       },
     },
   });
+  const [nowMs, setNowMs] = useState(Date.now());
   const [circles, setCircles] = useState([]);
   const [friends, setFriends] = useState([]);
   const [topFriends, setTopFriends] = useState([]);
@@ -249,6 +323,7 @@ const Social = () => {
   const [galleryTarget, setGalleryTarget] = useState(initialGuestUser.trim());
   const [galleryUrlInput, setGalleryUrlInput] = useState('');
   const [galleryCaptionInput, setGalleryCaptionInput] = useState('');
+  const [galleryRelationshipAudience, setGalleryRelationshipAudience] = useState('social');
   const [galleryError, setGalleryError] = useState('');
   const [galleryBusy, setGalleryBusy] = useState(false);
   const [galleryLoading, setGalleryLoading] = useState(false);
@@ -280,6 +355,26 @@ const Social = () => {
       && normalizedRequestedProfileIdentifier !== normalizedCurrentUsername
   );
   const isOwnSocialContext = isAuthenticated && !isViewingAnotherProfile;
+  const activeProfile = isAuthenticated && !isViewingAnotherProfile
+    ? currentUser
+    : guestProfile;
+  const socialPreferences = useMemo(
+    () => normalizeSocialPreferences(activeProfile?.socialPagePreferences, activeProfile?.profileTheme),
+    [activeProfile?.socialPagePreferences, activeProfile?.profileTheme]
+  );
+  const sectionRank = useMemo(() => (
+    socialPreferences.sectionOrder.reduce((acc, sectionId, index) => ({ ...acc, [sectionId]: index }), {})
+  ), [socialPreferences.sectionOrder]);
+  const isSectionVisible = useCallback(
+    (sectionId) => !socialPreferences.hiddenSections.includes(sectionId),
+    [socialPreferences.hiddenSections]
+  );
+  const isModuleVisible = useCallback(
+    (moduleId) => !socialPreferences.hiddenModules.includes(moduleId),
+    [socialPreferences.hiddenModules]
+  );
+  const headerGradientClass = THEME_ACCENT_TO_HEADER_CLASS[socialPreferences.accentColorToken] || THEME_ACCENT_TO_HEADER_CLASS.blue;
+  const pageThemeClass = THEME_TO_PAGE_CLASS[socialPreferences.themePreset] || THEME_TO_PAGE_CLASS.default;
 
   const galleryOwnerIdentifier = useMemo(() => {
     // Profile context (/social?user=...) uses target user gallery
@@ -329,6 +424,22 @@ const Social = () => {
     () => new Set(topFriends.map((friend) => String(friend._id))),
     [topFriends]
   );
+
+  const activeProfile = isViewingAnotherProfile ? guestProfile : currentUser;
+
+  const trackSocialEvent = useCallback((eventType, metadata = {}) => {
+    if (!isAuthenticated) return;
+    discoveryAPI.trackEvent(eventType, metadata).catch(() => {});
+  }, [isAuthenticated]);
+
+  const handleSectionClick = useCallback((sectionId) => {
+    trackSocialEvent('social_profile_section_clicked', { sectionId });
+  }, [trackSocialEvent]);
+
+  const handleGuestPreviewToggle = (enabled) => {
+    setIsGuestPreview(enabled);
+    trackSocialEvent('social_guest_preview_toggled', { enabled });
+  };
 
   const setGalleryActionLoading = (imageId, value) => {
     setGalleryActionLoadingByImage((prev) => {
@@ -399,9 +510,13 @@ const Social = () => {
   }, []);
 
   const loadAuthenticatedFeed = useCallback(async () => {
-    const profileResponse = await authAPI.getProfile();
+    const [profileResponse, resumeMetaResponse] = await Promise.all([
+      authAPI.getProfile(),
+      resumeAPI.getMyResume().catch(() => null)
+    ]);
     const user = profileResponse.data?.user;
     setCurrentUser(user || null);
+    setOwnerResumeMeta(resumeMetaResponse?.data?.resume || null);
 
     const [circlesResponse, friendsResponse] = await Promise.all([
       circlesAPI.getCircles().catch(() => ({ data: { circles: [] } })),
@@ -440,6 +555,7 @@ const Social = () => {
     if (!guestUser.trim()) {
       setPosts([]);
       setGuestProfile(null);
+      setOwnerResumeMeta(null);
       setFeedError('Enter a username or user ID in Guest mode to view a public feed.');
       return;
     }
@@ -448,7 +564,35 @@ const Social = () => {
     const publicPosts = Array.isArray(response.data?.posts) ? response.data.posts : [];
     setPosts(publicPosts.map(normalizePost));
     setGuestProfile(response.data?.user || null);
+    setOwnerResumeMeta(null);
   }, [guestUser]);
+
+  const visibleResumeInfo = useMemo(() => {
+    if (isOwnSocialContext && currentUser?.username && ownerResumeMeta?.hasResume) {
+      return {
+        username: currentUser.username,
+        resumeUrl: ownerResumeMeta.resumeUrl || `/resume/${encodeURIComponent(currentUser.username)}`,
+        resumeHeadline: ownerResumeMeta.resumeHeadline || null,
+        canManage: true
+      };
+    }
+
+    if (guestProfile?.hasPublicResume && guestProfile?.username && guestProfile?.resumeUrl) {
+      return {
+        username: guestProfile.username,
+        resumeUrl: guestProfile.resumeUrl,
+        resumeHeadline: guestProfile.resumeHeadline || null,
+        canManage: false
+      };
+    }
+
+    return null;
+  }, [isOwnSocialContext, currentUser?.username, ownerResumeMeta, guestProfile]);
+
+  const handleResumeProfileLinkClick = useCallback((resumeUsername) => {
+    if (!resumeUsername) return;
+    resumeAPI.trackProfileLinkClick(resumeUsername, 'social_page').catch(() => {});
+  }, []);
 
   const loadFeed = useCallback(async () => {
     setLoadingFeed(true);
@@ -498,6 +642,26 @@ const Social = () => {
   useEffect(() => {
     loadGallery();
   }, [loadGallery]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !galleryOwnerIdentifier) {
+      setTopFriends([]);
+      return;
+    }
+
+    friendsAPI.getTopFriends(galleryOwnerIdentifier)
+      .then((response) => {
+        setTopFriends(Array.isArray(response.data?.topFriends) ? response.data.topFriends : []);
+      })
+      .catch(() => {
+        setTopFriends([]);
+      });
+  }, [isAuthenticated, galleryOwnerIdentifier]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !galleryOwnerIdentifier) return;
+    trackSocialEvent('social_gallery_opened', { profile: galleryOwnerIdentifier });
+  }, [isAuthenticated, galleryOwnerIdentifier, trackSocialEvent]);
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser?._id || realtimeEnabled) {
@@ -941,6 +1105,10 @@ const Social = () => {
       setFeedError('Add post content or at least one media URL before publishing.');
       return;
     }
+    if ((postForm.relationshipAudience || 'social') === 'secure' && postForm.visibility !== 'friends') {
+      setFeedError('Secure audience currently supports only Friends visibility.');
+      return;
+    }
 
     if (contentType === 'poll') {
       const poll = postForm.interaction.poll;
@@ -1031,6 +1199,7 @@ const Social = () => {
         content,
         mediaUrls: postForm.mediaUrls,
         visibility: postForm.visibility,
+        relationshipAudience: postForm.relationshipAudience,
         visibleToCircles: postForm.visibleToCircles,
         visibleToUsers: postForm.visibleToUsers,
         excludeUsers: postForm.excludeUsers,
@@ -1064,6 +1233,7 @@ const Social = () => {
         mediaUrlInput: '',
         mediaUrls: [],
         visibility: 'public',
+        relationshipAudience: 'social',
         visibleToCircles: [],
         visibleToUsers: [],
         excludeUsers: [],
@@ -1260,6 +1430,7 @@ const Social = () => {
       const response = await galleryAPI.createGalleryItem(galleryOwnerIdentifier, {
         mediaUrl: value,
         caption: galleryCaptionInput,
+        relationshipAudience: galleryRelationshipAudience,
       });
 
       const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
@@ -1306,7 +1477,8 @@ const Social = () => {
       const response = await galleryAPI.uploadGalleryItem(
         galleryOwnerIdentifier,
         file,
-        galleryCaptionInput
+        galleryCaptionInput,
+        galleryRelationshipAudience
       );
 
       const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
@@ -1431,8 +1603,8 @@ const Social = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-700 to-violet-700 p-5 text-white shadow-lg ring-1 ring-white/20 sm:p-6 md:p-8">
+    <div className={`space-y-6 rounded-xl p-3 sm:p-4 ${pageThemeClass}`}>
+      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${headerGradientClass} p-5 text-white shadow-lg ring-1 ring-white/20 sm:p-6 md:p-8`}>
         <div className="max-w-3xl space-y-2 sm:space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100/95">
             Community Hub
@@ -1473,23 +1645,16 @@ const Social = () => {
         </div>
       </div>
 
-      {isGuestPreview && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <span className="font-semibold">Guest Preview</span>
-          <span className="text-amber-700">You are previewing how your profile appears to non-authenticated visitors. Controls that require sign-in are hidden.</span>
-          <button
-            type="button"
-            onClick={() => setIsGuestPreview(false)}
-            className="ml-auto shrink-0 rounded border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
-          >
-            Exit Preview
-          </button>
-        </div>
-      )}
+      <GuestPreviewNotice
+        sectionId={SOCIAL_SECTION_IDS.guest_preview_notice}
+        isGuestPreview={isGuestPreview}
+        onExitPreview={() => handleGuestPreviewToggle(false)}
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        <aside className="xl:col-span-3 space-y-4 xl:sticky xl:top-6">
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
+        <aside className="xl:col-span-3 flex flex-col gap-4 xl:sticky xl:top-6">
+          {isSectionVisible('shortcuts') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.shortcuts ?? 0 }}>
             <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Shortcuts</h3>
             <ul className="mt-3 space-y-2 text-sm">
               <li>
@@ -1497,30 +1662,40 @@ const Social = () => {
                   Social Stream
                 </Link>
               </li>
-              <li>
-                <Link to="/market" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                  Marketplace
-                </Link>
-              </li>
-              <li>
-                <Link to="/calendar" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                  Calendar
-                </Link>
-              </li>
-              <li>
-                <Link to="/settings" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                  User Settings
-                </Link>
-              </li>
-              <li>
-                <Link to="/refer" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                  Refer Friend
-                </Link>
-              </li>
+              {isModuleVisible('marketplaceShortcut') && (
+                <li>
+                  <Link to="/market" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                    Marketplace
+                  </Link>
+                </li>
+              )}
+              {isModuleVisible('calendarShortcut') && (
+                <li>
+                  <Link to="/calendar" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                    Calendar
+                  </Link>
+                </li>
+              )}
+              {isModuleVisible('settingsShortcut') && (
+                <li>
+                  <Link to="/settings" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                    User Settings
+                  </Link>
+                </li>
+              )}
+              {isModuleVisible('referShortcut') && (
+                <li>
+                  <Link to="/refer" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                    Refer Friend
+                  </Link>
+                </li>
+              )}
             </ul>
           </section>
+          )}
 
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
+          {isSectionVisible('snapshot') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.snapshot ?? 1 }}>
             <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Social Snapshot</h3>
             <div className="mt-3 space-y-3 text-sm text-gray-700">
               <p>
@@ -1539,13 +1714,37 @@ const Social = () => {
                   <span className="font-medium">@{guestProfile.username}</span>
                 </p>
               )}
+              {visibleResumeInfo && (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                  <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Resume</p>
+                  {visibleResumeInfo.resumeHeadline && (
+                    <p className="mt-1 text-sm text-blue-900">{visibleResumeInfo.resumeHeadline}</p>
+                  )}
+                  <Link
+                    to={visibleResumeInfo.resumeUrl}
+                    onClick={() => handleResumeProfileLinkClick(visibleResumeInfo.username)}
+                    className="mt-1 inline-flex text-sm font-medium text-blue-700 hover:text-blue-800"
+                  >
+                    View hosted resume
+                  </Link>
+                  {visibleResumeInfo.canManage && (
+                    <Link
+                      to="/settings"
+                      className="ml-3 inline-flex text-sm font-medium text-slate-700 hover:text-slate-900"
+                    >
+                      Manage
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
           </section>
+          )}
         </aside>
 
-        <section className="xl:col-span-6 space-y-6">
-          {!isAuthenticated && (
-            <div className="bg-white rounded-xl shadow p-6 space-y-3 border border-gray-100">
+        <section className="xl:col-span-6 flex flex-col gap-6">
+          {!isAuthenticated && isSectionVisible('guestLookup') && (
+            <div className="bg-white rounded-xl shadow p-6 space-y-3 border border-gray-100" style={{ order: sectionRank.guestLookup ?? 0 }}>
               <h3 className="text-lg font-medium">Guest Public Feed</h3>
               <p className="text-sm text-gray-600">Enter a username or user ID to load a public feed.</p>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -1576,13 +1775,22 @@ const Social = () => {
                   >
                     View calendar
                   </Link>
+                  {guestProfile?.hasPublicResume && guestProfile?.resumeUrl && (
+                    <Link
+                      to={guestProfile.resumeUrl}
+                      onClick={() => handleResumeProfileLinkClick(guestProfile.username)}
+                      className="ml-3 inline-flex text-blue-600 hover:text-blue-700"
+                    >
+                      View hosted resume
+                    </Link>
+                  )}
                 </div>
               )}
             </div>
           )}
 
-          {isOwnSocialContext && !isGuestPreview && (
-            <form onSubmit={handleSubmitPost} className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100">
+          {isOwnSocialContext && !isGuestPreview && isSectionVisible('composer') && (
+            <form onSubmit={handleSubmitPost} className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100" style={{ order: sectionRank.composer ?? 1 }}>
               <h3 className="text-lg font-medium">Create Post</h3>
 
               <textarea
@@ -1834,18 +2042,21 @@ const Social = () => {
             </form>
           )}
 
-          {isOwnSocialContext && !isGuestPreview && (
-            <CircleManager
-              circles={circles}
-              friends={friends}
-              onCreateCircle={handleCreateCircle}
-              onDeleteCircle={handleDeleteCircle}
-              onAddMember={handleAddCircleMember}
-              onRemoveMember={handleRemoveCircleMember}
-            />
+          {isOwnSocialContext && !isGuestPreview && isSectionVisible('circles') && (
+            <div style={{ order: sectionRank.circles ?? 2 }}>
+              <CircleManager
+                circles={circles}
+                friends={friends}
+                onCreateCircle={handleCreateCircle}
+                onDeleteCircle={handleDeleteCircle}
+                onAddMember={handleAddCircleMember}
+                onRemoveMember={handleRemoveCircleMember}
+              />
+            </div>
           )}
 
-          <section className="space-y-4">
+          {isSectionVisible('timeline') && (
+            <section className="space-y-4" style={{ order: sectionRank.timeline ?? 3 }}>
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-semibold">{(isOwnSocialContext && !isGuestPreview) ? 'Timeline' : 'Public Timeline'}</h3>
               <button
@@ -1892,9 +2103,18 @@ const Social = () => {
                         </p>
                         <p className="text-xs text-gray-500">{formatDate(post.createdAt)}</p>
                       </div>
-                      <span className="text-xs uppercase tracking-wide bg-gray-100 px-2 py-1 rounded">
-                        {PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs uppercase tracking-wide bg-gray-100 px-2 py-1 rounded">
+                          {PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}
+                        </span>
+                        <span className={`text-xs uppercase tracking-wide px-2 py-1 rounded ${
+                          post.relationshipAudience === 'secure'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-sky-100 text-sky-800'
+                        }`}>
+                          {RELATIONSHIP_AUDIENCE_LABELS[post.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
+                        </span>
+                      </div>
                     </header>
 
                     <div className="flex flex-wrap gap-2 text-xs text-gray-600">
@@ -2106,27 +2326,6 @@ const Social = () => {
                       </div>
                     )}
 
-          {isAuthenticated && !isGuestPreview && (
-            <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-3">
-              <h3 className="text-lg font-semibold">Moderation Transparency</h3>
-              <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
-              {myReports.length === 0 ? (
-                <p className="text-sm text-gray-500">No submitted reports yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {myReports.slice(0, 10).map((report) => (
-                    <div key={report.id} className="border rounded p-2 text-sm">
-                      <p className="font-medium text-gray-900">
-                        {report.category} • {report.targetType} • {report.status}
-                      </p>
-                      <p className="text-gray-500">{formatDate(report.createdAt)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
                     {isAuthenticated && !isGuestPreview ? (
                       <div className="space-y-3">
                         <button
@@ -2190,9 +2389,35 @@ const Social = () => {
                 );
               })
             )}
-          </section>
+            </section>
+          )}
 
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-4">
+          {isAuthenticated && !isGuestPreview && isSectionVisible('moderation') && (
+            <section
+              className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-3"
+              style={{ order: sectionRank.moderation ?? 5 }}
+            >
+              <h3 className="text-lg font-semibold">Moderation Transparency</h3>
+              <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
+              {myReports.length === 0 ? (
+                <p className="text-sm text-gray-500">No submitted reports yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {myReports.slice(0, 10).map((report) => (
+                    <div key={report.id} className="border rounded p-2 text-sm">
+                      <p className="font-medium text-gray-900">
+                        {report.category} • {report.targetType} • {report.status}
+                      </p>
+                      <p className="text-gray-500">{formatDate(report.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {isSectionVisible('gallery') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-4" style={{ order: sectionRank.gallery ?? 4 }}>
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-xl font-semibold">Gallery</h3>
               <span className="text-xs text-gray-500">{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
@@ -2251,6 +2476,17 @@ const Social = () => {
                   maxLength={280}
                   className="w-full border rounded px-3 py-2"
                 />
+                <label className="flex flex-col gap-1 text-sm text-gray-700">
+                  <span>Audience</span>
+                  <select
+                    value={galleryRelationshipAudience}
+                    onChange={(event) => setGalleryRelationshipAudience(event.target.value)}
+                    className="border rounded px-3 py-2"
+                  >
+                    <option value="social">Social</option>
+                    <option value="secure">Secure</option>
+                  </select>
+                </label>
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700">
                   <input
                     type="file"
@@ -2286,6 +2522,9 @@ const Social = () => {
                         {image.caption ? (
                           <p className="text-sm text-gray-700 whitespace-pre-wrap">{image.caption}</p>
                         ) : null}
+                        <p className="text-xs font-medium text-gray-500">
+                          Audience: {RELATIONSHIP_AUDIENCE_LABELS[image.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
+                        </p>
 
                         <div className="flex items-center gap-2 text-sm">
                           <button
@@ -2389,46 +2628,13 @@ const Social = () => {
                 })}
               </div>
             )}
-          </section>
-        </section>
-
-        <aside className="xl:col-span-3 space-y-4 xl:sticky xl:top-6">
-          {isOwnSocialContext && !isGuestPreview && (
-            <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
-              <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Friends</h3>
-              <div className="mt-3 space-y-2">
-                {topFriends.map((friend, index) => (
-                  <div key={`top-${friend._id}`} className="flex items-center justify-between rounded-lg border-2 border-blue-200 bg-blue-50 px-3 py-2">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">@{friend.username}</p>
-                      <p className="text-xs text-gray-600">{friend.realName || 'Top Friend'}</p>
-                    </div>
-                    <span className="inline-flex items-center rounded-full bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">
-                      Top {index + 1}
-                    </span>
-                  </div>
-                ))}
-                {friends
-                  .filter((friend) => !topFriendIdSet.has(String(friend._id)))
-                  .map((friend) => (
-                    <div key={`friend-${friend._id}`} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">@{friend.username}</p>
-                        <p className="text-xs text-gray-600">{friend.realName || 'Friend'}</p>
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {friend.category === 'secure' ? 'Secure' : 'Social'}
-                      </span>
-                    </div>
-                  ))}
-                {friends.length === 0 && topFriends.length === 0 && (
-                  <p className="text-sm text-gray-500">No friends to display.</p>
-                )}
-              </div>
             </section>
           )}
+        </section>
 
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
+        <aside className="xl:col-span-3 flex flex-col gap-4 xl:sticky xl:top-6">
+          {isSectionVisible('chatPanel') && isModuleVisible('chatPanel') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.chatPanel ?? 0 }}>
             <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Chat Panel</h3>
             <p className="mt-3 text-sm text-gray-700">
               Jump into direct or room conversations without leaving the social experience.
@@ -2440,8 +2646,10 @@ const Social = () => {
               Open Chat
             </Link>
           </section>
+          )}
 
-          <section className="bg-white rounded-xl shadow p-5 border border-gray-100">
+          {isSectionVisible('communityNotes') && isModuleVisible('communityNotes') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.communityNotes ?? 1 }}>
             <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Community Notes</h3>
             <ul className="mt-3 space-y-2 text-sm text-gray-700 list-disc list-inside">
               <li>Keep posts constructive and clear.</li>
@@ -2449,6 +2657,7 @@ const Social = () => {
               <li>Switch to chat for real-time discussion.</li>
             </ul>
           </section>
+          )}
         </aside>
       </div>
 

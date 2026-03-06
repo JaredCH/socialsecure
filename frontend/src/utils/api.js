@@ -100,6 +100,13 @@ export const authAPI = {
   getRecoveryKitStatus: () => api.get('/auth/recovery-kit/status'),
 };
 
+export const resumeAPI = {
+  getMyResume: () => api.get('/resume/me'),
+  upsertMyResume: (data) => api.put('/resume/me', data),
+  deleteMyResume: () => api.delete('/resume/me'),
+  trackEvent: (eventType, metadata = {}) => api.post('/resume/me/telemetry', { eventType, metadata })
+};
+
 // User API
 export const userAPI = {
   search: (query) => api.get(`/users/search?q=${query}`),
@@ -127,17 +134,29 @@ export const feedAPI = {
   getPost: (postId) => api.get(`/feed/post/${postId}`),
 };
 
+export const resumeAPI = {
+  getPublicResume: (username) =>
+    api.get(`/public/users/${encodeURIComponent(username)}/resume`),
+  getMyResume: () => api.get('/resume/me'),
+  saveMyResume: (data) => api.put('/resume/me', data),
+  trackProfileLinkClick: (username, source = 'social_profile') =>
+    api.post(`/public/users/${encodeURIComponent(username)}/resume/link-click`, { source }),
+};
+
 // Gallery API
 export const galleryAPI = {
   getGallery: (ownerIdOrUsername, page = 1, limit = 20) =>
     api.get(`/gallery/${encodeURIComponent(ownerIdOrUsername)}?page=${page}&limit=${limit}`),
   createGalleryItem: (ownerIdOrUsername, data) =>
     api.post(`/gallery/${encodeURIComponent(ownerIdOrUsername)}`, data),
-  uploadGalleryItem: (ownerIdOrUsername, file, caption = '') => {
+  uploadGalleryItem: (ownerIdOrUsername, file, caption = '', relationshipAudience = 'social') => {
     const formData = new FormData();
     formData.append('image', file);
     if (caption) {
       formData.append('caption', caption);
+    }
+    if (relationshipAudience) {
+      formData.append('relationshipAudience', relationshipAudience);
     }
 
     return api.post(`/gallery/${encodeURIComponent(ownerIdOrUsername)}`, formData, {

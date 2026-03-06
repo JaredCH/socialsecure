@@ -15,6 +15,13 @@ const ALL_CATEGORIES = [
   { id: 'ai', name: 'AI & Machine Learning', icon: '🤖' },
 ];
 
+const NEWS_SCOPES = [
+  { id: 'local', label: 'Local' },
+  { id: 'regional', label: 'Regional' },
+  { id: 'national', label: 'National' },
+  { id: 'global', label: 'Global' }
+];
+
 // Format relative time (e.g., "2 hours ago")
 const formatRelativeTime = (dateString) => {
   const date = new Date(dateString);
@@ -54,6 +61,8 @@ function News() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showSettings, setShowSettings] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
+  const [activeScope, setActiveScope] = useState('global');
+  const [scopeFallbackMessage, setScopeFallbackMessage] = useState('');
   
   // Location form state
   const [newLocation, setNewLocation] = useState({
@@ -104,6 +113,12 @@ function News() {
       setArticles(feedRes.data.articles);
       setPagination(feedRes.data.pagination);
       setPreferences(prefsRes.data.preferences);
+      setActiveScope(feedRes.data.personalization?.activeScope || prefsRes.data.preferences?.defaultScope || 'global');
+      if (feedRes.data.personalization?.fallbackApplied) {
+        setScopeFallbackMessage(`Showing ${feedRes.data.personalization.activeScope} scope because ${feedRes.data.personalization.requestedScope} scope is unavailable for your current location data.`);
+      } else {
+        setScopeFallbackMessage('');
+      }
       setTopics(topicsRes.data.topics);
       setPromotedArticles(promotedRes.data.items || []);
       setPromotedError(null);
@@ -129,11 +144,12 @@ function News() {
     
     try {
       const nextPage = pagination.page + 1;
-      const res = await newsAPI.getFeed({ 
-        page: nextPage, 
-        limit: 20,
-        topic: activeFilter !== 'all' ? activeFilter : undefined
-      });
+        const res = await newsAPI.getFeed({ 
+          page: nextPage, 
+          limit: 20,
+          topic: activeFilter !== 'all' ? activeFilter : undefined,
+          scope: activeScope
+        });
       
       setArticles(prev => [...prev, ...res.data.articles]);
       setPagination(res.data.pagination);
@@ -151,11 +167,17 @@ function News() {
       const res = await newsAPI.getFeed({ 
         page: 1, 
         limit: 20,
-        topic: topic !== 'all' ? topic : undefined
+        topic: topic !== 'all' ? topic : undefined,
+        scope: activeScope
       });
       
       setArticles(res.data.articles);
       setPagination(res.data.pagination);
+      if (res.data.personalization?.fallbackApplied) {
+        setScopeFallbackMessage(`Showing ${res.data.personalization.activeScope} scope because ${res.data.personalization.requestedScope} scope is unavailable for your current location data.`);
+      } else {
+        setScopeFallbackMessage('');
+      }
       await loadPromoted(topic);
     } catch (err) {
       console.error('Error filtering:', err);
@@ -188,17 +210,39 @@ function News() {
     }
   };
 
-  // Toggle local priority
-  const handleToggleLocalPriority = async () => {
-    if (!preferences) return;
-    
+  const handleScopeChange = async (scope) => {
+    setActiveScope(scope);
+    setLoading(true);
     try {
-      const res = await newsAPI.updatePreferences({
-        localPriorityEnabled: !preferences.localPriorityEnabled
+      const res = await newsAPI.getFeed({
+        page: 1,
+        limit: 20,
+        topic: activeFilter !== 'all' ? activeFilter : undefined,
+        scope
       });
+      setArticles(res.data.articles);
+      setPagination(res.data.pagination);
+      setActiveScope(res.data.personalization?.activeScope || scope);
+      if (res.data.personalization?.fallbackApplied) {
+        setScopeFallbackMessage(`Showing ${res.data.personalization.activeScope} scope because ${res.data.personalization.requestedScope} scope is unavailable for your current location data.`);
+      } else {
+        setScopeFallbackMessage('');
+      }
+      await loadPromoted(activeFilter);
+    } catch (err) {
+      console.error('Error updating feed scope:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDefaultScopeChange = async (defaultScope) => {
+    if (!preferences) return;
+    try {
+      const res = await newsAPI.updatePreferences({ defaultScope });
       setPreferences(res.data.preferences);
     } catch (err) {
-      console.error('Error updating preferences:', err);
+      console.error('Error updating default scope:', err);
     }
   };
 
@@ -314,6 +358,26 @@ function News() {
           
           {/* Topic Filters - Only show visible categories */}
           <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
+            {NEWS_SCOPES.map((scopeOption) => (
+              <button
+                key={scopeOption.id}
+                onClick={() => handleScopeChange(scopeOption.id)}
+                className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
+                  activeScope === scopeOption.id
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                }`}
+              >
+                {scopeOption.label}
+              </button>
+            ))}
+          </div>
+          {scopeFallbackMessage && (
+            <p className="text-xs text-amber-600 mt-2">{scopeFallbackMessage}</p>
+          )}
+
+          {/* Topic Filters - Only show visible categories */}
+          <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
             <button
               onClick={() => handleFilterChange('all')}
               className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
@@ -347,22 +411,21 @@ function News() {
           <div className="max-w-4xl mx-auto px-4 py-6">
             <h2 className="text-xl font-semibold mb-4">News Preferences</h2>
             
-            {/* Local Priority Toggle */}
-            <div className="flex items-center justify-between py-3 border-b border-gray-200">
-              <div>
-                <h3 className="font-medium">Local News Priority</h3>
-                <p className="text-sm text-gray-500">Prioritize news from your location</p>
-              </div>
-              <button
-                onClick={handleToggleLocalPriority}
-                className={`w-12 h-6 rounded-full transition-colors ${
-                  preferences?.localPriorityEnabled ? 'bg-blue-600' : 'bg-gray-300'
-                }`}
+            {/* Default Scope */}
+            <div className="py-3 border-b border-gray-200">
+              <h3 className="font-medium">Default News Scope</h3>
+              <p className="text-sm text-gray-500 mb-2">Choose which scope opens by default each time you load News</p>
+              <select
+                value={preferences?.defaultScope || 'global'}
+                onChange={(e) => handleDefaultScopeChange(e.target.value)}
+                className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
               >
-                <div className={`w-5 h-5 bg-white rounded-full transition-transform ${
-                  preferences?.localPriorityEnabled ? 'translate-x-6' : 'translate-x-0.5'
-                }`} />
-              </button>
+                {NEWS_SCOPES.map((scopeOption) => (
+                  <option key={scopeOption.id} value={scopeOption.id}>
+                    {scopeOption.label}
+                  </option>
+                ))}
+              </select>
             </div>
             
             {/* Google News Toggle */}

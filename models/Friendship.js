@@ -19,6 +19,16 @@ const friendshipSchema = new mongoose.Schema({
     default: 'pending',
     index: true
   },
+  requesterRelationshipAudience: {
+    type: String,
+    enum: ['social', 'secure'],
+    default: 'social'
+  },
+  recipientRelationshipAudience: {
+    type: String,
+    enum: ['social', 'secure'],
+    default: 'social'
+  },
   // Who blocked whom (if status is 'blocked')
   blockedBy: {
     type: mongoose.Schema.Types.ObjectId,
