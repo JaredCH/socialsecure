@@ -111,8 +111,8 @@ const buildPanelLayoutMap = (normalized) => {
     placed.push(candidate);
   };
 
-  const hasGridPlacement = (panel) => Number.isFinite(Number(panel.gridPlacement?.row))
-    && Number.isFinite(Number(panel.gridPlacement?.col));
+  const hasGridPlacement = (panel) => Number.isFinite(panel.gridPlacement?.row)
+    && Number.isFinite(panel.gridPlacement?.col);
 
   const placePanel = (panel, preferPlacement) => {
     const bounds = getColumnBoundsForArea(panel.area);
