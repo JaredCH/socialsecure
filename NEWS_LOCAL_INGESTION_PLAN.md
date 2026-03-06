@@ -126,10 +126,10 @@ After deployment in staging:
 - [x] Add `locationTags`, `scopeReason`, `scopeConfidence` fields to `Article`
 - [x] Implement deterministic location resolver utility using ZIP registry
 - [x] Refactor `resolveAssignedZipCode` / ingestion flow to use resolver first, geocoder fallback second
-- [ ] Add optional GDELT adapter + source toggles
+- [x] Add optional GDELT adapter + source toggles
 - [x] Update feed scoring to prefer deterministic matches
 - [x] Add tests for ZIPs `78666` and `70726`
-- [ ] Add metrics/logging for scope quality
+- [x] Add metrics/logging for scope quality
 - [x] Roll out behind `NEWS_LOCATION_TAGGER_V2` flag
 
 ## 6) Recommendation for approval

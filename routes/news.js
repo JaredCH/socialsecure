@@ -57,6 +57,9 @@ const DETERMINISTIC_SCOPE_WEIGHT = 2;
 const LOCATION_GEOCODE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_LOCATION_QUERY_HINTS = 30;
 const NEWS_LOCATION_TAGGER_V2_ENABLED = String(process.env.NEWS_LOCATION_TAGGER_V2 || 'true').toLowerCase() !== 'false';
+const GDELT_ENABLED = String(process.env.GDELT_ENABLED || 'false').toLowerCase() === 'true';
+const GDELT_API_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc';
+const GDELT_DEFAULT_QUERIES = ['local news', 'breaking news', 'community news'];
 const newsGeocoder = NodeGeocoder({
   provider: 'openstreetmap',
   httpAdapter: 'https',
@@ -443,6 +446,66 @@ const mergeLocationTags = (existing = {}, incoming = {}, assignedZipCode = null)
     counties: mergeLocationTagValues(existing, incoming, 'counties'),
     states: mergeLocationTagValues(existing, incoming, 'states'),
     countries: mergeLocationTagValues(existing, incoming, 'countries')
+  };
+};
+
+/**
+ * Compute scope quality metrics from a batch of articles.
+ * Returns structured metrics for observability (Phase 4 of NEWS_LOCAL_INGESTION_PLAN).
+ */
+const computeScopeQualityMetrics = (articles = [], ingestionStartTime) => {
+  const total = articles.length;
+  if (total === 0) {
+    return { total: 0, scopeReasonBreakdown: {}, deterministicTagRate: 0, latencyMs: 0 };
+  }
+
+  const scopeReasonCounts = {};
+  let withZipTags = 0;
+  let withStateTags = 0;
+  let withCountryTags = 0;
+  let deterministicCount = 0;
+  const latencies = [];
+
+  for (const article of articles) {
+    const reason = article.scopeReason || 'source_default';
+    scopeReasonCounts[reason] = (scopeReasonCounts[reason] || 0) + 1;
+
+    const tags = article.locationTags || {};
+    if (Array.isArray(tags.zipCodes) && tags.zipCodes.length > 0) { withZipTags++; deterministicCount++; }
+    else if (Array.isArray(tags.states) && tags.states.length > 0) { withStateTags++; deterministicCount++; }
+    else if (Array.isArray(tags.countries) && tags.countries.length > 0) { withCountryTags++; deterministicCount++; }
+
+    if (article.publishedAt && article.scrapeTimestamp) {
+      const published = new Date(article.publishedAt).getTime();
+      const scraped = new Date(article.scrapeTimestamp).getTime();
+      if (Number.isFinite(published) && Number.isFinite(scraped) && scraped >= published) {
+        latencies.push(scraped - published);
+      }
+    }
+  }
+
+  latencies.sort((a, b) => a - b);
+  const medianLatencyMs = latencies.length > 0
+    ? latencies[Math.floor(latencies.length / 2)]
+    : null;
+
+  const scopeReasonBreakdown = {};
+  for (const [reason, count] of Object.entries(scopeReasonCounts)) {
+    scopeReasonBreakdown[reason] = {
+      count,
+      pct: Number(((count / total) * 100).toFixed(1))
+    };
+  }
+
+  return {
+    total,
+    scopeReasonBreakdown,
+    deterministicTagRate: Number(((deterministicCount / total) * 100).toFixed(1)),
+    withZipTags,
+    withStateTags,
+    withCountryTags,
+    medianIngestLatencyMs: medianLatencyMs,
+    ingestionDurationMs: ingestionStartTime ? Date.now() - ingestionStartTime : null
   };
 };
 
@@ -1115,6 +1178,88 @@ async function fetchGovernmentSource(source) {
   return fetchRssSource(source);
 }
 
+/**
+ * GDELT 2.0 DOC API Adapter
+ * Fetches geolocated articles from GDELT's free document API.
+ * Returns articles with location tags derived from GDELT's geolocation metadata.
+ */
+const parseGdeltDate = (seendate) => {
+  if (!seendate) return new Date();
+  const iso = seendate.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/, '$1-$2-$3T$4:$5:$6Z');
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
+async function fetchGdeltSource(query, options = {}) {
+  try {
+    const encodedQuery = encodeURIComponent(query);
+    const maxRecords = options.maxRecords || 25;
+    const url = `${GDELT_API_BASE}?query=${encodedQuery}&mode=artlist&maxrecords=${maxRecords}&format=json`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let response;
+    try {
+      response = await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!response.ok) {
+      console.warn(`GDELT API returned ${response.status} for query "${query}"`);
+      return [];
+    }
+    const data = await response.json();
+    const articles = Array.isArray(data.articles) ? data.articles : [];
+    return await Promise.all(articles.map(async (item) => {
+      const sourceDomain = item.domain || item.source || 'GDELT';
+      const locationTokens = buildArticleLocationTokens({
+        source: { name: sourceDomain, category: query },
+        item: {
+          title: item.title || '',
+          categories: item.domain ? [item.domain] : [],
+          contentSnippet: item.seendate || ''
+        },
+        query
+      });
+      const localityLevel = inferLocalityLevel(locationTokens);
+      const assignedZipCode = await resolveAssignedZipCode({
+        locationTokens,
+        source: { name: sourceDomain, category: query },
+        item: { title: item.title || '' },
+        query
+      });
+      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
+      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
+
+      return {
+        title: item.title || 'Untitled',
+        description: item.title || '',
+        source: sourceDomain,
+        sourceId: item.url || item.title,
+        url: item.url,
+        imageUrl: item.socialimage || null,
+        publishedAt: parseGdeltDate(item.seendate),
+        topics: toUniqueNonEmptyStrings([query.toLowerCase(), ...(item.domain ? [item.domain] : [])]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'gdlet',
+        localityLevel,
+        language: item.language || 'en',
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching GDELT source for "${query}":`, error.message);
+    return [];
+  }
+}
+
 // Helper: Extract image from HTML content
 function extractImageFromContent(content) {
   if (!content) return null;
@@ -1501,8 +1646,21 @@ async function ingestAllSources() {
     allArticles = [...allArticles, ...articles];
   }
   
-  // 3. Process all articles (deduplication)
+  // 3. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
+  if (GDELT_ENABLED) {
+    const gdeltQueries = GDELT_DEFAULT_QUERIES;
+    for (const query of gdeltQueries) {
+      const articles = await fetchGdeltSource(query);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+  
+  // 4. Process all articles (deduplication)
   const results = await processArticles(allArticles, { ingestionRunId });
+  
+  // 5. Log scope quality metrics
+  const scopeQuality = computeScopeQualityMetrics(allArticles, startTime);
+  console.log('[news-scope-quality]', JSON.stringify(scopeQuality));
   
   console.log(`Ingestion complete: ${results.inserted} inserted, ${results.updated} updated, ${results.duplicates} duplicates in ${Date.now() - startTime}ms`);
   return results;
@@ -2447,7 +2605,8 @@ module.exports = {
     fetchGoogleNewsSource,
     fetchYoutubeSource,
     fetchPodcastSource,
-    fetchGovernmentSource
+    fetchGovernmentSource,
+    fetchGdeltSource
   },
   internals: {
     processArticles,
@@ -2456,6 +2615,7 @@ module.exports = {
     resolveAssignedZipCode,
     inferLocationTokensFromText,
     resolveLocationContext,
-    geocodeContextCache
+    geocodeContextCache,
+    computeScopeQualityMetrics
   }
 };
