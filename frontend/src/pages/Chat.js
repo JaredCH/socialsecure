@@ -217,6 +217,8 @@ function Chat() {
     return <div className="bg-white rounded-lg shadow p-6">Loading unified chat hub...</div>;
   }
 
+  const defaultZipCode = profile?.zipCode || hubData?.zip?.current?.zipCode || '';
+
   return (
     <div className="bg-white rounded-lg shadow p-6 space-y-4">
       <div>
@@ -224,8 +226,8 @@ function Chat() {
         <p className="text-sm text-gray-600">
           Zip rooms, direct messages, and profile threads in one workspace.
         </p>
-        {profile?.zipCode ? (
-          <p className="text-xs text-gray-500 mt-1">Your default zip room: {profile.zipCode}</p>
+        {defaultZipCode ? (
+          <p className="text-xs text-gray-500 mt-1">Your default zip room: {defaultZipCode}</p>
         ) : (
           <p className="text-xs text-amber-700 mt-1">Add a zip code in your profile to enable default zip-room chat.</p>
         )}
