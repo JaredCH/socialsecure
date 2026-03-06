@@ -18,6 +18,10 @@ const {
   getArticleMomentumSignal,
   summarizeSignals
 } = require('../services/newsViralScore');
+const {
+  findZipLocation,
+  findZipLocationByCityState
+} = require('../services/zipLocationIndex');
 
 // Initialize RSS parser with timeout
 const parser = new Parser({
@@ -49,8 +53,10 @@ const KEYWORD_MATCH_WEIGHT = 100;
 const SCOPE_TIER_WEIGHT = 10;
 const MAX_SCOPE_TIERS = 4;
 const MAX_FEED_CANDIDATES = 400;
+const DETERMINISTIC_SCOPE_WEIGHT = 2;
 const LOCATION_GEOCODE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_LOCATION_QUERY_HINTS = 30;
+const NEWS_LOCATION_TAGGER_V2_ENABLED = String(process.env.NEWS_LOCATION_TAGGER_V2 || 'true').toLowerCase() !== 'false';
 const newsGeocoder = NodeGeocoder({
   provider: 'openstreetmap',
   httpAdapter: 'https',
@@ -267,6 +273,27 @@ const extractCityStateQueryFromTitle = (title = '') => {
   return matches[0];
 };
 
+const parseCityStateFromTitle = (title = '') => {
+  const cityStateQuery = extractCityStateQueryFromTitle(title);
+  if (!cityStateQuery) return null;
+  const parts = cityStateQuery.split(',').map((value) => String(value || '').trim()).filter(Boolean);
+  if (parts.length !== 2) return null;
+  const [cityPart, statePart] = parts;
+  if (!cityPart || !statePart) return null;
+  return {
+    city: cityPart,
+    state: statePart
+  };
+};
+
+const isLikelyLocationQuery = (value = '') => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  if (extractCityStateQueryFromTitle(normalized)) return true;
+  if (extractZipTokens([normalized]).length > 0) return true;
+  return false;
+};
+
 const resolveAssignedZipCode = async ({ locationTokens = [], source = {}, item = {}, query = null }) => {
   const sourceZip = normalizeZipCode(source.zipCode || source.postalCode || '');
   if (sourceZip && isZipLikeToken(sourceZip)) {
@@ -278,9 +305,28 @@ const resolveAssignedZipCode = async ({ locationTokens = [], source = {}, item =
     return directZip;
   }
 
+  const titleCityState = parseCityStateFromTitle(item.title);
+  if (titleCityState) {
+    try {
+      const matchedZipIndexEntry = await findZipLocationByCityState({
+        city: titleCityState.city,
+        state: titleCityState.state,
+        countryCode: source.country || source.countryCode
+      });
+      if (matchedZipIndexEntry?.zipCode && isZipLikeToken(normalizeZipCode(matchedZipIndexEntry.zipCode))) {
+        return normalizeZipCode(matchedZipIndexEntry.zipCode);
+      }
+    } catch (error) {
+      console.warn('News article zip index lookup failed:', titleCityState, error.message);
+    }
+  }
+
   const titleQuery = extractCityStateQueryFromTitle(item.title);
-  const sourceQuery = source.location || source.address || source.name || query || '';
-  const geocodeQuery = titleQuery || sourceQuery;
+  const sourceQuery = source.location || source.address || '';
+  // Intentionally omit source.name to avoid noisy per-article geocode lookups
+  // against generic publisher names (for example, "BBC News").
+  const queryHint = isLikelyLocationQuery(query) ? query : '';
+  const geocodeQuery = titleQuery || sourceQuery || queryHint || '';
   if (!geocodeQuery) return null;
 
   try {
@@ -324,6 +370,80 @@ const inferLocalityLevel = (locationTokens = []) => {
 
   // If we have tokens but couldn't classify, assume city-level (local place mention)
   return tokenSet.size > 0 ? 'city' : 'global';
+};
+
+const buildLocationTags = ({ locationTokens = [], assignedZipCode = null }) => {
+  const normalizedTokens = toUniqueNonEmptyLocationTokens(locationTokens);
+  const zipCodes = extractZipTokens([...normalizedTokens, assignedZipCode]);
+  const cities = [];
+  const counties = [];
+  const states = [];
+  const countries = [];
+
+  for (const token of normalizedTokens) {
+    if (!token || isZipLikeToken(token)) continue;
+    if (token.includes(' county') || token.includes(' parish')) {
+      counties.push(token);
+      continue;
+    }
+    if (US_STATE_NAMES.has(token) || US_STATE_ABBREVS.has(token)) {
+      states.push(token);
+      continue;
+    }
+    if (COUNTRY_NAMES.has(token)) {
+      countries.push(token);
+      continue;
+    }
+    cities.push(token);
+  }
+
+  return {
+    zipCodes,
+    cities: toUniqueNonEmptyStrings(cities),
+    counties: toUniqueNonEmptyStrings(counties),
+    states: toUniqueNonEmptyStrings(states),
+    countries: toUniqueNonEmptyStrings(countries)
+  };
+};
+
+const deriveScopeMetadata = ({ locationTags = {}, localityLevel = 'global', locationTokens = [] }) => {
+  if (Array.isArray(locationTags.zipCodes) && locationTags.zipCodes.length > 0) {
+    return { scopeReason: 'zip_match', scopeConfidence: 1 };
+  }
+  if ((Array.isArray(locationTags.cities) && locationTags.cities.length > 0)
+    || (Array.isArray(locationTags.counties) && locationTags.counties.length > 0)
+    || localityLevel === 'city') {
+    return { scopeReason: 'city_match', scopeConfidence: 0.85 };
+  }
+  if ((Array.isArray(locationTags.states) && locationTags.states.length > 0) || localityLevel === 'state') {
+    return { scopeReason: 'state_match', scopeConfidence: 0.7 };
+  }
+  if ((Array.isArray(locationTags.countries) && locationTags.countries.length > 0) || localityLevel === 'country') {
+    return { scopeReason: 'country_match', scopeConfidence: 0.55 };
+  }
+  if (Array.isArray(locationTokens) && locationTokens.length > 0) {
+    return { scopeReason: 'nlp_only', scopeConfidence: 0.35 };
+  }
+  return { scopeReason: 'source_default', scopeConfidence: 0.1 };
+};
+
+const mergeLocationTagValues = (existing = {}, incoming = {}, key) => {
+  const existingValues = Array.isArray(existing[key]) ? existing[key] : [];
+  const incomingValues = Array.isArray(incoming[key]) ? incoming[key] : [];
+  return toUniqueNonEmptyStrings([...existingValues, ...incomingValues]);
+};
+
+const mergeLocationTags = (existing = {}, incoming = {}, assignedZipCode = null) => {
+  return {
+    zipCodes: toUniqueNonEmptyStrings([
+      ...mergeLocationTagValues(existing, incoming, 'zipCodes'),
+      assignedZipCode
+    ]),
+    cities: mergeLocationTagValues(existing, incoming, 'cities'),
+    counties: mergeLocationTagValues(existing, incoming, 'counties'),
+    states: mergeLocationTagValues(existing, incoming, 'states'),
+    countries: mergeLocationTagValues(existing, incoming, 'countries')
+  };
 };
 
 const getItemPublishedAt = (item = {}) => {
@@ -412,6 +532,52 @@ const geocodeFromLocationContext = async ({ zipCodeValues = [], cityValues = [],
   const countyCandidates = toUniqueNonEmptyStrings(countyValues);
   const stateCandidates = toUniqueNonEmptyStrings(stateValues);
   const countryCandidates = toUniqueNonEmptyStrings(countryValues);
+
+  for (const zipCode of zipCandidates) {
+    try {
+      const zipLocation = await findZipLocation(zipCode);
+      if (zipLocation) {
+        return {
+          ...zipLocation,
+          zipcode: zipLocation.zipCode || zipCode,
+          postalCode: zipLocation.zipCode || zipCode,
+          _newsGeocodeMeta: {
+            query: zipCode,
+            cacheStatus: 'zip_index'
+          }
+        };
+      }
+    } catch (error) {
+      console.warn('News zip index lookup failed:', zipCode, error.message);
+    }
+  }
+
+  if (cityCandidates.length > 0 && stateCandidates.length > 0) {
+    for (const city of cityCandidates) {
+      for (const state of stateCandidates) {
+        try {
+          const cityStateMatch = await findZipLocationByCityState({
+            city,
+            state,
+            countryCode: countryCandidates[0]
+          });
+          if (cityStateMatch) {
+            return {
+              ...cityStateMatch,
+              zipcode: cityStateMatch.zipCode || null,
+              postalCode: cityStateMatch.zipCode || null,
+              _newsGeocodeMeta: {
+                query: `${city}, ${state}`,
+                cacheStatus: 'zip_index'
+              }
+            };
+          }
+        } catch (error) {
+          console.warn('News city/state zip index lookup failed:', `${city}, ${state}`, error.message);
+        }
+      }
+    }
+  }
 
   const queryHints = [];
   for (const zipCode of zipCandidates) {
@@ -766,6 +932,8 @@ async function fetchRssSource(source) {
       const locationTokens = buildArticleLocationTokens({ source, item });
       const localityLevel = inferLocalityLevel(locationTokens);
       const assignedZipCode = await resolveAssignedZipCode({ locationTokens, source, item });
+      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
+      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
       
       return {
         title: item.title || 'Untitled',
@@ -782,7 +950,14 @@ async function fetchRssSource(source) {
         localityLevel,
         language: item.isoLanguage || feed.language || 'en',
         providerId,
-        scrapeTimestamp: new Date()
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
       };
     }));
   } catch (error) {
@@ -825,6 +1000,8 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
         item,
         query
       });
+      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
+      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
       
       return {
         title: item.title || 'Untitled',
@@ -840,7 +1017,14 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
         sourceType,
         localityLevel,
         language: 'en',
-        scrapeTimestamp: new Date()
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
       };
     }));
   } catch (error) {
@@ -1063,6 +1247,18 @@ async function processArticles(articles, options = {}) {
               topics: [...new Set([...(existing.topics || []), ...(scoredArticle.topics || [])])],
               locations: mergedLocations,
               assignedZipCode: scoredArticle.assignedZipCode || existing.assignedZipCode || null,
+              locationTags: NEWS_LOCATION_TAGGER_V2_ENABLED
+                ? mergeLocationTags(existing.locationTags, scoredArticle.locationTags, scoredArticle.assignedZipCode)
+                : existing.locationTags,
+              scopeReason: NEWS_LOCATION_TAGGER_V2_ENABLED
+                ? (scoredArticle.scopeReason || existing.scopeReason || 'source_default')
+                : existing.scopeReason,
+              scopeConfidence: NEWS_LOCATION_TAGGER_V2_ENABLED
+                ? Math.max(
+                  Number.isFinite(existing.scopeConfidence) ? existing.scopeConfidence : 0,
+                  Number.isFinite(scoredArticle.scopeConfidence) ? scoredArticle.scopeConfidence : 0
+                )
+                : existing.scopeConfidence,
               viralScore: scoredArticle.viralScore,
               viralScoreVersion: scoredArticle.viralScoreVersion,
               viralSignals: scoredArticle.viralSignals,
@@ -1466,6 +1662,9 @@ router.get('/feed', authenticateToken, async (req, res) => {
           const scopeTier = getScopeTier(scopeValue, article._locationMatches);
           const recencyScore = scoreRecency(article.publishedAt, article.freshnessScore);
           const localityLevelScore = scoreLocalityLevel(scopeValue, article.localityLevel);
+          const deterministicScopeScore = NEWS_LOCATION_TAGGER_V2_ENABLED
+            ? ((Number(article.scopeConfidence) || 0) * DETERMINISTIC_SCOPE_WEIGHT)
+            : 0;
 
           return {
             ...article,
@@ -1474,7 +1673,8 @@ router.get('/feed', authenticateToken, async (req, res) => {
               (article._boostScore * KEYWORD_MATCH_WEIGHT) +
               ((MAX_SCOPE_TIERS - scopeTier) * SCOPE_TIER_WEIGHT) +
               recencyScore +
-              localityLevelScore
+              localityLevelScore +
+              deterministicScopeScore
           };
         })
         .filter((article) => {

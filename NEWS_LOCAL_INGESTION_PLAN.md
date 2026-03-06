@@ -1,4 +1,4 @@
-# /news Local Sourcing & Scope-Tagging Improvement Plan (Issue Draft)
+# /news Local Sourcing & Scope-Tagging Improvement Plan
 
 ## 1) Why this plan is needed (current code findings)
 Current `/news` ingestion and ranking already attempts location inference, but there are reliability gaps for US-local matching:
@@ -122,15 +122,15 @@ After deployment in staging:
 4. Verify no per-article geocode storm in logs/metrics.
 
 ## 5) Exact implementation checklist
-- [ ] Add `ZipLocationIndex` model + importer job (Census/HUD source files)
-- [ ] Add `locationTags`, `scopeReason`, `scopeConfidence` fields to `Article`
-- [ ] Implement deterministic location resolver utility using ZIP registry
-- [ ] Refactor `resolveAssignedZipCode` / ingestion flow to use resolver first, geocoder fallback second
+- [x] Add `ZipLocationIndex` model + importer job (Census/HUD source files)
+- [x] Add `locationTags`, `scopeReason`, `scopeConfidence` fields to `Article`
+- [x] Implement deterministic location resolver utility using ZIP registry
+- [x] Refactor `resolveAssignedZipCode` / ingestion flow to use resolver first, geocoder fallback second
 - [ ] Add optional GDELT adapter + source toggles
-- [ ] Update feed scoring to prefer deterministic matches
-- [ ] Add tests for ZIPs `78666` and `70726`
+- [x] Update feed scoring to prefer deterministic matches
+- [x] Add tests for ZIPs `78666` and `70726`
 - [ ] Add metrics/logging for scope quality
-- [ ] Roll out behind `NEWS_LOCATION_TAGGER_V2` flag
+- [x] Roll out behind `NEWS_LOCATION_TAGGER_V2` flag
 
 ## 6) Recommendation for approval
 Approve implementation of **Phase 0–2 first** (highest impact, lowest risk, still fully free-centric), then phase in source expansion (Phase 3) after tagging quality is measurable.

@@ -43,6 +43,24 @@ const articleSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  locationTags: {
+    zipCodes: [{ type: String }],
+    cities: [{ type: String }],
+    counties: [{ type: String }],
+    states: [{ type: String }],
+    countries: [{ type: String }]
+  },
+  scopeConfidence: {
+    type: Number,
+    min: 0,
+    max: 1,
+    default: 0
+  },
+  scopeReason: {
+    type: String,
+    enum: ['zip_match', 'city_match', 'state_match', 'country_match', 'nlp_only', 'source_default'],
+    default: 'source_default'
+  },
   language: {
     type: String,
     default: 'en'

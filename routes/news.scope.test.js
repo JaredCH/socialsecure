@@ -408,6 +408,102 @@ describe('News scope routing', () => {
     expect(response.body.articles[0]._id).toBe('state-1');
   });
 
+  it.each([
+    {
+      zipCode: '78666',
+      city: 'San Marcos',
+      state: 'Texas',
+      localArticleId: 'local-78666',
+      localTitle: 'San Marcos transit update near 78666',
+      stateArticleId: 'state-78666',
+      stateTitle: 'Texas infrastructure update'
+    },
+    {
+      zipCode: '70726',
+      city: 'Denham Springs',
+      state: 'Louisiana',
+      localArticleId: 'local-70726',
+      localTitle: 'Denham Springs cleanup update in 70726',
+      stateArticleId: 'state-70726',
+      stateTitle: 'Louisiana emergency management update'
+    }
+  ])('keeps local and regional scope deterministic for zip $zipCode', async ({
+    zipCode,
+    city,
+    state,
+    localArticleId,
+    localTitle,
+    stateArticleId,
+    stateTitle
+  }) => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: localArticleId,
+        title: localTitle,
+        description: '',
+        source: 'Local Wire',
+        sourceType: 'rss',
+        sourceId: `${zipCode}-local-wire`,
+        locations: [zipCode, city, 'US'],
+        assignedZipCode: zipCode,
+        localityLevel: 'city',
+        publishedAt: new Date('2026-03-02T00:00:00.000Z')
+      },
+      {
+        _id: stateArticleId,
+        title: stateTitle,
+        description: '',
+        source: 'State Wire',
+        sourceType: 'rss',
+        sourceId: `${zipCode}-state-wire`,
+        locations: [state, 'US'],
+        localityLevel: 'state',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      },
+      {
+        _id: `global-${zipCode}`,
+        title: 'Global market update',
+        description: '',
+        source: 'Global Wire',
+        sourceType: 'rss',
+        sourceId: `${zipCode}-global-wire`,
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'local',
+      locations: [{ country: 'US', zipCode, isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: 'US', zipCode }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const localResponse = await request(app)
+      .get('/api/news/feed?scope=local')
+      .set('Authorization', 'Bearer token');
+
+    expect(localResponse.status).toBe(200);
+    expect(localResponse.body.personalization.requestedScope).toBe('local');
+    expect(localResponse.body.personalization.activeScope).toBe('local');
+    expect(localResponse.body.personalization.fallbackApplied).toBe(false);
+    expect(localResponse.body.articles[0]._id).toBe(localArticleId);
+
+    const regionalResponse = await request(app)
+      .get('/api/news/feed?scope=regional')
+      .set('Authorization', 'Bearer token');
+
+    expect(regionalResponse.status).toBe(200);
+    expect(regionalResponse.body.personalization.requestedScope).toBe('regional');
+    expect(regionalResponse.body.personalization.activeScope).toBe('regional');
+    expect(regionalResponse.body.personalization.fallbackApplied).toBe(false);
+    expect(regionalResponse.body.articles[0]._id).toBe(stateArticleId);
+  });
+
   it('includes country-level articles in regional scope without falling back', async () => {
     const app = buildApp();
     const feedArticles = [
@@ -694,6 +790,42 @@ describe('News scope routing', () => {
     expect(secondResponse.status).toBe(200);
     expect(secondResponse.body.personalization.activeScope).toBe('regional');
     expect(secondResponse.body.personalization.fallbackApplied).toBe(false);
+  });
+
+  it('returns deterministic no_scope_matches fallback reason when local and regional matches are absent', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'fallback-country-1',
+        title: 'US federal policy update',
+        description: '',
+        source: 'National Wire',
+        sourceType: 'rss',
+        sourceId: 'national-wire',
+        locations: ['United States', 'US'],
+        localityLevel: 'country',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'local',
+      locations: [{ country: 'US', zipCode: '70726', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: 'US', zipCode: '70726' }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=local')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.requestedScope).toBe('local');
+    expect(response.body.personalization.activeScope).toBe('regional');
+    expect(response.body.personalization.fallbackApplied).toBe(true);
+    expect(response.body.personalization.fallbackReason).toBe('no_scope_matches');
   });
 
   it('treats nearby zip prefixes as local proximity matches', async () => {
