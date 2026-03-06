@@ -422,215 +422,258 @@ function Maps() {
     setMapInitAttempt((attempt) => attempt + 1);
   };
 
+  const flyToFriend = (friend) => {
+    if (!map || friend.lat == null || friend.lng == null) return;
+    map.setView([friend.lat, friend.lng], 14);
+  };
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="h-full w-full flex flex-col overflow-hidden bg-gray-50 text-gray-900">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold">🗺️ Maps</h1>
-            
-            <div className="flex items-center gap-2">
+      <div className="shrink-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 py-3 flex items-center justify-between">
+        <h1 className="text-xl font-bold">🗺️ Maps</h1>
+        <div className="flex items-center gap-2 text-sm">
+          <button
+            onClick={updateLocation}
+            className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+          >
+            📍 My Location
+          </button>
+          <button
+            onClick={() => setShowCreateSpotlight(true)}
+            className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+          >
+            ✨ Create Spotlight
+          </button>
+        </div>
+      </div>
+
+      {/* Three-column body */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left Sidebar – Controls & Filters */}
+        <aside className="w-72 shrink-0 bg-white border-r border-gray-200 overflow-y-auto flex flex-col">
+          {/* View Mode */}
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2">View Mode</h2>
+            <div className="flex gap-2">
               <button
-                onClick={updateLocation}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm"
+                onClick={() => setViewMode('local')}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  viewMode === 'local'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
               >
-                📍 My Location
+                📍 Local
               </button>
               <button
-                onClick={() => setShowCreateSpotlight(true)}
-                className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 rounded-lg text-sm"
+                onClick={() => setViewMode('community')}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  viewMode === 'community'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
               >
-                ✨ Create Spotlight
+                🌍 Community
               </button>
             </div>
           </div>
-          
-          {/* View Mode Tabs */}
-          <div className="flex gap-4 mt-3">
-            <button
-              onClick={() => setViewMode('local')}
-              className={`px-4 py-1.5 rounded-full text-sm ${
-                viewMode === 'local' ? 'bg-blue-600' : 'bg-gray-700'
-              }`}
-            >
-              📍 Local Map
-            </button>
-            <button
-              onClick={() => setViewMode('community')}
-              className={`px-4 py-1.5 rounded-full text-sm ${
-                viewMode === 'community' ? 'bg-blue-600' : 'bg-gray-700'
-              }`}
-            >
-              🌍 Community Map
-            </button>
-          </div>
-          
+
           {/* Layer Toggles */}
-          <div className="flex gap-4 mt-3 text-sm">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={layers.friends}
-                onChange={() => toggleLayer('friends')}
-                className="rounded"
-              />
-              👥 Friends
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={layers.spotlights}
-                onChange={() => toggleLayer('spotlights')}
-                className="rounded"
-              />
-              ✨ Spotlights
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={layers.heatmap}
-                onChange={() => toggleLayer('heatmap')}
-                className="rounded"
-              />
-              🔥 Heatmap
-            </label>
-          </div>
-        </div>
-      </div>
-
-      {/* Privacy Settings */}
-      <div className="bg-gray-800 border-b border-gray-700">
-        <div className="max-w-6xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-medium">Friend Location Sharing</h3>
-              <p className="text-sm text-gray-400">Allow friends to see your general location</p>
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2">Layers</h2>
+            <div className="space-y-2 text-sm">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.friends}
+                  onChange={() => toggleLayer('friends')}
+                  className="rounded text-blue-600 focus:ring-blue-500"
+                />
+                <span>👥 Friends</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.spotlights}
+                  onChange={() => toggleLayer('spotlights')}
+                  className="rounded text-blue-600 focus:ring-blue-500"
+                />
+                <span>✨ Spotlights</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.heatmap}
+                  onChange={() => toggleLayer('heatmap')}
+                  className="rounded text-blue-600 focus:ring-blue-500"
+                />
+                <span>🔥 Heatmap</span>
+              </label>
             </div>
-            <button
-              onClick={() => updatePrivacy(!privacySettings.shareWithFriends)}
-              className={`w-12 h-6 rounded-full transition-colors ${
-                privacySettings.shareWithFriends ? 'bg-blue-600' : 'bg-gray-600'
-              }`}
-            >
-              <div className={`w-5 h-5 bg-white rounded-full transition-transform ${
-                privacySettings.shareWithFriends ? 'translate-x-6' : 'translate-x-0.5'
-              }`} />
-            </button>
           </div>
-          <p className="text-xs text-gray-500 mt-2">
-            ℹ️ Heatmap participation is mandatory and anonymized - you cannot opt out
-          </p>
-        </div>
-      </div>
 
-      {/* Map Container */}
-      <div className="relative">
-        <div ref={mapRef} className="h-[500px] w-full" />
-        
-        {/* Loading Overlay */}
-        {loading && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white"></div>
-          </div>
-        )}
-        
-        {/* Error Toast */}
-        {error && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-600 px-4 py-3 rounded-lg flex items-center gap-3 max-w-[90%]">
-            <span>{error}</span>
-            <button
-              onClick={retryMapInitialization}
-              className="px-3 py-1 text-sm bg-red-700 hover:bg-red-800 rounded"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Spotlight List */}
-      <div className="max-w-6xl mx-auto px-4 py-4">
-        <h2 className="text-lg font-semibold mb-3">Nearby Spotlights</h2>
-        
-        {spotlights.length === 0 ? (
-          <p className="text-gray-400">No spotlights nearby. Create one!</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {spotlights.map(spotlight => (
-              <div key={spotlight._id} className="bg-gray-800 rounded-lg p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-medium">{spotlight.locationName}</h3>
-                    <p className="text-sm text-gray-400">
-                      {CATEGORY_ICONS[spotlight.category]} {spotlight.category}
-                    </p>
-                  </div>
-                  <span className="text-2xl">{STATE_ICONS[spotlight.state]}</span>
-                </div>
-                
-                {spotlight.description && (
-                  <p className="text-sm text-gray-300 mt-2">{spotlight.description}</p>
-                )}
-                
-                <div className="flex items-center gap-4 mt-3">
-                  <button
-                    onClick={() => handleReact(spotlight._id, 'heart')}
-                    className="flex items-center gap-1 text-sm hover:text-red-400"
-                  >
-                    ❤️ {spotlight.reactions?.heart || 0}
-                  </button>
-                  <button
-                    onClick={() => handleReact(spotlight._id, 'fire')}
-                    className="flex items-center gap-1 text-sm hover:text-orange-400"
-                  >
-                    🔥 {spotlight.reactions?.fire || 0}
-                  </button>
-                  <button
-                    onClick={() => handleReact(spotlight._id, 'cool')}
-                    className="flex items-center gap-1 text-sm hover:text-blue-400"
-                  >
-                    😎 {spotlight.reactions?.cool || 0}
-                  </button>
-                </div>
-                
-                {spotlight.user && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    by {spotlight.user.username}
-                  </p>
-                )}
+          {/* Privacy Settings */}
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2">Privacy</h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Share Location</p>
+                <p className="text-xs text-gray-500">Friends see your area</p>
               </div>
-            ))}
+              <button
+                onClick={() => updatePrivacy(!privacySettings.shareWithFriends)}
+                className={`w-11 h-6 rounded-full transition-colors ${
+                  privacySettings.shareWithFriends ? 'bg-blue-600' : 'bg-gray-300'
+                }`}
+              >
+                <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  privacySettings.shareWithFriends ? 'translate-x-5' : 'translate-x-0.5'
+                }`} />
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              ℹ️ Heatmap participation is mandatory and anonymized
+            </p>
           </div>
-        )}
+
+          {/* Nearby Spotlights */}
+          <div className="p-4 flex-1 overflow-y-auto">
+            <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2">Nearby Spotlights</h2>
+            {spotlights.length === 0 ? (
+              <p className="text-sm text-gray-400">No spotlights nearby.</p>
+            ) : (
+              <div className="space-y-3">
+                {spotlights.map(spotlight => (
+                  <div key={spotlight._id} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-medium truncate">{spotlight.locationName}</h3>
+                        <p className="text-xs text-gray-500">
+                          {CATEGORY_ICONS[spotlight.category]} {spotlight.category}
+                        </p>
+                      </div>
+                      <span className="text-lg shrink-0">{STATE_ICONS[spotlight.state]}</span>
+                    </div>
+                    {spotlight.description && (
+                      <p className="text-xs text-gray-600 mt-1 line-clamp-2">{spotlight.description}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-2">
+                      <button
+                        onClick={() => handleReact(spotlight._id, 'heart')}
+                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-red-500"
+                      >
+                        ❤️ {spotlight.reactions?.heart || 0}
+                      </button>
+                      <button
+                        onClick={() => handleReact(spotlight._id, 'fire')}
+                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-orange-500"
+                      >
+                        🔥 {spotlight.reactions?.fire || 0}
+                      </button>
+                      <button
+                        onClick={() => handleReact(spotlight._id, 'cool')}
+                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-blue-500"
+                      >
+                        😎 {spotlight.reactions?.cool || 0}
+                      </button>
+                    </div>
+                    {spotlight.user && (
+                      <p className="text-xs text-gray-400 mt-1">by {spotlight.user.username}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* Center – Map */}
+        <div className="flex-1 min-w-0 relative">
+          <div ref={mapRef} className="absolute inset-0" />
+
+          {/* Loading Overlay */}
+          {loading && (
+            <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-[500]">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
+            </div>
+          )}
+
+          {/* Error Toast */}
+          {error && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-4 py-3 rounded-lg flex items-center gap-3 max-w-[90%] z-[500]">
+              <span className="text-sm">{error}</span>
+              <button
+                onClick={retryMapInitialization}
+                className="px-3 py-1 text-sm bg-red-700 hover:bg-red-800 rounded"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Right Sidebar – Friends */}
+        <aside className="w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto flex flex-col">
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-xs font-semibold uppercase text-gray-500">Friends Nearby</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {friendsLocations.length === 0 ? (
+              <div className="p-4 text-center">
+                <p className="text-sm text-gray-400">No friends sharing locations.</p>
+                <p className="text-xs text-gray-400 mt-1">Friends with location enabled will appear here.</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {friendsLocations.map((friend, idx) => (
+                  <li key={friend.user?._id || idx}>
+                    <button
+                      onClick={() => flyToFriend(friend)}
+                      className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3"
+                    >
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-700 text-sm font-medium shrink-0">
+                        {friend.user?.username?.[0]?.toUpperCase() || '?'}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{friend.user?.username || 'Friend'}</p>
+                        <p className="text-xs text-gray-500 truncate">{friend.city || friend.locationName || 'Location shared'}</p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </aside>
       </div>
 
       {/* Create Spotlight Modal */}
       {showCreateSpotlight && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold mb-4">✨ Create Spotlight</h2>
-            
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">✨ Create Spotlight</h2>
+
             <form onSubmit={handleCreateSpotlight}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Location Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Location Name *</label>
                   <input
                     type="text"
                     value={spotlightForm.locationName}
                     onChange={(e) => setSpotlightForm(prev => ({ ...prev, locationName: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     placeholder="e.g., Joe's Coffee Shop"
                     required
                   />
                 </div>
-                
+
                 <div>
-                  <label className="block text-sm font-medium mb-1">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                   <select
                     value={spotlightForm.category}
                     onChange={(e) => setSpotlightForm(prev => ({ ...prev, category: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                   >
                     <option value="food">🍔 Food</option>
                     <option value="drink">🍺 Drink</option>
@@ -641,31 +684,31 @@ function Maps() {
                     <option value="other">📍 Other</option>
                   </select>
                 </div>
-                
+
                 <div>
-                  <label className="block text-sm font-medium mb-1">Description</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                   <textarea
                     value={spotlightForm.description}
                     onChange={(e) => setSpotlightForm(prev => ({ ...prev, description: e.target.value }))}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     placeholder="What makes this place special?"
                     rows={3}
                   />
                 </div>
               </div>
-              
+
               <div className="flex gap-3 mt-6">
                 <button
                   type="button"
                   onClick={() => setShowCreateSpotlight(false)}
-                  className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg"
+                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creatingSpotlight || !spotlightForm.locationName}
-                  className="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors"
                 >
                   {creatingSpotlight ? 'Creating...' : '✨ Create'}
                 </button>
