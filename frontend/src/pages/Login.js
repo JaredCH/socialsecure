@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { authAPI } from '../utils/api';
+import { authAPI, evaluateRegisterPassword } from '../utils/api';
 
 function Login({ onSuccess }) {
   const navigate = useNavigate();
   const [form, setForm] = useState({ identifier: '', password: '' });
   const [submitting, setSubmitting] = useState(false);
+  const passwordEvaluation = useMemo(
+    () => evaluateRegisterPassword(form.password),
+    [form.password]
+  );
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -56,6 +60,12 @@ function Login({ onSuccess }) {
             placeholder="Your password"
             required
           />
+          <p className="mt-1 text-xs text-gray-600">
+            Password quality indicator (advisory only).
+          </p>
+          <p className="text-sm text-gray-700" aria-live="polite" role="status">
+            Strength: <span className="font-medium">{passwordEvaluation.strengthLabel}</span>
+          </p>
         </div>
 
         <button

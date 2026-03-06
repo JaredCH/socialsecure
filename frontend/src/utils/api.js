@@ -31,6 +31,44 @@ api.interceptors.response.use(
 );
 
 // Auth API
+export const REGISTER_PASSWORD_REQUIREMENTS = [
+  {
+    id: 'minLength',
+    label: 'At least 8 characters',
+    validator: (password) => password.length >= 8
+  },
+  {
+    id: 'upperLower',
+    label: 'Includes uppercase and lowercase letters',
+    validator: (password) => /[a-z]/.test(password) && /[A-Z]/.test(password)
+  },
+  {
+    id: 'number',
+    label: 'Includes at least one number',
+    validator: (password) => /\d/.test(password)
+  }
+];
+
+const PASSWORD_STRENGTH_LABELS = ['Weak', 'Fair', 'Good', 'Strong'];
+
+export const evaluateRegisterPassword = (password = '') => {
+  const requirementChecks = REGISTER_PASSWORD_REQUIREMENTS.map((requirement) => ({
+    ...requirement,
+    met: requirement.validator(password)
+  }));
+
+  const metCount = requirementChecks.filter((requirement) => requirement.met).length;
+  const lengthBonus = password.length >= 12 ? 1 : 0;
+  const strengthScore = Math.min(metCount + lengthBonus, PASSWORD_STRENGTH_LABELS.length - 1);
+
+  return {
+    requirementChecks,
+    allRequirementsMet: requirementChecks.every((requirement) => requirement.met),
+    strengthScore,
+    strengthLabel: PASSWORD_STRENGTH_LABELS[strengthScore]
+  };
+};
+
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
