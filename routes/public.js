@@ -5,6 +5,7 @@ const router = express.Router();
 const User = require('../models/User');
 const Post = require('../models/Post');
 const BlockList = require('../models/BlockList');
+const { toPublicSocialPagePreferences } = require('../utils/socialPagePreferences');
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -37,7 +38,7 @@ const parsePagination = (query) => {
   };
 };
 
-const publicUserProjection = '_id username realName city state country registrationStatus pgpPublicKey createdAt';
+const publicUserProjection = '_id username realName city state country registrationStatus pgpPublicKey createdAt profileTheme socialPagePreferences';
 
 const toPublicUserProfile = (userDoc) => {
   if (!userDoc) return null;
@@ -51,6 +52,9 @@ const toPublicUserProfile = (userDoc) => {
     country: userDoc.country || null,
     registrationStatus: userDoc.registrationStatus,
     hasPGP: !!userDoc.pgpPublicKey,
+    socialPagePreferences: toPublicSocialPagePreferences(userDoc.socialPagePreferences, {
+      profileTheme: userDoc.profileTheme || 'default'
+    }),
     createdAt: userDoc.createdAt
   };
 };

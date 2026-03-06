@@ -1,6 +1,14 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { DEFAULT_REALTIME_PREFERENCES, normalizeRealtimePreferences } = require('../utils/realtimePreferences');
+const {
+  SOCIAL_THEME_PRESETS,
+  SOCIAL_ACCENT_TOKENS,
+  SOCIAL_SECTION_IDS,
+  SOCIAL_MODULE_IDS,
+  buildDefaultSocialPagePreferences,
+  toPublicSocialPagePreferences
+} = require('../utils/socialPagePreferences');
 
 const userSchema = new mongoose.Schema({
   universalId: {
@@ -82,6 +90,35 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['default', 'light', 'dark', 'sunset', 'forest'],
     default: 'default'
+  },
+  socialPagePreferences: {
+    themePreset: {
+      type: String,
+      enum: SOCIAL_THEME_PRESETS,
+      default: 'default'
+    },
+    accentColorToken: {
+      type: String,
+      enum: SOCIAL_ACCENT_TOKENS,
+      default: 'blue'
+    },
+    sectionOrder: [{
+      type: String,
+      enum: SOCIAL_SECTION_IDS
+    }],
+    hiddenSections: [{
+      type: String,
+      enum: SOCIAL_SECTION_IDS
+    }],
+    hiddenModules: [{
+      type: String,
+      enum: SOCIAL_MODULE_IDS
+    }],
+    version: {
+      type: Number,
+      default: 1,
+      min: 1
+    }
   },
   location: {
     type: {
@@ -340,6 +377,9 @@ userSchema.pre('save', async function(next) {
   if (this.isModified('passwordHash') && this.passwordHash) {
     this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
   }
+  if (!this.socialPagePreferences || typeof this.socialPagePreferences !== 'object') {
+    this.socialPagePreferences = buildDefaultSocialPagePreferences(this.profileTheme);
+  }
   next();
 });
 
@@ -382,6 +422,9 @@ userSchema.methods.toPublicProfile = function() {
     bannerUrl: this.bannerUrl || '',
     links: Array.isArray(this.links) ? this.links : [],
     profileTheme: this.profileTheme || 'default',
+    socialPagePreferences: toPublicSocialPagePreferences(this.socialPagePreferences, {
+      profileTheme: this.profileTheme || 'default'
+    }),
     city: this.city,
     state: this.state,
     country: this.country,
