@@ -1,5 +1,17 @@
 const mongoose = require('mongoose');
 
+const MARKET_UPLOAD_PREFIX = '/uploads/market/';
+
+const isValidListingImage = (value) => {
+  if (!value || typeof value !== 'string') return false;
+  const normalized = value.trim();
+  if (!normalized) return false;
+  if (normalized.startsWith(MARKET_UPLOAD_PREFIX)) {
+    return !normalized.includes('..');
+  }
+  return /^https?:\/\/.+/.test(normalized);
+};
+
 const marketListingSchema = new mongoose.Schema({
   sellerId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -60,9 +72,9 @@ const marketListingSchema = new mongoose.Schema({
     type: String,
     validate: {
       validator: function(v) {
-        return /^https?:\/\/.+/.test(v);
+        return isValidListingImage(v);
       },
-      message: 'Image URL must be a valid HTTP/HTTPS URL'
+      message: 'Image must be a valid HTTP/HTTPS URL or uploaded image path'
     }
   }],
   location: {

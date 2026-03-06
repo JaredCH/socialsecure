@@ -269,6 +269,12 @@ export const locationAPI = {
 };
 
 // Market API
+const withMultipartHeaders = (data) => (
+  data instanceof FormData
+    ? { headers: { 'Content-Type': 'multipart/form-data' } }
+    : undefined
+);
+
 export const marketAPI = {
   getCategories: () => api.get('/market/categories'),
   getListings: (filters = {}, page = 1, limit = 20) => {
@@ -283,8 +289,8 @@ export const marketAPI = {
     return api.get(`/market/listings?${params}`);
   },
   getListing: (listingId) => api.get(`/market/listings/${listingId}`),
-  createListing: (data) => api.post('/market/listings', data),
-  updateListing: (listingId, data) => api.put(`/market/listings/${listingId}`, data),
+  createListing: (data) => api.post('/market/listings', data, withMultipartHeaders(data)),
+  updateListing: (listingId, data) => api.put(`/market/listings/${listingId}`, data, withMultipartHeaders(data)),
   deleteListing: (listingId) => api.delete(`/market/listings/${listingId}`),
   incrementViews: (listingId) => api.post(`/market/listings/${listingId}/view`),
   markAsSold: (listingId) => api.post(`/market/listings/${listingId}/sold`),
