@@ -1,6 +1,12 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
+const ADMIN_PROFILE = {
+  realName: 'Jared Hicks',
+  country: 'US',
+  zipCode: '78666'
+};
+
 const ensureUniversalAdminAccount = async ({
   username,
   email,
@@ -33,11 +39,12 @@ const ensureUniversalAdminAccount = async ({
       : null;
 
     adminUser = new User({
-      realName: 'System Administrator',
+      realName: ADMIN_PROFILE.realName,
       username: normalizedUsername,
       email: resolvedEmail,
       passwordHash,
-      country: 'US',
+      country: ADMIN_PROFILE.country,
+      zipCode: ADMIN_PROFILE.zipCode,
       registrationStatus: 'active',
       isAdmin: true,
       onboardingStatus: 'completed',
@@ -58,6 +65,21 @@ const ensureUniversalAdminAccount = async ({
   let updated = false;
   let privilegesRepaired = false;
   let encryptionPasswordUpdated = false;
+
+  if (adminUser.realName !== ADMIN_PROFILE.realName) {
+    adminUser.realName = ADMIN_PROFILE.realName;
+    updated = true;
+  }
+
+  if (adminUser.country !== ADMIN_PROFILE.country) {
+    adminUser.country = ADMIN_PROFILE.country;
+    updated = true;
+  }
+
+  if (adminUser.zipCode !== ADMIN_PROFILE.zipCode) {
+    adminUser.zipCode = ADMIN_PROFILE.zipCode;
+    updated = true;
+  }
 
   if (!adminUser.isAdmin || adminUser.registrationStatus !== 'active') {
     adminUser.isAdmin = true;
