@@ -264,6 +264,13 @@ router.post('/register', [
     .withMessage('Password must be at least 8 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+  body('countryCode')
+    .trim()
+    .customSanitizer((value) => String(value || '').toUpperCase())
+    .notEmpty()
+    .withMessage('Country code is required')
+    .matches(/^[A-Z]{2}$/)
+    .withMessage('Country code must be a valid 2-letter uppercase code'),
   body('county')
     .trim()
     .notEmpty()
@@ -288,7 +295,16 @@ router.post('/register', [
   }
 
   try {
-    const { realName, username, email, password, county, zipCode, referralCode } = req.body;
+    const {
+      realName,
+      username,
+      email,
+      password,
+      countryCode,
+      county,
+      zipCode,
+      referralCode
+    } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
@@ -308,6 +324,7 @@ router.post('/register', [
       username,
       email,
       passwordHash: password, // Will be hashed by pre-save middleware
+      country: countryCode,
       county,
       zipCode: normalizeZipCode(zipCode),
       registrationStatus: 'active',

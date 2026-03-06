@@ -19,7 +19,7 @@ function PostRegistrationWelcome({ user, onConfirm }) {
 
   const handleBegin = () => {
     onConfirm?.();
-    navigate('/settings', { replace: true });
+    navigate('/onboarding', { replace: true });
   };
 
   return (

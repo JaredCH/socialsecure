@@ -41,7 +41,7 @@ const ProtectedRoute = ({
   }
 
   if (encryptionPasswordRequired && !allowWhenEncryptionRequired) {
-    return <Navigate to="/settings" replace />;
+    return <Navigate to="/onboarding" replace />;
   }
 
   return children;
@@ -430,7 +430,7 @@ function App() {
                     : onboardingRequired
                     ? <Navigate to="/onboarding" replace />
                     : encryptionPasswordRequired
-                      ? <Navigate to="/settings" replace />
+                      ? <Navigate to="/onboarding" replace />
                       : <Home />
                   : <Home />
               }
@@ -461,7 +461,7 @@ function App() {
                       onConfirm={handleWelcomeConfirmed}
                     />
                   ) : (
-                    <Navigate to={encryptionPasswordRequired ? '/settings' : '/'} replace />
+                    <Navigate to={encryptionPasswordRequired ? '/onboarding' : '/'} replace />
                   )}
                 </ProtectedRoute>
               )}
@@ -476,7 +476,7 @@ function App() {
                   encryptionPasswordRequired={false}
                   allowWhenEncryptionRequired
                 >
-                  {onboardingRequired ? (
+                  {onboardingRequired || encryptionPasswordRequired ? (
                     <OnboardingPage
                       user={user}
                       onboarding={onboardingStatus}
