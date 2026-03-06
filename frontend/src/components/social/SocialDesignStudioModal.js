@@ -1,11 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FONT_SIZE_LABELS,
   SOCIAL_DESIGN_TEMPLATES,
   SOCIAL_FONT_FAMILIES,
   SOCIAL_FONT_SIZE_TOKENS,
+  SOCIAL_LAYOUT_PRESETS,
   SOCIAL_PANEL_IDS,
   SOCIAL_PANEL_LABELS,
+  SOCIAL_THEME_STYLE_PRESETS,
   normalizeSocialPreferences
 } from '../../utils/socialPagePreferences';
 
@@ -38,6 +40,9 @@ const SIDE_HEIGHT_BY_UNITS = {
   4: 'twoRows',
   8: 'fourRows'
 };
+const MAIN_ALLOWED_WIDTHS = [1, 2, 4, 6, 8];
+const MAIN_ALLOWED_HEIGHTS = [1, 2, 4, 6, 8];
+const SIDE_ALLOWED_HEIGHTS = [1, 2, 4, 8];
 
 const getPanelWidthUnits = (panel = {}) => {
   if (panel.area === 'sideLeft' || panel.area === 'sideRight') return 2;
@@ -66,6 +71,29 @@ const getPanelHeightUnits = (panel = {}) => {
 
 const getColumnBoundsForArea = (area) => {
   return { min: 0, max: GRID_COLUMNS - 1 };
+};
+
+const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const getNearestAllowedUnit = (value, allowedUnits) => {
+  if (!allowedUnits.length) return value;
+  return allowedUnits.reduce((closest, candidate) => (
+    Math.abs(candidate - value) < Math.abs(closest - value) ? candidate : closest
+  ), allowedUnits[0]);
+};
+
+const getSizeTokenFromUnits = (panel, widthUnits) => {
+  if (panel.area === 'top') return 'fullTile';
+  if (panel.area === 'sideLeft' || panel.area === 'sideRight') return panel.size === 'sidePanelHalfHeight' ? 'sidePanelHalfHeight' : 'sidePanelFull';
+  return SIZE_BY_WIDTH_UNITS[widthUnits] || panel.size;
+};
+
+const getHeightTokenFromUnits = (panel, heightUnits) => {
+  if (panel.area === 'top') return 'fullRow';
+  if (panel.area === 'sideLeft' || panel.area === 'sideRight') {
+    return SIDE_HEIGHT_BY_UNITS[heightUnits] || panel.height || 'fullRow';
+  }
+  return MAIN_HEIGHT_BY_UNITS[heightUnits] || panel.height || 'fullRow';
 };
 
 const panelWithPlacement = (panel = {}, row = 0, col = 0) => ({
@@ -157,7 +185,9 @@ const SocialDesignStudioModal = ({
   activeConfigId,
   sharedDesigns,
   favoriteDesigns,
+  layoutPresets,
   onApplyTemplate,
+  onApplyLayoutPreset,
   onGlobalStylesChange,
   onPanelOverrideToggle,
   onPanelStyleChange,
@@ -176,13 +206,35 @@ const SocialDesignStudioModal = ({
   const [newConfigName, setNewConfigName] = useState('');
   const [duplicateNames, setDuplicateNames] = useState({});
   const [activePanelId, setActivePanelId] = useState('');
-  const [dragPanelId, setDragPanelId] = useState('');
-  const [hoverCell, setHoverCell] = useState(null);
-  const [isPlacementMode, setIsPlacementMode] = useState(false);
-  const [selectionStart, setSelectionStart] = useState(null);
+  const [layoutDraftById, setLayoutDraftById] = useState({});
+  const [pointerAction, setPointerAction] = useState(null);
+  const gridRef = useRef(null);
   const normalized = useMemo(() => normalizeSocialPreferences(preferences), [preferences]);
   const gridLayout = useMemo(() => buildPanelLayoutMap(normalized), [normalized]);
-  const selectedPanel = activePanelId ? gridLayout.placed.find((panel) => panel.id === activePanelId) : null;
+  const previewPanels = useMemo(() => gridLayout.placed.map((panel) => {
+    const draft = layoutDraftById[panel.id] || {};
+    return {
+      ...panel,
+      ...draft,
+      size: draft.size || panel.size,
+      height: draft.height || panel.height,
+      gridPlacement: draft.gridPlacement || panel.gridPlacement
+    };
+  }), [gridLayout, layoutDraftById]);
+  const occupiedCells = useMemo(() => {
+    const cellMap = new Map();
+    previewPanels.forEach((panel) => {
+      const width = getPanelWidthUnits(panel);
+      const height = getPanelHeightUnits(panel);
+      for (let y = panel.gridPlacement.row; y < panel.gridPlacement.row + height; y += 1) {
+        for (let x = panel.gridPlacement.col; x < panel.gridPlacement.col + width; x += 1) {
+          cellMap.set(`${x}:${y}`, panel.id);
+        }
+      }
+    });
+    return cellMap;
+  }, [previewPanels]);
+  const selectedPanel = activePanelId ? previewPanels.find((panel) => panel.id === activePanelId) : null;
 
   if (!isOpen) return null;
 
@@ -204,13 +256,9 @@ const SocialDesignStudioModal = ({
 
   const openPanelEditor = (panelId) => {
     setActivePanelId(panelId);
-    setDragPanelId('');
-    setIsPlacementMode(true);
-    setHoverCell(null);
-    setSelectionStart(null);
   };
 
-  const getPlacementFootprint = (panel, row, col) => {
+  const getPlacementFootprint = (panel, row, col, ignorePanelId = '') => {
     const width = getPanelWidthUnits(panel);
     const height = getPanelHeightUnits(panel);
     const bounds = getColumnBoundsForArea(panel.area);
@@ -222,47 +270,108 @@ const SocialDesignStudioModal = ({
     let valid = true;
     for (let y = row; y < row + height; y += 1) {
       for (let x = col; x < col + width; x += 1) {
-        const occupant = gridLayout.occupied[y][x];
-        if (occupant && occupant !== panel.id) valid = false;
+        const occupantId = occupiedCells.get(`${x}:${y}`);
+        if (occupantId && occupantId !== panel.id && occupantId !== ignorePanelId) valid = false;
         cells.push(`${x}:${y}`);
       }
     }
     return { valid, cells };
   };
 
-  const getSelectionPatch = (panel, topLeft, bottomRight) => {
-    if (!panel || !topLeft || !bottomRight) return { valid: false, cells: [] };
-    if (bottomRight.row < topLeft.row || bottomRight.col < topLeft.col) {
-      return { valid: false, cells: [] };
-    }
+  const getCellFromClientPoint = (clientX, clientY) => {
+    if (!gridRef.current) return null;
+    const rect = gridRef.current.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const x = clampValue(clientX - rect.left, 0, rect.width - 1);
+    const y = clampValue(clientY - rect.top, 0, rect.height - 1);
+    const col = clampValue(Math.floor((x / rect.width) * GRID_COLUMNS), 0, GRID_COLUMNS - 1);
+    const row = clampValue(Math.floor((y / rect.height) * GRID_ROWS), 0, GRID_ROWS - 1);
+    return { row, col };
+  };
 
-    const widthUnits = (bottomRight.col - topLeft.col) + 1;
-    const heightUnits = (bottomRight.row - topLeft.row) + 1;
-    const isSidePanel = panel.area === 'sideLeft' || panel.area === 'sideRight';
-    const size = isSidePanel
-      ? panel.size
-      : SIZE_BY_WIDTH_UNITS[widthUnits];
-    const height = isSidePanel
-      ? SIDE_HEIGHT_BY_UNITS[heightUnits]
-      : MAIN_HEIGHT_BY_UNITS[heightUnits];
-    const candidate = {
-      ...panel,
-      size: size || panel.size,
-      height: height || panel.height
-    };
+  useEffect(() => {
+    if (!pointerAction) return undefined;
 
-    if (!size || !height) return { valid: false, cells: [] };
-    const footprint = getPlacementFootprint(candidate, topLeft.row, topLeft.col);
-    if (!footprint.valid) return footprint;
-    return {
-      ...footprint,
-      patch: {
-        size,
-        height,
-        gridPlacement: { row: topLeft.row, col: topLeft.col }
+    const handlePointerMove = (event) => {
+      const panel = previewPanels.find((item) => item.id === pointerAction.panelId);
+      if (!panel) return;
+      const cell = getCellFromClientPoint(event.clientX, event.clientY);
+      if (!cell) return;
+
+      if (pointerAction.type === 'drag') {
+        const width = getPanelWidthUnits(panel);
+        const height = getPanelHeightUnits(panel);
+        const bounds = getColumnBoundsForArea(panel.area);
+        const nextCol = clampValue(cell.col - pointerAction.offsetCol, bounds.min, bounds.max - width + 1);
+        const nextRow = clampValue(cell.row - pointerAction.offsetRow, 0, GRID_ROWS - height);
+        const nextFootprint = getPlacementFootprint(panel, nextRow, nextCol, panel.id);
+        if (!nextFootprint.valid) return;
+        setLayoutDraftById((prev) => ({
+          ...prev,
+          [panel.id]: {
+            ...(prev[panel.id] || {}),
+            gridPlacement: { row: nextRow, col: nextCol }
+          }
+        }));
+      }
+
+      if (pointerAction.type === 'resize') {
+        const baseRow = panel.gridPlacement.row;
+        const baseCol = panel.gridPlacement.col;
+        const requestedWidth = (cell.col - baseCol) + 1;
+        const requestedHeight = (cell.row - baseRow) + 1;
+        const allowedWidths = panel.area === 'main' ? MAIN_ALLOWED_WIDTHS : [getPanelWidthUnits(panel)];
+        const allowedHeights = panel.area === 'main'
+          ? MAIN_ALLOWED_HEIGHTS
+          : (panel.area === 'sideLeft' || panel.area === 'sideRight' ? SIDE_ALLOWED_HEIGHTS : [2]);
+        const widthUnits = clampValue(
+          getNearestAllowedUnit(requestedWidth, allowedWidths),
+          Math.min(...allowedWidths),
+          Math.max(...allowedWidths)
+        );
+        const heightUnits = clampValue(
+          getNearestAllowedUnit(requestedHeight, allowedHeights),
+          Math.min(...allowedHeights),
+          Math.max(...allowedHeights)
+        );
+        const size = getSizeTokenFromUnits(panel, widthUnits);
+        const height = getHeightTokenFromUnits(panel, heightUnits);
+        const candidate = { ...panel, size, height };
+        const nextFootprint = getPlacementFootprint(candidate, baseRow, baseCol, panel.id);
+        if (!nextFootprint.valid) return;
+        setLayoutDraftById((prev) => ({
+          ...prev,
+          [panel.id]: {
+            ...(prev[panel.id] || {}),
+            size,
+            height
+          }
+        }));
       }
     };
-  };
+
+    const handlePointerUp = () => {
+      const panelId = pointerAction.panelId;
+      const patch = layoutDraftById[panelId];
+      if (patch) {
+        updateLayoutPatch(panelId, patch);
+      }
+      setPointerAction(null);
+      setLayoutDraftById((prev) => {
+        if (!prev[panelId]) return prev;
+        const next = { ...prev };
+        delete next[panelId];
+        return next;
+      });
+    };
+
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [pointerAction, previewPanels, layoutDraftById]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
@@ -282,16 +391,16 @@ const SocialDesignStudioModal = ({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">Layout studio</h3>
-                  <p className="text-sm text-slate-800">Click a panel, then select a top-left and bottom-right corner on the 6x10 conceptual grid to set size and placement. Green = valid placement, red = blocked.</p>
+                  <p className="text-sm text-slate-800">Drag panels directly on the canvas to reposition. Drag each panel&apos;s bottom-right handle to resize with live constraints. Keyboard: press Enter/Space to focus a panel, arrows to move, and Shift+arrows to resize.</p>
                 </div>
                 {busy ? <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Saving…</span> : null}
               </div>
               <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(260px,0.85fr)_minmax(0,1.4fr)]">
                 <div className="rounded-2xl border border-slate-200 p-4">
-                  <h4 className="text-sm font-semibold text-slate-900">Panel shape and slot</h4>
-                  <p className="mt-1 text-xs text-slate-800">Click a panel, choose a top-left grid corner, then choose a bottom-right corner to set the panel size and placement. Green highlights are valid.</p>
+                  <h4 className="text-sm font-semibold text-slate-900">Panel position and size</h4>
+                  <p className="mt-1 text-xs text-slate-800">Select any panel to focus it. Use drag on the card to move and the square handle to resize.</p>
                   <div className="mt-3 space-y-2">
-                    {gridLayout.placed.map((panel) => (
+                    {previewPanels.map((panel) => (
                       <button
                         key={panel.id}
                         type="button"
@@ -306,98 +415,89 @@ const SocialDesignStudioModal = ({
                     ))}
                   </div>
                   <p className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900">
-                    {selectedPanel && isPlacementMode && !selectionStart
-                      ? `Selected ${SOCIAL_PANEL_LABELS[selectedPanel.id] || selectedPanel.id}. Select its top-left corner on the grid.`
-                      : selectedPanel && isPlacementMode && selectionStart
-                        ? `Top-left is set at row ${selectionStart.row + 1}, col ${selectionStart.col + 1}. Now select the bottom-right corner.`
-                      : 'Pick a panel to begin editing and placement.'}
+                    {selectedPanel
+                      ? `Selected ${SOCIAL_PANEL_LABELS[selectedPanel.id] || selectedPanel.id}. Drag to move. Resize using the bottom-right handle.`
+                      : 'Pick a panel to begin direct manipulation.'}
                   </p>
                 </div>
                 <div
                   className="relative rounded-2xl border border-slate-200 p-3"
                   style={{ backgroundColor: normalized.globalStyles.pageBackgroundColor }}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    if (!dragPanelId || !hoverCell) return;
-                    const panel = gridLayout.placed.find((item) => item.id === dragPanelId);
-                    if (!panel) return;
-                    const footprint = getPlacementFootprint(panel, hoverCell.row, hoverCell.col);
-                    if (!footprint.valid) return;
-                    updateLayoutPatch(dragPanelId, { gridPlacement: { row: hoverCell.row, col: hoverCell.col } });
-                    setDragPanelId('');
-                    setHoverCell(null);
-                  }}
                 >
                   <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-800">
                     <span>Grid preview</span>
                     <span>6x10 conceptual grid (12x20 internal slots)</span>
                   </div>
-                  <div className="relative grid gap-0.5 rounded-lg bg-slate-200/70 p-1" style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${GRID_ROWS}, minmax(0, 20px))` }}>
+                  <div
+                    ref={gridRef}
+                    className="relative grid gap-0.5 rounded-lg bg-slate-200/70 p-1"
+                    style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${GRID_ROWS}, minmax(0, 20px))` }}
+                  >
                     {Array.from({ length: GRID_ROWS * GRID_COLUMNS }).map((_, index) => {
                       const col = index % GRID_COLUMNS;
                       const row = Math.floor(index / GRID_COLUMNS);
-                      const panel = dragPanelId ? gridLayout.placed.find((item) => item.id === dragPanelId) : selectedPanel;
-                      const footprint = panel && selectionStart && hoverCell
-                        ? getSelectionPatch(panel, selectionStart, hoverCell)
-                        : panel && hoverCell && !selectionStart
-                          ? getPlacementFootprint(panel, hoverCell.row, hoverCell.col)
-                          : null;
-                      const key = `${col}:${row}`;
-                      const inHoverFootprint = Boolean(footprint?.cells.includes(key));
                       return (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`h-4 w-full rounded-[3px] ${inHoverFootprint ? (footprint.valid ? 'bg-emerald-400' : 'bg-rose-400') : 'bg-white/75 hover:bg-blue-100'}`}
-                          onMouseEnter={() => setHoverCell({ row, col })}
-                          onDragOver={(event) => {
-                            event.preventDefault();
-                            if (!dragPanelId) return;
-                            setHoverCell((current) => (
-                              current && current.row === row && current.col === col
-                                ? current
-                                : { row, col }
-                            ));
-                          }}
-                          onClick={() => {
-                            if (!selectedPanel) return;
-                            if (!selectionStart) {
-                              setSelectionStart({ row, col });
-                              setHoverCell({ row, col });
-                              return;
-                            }
-                            const result = getSelectionPatch(selectedPanel, selectionStart, { row, col });
-                            if (!result.valid || !result.patch) return;
-                            updateLayoutPatch(selectedPanel.id, result.patch);
-                            setSelectionStart(null);
-                            setIsPlacementMode(false);
-                            setHoverCell(null);
-                          }}
-                          aria-label={`Grid cell row ${row + 1} col ${col + 1}`}
-                        />
+                        <div key={`${col}:${row}`} className="h-4 w-full rounded-[3px] bg-white/75" />
                       );
                     })}
-                    {gridLayout.placed.map((panel) => {
+                    {previewPanels.map((panel) => {
                       const width = getPanelWidthUnits(panel);
                       const height = getPanelHeightUnits(panel);
                       return (
                         <div
                           key={panel.id}
-                          draggable
-                          onDragStart={() => {
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${SOCIAL_PANEL_LABELS[panel.id] || panel.id} panel`}
+                          onPointerDown={(event) => {
+                            if (event.pointerType === 'mouse' && event.button !== 0) return;
+                            const cell = getCellFromClientPoint(event.clientX, event.clientY);
+                            if (!cell) return;
+                            event.preventDefault();
                             setActivePanelId(panel.id);
-                            setIsPlacementMode(true);
-                            setDragPanelId(panel.id);
-                            setHoverCell(null);
-                            setSelectionStart(null);
+                            setPointerAction({
+                              type: 'drag',
+                              panelId: panel.id,
+                              offsetRow: clampValue(cell.row - panel.gridPlacement.row, 0, height - 1),
+                              offsetCol: clampValue(cell.col - panel.gridPlacement.col, 0, width - 1)
+                            });
                           }}
-                          onDragEnd={() => {
-                            setDragPanelId('');
-                            setHoverCell(null);
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              openPanelEditor(panel.id);
+                              return;
+                            }
+                            if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+                            event.preventDefault();
+                            const width = getPanelWidthUnits(panel);
+                            const height = getPanelHeightUnits(panel);
+                            const bounds = getColumnBoundsForArea(panel.area);
+                            const deltaRow = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+                            const deltaCol = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
+                            if (event.shiftKey) {
+                              const allowedWidths = panel.area === 'main' ? MAIN_ALLOWED_WIDTHS : [width];
+                              const allowedHeights = panel.area === 'main'
+                                ? MAIN_ALLOWED_HEIGHTS
+                                : (panel.area === 'sideLeft' || panel.area === 'sideRight' ? SIDE_ALLOWED_HEIGHTS : [2]);
+                              const targetWidth = getNearestAllowedUnit(width + deltaCol, allowedWidths);
+                              const targetHeight = getNearestAllowedUnit(height + deltaRow, allowedHeights);
+                              const size = getSizeTokenFromUnits(panel, targetWidth);
+                              const nextHeightToken = getHeightTokenFromUnits(panel, targetHeight);
+                              const candidate = { ...panel, size, height: nextHeightToken };
+                              const nextFootprint = getPlacementFootprint(candidate, panel.gridPlacement.row, panel.gridPlacement.col, panel.id);
+                              if (!nextFootprint.valid) return;
+                              updateLayoutPatch(panel.id, { size, height: nextHeightToken });
+                              return;
+                            }
+                            const nextRow = clampValue(panel.gridPlacement.row + deltaRow, 0, GRID_ROWS - height);
+                            const nextCol = clampValue(panel.gridPlacement.col + deltaCol, bounds.min, bounds.max - width + 1);
+                            const nextFootprint = getPlacementFootprint(panel, nextRow, nextCol, panel.id);
+                            if (!nextFootprint.valid) return;
+                            updateLayoutPatch(panel.id, { gridPlacement: { row: nextRow, col: nextCol } });
                           }}
                           onClick={() => openPanelEditor(panel.id)}
-                          className={`absolute cursor-grab rounded-md border border-black/10 px-1 py-1 text-[10px] font-semibold shadow-sm ${activePanelId === panel.id ? 'ring-2 ring-blue-400' : ''} ${selectionStart ? 'pointer-events-none' : ''}`}
+                          className={`absolute cursor-grab rounded-md border border-black/10 px-1 py-1 text-[10px] font-semibold shadow-sm ${activePanelId === panel.id ? 'ring-2 ring-blue-400' : ''}`}
                           style={{
                             left: `calc(${(panel.gridPlacement.col / GRID_COLUMNS) * 100}% + 4px)`,
                             top: `calc(${(panel.gridPlacement.row / GRID_ROWS) * 100}% + 4px)`,
@@ -409,6 +509,23 @@ const SocialDesignStudioModal = ({
                           }}
                         >
                           {SOCIAL_PANEL_LABELS[panel.id] || panel.id}
+                          <button
+                            type="button"
+                            className="absolute bottom-0.5 right-0.5 h-5 w-5 cursor-se-resize rounded-sm border border-white/90 bg-slate-700/80"
+                            aria-label={`Resize ${SOCIAL_PANEL_LABELS[panel.id] || panel.id}`}
+                            onPointerDown={(event) => {
+                              if (event.pointerType === 'mouse' && event.button !== 0) return;
+                              event.stopPropagation();
+                              event.preventDefault();
+                              setActivePanelId(panel.id);
+                              setPointerAction({ type: 'resize', panelId: panel.id });
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== 'Enter' && event.key !== ' ') return;
+                              event.preventDefault();
+                              setActivePanelId(panel.id);
+                            }}
+                          />
                         </div>
                       );
                     })}
@@ -475,9 +592,18 @@ const SocialDesignStudioModal = ({
                           <h4 className="font-semibold text-slate-900">{SOCIAL_PANEL_LABELS[panelId] || panelId}</h4>
                           <p className="text-xs text-slate-800">{panel?.useCustomStyles ? 'Custom override active' : 'Using global style'}</p>
                         </div>
-                        <button type="button" onClick={() => onPanelOverrideToggle(panelId, !panel?.useCustomStyles)} className="rounded-lg border border-slate-200 px-3 py-1 text-xs hover:bg-slate-50">
-                          {panel?.useCustomStyles ? 'Use global' : 'Enable override'}
-                        </button>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => onPanelOverrideToggle(panelId, !panel?.useCustomStyles)} className="rounded-lg border border-slate-200 px-3 py-1 text-xs hover:bg-slate-50">
+                            {panel?.useCustomStyles ? 'Disable override' : 'Enable override'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onPanelOverrideToggle(panelId, false)}
+                            className="rounded-lg border border-blue-200 px-3 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                          >
+                            Reset to global
+                          </button>
+                        </div>
                       </div>
                       {panel?.useCustomStyles ? (
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -500,7 +626,31 @@ const SocialDesignStudioModal = ({
 
           <div className="space-y-6 border-l border-slate-200 bg-white px-6 py-6">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">Instant themes</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Layout presets</h3>
+              <div className="mt-4 grid gap-3">
+                {(layoutPresets || SOCIAL_LAYOUT_PRESETS).map((preset) => (
+                  <button key={preset.id} type="button" onClick={() => onApplyLayoutPreset(preset)} className="rounded-2xl border border-slate-200 px-4 py-4 text-left hover:border-slate-300 hover:bg-slate-50">
+                    <p className="font-semibold text-slate-900">{preset.name}</p>
+                    <p className="text-sm text-slate-800">{preset.description}</p>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900">Theme presets</h3>
+              <div className="mt-4 grid gap-3">
+                {(SOCIAL_THEME_STYLE_PRESETS || []).map((themePreset) => (
+                  <button key={themePreset.id} type="button" onClick={() => onApplyTemplate(themePreset)} className="rounded-2xl border border-slate-200 px-4 py-4 text-left hover:border-slate-300 hover:bg-slate-50">
+                    <p className="font-semibold text-slate-900">{themePreset.name}</p>
+                    <p className="text-sm text-slate-800">{themePreset.description}</p>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900">Instant mixed designs</h3>
               <div className="mt-4 grid gap-3">
                 {(SOCIAL_DESIGN_TEMPLATES || []).map((template) => (
                   <button key={template.id} type="button" onClick={() => onApplyTemplate(template)} className="rounded-2xl border border-slate-200 px-4 py-4 text-left hover:border-slate-300 hover:bg-slate-50">
@@ -591,9 +741,11 @@ SocialDesignStudioModal.defaultProps = {
   configs: [],
   sharedDesigns: [],
   favoriteDesigns: [],
+  layoutPresets: SOCIAL_LAYOUT_PRESETS,
   busy: false,
   error: '',
-  successMessage: ''
+  successMessage: '',
+  onApplyLayoutPreset: () => {}
 };
 
 export default SocialDesignStudioModal;

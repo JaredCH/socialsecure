@@ -13,6 +13,8 @@ describe('socialPagePreferences utility', () => {
     expect(prefs.globalStyles.panelColor).toBe('#ffffff');
     expect(prefs.panels.timeline.area).toBe('main');
     expect(prefs.panels.shortcuts.size).toBe('sidePanelFull');
+    expect(prefs.panels.timeline.height).toBe('twoRows');
+    expect(prefs.panels.timeline.gridPlacement).toEqual({ row: 5, col: 0 });
   });
 
   it('rejects unknown legacy section ids in strict mode', () => {
@@ -47,6 +49,18 @@ describe('socialPagePreferences utility', () => {
     expect(normalized.value.panels.shortcuts.resolvedStyles.panelColor).toBe('#101010');
     expect(normalized.value.panels.shortcuts.resolvedStyles.fontFamily).toBe('Manrope');
     expect(normalized.value.panels.shortcuts.resolvedStyles.fontSizes.header).toBe('3xl');
+  });
+
+  it('normalizes modern grid-aware main sizes and keeps valid placement coordinates', () => {
+    const normalized = normalizeSocialPagePreferences({
+      panels: {
+        timeline: { area: 'main', size: 'halfTile', height: 'threeRows', gridPlacement: { row: 10, col: 2 } },
+      }
+    });
+
+    expect(normalized.value.panels.timeline.size).toBe('oneCol');
+    expect(normalized.value.panels.timeline.height).toBe('threeRows');
+    expect(normalized.value.panels.timeline.gridPlacement).toEqual({ row: 10, col: 2 });
   });
 
   it('merges template patches without dropping existing panel data', () => {

@@ -14,6 +14,7 @@ import {
   mergeDesignPatch,
   normalizeSocialPreferences as normalizePageDesign,
   SOCIAL_DESIGN_TEMPLATES,
+  SOCIAL_LAYOUT_PRESETS,
   SOCIAL_PANEL_LABELS
 } from '../utils/socialPagePreferences';
 import {
@@ -323,6 +324,7 @@ const Social = () => {
   const [favoriteDesigns, setFavoriteDesigns] = useState([]);
   const [sharedDesigns, setSharedDesigns] = useState([]);
   const [socialTemplates, setSocialTemplates] = useState(SOCIAL_DESIGN_TEMPLATES);
+  const [layoutPresets, setLayoutPresets] = useState(SOCIAL_LAYOUT_PRESETS);
   const [designBusy, setDesignBusy] = useState(false);
   const [designError, setDesignError] = useState('');
   const [designSuccessMessage, setDesignSuccessMessage] = useState('');
@@ -818,6 +820,7 @@ const Social = () => {
       setSocialTemplates(Array.isArray(response.data?.templates) && response.data.templates.length > 0
         ? response.data.templates
         : SOCIAL_DESIGN_TEMPLATES);
+      setLayoutPresets(SOCIAL_LAYOUT_PRESETS);
       setActiveDesignConfigId(response.data?.activeConfigId || null);
       if (response.data?.currentPreferences) {
         setCurrentUser((prev) => (prev ? {
@@ -925,6 +928,10 @@ const Social = () => {
     }));
   }, [patchDraftPreferences]);
 
+  const buildPanelOverridePatch = useCallback((enabled) => (
+    enabled ? { useCustomStyles: true } : { useCustomStyles: false, styles: {} }
+  ), []);
+
   const movePanel = useCallback((panelId, direction) => {
     patchDraftPreferences((prev) => {
       const next = JSON.parse(JSON.stringify(prev));
@@ -948,6 +955,11 @@ const Social = () => {
   const applyTemplate = useCallback((template) => {
     if (!template?.design) return;
     patchDraftPreferences((prev) => mergeDesignPatch(prev, template.design));
+  }, [patchDraftPreferences]);
+
+  const applyLayoutPreset = useCallback((preset) => {
+    if (!preset?.panels) return;
+    patchDraftPreferences((prev) => mergeDesignPatch(prev, { panels: preset.panels }));
   }, [patchDraftPreferences]);
 
   const saveNewConfig = useCallback(async (name) => {
@@ -2366,9 +2378,11 @@ const Social = () => {
         activeConfigId={activeDesignConfigId}
         sharedDesigns={sharedDesigns}
         favoriteDesigns={favoriteDesigns}
+        layoutPresets={layoutPresets}
         onApplyTemplate={applyTemplate}
+        onApplyLayoutPreset={applyLayoutPreset}
         onGlobalStylesChange={updateGlobalStyles}
-        onPanelOverrideToggle={(panelId, enabled) => updatePanelPreferences(panelId, { useCustomStyles: enabled })}
+        onPanelOverrideToggle={(panelId, enabled) => updatePanelPreferences(panelId, buildPanelOverridePatch(enabled))}
         onPanelStyleChange={(panelId, patch) => updatePanelPreferences(panelId, { useCustomStyles: true, styles: patch })}
         onPanelLayoutChange={(panelId, patch) => updatePanelPreferences(panelId, patch)}
         onCreateConfig={saveNewConfig}

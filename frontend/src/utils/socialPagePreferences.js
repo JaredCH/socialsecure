@@ -65,6 +65,123 @@ export const SOCIAL_HEIGHT_LABELS = {
   fourRows: '4 rows'
 };
 
+export const SOCIAL_LAYOUT_PRESETS = [
+  {
+    id: 'compact',
+    name: 'Compact',
+    description: 'Dense arrangement for quick scanning across all panels.',
+    panels: {
+      guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 0, gridPlacement: { row: 0, col: 0 }, visible: true },
+      guest_lookup: { area: 'main', size: 'twoCols', height: 'fullRow', order: 1, gridPlacement: { row: 1, col: 0 }, visible: true },
+      composer: { area: 'main', size: 'fourCols', height: 'fullRow', order: 2, gridPlacement: { row: 3, col: 0 }, visible: true },
+      circles: { area: 'main', size: 'twoCols', height: 'fullRow', order: 3, gridPlacement: { row: 5, col: 0 }, visible: true },
+      timeline: { area: 'main', size: 'fourCols', height: 'twoRows', order: 4, gridPlacement: { row: 7, col: 0 }, visible: true },
+      moderation_status: { area: 'main', size: 'oneCol', height: 'fullRow', order: 5, gridPlacement: { row: 5, col: 4 }, visible: true },
+      gallery: { area: 'main', size: 'threeCols', height: 'twoRows', order: 6, gridPlacement: { row: 11, col: 0 }, visible: true },
+      shortcuts: { area: 'sideLeft', size: 'sidePanelFull', height: 'twoRows', order: 0, gridPlacement: { row: 0, col: 8 }, visible: true },
+      snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', height: 'fullRow', order: 1, gridPlacement: { row: 4, col: 8 }, visible: true },
+      chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, gridPlacement: { row: 0, col: 10 }, visible: true },
+      top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, gridPlacement: { row: 2, col: 10 }, visible: true },
+      community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, gridPlacement: { row: 6, col: 10 }, visible: true },
+      profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, gridPlacement: { row: 15, col: 0 }, visible: true }
+    }
+  },
+  {
+    id: 'balanced',
+    name: 'Balanced',
+    description: 'Evenly weighted layout for feed, actions, and utilities.',
+    panels: {
+      guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 0, gridPlacement: { row: 0, col: 0 }, visible: true },
+      guest_lookup: { area: 'main', size: 'oneCol', height: 'fullRow', order: 1, gridPlacement: { row: 1, col: 0 }, visible: true },
+      composer: { area: 'main', size: 'threeCols', height: 'fullRow', order: 2, gridPlacement: { row: 1, col: 2 }, visible: true },
+      circles: { area: 'main', size: 'twoCols', height: 'fullRow', order: 3, gridPlacement: { row: 3, col: 0 }, visible: true },
+      timeline: { area: 'main', size: 'threeCols', height: 'twoRows', order: 4, gridPlacement: { row: 5, col: 0 }, visible: true },
+      moderation_status: { area: 'main', size: 'oneCol', height: 'fullRow', order: 5, gridPlacement: { row: 3, col: 4 }, visible: true },
+      gallery: { area: 'main', size: 'threeCols', height: 'twoRows', order: 6, gridPlacement: { row: 5, col: 6 }, visible: true },
+      shortcuts: { area: 'sideLeft', size: 'sidePanelFull', height: 'twoRows', order: 0, gridPlacement: { row: 0, col: 8 }, visible: true },
+      snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', height: 'fullRow', order: 1, gridPlacement: { row: 4, col: 8 }, visible: true },
+      chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, gridPlacement: { row: 0, col: 10 }, visible: true },
+      top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, gridPlacement: { row: 2, col: 10 }, visible: true },
+      community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, gridPlacement: { row: 6, col: 10 }, visible: true },
+      profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, gridPlacement: { row: 15, col: 0 }, visible: true }
+    }
+  },
+  {
+    id: 'content-first',
+    name: 'Content first',
+    description: 'Prioritizes timeline and gallery while keeping utility panels accessible.',
+    panels: {
+      guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 0, gridPlacement: { row: 0, col: 0 }, visible: true },
+      composer: { area: 'main', size: 'fourCols', height: 'fullRow', order: 1, gridPlacement: { row: 1, col: 0 }, visible: true },
+      timeline: { area: 'main', size: 'fourCols', height: 'threeRows', order: 2, gridPlacement: { row: 3, col: 0 }, visible: true },
+      gallery: { area: 'main', size: 'fourCols', height: 'twoRows', order: 3, gridPlacement: { row: 9, col: 0 }, visible: true },
+      guest_lookup: { area: 'main', size: 'oneCol', height: 'fullRow', order: 4, gridPlacement: { row: 13, col: 0 }, visible: true },
+      circles: { area: 'main', size: 'oneCol', height: 'fullRow', order: 5, gridPlacement: { row: 13, col: 2 }, visible: true },
+      moderation_status: { area: 'main', size: 'oneCol', height: 'fullRow', order: 6, gridPlacement: { row: 13, col: 4 }, visible: true },
+      shortcuts: { area: 'sideLeft', size: 'sidePanelFull', height: 'twoRows', order: 0, gridPlacement: { row: 0, col: 8 }, visible: true },
+      snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', height: 'fullRow', order: 1, gridPlacement: { row: 4, col: 8 }, visible: true },
+      chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, gridPlacement: { row: 0, col: 10 }, visible: true },
+      top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, gridPlacement: { row: 2, col: 10 }, visible: true },
+      community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, gridPlacement: { row: 6, col: 10 }, visible: true },
+      profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, gridPlacement: { row: 15, col: 0 }, visible: true }
+    }
+  }
+];
+
+export const SOCIAL_THEME_STYLE_PRESETS = [
+  {
+    id: 'oceanic',
+    name: 'Oceanic',
+    description: 'Cool blues with crisp contrast for long reading sessions.',
+    design: {
+      themePreset: 'default',
+      accentColorToken: 'blue',
+      globalStyles: {
+        panelColor: '#eff6ff',
+        headerColor: '#1d4ed8',
+        fontFamily: 'Inter',
+        fontColor: '#0f172a',
+        pageBackgroundColor: '#e0f2fe',
+        fontSizes: { header: '2xl', subHeader: 'xl', regular: 'base', small: 'sm' }
+      }
+    }
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    description: 'Dark, focused palette ideal for dense dashboards.',
+    design: {
+      themePreset: 'dark',
+      accentColorToken: 'emerald',
+      globalStyles: {
+        panelColor: '#0f172a',
+        headerColor: '#334155',
+        fontFamily: 'Space Grotesk',
+        fontColor: '#e2e8f0',
+        pageBackgroundColor: '#020617',
+        fontSizes: { header: '2xl', subHeader: 'lg', regular: 'base', small: 'sm' }
+      }
+    }
+  },
+  {
+    id: 'sunrise',
+    name: 'Sunrise',
+    description: 'Warm editorial tones with high readability.',
+    design: {
+      themePreset: 'sunset',
+      accentColorToken: 'rose',
+      globalStyles: {
+        panelColor: '#fff7ed',
+        headerColor: '#c2410c',
+        fontFamily: 'Merriweather',
+        fontColor: '#7c2d12',
+        pageBackgroundColor: '#fff1f2',
+        fontSizes: { header: '3xl', subHeader: 'xl', regular: 'lg', small: 'base' }
+      }
+    }
+  }
+];
+
 export const FONT_SIZE_LABELS = {
   xs: 'XS',
   sm: 'SM',
@@ -105,21 +222,11 @@ export const DEFAULT_GLOBAL_STYLES = {
   }
 };
 
-export const DEFAULT_PANEL_LAYOUTS = {
-  profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, visible: false },
-  guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 1, visible: true },
-  shortcuts: { area: 'sideLeft', size: 'sidePanelFull', height: 'twoRows', order: 0, visible: true },
-  snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', height: 'fullRow', order: 1, visible: true },
-  guest_lookup: { area: 'main', size: 'twoCols', height: 'fullRow', order: 0, visible: true },
-  composer: { area: 'main', size: 'fourCols', height: 'fullRow', order: 2, visible: true },
-  circles: { area: 'main', size: 'twoCols', height: 'fullRow', order: 3, visible: true },
-  timeline: { area: 'main', size: 'fourCols', height: 'twoRows', order: 4, visible: true },
-  moderation_status: { area: 'main', size: 'oneCol', height: 'fullRow', order: 5, visible: true },
-  gallery: { area: 'main', size: 'threeCols', height: 'twoRows', order: 6, visible: true },
-  chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, visible: true },
-  top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, visible: true },
-  community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, visible: true }
-};
+const BALANCED_LAYOUT_PRESET = SOCIAL_LAYOUT_PRESETS.find((preset) => preset.id === 'balanced')
+  || SOCIAL_LAYOUT_PRESETS[0]
+  || { panels: {} };
+
+export const DEFAULT_PANEL_LAYOUTS = BALANCED_LAYOUT_PRESET.panels;
 
 export const SOCIAL_DESIGN_TEMPLATES = [
   {
@@ -259,8 +366,10 @@ export const buildDefaultSocialPreferences = (profileTheme = 'default') => ({
     fontSizes: { ...DEFAULT_GLOBAL_STYLES.fontSizes }
   },
   panels: SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
+    const panelDefaults = DEFAULT_PANEL_LAYOUTS[panelId];
     acc[panelId] = {
-      ...DEFAULT_PANEL_LAYOUTS[panelId],
+      ...panelDefaults,
+      gridPlacement: panelDefaults.gridPlacement ? { ...panelDefaults.gridPlacement } : undefined,
       useCustomStyles: false,
       styles: {}
     };
