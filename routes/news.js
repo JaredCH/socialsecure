@@ -34,7 +34,13 @@ const MAX_SCOPE_TIERS = 4;
 
 const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase();
 
-const hasLocationContext = (location = {}) => Boolean(location?.city || location?.state || location?.country);
+const hasLocationContext = (location = {}) => Boolean(
+  location?.city
+  || location?.county
+  || location?.state
+  || location?.country
+  || location?.zipCode
+);
 
 const getPrimaryLocation = (preferences) => {
   if (!preferences?.locations?.length) return null;
@@ -45,24 +51,40 @@ const getUserLocationFallback = (user) => {
   if (!user) return null;
   const fallback = {
     city: user.city || null,
+    county: user.county || null,
     state: user.state || null,
-    country: user.country || null
+    country: user.country || null,
+    zipCode: user.zipCode || null
   };
   return hasLocationContext(fallback) ? fallback : null;
 };
 
 const resolveLocationContext = ({ preferences, user }) => {
   const primary = getPrimaryLocation(preferences);
-  if (hasLocationContext(primary)) {
-    return { ...primary.toObject?.() || primary, source: 'preferences' };
-  }
-
   const fallback = getUserLocationFallback(user);
+  if (hasLocationContext(primary)) {
+    const primaryLocation = primary.toObject?.() || primary;
+    return {
+      city: primaryLocation.city || fallback?.city || null,
+      county: primaryLocation.county || fallback?.county || null,
+      state: primaryLocation.state || fallback?.state || null,
+      country: primaryLocation.country || fallback?.country || null,
+      zipCode: primaryLocation.zipCode || fallback?.zipCode || null,
+      source: 'preferences'
+    };
+  }
   if (fallback) {
     return { ...fallback, source: 'profile' };
   }
 
-  return { city: null, state: null, country: null, source: 'none' };
+  return {
+    city: null,
+    county: null,
+    state: null,
+    country: null,
+    zipCode: null,
+    source: 'none'
+  };
 };
 
 const resolveDefaultScope = ({ preferences, locationContext }) => {
@@ -86,7 +108,7 @@ const getFallbackScopeOrder = (scope) => {
 };
 
 const scopeCanUseContext = (scope, locationContext) => {
-  if (scope === 'local') return Boolean(locationContext?.city);
+  if (scope === 'local') return Boolean(locationContext?.city || locationContext?.county || locationContext?.zipCode);
   if (scope === 'regional') return Boolean(locationContext?.state);
   if (scope === 'national') return Boolean(locationContext?.country);
   return true;
@@ -116,16 +138,22 @@ const articleMentionsLocationToken = (articleLocationToken, userToken) => {
 
 const articleMatchesLocation = (article, locationContext) => {
   const articleLocations = Array.isArray(article.locations) ? article.locations.map(normalizeLocationToken) : [];
+  const zipCode = normalizeLocationToken(locationContext?.zipCode);
   const city = normalizeLocationToken(locationContext?.city);
+  const county = normalizeLocationToken(locationContext?.county);
   const state = normalizeLocationToken(locationContext?.state);
   const country = normalizeLocationToken(locationContext?.country);
 
+  const hasZipCode = zipCode && articleLocations.some((token) => articleMentionsLocationToken(token, zipCode));
   const hasCity = city && articleLocations.some((token) => articleMentionsLocationToken(token, city));
+  const hasCounty = county && articleLocations.some((token) => articleMentionsLocationToken(token, county));
   const hasState = state && articleLocations.some((token) => articleMentionsLocationToken(token, state));
   const hasCountry = country && articleLocations.some((token) => articleMentionsLocationToken(token, country));
 
   return {
+    zipCode: Boolean(hasZipCode),
     city: Boolean(hasCity),
+    county: Boolean(hasCounty),
     state: Boolean(hasState),
     country: Boolean(hasCountry)
   };
@@ -133,10 +161,11 @@ const articleMatchesLocation = (article, locationContext) => {
 
 const getScopeTier = (scope, locationMatches) => {
   if (scope === 'local') {
-    if (locationMatches.city) return 0;
-    if (locationMatches.state) return 1;
-    if (locationMatches.country) return 2;
-    return 3;
+    if (locationMatches.zipCode || locationMatches.city) return 0;
+    if (locationMatches.county) return 1;
+    if (locationMatches.state) return 2;
+    if (locationMatches.country) return 3;
+    return 4;
   }
   if (scope === 'regional') {
     if (locationMatches.state) return 0;
@@ -544,7 +573,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
 
     const [preferences, user] = await Promise.all([
       NewsPreferences.findOne({ user: req.user.userId }),
-      User.findById(req.user.userId).select('city state country')
+      User.findById(req.user.userId).select('city county state country zipCode')
     ]);
 
     const locationContext = resolveLocationContext({ preferences, user });
@@ -706,11 +735,13 @@ router.get('/feed', authenticateToken, async (req, res) => {
         fallbackApplied,
         locationContext: {
           source: locationContext.source,
+          hasZipCode: Boolean(locationContext.zipCode),
           hasCity: Boolean(locationContext.city),
+          hasCounty: Boolean(locationContext.county),
           hasState: Boolean(locationContext.state),
           hasCountry: Boolean(locationContext.country),
           levelsUsed: activeScope === 'local'
-            ? ['city', 'state', 'country']
+            ? ['zipCode', 'city', 'county', 'state', 'country']
             : activeScope === 'regional'
               ? ['state', 'country']
               : activeScope === 'national'
@@ -797,7 +828,7 @@ router.get('/sources', authenticateToken, async (req, res) => {
  */
 router.get('/preferences', authenticateToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('city state country');
+    const user = await User.findById(req.user.userId).select('city county state country zipCode');
     const userFallbackLocation = getUserLocationFallback(user);
     let preferences = await NewsPreferences.findOne({ user: req.user.userId })
       .populate('rssSources.sourceId');

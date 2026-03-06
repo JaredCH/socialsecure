@@ -110,18 +110,18 @@ describe('News scope routing', () => {
     expect(response.body.articles[0]._id).toBe('city-1');
   });
 
-  it('falls back from local request to national when only country location is available', async () => {
+  it('keeps local scope active when zip + country profile data is available', async () => {
     const app = buildApp();
     const feedArticles = [
       {
-        _id: 'country-1',
-        title: 'USA Headline',
+        _id: 'zip-1',
+        title: 'Zip Headline',
         description: '',
-        source: 'US News',
+        source: 'Metro Wire',
         sourceType: 'rss',
-        sourceId: 'us-news',
-        locations: ['USA'],
-        localityLevel: 'country',
+        sourceId: 'metro-wire',
+        locations: ['10001', 'US'],
+        localityLevel: 'city',
         publishedAt: new Date('2026-03-01T00:00:00.000Z')
       },
       {
@@ -139,10 +139,45 @@ describe('News scope routing', () => {
 
     NewsPreferences.findOne.mockResolvedValue({
       defaultScope: 'local',
+      locations: [{ country: 'US', isPrimary: true }],
+      followedKeywords: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: 'US', zipCode: '10001' }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=local')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.requestedScope).toBe('local');
+    expect(response.body.personalization.activeScope).toBe('local');
+    expect(response.body.personalization.fallbackApplied).toBe(false);
+    expect(response.body.personalization.locationContext.hasZipCode).toBe(true);
+  });
+
+  it('falls back from local request to national when only country location is available', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'country-1',
+        title: 'USA Headline',
+        description: '',
+        source: 'US News',
+        sourceType: 'rss',
+        sourceId: 'us-news',
+        locations: ['USA'],
+        localityLevel: 'country',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'local',
       locations: [{ country: 'USA', isPrimary: true }],
       followedKeywords: []
     });
-    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, state: null, country: 'USA' }) });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: 'USA', zipCode: null }) });
     Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
 
     const response = await request(app)
@@ -154,6 +189,41 @@ describe('News scope routing', () => {
     expect(response.body.personalization.activeScope).toBe('national');
     expect(response.body.personalization.fallbackApplied).toBe(true);
     expect(response.body.personalization.locationContext.hasCountry).toBe(true);
+  });
+
+  it('keeps local scope active when county-only profile data is available', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'county-1',
+        title: 'County Alert',
+        description: '',
+        source: 'County Desk',
+        sourceType: 'rss',
+        sourceId: 'county-desk',
+        locations: ['Travis County'],
+        localityLevel: 'state',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'local',
+      locations: [{ county: 'Travis County', isPrimary: true }],
+      followedKeywords: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: 'Travis County', state: null, country: null, zipCode: null }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=local')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.requestedScope).toBe('local');
+    expect(response.body.personalization.activeScope).toBe('local');
+    expect(response.body.personalization.fallbackApplied).toBe(false);
+    expect(response.body.personalization.locationContext.hasCounty).toBe(true);
   });
 
   it('seeds preferences location and local default scope from user profile on first fetch', async () => {
