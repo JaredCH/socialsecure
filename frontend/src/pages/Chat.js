@@ -160,6 +160,12 @@ function Chat() {
     }
   };
 
+  const loadDiscoverRooms = async ({ query = '', tags = '', status = '' } = {}) => {
+    const discover = await chatAPI.discoverRooms({ query, tags, status, page: 1, limit: 50 });
+    const discoveredRooms = Array.isArray(discover.data?.rooms) ? discover.data.rooms : [];
+    return discoveredRooms;
+  };
+
   useEffect(() => {
     const bootstrap = async () => {
       setLoadingHub(true);

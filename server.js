@@ -286,4 +286,13 @@ const getFriendIds = async (userId) => {
 
 initializeRealtime(io);
 
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    startEventScheduleIngestionScheduler();
+    startEventRoomLifecycleScheduler();
+  } catch (error) {
+    console.error('Failed to start event schedulers:', error);
+  }
+}
+
 module.exports = { app, server };

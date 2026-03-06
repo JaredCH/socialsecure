@@ -8,7 +8,7 @@ const chatRoomSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['city', 'state', 'county'],
+    enum: ['city', 'state', 'county', 'event'],
     required: true
   },
   location: {

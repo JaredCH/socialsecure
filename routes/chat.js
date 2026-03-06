@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
+const EventSchedule = require('../models/EventSchedule');
 const DeviceKey = require('../models/DeviceKey');
 const SecurityEvent = require('../models/SecurityEvent');
 const BlockList = require('../models/BlockList');
@@ -99,6 +101,8 @@ const unifiedChatLimiter = rateLimit({
 
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 500;
+const DEFAULT_DISCOVERY_LIMIT = 20;
+const MAX_DISCOVERY_LIMIT = 100;
 const MESSAGE_TYPES = ['text', 'action', 'system', 'command'];
 
 const COMMAND_DATA_LIMITS = {
@@ -130,6 +134,21 @@ const isSafeBase64Like = (value, maxLength) => isSafeString(value, maxLength) &&
 const isSafeHex = (value, minLength, maxLength) => isSafeString(value, maxLength) && value.length >= minLength && HEX_PATTERN.test(value);
 
 const parseMessageLimit = (rawLimit) => Math.min(Math.max(parseInt(rawLimit, 10) || DEFAULT_MESSAGE_LIMIT, 1), MAX_MESSAGE_LIMIT);
+const parseDiscoveryLimit = (rawLimit) => Math.min(Math.max(parseInt(rawLimit, 10) || DEFAULT_DISCOVERY_LIMIT, 1), MAX_DISCOVERY_LIMIT);
+const chatKeyGenerator = (req) => req.ip || req.socket?.remoteAddress || 'unknown';
+const buildRouteLimiter = (max, message) => rateLimit({
+  windowMs: 60 * 1000,
+  max,
+  message,
+  keyGenerator: chatKeyGenerator,
+  validate: {
+    xForwardedForHeader: false
+  }
+});
+const discoveryLimiter = buildRouteLimiter(90, 'Too many room discovery requests. Please slow down.');
+const allRoomsLimiter = buildRouteLimiter(20, 'Too many full room list requests. Please try again soon.');
+const roomReadLimiter = buildRouteLimiter(120, 'Too many room requests. Please slow down.');
+const roomWriteLimiter = buildRouteLimiter(60, 'Too many chat messages. Please slow down.');
 
 const encodeMessageCursor = (createdAt, id) => Buffer.from(`${new Date(createdAt).toISOString()}|${String(id)}`).toString('base64url');
 
@@ -570,49 +589,163 @@ const validateRoomKeyPackagePayload = (payload) => {
   return null;
 };
 
-// Get nearby chat rooms based on user location
-router.get('/rooms/nearby', authenticateToken, async (req, res) => {
+// Discover event rooms with optional search/filters.
+router.get('/rooms/discover', discoveryLimiter, authenticateToken, async (req, res) => {
   try {
-    const { longitude, latitude, maxDistance = 50 } = req.query;
-    
-    if (!longitude || !latitude) {
-      return res.status(400).json({ error: 'Longitude and latitude are required' });
+    await reconcileEventRooms();
+
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = parseDiscoveryLimit(req.query.limit);
+    const skip = (page - 1) * limit;
+    const query = String(req.query.query || '').trim().toLowerCase();
+    const status = String(req.query.status || '').trim().toLowerCase();
+    const tags = String(req.query.tags || '')
+      .split(',')
+      .map((tag) => tag.trim().toLowerCase())
+      .filter(Boolean);
+    const roomFilter = { type: 'event', discoverable: true };
+
+    const rooms = await ChatRoom.find(roomFilter)
+      .select('_id name type eventRef members messageCount lastActivity')
+      .sort({ messageCount: -1, lastActivity: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const eventIds = rooms.map((room) => room.eventRef).filter(Boolean);
+    const eventFilter = { _id: { $in: eventIds } };
+    if (status) {
+      eventFilter.status = status;
     }
-    
-    const lon = parseFloat(longitude);
-    const lat = parseFloat(latitude);
-    const distance = parseInt(maxDistance);
-    
-    if (isNaN(lon) || isNaN(lat) || isNaN(distance)) {
-      return res.status(400).json({ error: 'Invalid coordinates or distance' });
+    if (tags.length > 0) {
+      eventFilter.tags = { $in: tags };
     }
-    
-    const rooms = await ChatRoom.findNearby(lon, lat, distance);
-    
-    res.json({
+    if (query) {
+      eventFilter.$or = [
+        { title: { $regex: query, $options: 'i' } },
+        { leagueOrSeries: { $regex: query, $options: 'i' } },
+        { tags: { $in: [query] } }
+      ];
+    }
+
+    const events = await EventSchedule.find(eventFilter)
+      .select('_id eventType leagueOrSeries title season episode startAt endAt status tags')
+      .lean();
+    const eventsById = new Map(events.map((event) => [String(event._id), event]));
+
+    const filteredRooms = rooms
+      .map((room) => ({
+        ...room,
+        event: eventsById.get(String(room.eventRef)) || null
+      }))
+      .filter((room) => !!room.event);
+
+    return res.json({
       success: true,
-      rooms: rooms.map(room => ({
+      page,
+      limit,
+      rooms: filteredRooms.map((room) => ({
         _id: room._id,
         name: room.name,
         type: room.type,
-        city: room.city,
-        state: room.state,
-        country: room.country,
-        radius: room.radius,
-        memberCount: room.members.length,
-        messageCount: room.messageCount,
+        memberCount: Array.isArray(room.members) ? room.members.length : 0,
+        messageCount: room.messageCount || 0,
         lastActivity: room.lastActivity,
-        distance: room.distance // Would be calculated in the findNearby method
+        event: room.event
       }))
     });
   } catch (error) {
-    console.error('Error fetching nearby rooms:', error);
-    res.status(500).json({ error: 'Failed to fetch nearby rooms', details: error.message });
+    console.error('Error discovering rooms:', error);
+    return res.status(500).json({ error: 'Failed to discover rooms', details: error.message });
+  }
+});
+
+// Upcoming event rooms based on schedule start datetime.
+router.get('/rooms/events/upcoming', discoveryLimiter, authenticateToken, async (req, res) => {
+  try {
+    await reconcileEventRooms();
+    const now = new Date();
+    const days = Math.max(Math.min(parseInt(req.query.days, 10) || 7, 30), 1);
+    const endWindow = new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
+
+    const schedules = await EventSchedule.find({
+      startAt: { $gte: now, $lte: endWindow },
+      status: { $in: ['scheduled', 'live'] }
+    })
+      .sort({ startAt: 1 })
+      .limit(200)
+      .lean();
+
+    const eventIds = schedules.map((schedule) => schedule._id);
+    const rooms = await ChatRoom.find({
+      type: 'event',
+      discoverable: true,
+      eventRef: { $in: eventIds }
+    })
+      .select('_id name eventRef members messageCount')
+      .lean();
+    const roomByEvent = new Map(rooms.map((room) => [String(room.eventRef), room]));
+
+    return res.json({
+      success: true,
+      days,
+      events: schedules.map((schedule) => ({
+        schedule: {
+          _id: schedule._id,
+          eventType: schedule.eventType,
+          leagueOrSeries: schedule.leagueOrSeries,
+          title: schedule.title,
+          season: schedule.season,
+          episode: schedule.episode,
+          startAt: schedule.startAt,
+          endAt: schedule.endAt,
+          status: schedule.status,
+          tags: schedule.tags || []
+        },
+        room: roomByEvent.get(String(schedule._id)) || null
+      }))
+    });
+  } catch (error) {
+    console.error('Error loading upcoming event rooms:', error);
+    return res.status(500).json({ error: 'Failed to load upcoming event rooms', details: error.message });
+  }
+});
+
+// All chat rooms endpoint must be explicitly requested by the user.
+router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = parseDiscoveryLimit(req.query.limit);
+    const skip = (page - 1) * limit;
+
+    const rooms = await ChatRoom.find({})
+      .select('_id name type city state country county discoverable eventRef members messageCount lastActivity')
+      .sort({ lastActivity: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const total = await ChatRoom.countDocuments({});
+
+    return res.json({
+      success: true,
+      page,
+      limit,
+      total,
+      hasMore: (skip + rooms.length) < total,
+      rooms: rooms.map((room) => ({
+        ...room,
+        memberCount: Array.isArray(room.members) ? room.members.length : 0
+      }))
+    });
+  } catch (error) {
+    console.error('Error loading all rooms:', error);
+    return res.status(500).json({ error: 'Failed to load all rooms', details: error.message });
   }
 });
 
 // Get room details and messages
-router.get('/rooms/:roomId', authenticateToken, async (req, res) => {
+router.get('/rooms/:roomId', roomReadLimiter, authenticateToken, async (req, res) => {
   try {
     const { roomId } = req.params;
     const page = parseInt(req.query.page, 10) || 1;
@@ -967,6 +1100,7 @@ router.get('/media/:mediaId', mediaFetchRateLimiter, authenticateToken, handleGe
 router.post('/rooms/:roomId/messages/e2ee', [
   roomMessageRateLimiter,
   authenticateToken,
+  roomWriteLimiter,
   body('content').not().exists().withMessage('Plaintext content is not allowed on E2EE endpoint'),
   body('encryptedContent').not().exists().withMessage('Legacy encryptedContent is not allowed on E2EE endpoint'),
   body('messageType').optional().isIn(MESSAGE_TYPES).withMessage('Invalid messageType'),
@@ -1508,6 +1642,7 @@ router.get('/rooms/:roomId/messages', authenticateToken, async (req, res) => {
 // Migrate a legacy message to E2EE envelope format (idempotent)
 router.post('/rooms/:roomId/messages/:messageId/migrate-e2ee', [
   authenticateToken,
+  roomWriteLimiter,
   body('content').not().exists().withMessage('Plaintext content is not allowed on migration endpoint'),
   body('encryptedContent').not().exists().withMessage('Legacy encryptedContent is not allowed on migration endpoint'),
   body('e2ee').custom((value) => {
