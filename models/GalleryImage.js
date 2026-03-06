@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeRelationshipAudience } = require('../utils/relationshipAudience');
 
 const galleryReactionSchema = new mongoose.Schema({
   userId: {
@@ -36,6 +37,12 @@ const galleryImageSchema = new mongoose.Schema({
     type: String,
     enum: ['url', 'upload'],
     default: 'url'
+  },
+  relationshipAudience: {
+    type: String,
+    enum: ['social', 'secure'],
+    default: 'social',
+    index: true
   },
   caption: {
     type: String,
@@ -116,5 +123,19 @@ galleryImageSchema.methods.applyReaction = function applyReaction(userId, reacti
   };
 };
 
-module.exports = mongoose.model('GalleryImage', galleryImageSchema);
+galleryImageSchema.methods.canView = function canView(viewerId, context = {}) {
+  const normalizedViewerId = String(viewerId || '');
+  const normalizedOwnerId = String(this.ownerId || '');
+  if (normalizedViewerId && normalizedOwnerId === normalizedViewerId) {
+    return true;
+  }
 
+  const relationshipAudience = normalizeRelationshipAudience(this.relationshipAudience);
+  if (relationshipAudience === 'secure') {
+    return Boolean(context.isSecureFriend);
+  }
+
+  return true;
+};
+
+module.exports = mongoose.model('GalleryImage', galleryImageSchema);

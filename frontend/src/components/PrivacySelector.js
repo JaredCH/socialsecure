@@ -7,6 +7,11 @@ const VISIBILITY_OPTIONS = [
   { value: 'specific_users', label: 'Specific Users' },
   { value: 'private', label: 'Private' }
 ];
+const RELATIONSHIP_AUDIENCE_OPTIONS = [
+  { value: 'social', label: 'Social' },
+  { value: 'secure', label: 'Secure (secure friends only)' }
+];
+const SECURE_ALLOWED_VISIBILITY = new Set(['friends']);
 
 function PrivacySelector({
   form,
@@ -20,6 +25,19 @@ function PrivacySelector({
   return (
     <div className="space-y-3">
       <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
+        <select
+          value={form.relationshipAudience || 'social'}
+          onChange={(event) => onChange('relationshipAudience', event.target.value)}
+          className="w-full border rounded p-2"
+        >
+          {RELATIONSHIP_AUDIENCE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Visibility</label>
         <select
           value={form.visibility}
@@ -27,9 +45,23 @@ function PrivacySelector({
           className="w-full border rounded p-2"
         >
           {VISIBILITY_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
+            <option
+              key={option.value}
+              value={option.value}
+              disabled={
+                (form.relationshipAudience || 'social') === 'secure'
+                && !SECURE_ALLOWED_VISIBILITY.has(option.value)
+              }
+            >
+              {option.label}
+            </option>
           ))}
         </select>
+        {(form.relationshipAudience || 'social') === 'secure' && !SECURE_ALLOWED_VISIBILITY.has(form.visibility) ? (
+          <p className="mt-1 text-xs text-amber-700">
+            Secure audience currently supports only Friends visibility.
+          </p>
+        ) : null}
       </div>
 
       {form.visibility === 'circles' && (

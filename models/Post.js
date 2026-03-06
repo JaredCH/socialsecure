@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeRelationshipAudience } = require('../utils/relationshipAudience');
 
 const EARTH_RADIUS_MILES = 3958.8;
 
@@ -182,6 +183,12 @@ const postSchema = new mongoose.Schema({
     enum: ['public', 'friends', 'circles', 'specific_users', 'private'],
     default: 'public'
   },
+  relationshipAudience: {
+    type: String,
+    enum: ['social', 'secure'],
+    default: 'social',
+    index: true
+  },
   visibleToCircles: [{
     type: String,
     trim: true,
@@ -287,7 +294,8 @@ postSchema.index({ createdAt: -1, visibility: 1, authorId: 1 });
 
 // Method to check if user can view post
 postSchema.methods.canView = function(viewerId, context = {}) {
-  if (!viewerId) return this.visibility === 'public';
+  const relationshipAudience = normalizeRelationshipAudience(this.relationshipAudience);
+  if (!viewerId) return this.visibility === 'public' && relationshipAudience !== 'secure';
 
   const viewer = String(viewerId);
   const author = String(this.authorId);
@@ -299,6 +307,10 @@ postSchema.methods.canView = function(viewerId, context = {}) {
 
   if (author === viewer || target === viewer) {
     return true;
+  }
+
+  if (relationshipAudience === 'secure' && !context.isSecureFriend) {
+    return false;
   }
 
   const excludedIds = Array.isArray(this.excludeUsers)

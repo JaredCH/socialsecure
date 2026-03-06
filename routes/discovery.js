@@ -3,8 +3,12 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const Post = require('../models/Post');
-const Friendship = require('../models/Friendship');
 const BlockList = require('../models/BlockList');
+const {
+  normalizeRelationshipAudience,
+  getViewerRelationshipContext,
+  logRelationshipAudienceEvent
+} = require('../utils/relationshipAudience');
 
 const router = express.Router();
 
@@ -45,22 +49,6 @@ const setCache = (cacheKey, value) => {
     createdAt: Date.now(),
     value
   });
-};
-
-const getFriendIds = async (userId) => {
-  const friendships = await Friendship.find({
-    status: 'accepted',
-    $or: [{ requester: userId }, { recipient: userId }]
-  }).select('requester recipient').lean();
-
-  const ids = new Set();
-  for (const friendship of friendships) {
-    const requester = String(friendship.requester);
-    const recipient = String(friendship.recipient);
-    ids.add(requester === String(userId) ? recipient : requester);
-  }
-
-  return ids;
 };
 
 const getBlockedOrMutedIds = async (viewerId) => {
@@ -172,8 +160,8 @@ router.get('/users', authenticateToken, discoveryLimiter, async (req, res) => {
       return res.json({ ...cached, cached: true });
     }
 
-    const [friendIds, blockedOrMuted] = await Promise.all([
-      getFriendIds(viewerId),
+    const [relationshipContext, blockedOrMuted] = await Promise.all([
+      getViewerRelationshipContext(viewerId),
       getBlockedOrMutedIds(viewerId)
     ]);
 
@@ -199,7 +187,7 @@ router.get('/users', authenticateToken, discoveryLimiter, async (req, res) => {
         const socialSignal = Math.min(1, Math.log1p(Number(candidate.friendCount || 0)) / 4);
         const locationSignal = scoreLocationAffinity(req.viewerProfile, candidate);
         const freshness = recencyScore(candidate.createdAt, 120);
-        const isAlreadyFriend = friendIds.has(String(candidate._id));
+        const isAlreadyFriend = relationshipContext.friendIds.has(String(candidate._id));
 
         const score =
           (textMatch * 0.4)
@@ -266,8 +254,8 @@ router.get('/posts', authenticateToken, discoveryLimiter, async (req, res) => {
       return res.json({ ...cached, cached: true });
     }
 
-    const [friendIds, blockedOrMuted] = await Promise.all([
-      getFriendIds(viewerId),
+    const [relationshipContext, blockedOrMuted] = await Promise.all([
+      getViewerRelationshipContext(viewerId),
       getBlockedOrMutedIds(viewerId)
     ]);
 
@@ -289,18 +277,28 @@ router.get('/posts', authenticateToken, discoveryLimiter, async (req, res) => {
       .populate('authorId', 'username realName city state country')
       .populate('targetFeedId', 'username realName');
 
+    let secureDeniedCount = 0;
     const ranked = candidates
       .filter((post) => !blockedOrMuted.has(String(post.authorId?._id || post.authorId)))
-      .filter((post) => post.canView(viewerId, {
-        isFriend: friendIds.has(String(post.authorId?._id || post.authorId)),
-        viewerCoordinates
-      }))
+      .filter((post) => {
+        const authorId = String(post.authorId?._id || post.authorId || '');
+        const canView = post.canView(viewerId, {
+          isFriend: relationshipContext.friendIds.has(authorId),
+          isSecureFriend: relationshipContext.secureAudienceOwnerIds.has(authorId),
+          viewerCoordinates
+        });
+        if (!canView && normalizeRelationshipAudience(post.relationshipAudience) === 'secure') {
+          secureDeniedCount += 1;
+        }
+        return canView;
+      })
       .map((post) => {
+        const authorId = String(post.authorId?._id || post.authorId || '');
         const likesCount = Array.isArray(post.likes) ? post.likes.length : 0;
         const commentsCount = Array.isArray(post.comments) ? post.comments.length : 0;
         const engagement = Math.min(1, (likesCount + (commentsCount * 2)) / 25);
         const freshness = recencyScore(post.createdAt, 30);
-        const socialSignal = friendIds.has(String(post.authorId?._id || post.authorId)) ? 1 : 0.2;
+        const socialSignal = relationshipContext.friendIds.has(authorId) ? 1 : 0.2;
         const textMatch = scoreTextMatch(query, post.authorId?.username || '', post.content || '');
         const score = (engagement * 0.35) + (freshness * 0.3) + (socialSignal * 0.2) + (textMatch * 0.15);
 
@@ -308,6 +306,7 @@ router.get('/posts', authenticateToken, discoveryLimiter, async (req, res) => {
           _id: post._id,
           content: post.content,
           visibility: post.visibility,
+          relationshipAudience: normalizeRelationshipAudience(post.relationshipAudience),
           authorId: post.authorId,
           targetFeedId: post.targetFeedId,
           createdAt: post.createdAt,
@@ -326,6 +325,18 @@ router.get('/posts', authenticateToken, discoveryLimiter, async (req, res) => {
       })
       .sort((a, b) => (b.ranking.score - a.ranking.score) || (new Date(b.createdAt) - new Date(a.createdAt)));
 
+    if (secureDeniedCount > 0) {
+      logRelationshipAudienceEvent({
+        eventType: 'secure_content_access_denied',
+        viewerId,
+        req,
+        metadata: {
+          route: 'discovery_posts',
+          secureDeniedCount
+        }
+      });
+    }
+
     const total = ranked.length;
     const start = (page - 1) * limit;
     const posts = ranked.slice(start, start + limit);
@@ -341,6 +352,19 @@ router.get('/posts', authenticateToken, discoveryLimiter, async (req, res) => {
     };
 
     setCache(cacheKey, responsePayload);
+    const secureVisibleCount = posts.filter((post) => post.relationshipAudience === 'secure').length;
+    if (secureVisibleCount > 0) {
+      logRelationshipAudienceEvent({
+        eventType: 'secure_content_viewed',
+        viewerId,
+        req,
+        metadata: {
+          route: 'discovery_posts',
+          secureVisibleCount
+        }
+      });
+    }
+
     logDiscoveryEvent({
       userId: viewerId,
       eventType: 'discovery_post_impression',

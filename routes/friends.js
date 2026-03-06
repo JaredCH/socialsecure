@@ -8,6 +8,18 @@ const TopFriend = require('../models/TopFriend');
 const Presence = require('../models/Presence');
 const { createNotification } = require('../services/notifications');
 const { buildPresencePayload, getPresenceMapForUsers } = require('../services/realtime');
+const { RELATIONSHIP_AUDIENCE_VALUES, normalizeRelationshipAudience } = require('../utils/relationshipAudience');
+
+const getViewerRelationshipAudience = (friendship, viewerId) => {
+  const normalizedViewerId = String(viewerId || '');
+  if (String(friendship?.requester || '') === normalizedViewerId) {
+    return normalizeRelationshipAudience(friendship?.requesterRelationshipAudience);
+  }
+  if (String(friendship?.recipient || '') === normalizedViewerId) {
+    return normalizeRelationshipAudience(friendship?.recipientRelationshipAudience);
+  }
+  return 'social';
+};
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -366,6 +378,21 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const friends = await Friendship.getFriends(req.user._id);
     const friendIds = friends.map((friend) => friend._id);
+    const acceptedFriendships = await Friendship.find({
+      status: 'accepted',
+      $or: [
+        { requester: req.user._id },
+        { recipient: req.user._id }
+      ]
+    }).select('requester recipient requesterRelationshipAudience recipientRelationshipAudience').lean();
+    const audienceByFriendId = new Map();
+    for (const friendship of acceptedFriendships) {
+      const requester = String(friendship.requester || '');
+      const recipient = String(friendship.recipient || '');
+      const friendId = requester === String(req.user._id) ? recipient : requester;
+      if (!friendId) continue;
+      audienceByFriendId.set(friendId, getViewerRelationshipAudience(friendship, req.user._id));
+    }
 
     const [presenceMap, friendUsers] = await Promise.all([
       getPresenceMapForUsers(friendIds),
@@ -375,6 +402,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const friendUserMap = new Map(friendUsers.map((entry) => [String(entry._id), entry]));
     const friendsWithPresence = friends.map((friend) => ({
       ...friend,
+      relationshipAudience: audienceByFriendId.get(String(friend._id)) || 'social',
       presence: buildPresencePayload(friend._id, presenceMap.get(String(friend._id)), friendUserMap.get(String(friend._id))?.realtimePreferences)
     }));
     
@@ -386,6 +414,54 @@ router.get('/', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error getting friends:', error);
     res.status(500).json({ error: 'Failed to get friends' });
+  }
+});
+
+// PATCH /api/friends/:id/audience - Set per-friend relationship audience
+router.patch('/:id/audience', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requestedAudience = String(req.body?.relationshipAudience || '').trim().toLowerCase();
+    if (!RELATIONSHIP_AUDIENCE_VALUES.includes(requestedAudience)) {
+      return res.status(400).json({ error: 'Invalid relationship audience' });
+    }
+    const relationshipAudience = normalizeRelationshipAudience(requestedAudience);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid friendship ID' });
+    }
+
+    const friendship = await Friendship.findById(id);
+    if (!friendship) {
+      return res.status(404).json({ error: 'Friendship not found' });
+    }
+
+    if (friendship.status !== 'accepted') {
+      return res.status(400).json({ error: 'Relationship audience can only be set for accepted friendships' });
+    }
+
+    const viewerId = String(req.user._id || '');
+    if (String(friendship.requester) === viewerId) {
+      friendship.requesterRelationshipAudience = relationshipAudience;
+    } else if (String(friendship.recipient) === viewerId) {
+      friendship.recipientRelationshipAudience = relationshipAudience;
+    } else {
+      return res.status(403).json({ error: 'Not authorized to update this friendship' });
+    }
+
+    await friendship.save();
+
+    return res.json({
+      success: true,
+      friendship: {
+        _id: friendship._id,
+        status: friendship.status,
+        relationshipAudience
+      }
+    });
+  } catch (error) {
+    console.error('Error updating relationship audience:', error);
+    return res.status(500).json({ error: 'Failed to update relationship audience' });
   }
 });
 
@@ -607,7 +683,8 @@ router.get('/relationship/:userId', authenticateToken, async (req, res) => {
       success: true,
       relationship,
       isOwner,
-      friendshipId: friendship ? friendship._id : null
+      friendshipId: friendship ? friendship._id : null,
+      relationshipAudience: friendship ? getViewerRelationshipAudience(friendship, req.user._id) : 'social'
     });
   } catch (error) {
     console.error('Error getting relationship:', error);

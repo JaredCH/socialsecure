@@ -10,11 +10,18 @@ const BlockList = require('../models/BlockList');
 const MuteList = require('../models/MuteList');
 const { createNotification } = require('../services/notifications');
 const { emitFeedInteraction, emitFeedPost } = require('../services/realtime');
+const {
+  RELATIONSHIP_AUDIENCE_VALUES,
+  normalizeRelationshipAudience,
+  getViewerRelationshipContext,
+  logRelationshipAudienceEvent
+} = require('../utils/relationshipAudience');
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
 const VALID_VISIBILITY = ['public', 'friends', 'circles', 'specific_users', 'private'];
+const SECURE_VISIBILITY_COMPATIBILITY = new Set(['friends']);
 const interactionRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
@@ -32,24 +39,6 @@ const parseViewerCoordinates = (req) => {
     return null;
   }
   return [longitude, latitude];
-};
-
-const getFriendIds = async (userId) => {
-  const friendships = await Friendship.find({
-    status: 'accepted',
-    $or: [
-      { requester: userId },
-      { recipient: userId }
-    ]
-  }).select('requester recipient').lean();
-
-  const ids = new Set();
-  for (const friendship of friendships) {
-    const requester = String(friendship.requester);
-    const recipient = String(friendship.recipient);
-    ids.add(requester === String(userId) ? recipient : requester);
-  }
-  return ids;
 };
 
 const getBlockedOrMutedIds = async (viewerId) => {
@@ -87,7 +76,7 @@ const buildRealtimeAudience = async (...seedUserIds) => {
   const audience = new Set(normalizedSeedIds);
 
   await Promise.all(normalizedSeedIds.map(async (seedUserId) => {
-    const friendIds = await getFriendIds(seedUserId);
+    const { friendIds } = await getViewerRelationshipContext(seedUserId);
     for (const friendId of friendIds) {
       audience.add(String(friendId));
     }
@@ -96,9 +85,11 @@ const buildRealtimeAudience = async (...seedUserIds) => {
   return [...audience];
 };
 
-const canViewerSeePost = (post, viewerId, friendIds, viewerCoordinates = null) => {
+const canViewerSeePost = (post, viewerId, relationshipContext, viewerCoordinates = null) => {
+  const authorId = String(post.authorId?._id || post.authorId || '');
   return post.canView(viewerId, {
-    isFriend: friendIds.has(String(post.authorId)),
+    isFriend: relationshipContext.friendIds.has(authorId),
+    isSecureFriend: relationshipContext.secureAudienceOwnerIds.has(authorId),
     viewerCoordinates
   });
 };
@@ -537,7 +528,7 @@ router.get('/user/:userId', authenticateToken, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const viewerId = String(req.user.userId || '');
     const viewerCoordinates = parseViewerCoordinates(req);
-    const friendIds = await getFriendIds(viewerId);
+    const relationshipContext = await getViewerRelationshipContext(viewerId);
     const blockedOrMuted = await getBlockedOrMutedIds(viewerId);
 
     const candidatePosts = await Post.find({
@@ -555,7 +546,21 @@ router.get('/user/:userId', authenticateToken, async (req, res) => {
     const visiblePosts = candidatePosts
       .filter((post) => !blockedOrMuted.has(String(post.authorId?._id || post.authorId)))
       .filter((post) => !blockedOrMuted.has(String(post.targetFeedId?._id || post.targetFeedId)))
-      .filter((post) => canViewerSeePost(post, viewerId, friendIds, viewerCoordinates));
+      .filter((post) => canViewerSeePost(post, viewerId, relationshipContext, viewerCoordinates));
+
+    const secureVisibleCount = visiblePosts.filter((post) => normalizeRelationshipAudience(post.relationshipAudience) === 'secure').length;
+    if (secureVisibleCount > 0) {
+      logRelationshipAudienceEvent({
+        eventType: 'secure_content_viewed',
+        viewerId,
+        ownerId: userId,
+        req,
+        metadata: {
+          route: 'feed_user',
+          secureVisibleCount
+        }
+      });
+    }
 
     const start = (page - 1) * limit;
     const posts = visiblePosts.slice(start, start + limit);
@@ -580,6 +585,7 @@ router.post('/post', [
   body('encryptedContent').optional().trim(),
   body('targetFeedId').isMongoId().withMessage('Valid target feed ID required'),
   body('visibility').optional().isIn(VALID_VISIBILITY).withMessage('Invalid visibility'),
+  body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES).withMessage('Invalid relationship audience'),
   body('mediaUrls').optional(),
   body('visibleToCircles').optional().isArray({ max: 25 }).withMessage('visibleToCircles must be an array'),
   body('visibleToUsers').optional().isArray({ max: 200 }).withMessage('visibleToUsers must be an array'),
@@ -601,6 +607,7 @@ router.post('/post', [
       encryptedContent,
       targetFeedId,
       visibility = 'public',
+      relationshipAudience,
       visibleToCircles,
       visibleToUsers,
       excludeUsers,
@@ -667,6 +674,16 @@ router.post('/post', [
       : [];
     const normalizedVisibleToUsers = normalizeObjectIdArray(visibleToUsers).slice(0, 200);
     const normalizedExcludeUsers = normalizeObjectIdArray(excludeUsers).slice(0, 200);
+    const normalizedRelationshipAudience = normalizeRelationshipAudience(relationshipAudience);
+
+    if (
+      normalizedRelationshipAudience === 'secure'
+      && !SECURE_VISIBILITY_COMPATIBILITY.has(visibility)
+    ) {
+      return res.status(400).json({
+        error: 'Secure audience currently supports only friends visibility'
+      });
+    }
 
     let effectiveVisibleToUsers = normalizedVisibleToUsers;
 
@@ -721,7 +738,8 @@ router.post('/post', [
       locationRadius: Number.isFinite(Number(locationRadius)) ? Number(locationRadius) : null,
       expiresAt: normalizedExpiresAt,
       mediaUrls: mediaUrlsValidation.mediaUrls,
-      interaction: interactionValidation.interaction
+      interaction: interactionValidation.interaction,
+      relationshipAudience: normalizedRelationshipAudience
     };
     
     // Add location if provided
@@ -734,6 +752,19 @@ router.post('/post', [
     
     const post = new Post(postData);
     await post.save();
+
+    logRelationshipAudienceEvent({
+      eventType: 'content_audience_selected',
+      viewerId: authorId,
+      ownerId: authorId,
+      req,
+      metadata: {
+        contentType: 'post',
+        contentId: String(post._id),
+        visibility,
+        relationshipAudience: normalizedRelationshipAudience
+      }
+    });
     
     // Populate author and target user info
     await post.populate('authorId', 'username realName');
@@ -796,8 +827,8 @@ router.post('/post/:postId/like', interactionRateLimiter, authenticateToken, asy
     }
     
     // Check if user can view post before liking
-    const friendIds = await getFriendIds(String(userId));
-    const canView = canViewerSeePost(post, String(userId), friendIds, null);
+    const relationshipContext = await getViewerRelationshipContext(String(userId));
+    const canView = canViewerSeePost(post, String(userId), relationshipContext, null);
     if (!canView) {
       return res.status(403).json({ error: 'Cannot like this post' });
     }
@@ -901,8 +932,8 @@ router.post('/post/:postId/comment', [
     }
     
     // Check if user can view post before commenting
-    const friendIds = await getFriendIds(String(userId));
-    const canView = canViewerSeePost(post, String(userId), friendIds, null);
+    const relationshipContext = await getViewerRelationshipContext(String(userId));
+    const canView = canViewerSeePost(post, String(userId), relationshipContext, null);
     if (!canView) {
       return res.status(403).json({ error: 'Cannot comment on this post' });
     }
@@ -991,8 +1022,8 @@ router.post('/post/:postId/vote', interactionSubmissionLimiter, authenticateToke
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    const friendIds = await getFriendIds(userId);
-    if (!canViewerSeePost(post, userId, friendIds, null)) {
+    const relationshipContext = await getViewerRelationshipContext(userId);
+    if (!canViewerSeePost(post, userId, relationshipContext, null)) {
       return res.status(403).json({ error: 'Cannot vote on this post' });
     }
 
@@ -1062,8 +1093,8 @@ router.post('/post/:postId/quiz-answer', interactionSubmissionLimiter, authentic
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    const friendIds = await getFriendIds(userId);
-    if (!canViewerSeePost(post, userId, friendIds, null)) {
+    const relationshipContext = await getViewerRelationshipContext(userId);
+    if (!canViewerSeePost(post, userId, relationshipContext, null)) {
       return res.status(403).json({ error: 'Cannot answer this quiz' });
     }
 
@@ -1123,8 +1154,8 @@ router.post('/post/:postId/countdown-follow', interactionSubmissionLimiter, auth
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    const friendIds = await getFriendIds(userId);
-    if (!canViewerSeePost(post, userId, friendIds, null)) {
+    const relationshipContext = await getViewerRelationshipContext(userId);
+    if (!canViewerSeePost(post, userId, relationshipContext, null)) {
       return res.status(403).json({ error: 'Cannot follow this countdown' });
     }
 
@@ -1172,8 +1203,8 @@ router.get('/post/:postId/interaction', interactionReadLimiter, authenticateToke
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    const friendIds = await getFriendIds(userId);
-    if (!canViewerSeePost(post, userId, friendIds, null)) {
+    const relationshipContext = await getViewerRelationshipContext(userId);
+    if (!canViewerSeePost(post, userId, relationshipContext, null)) {
       return res.status(403).json({ error: 'Cannot view this interaction' });
     }
 
@@ -1204,9 +1235,9 @@ router.get('/timeline', authenticateToken, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const viewerCoordinates = parseViewerCoordinates(req);
-    const friendIds = await getFriendIds(userId);
+    const relationshipContext = await getViewerRelationshipContext(userId);
     const blockedOrMuted = await getBlockedOrMutedIds(userId);
-    const authorIds = [userId, ...friendIds];
+    const authorIds = [userId, ...relationshipContext.friendIds];
 
     const candidatePosts = await Post.find({
       $and: [
@@ -1234,7 +1265,20 @@ router.get('/timeline', authenticateToken, async (req, res) => {
     const visiblePosts = candidatePosts
       .filter((post) => !blockedOrMuted.has(String(post.authorId?._id || post.authorId)))
       .filter((post) => !blockedOrMuted.has(String(post.targetFeedId?._id || post.targetFeedId)))
-      .filter((post) => canViewerSeePost(post, userId, friendIds, viewerCoordinates));
+      .filter((post) => canViewerSeePost(post, userId, relationshipContext, viewerCoordinates));
+
+    const secureVisibleCount = visiblePosts.filter((post) => normalizeRelationshipAudience(post.relationshipAudience) === 'secure').length;
+    if (secureVisibleCount > 0) {
+      logRelationshipAudienceEvent({
+        eventType: 'secure_content_viewed',
+        viewerId: userId,
+        req,
+        metadata: {
+          route: 'feed_timeline',
+          secureVisibleCount
+        }
+      });
+    }
 
     const start = (page - 1) * limit;
     const posts = visiblePosts.slice(start, start + limit);
@@ -1269,10 +1313,35 @@ router.get('/post/:postId', authenticateToken, async (req, res) => {
     }
     
     // Check if user can view post
-    const friendIds = await getFriendIds(String(userId));
-    const canView = canViewerSeePost(post, String(userId), friendIds, null);
+    const relationshipContext = await getViewerRelationshipContext(String(userId));
+    const canView = canViewerSeePost(post, String(userId), relationshipContext, null);
     if (!canView) {
+      if (normalizeRelationshipAudience(post.relationshipAudience) === 'secure') {
+        logRelationshipAudienceEvent({
+          eventType: 'secure_content_access_denied',
+          viewerId: String(userId),
+          ownerId: String(post.authorId?._id || post.authorId || ''),
+          req,
+          metadata: {
+            route: 'feed_post',
+            postId: String(post._id)
+          }
+        });
+      }
       return res.status(403).json({ error: 'Cannot view this post' });
+    }
+
+    if (normalizeRelationshipAudience(post.relationshipAudience) === 'secure') {
+      logRelationshipAudienceEvent({
+        eventType: 'secure_content_viewed',
+        viewerId: String(userId),
+        ownerId: String(post.authorId?._id || post.authorId || ''),
+        req,
+        metadata: {
+          route: 'feed_post',
+          postId: String(post._id)
+        }
+      });
     }
     
     res.json({

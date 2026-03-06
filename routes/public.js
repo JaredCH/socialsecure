@@ -5,6 +5,10 @@ const router = express.Router();
 const User = require('../models/User');
 const Post = require('../models/Post');
 const BlockList = require('../models/BlockList');
+const {
+  normalizeRelationshipAudience,
+  socialOrUnsetAudienceQuery
+} = require('../utils/relationshipAudience');
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -94,9 +98,14 @@ const findUserByIdOrUsername = async (identifier) => {
 const publicPostQuery = (userId) => ({
   targetFeedId: userId,
   visibility: 'public',
-  $or: [
-    { expiresAt: null },
-    { expiresAt: { $gt: new Date() } }
+  $and: [
+    socialOrUnsetAudienceQuery('relationshipAudience'),
+    {
+      $or: [
+        { expiresAt: null },
+        { expiresAt: { $gt: new Date() } }
+      ]
+    }
   ]
 });
 
@@ -142,6 +151,7 @@ const toPublicPost = (post) => ({
   content: post.content || null,
   mediaUrls: normalizeMediaUrls(post.mediaUrls),
   visibility: post.visibility,
+  relationshipAudience: normalizeRelationshipAudience(post.relationshipAudience),
   visibleToCircles: Array.isArray(post.visibleToCircles) ? post.visibleToCircles : [],
   locationRadius: Number.isFinite(Number(post.locationRadius)) ? Number(post.locationRadius) : null,
   expiresAt: post.expiresAt || null,
@@ -202,7 +212,7 @@ router.get('/users/:userId/feed', async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('_id authorId targetFeedId content visibility visibleToCircles locationRadius expiresAt mediaUrls likes comments createdAt updatedAt')
+        .select('_id authorId targetFeedId content visibility relationshipAudience visibleToCircles locationRadius expiresAt mediaUrls likes comments createdAt updatedAt')
         .populate(publicPostPopulate)
         .lean(),
       Post.countDocuments(query)
@@ -248,7 +258,7 @@ router.get('/users/:userId/gallery', async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('_id authorId targetFeedId content visibility mediaUrls createdAt updatedAt')
+        .select('_id authorId targetFeedId content visibility relationshipAudience mediaUrls createdAt updatedAt')
         .populate(publicPostPopulate)
         .lean(),
       Post.countDocuments(query)
@@ -270,11 +280,12 @@ router.get('/users/:userId/gallery', async (req, res) => {
           sourcePostId: post._id
         })),
         sourcePost: {
-          _id: post._id,
-          content: post.content || null,
-          visibility: post.visibility,
-          createdAt: post.createdAt,
-          updatedAt: post.updatedAt,
+            _id: post._id,
+            content: post.content || null,
+            visibility: post.visibility,
+            relationshipAudience: normalizeRelationshipAudience(post.relationshipAudience),
+            createdAt: post.createdAt,
+            updatedAt: post.updatedAt,
           author: post.authorId,
           targetFeed: post.targetFeedId
         },
