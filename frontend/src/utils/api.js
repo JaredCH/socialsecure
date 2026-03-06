@@ -112,8 +112,6 @@ export const galleryAPI = {
 
 // Chat API
 export const chatAPI = {
-  getNearbyRooms: (longitude, latitude, maxDistance = 50) => 
-    api.get(`/chat/rooms/nearby?longitude=${longitude}&latitude=${latitude}&maxDistance=${maxDistance}`),
   getRoom: (roomId, page = 1, limit = 500) =>
     api.get(`/chat/rooms/${roomId}?page=${page}&limit=${limit}`),
   sendMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages`, data),

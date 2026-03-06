@@ -6,6 +6,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
 const DeviceKey = require('../models/DeviceKey');
@@ -111,6 +112,7 @@ const AUDIO_EXT_BY_MIME = {
   'audio/mp4': 'mp4'
 };
 const AUDIO_STORAGE_KEY_PATTERN = /^[a-f0-9-]+\.(webm|ogg|mp4)$/;
+const isValidAudioStorageKey = (value) => typeof value === 'string' && value.length > 0 && value.length <= 255 && AUDIO_STORAGE_KEY_PATTERN.test(value);
 
 const isSafeString = (value, maxLength) => typeof value === 'string' && value.length > 0 && value.length <= maxLength;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -209,12 +211,12 @@ const sanitizeAudioMetadata = (payload) => {
   }
 
   const storageKey = typeof payload.storageKey === 'string' ? payload.storageKey.trim() : '';
-  if (!storageKey || storageKey.length > 255 || !AUDIO_STORAGE_KEY_PATTERN.test(storageKey)) {
+  if (!isValidAudioStorageKey(storageKey)) {
     return { error: 'audio.storageKey is invalid' };
   }
 
   const url = typeof payload.url === 'string' ? payload.url.trim() : '';
-  if (!url || url.length > 1024 || !url.startsWith('/api/chat/media/')) {
+  if (!url || url.length > 1024 || url !== `/api/chat/media/audio/${storageKey}`) {
     return { error: 'audio.url is invalid' };
   }
 
@@ -265,6 +267,33 @@ const audioUpload = multer({
     }
     cb(null, true);
   }
+});
+
+const roomMessageRateLimiter = rateLimit({
+  windowMs: 15 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many chat messages. Please wait before sending again.'
+  }
+});
+
+const mediaUploadRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many media uploads. Please wait before uploading another voice note.'
+  }
+});
+
+const mediaFetchRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false
 });
 
 const createRoomEventMessage = async ({ roomId, userId, content, messageType = 'system', commandData = null }) => {
@@ -567,6 +596,7 @@ router.get('/rooms/:roomId', authenticateToken, async (req, res) => {
 
 // Send message to chat room with rate limiting
 router.post('/rooms/:roomId/messages', [
+  roomMessageRateLimiter,
   authenticateToken,
   body('content').optional({ nullable: true }).trim().isLength({ max: 2000 }).withMessage('Message too long'),
   body('encryptedContent').optional().trim(),
@@ -674,8 +704,8 @@ router.post('/rooms/:roomId/messages', [
       messageData.location = user.location;
     }
     
-    const message = new ChatMessage(messageData);
-    await message.save();
+    const savedMessage = new ChatMessage(messageData);
+    await savedMessage.save();
     
     // Update room message count and last activity
     await room.incrementMessageCount();
@@ -684,10 +714,10 @@ router.post('/rooms/:roomId/messages', [
     await room.addMember(userId);
     
     // Populate user info for response
-    await message.populate('userId', 'username realName');
+    await savedMessage.populate('userId', 'username realName');
 
     const senderLabel = user.username || user.realName || 'Someone';
-    await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
+    await notifyRoomMembers({ room, senderId: userId, senderLabel, message: savedMessage });
     
     // Broadcast message via WebSocket (handled in server.js)
     // The WebSocket server will handle real-time broadcasting
@@ -695,7 +725,7 @@ router.post('/rooms/:roomId/messages', [
     res.status(201).json({
       success: true,
       message: 'Message sent successfully',
-      message: message.toPublicMessage(),
+      messageData: savedMessage.toPublicMessage(),
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining
@@ -708,7 +738,7 @@ router.post('/rooms/:roomId/messages', [
 });
 
 // Upload voice-note media (controlled endpoint)
-router.post('/media/audio/upload-url', authenticateToken, (req, res) => {
+router.post('/media/audio/upload-url', mediaUploadRateLimiter, authenticateToken, (req, res) => {
   audioUpload.single('audio')(req, res, async (uploadError) => {
     if (uploadError instanceof multer.MulterError && uploadError.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ error: `Audio file exceeds ${MAX_AUDIO_SIZE_BYTES} bytes` });
@@ -777,7 +807,7 @@ router.post('/media/audio/upload-url', authenticateToken, (req, res) => {
         success: true,
         audio: {
           storageKey,
-          url: `/api/chat/media/${storageKey}`,
+          url: `/api/chat/media/audio/${storageKey}`,
           durationMs,
           waveformBins: normalizedBins,
           mimeType: file.mimetype,
@@ -795,10 +825,10 @@ router.post('/media/audio/upload-url', authenticateToken, (req, res) => {
 });
 
 // Authorized retrieval of stored chat media
-router.get('/media/:mediaId', authenticateToken, async (req, res) => {
+const handleGetAudioMedia = async (req, res) => {
   try {
     const mediaId = String(req.params.mediaId || '').trim();
-    if (!AUDIO_STORAGE_KEY_PATTERN.test(mediaId)) {
+    if (!isValidAudioStorageKey(mediaId)) {
       return res.status(400).json({ error: 'Invalid media id' });
     }
 
@@ -831,10 +861,14 @@ router.get('/media/:mediaId', authenticateToken, async (req, res) => {
     console.error('Error retrieving chat media:', error?.message || error);
     return res.status(500).json({ error: 'Failed to retrieve media' });
   }
-});
+};
+
+router.get('/media/audio/:mediaId', mediaFetchRateLimiter, authenticateToken, handleGetAudioMedia);
+router.get('/media/:mediaId', mediaFetchRateLimiter, authenticateToken, handleGetAudioMedia);
 
 // Send E2EE message envelope only (no plaintext accepted)
 router.post('/rooms/:roomId/messages/e2ee', [
+  roomMessageRateLimiter,
   authenticateToken,
   body('content').not().exists().withMessage('Plaintext content is not allowed on E2EE endpoint'),
   body('encryptedContent').not().exists().withMessage('Legacy encryptedContent is not allowed on E2EE endpoint'),
@@ -959,20 +993,20 @@ router.post('/rooms/:roomId/messages/e2ee', [
       messageData.location = user.location;
     }
 
-    const message = new ChatMessage(messageData);
-    await message.save();
+    const savedMessage = new ChatMessage(messageData);
+    await savedMessage.save();
 
     await room.incrementMessageCount();
     await room.addMember(userId);
-    await message.populate('userId', 'username realName');
+    await savedMessage.populate('userId', 'username realName');
 
     const senderLabel = user.username || user.realName || 'Someone';
-    await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
+    await notifyRoomMembers({ room, senderId: userId, senderLabel, message: savedMessage });
 
     return res.status(201).json({
       success: true,
       message: 'E2EE message envelope accepted',
-      messageData: message.toPublicMessage(),
+      messageData: savedMessage.toPublicMessage(),
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining

@@ -892,7 +892,7 @@ const Chat = () => {
           return;
         }
       }
-      toast.error(error.response?.data?.error || error.message || 'Failed to send encrypted message.');
+      toast.error(error.response?.data?.error || error.message || 'Failed to send message. Please try again.');
     } finally {
       setSending(false);
     }
