@@ -247,6 +247,8 @@ export const chatAPI = {
   getConversations: () => api.get('/chat/conversations'),
   getConversationMessages: (conversationId, page = 1, limit = 50) =>
     api.get(`/chat/conversations/${conversationId}/messages?page=${page}&limit=${limit}`),
+  getConversationUsers: (conversationId) =>
+    api.get(`/chat/conversations/${conversationId}/users`),
   sendConversationMessage: (conversationId, content) =>
     api.post(`/chat/conversations/${conversationId}/messages`, { content }),
   startDM: (targetUserId) => api.post('/chat/dm/start', { targetUserId }),

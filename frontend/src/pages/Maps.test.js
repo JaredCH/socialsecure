@@ -1,6 +1,6 @@
 jest.mock('../utils/api', () => ({ mapsAPI: {} }));
 
-import { resolveLeafletModule, withDataFallback } from './Maps';
+import { configureLeafletMarkerAssets, resolveLeafletModule, withDataFallback } from './Maps';
 
 describe('resolveLeafletModule', () => {
   it('uses default export when it contains Leaflet map API', () => {
@@ -40,5 +40,34 @@ describe('withDataFallback', () => {
     await expect(withDataFallback(Promise.reject(new Error('boom')), { spotlights: [] }))
       .resolves
       .toEqual({ data: { spotlights: [] } });
+  });
+});
+
+describe('configureLeafletMarkerAssets', () => {
+  it('sets explicit marker icon URLs from bundled Leaflet assets', async () => {
+    const mergeOptions = jest.fn();
+    const leafletModule = { Icon: { Default: { mergeOptions } } };
+    const assetLoader = jest.fn().mockResolvedValue([
+      { default: '/assets/marker-icon-2x.png' },
+      { default: '/assets/marker-icon.png' },
+      { default: '/assets/marker-shadow.png' }
+    ]);
+
+    await configureLeafletMarkerAssets(leafletModule, assetLoader);
+
+    expect(assetLoader).toHaveBeenCalledTimes(1);
+    expect(mergeOptions).toHaveBeenCalledWith({
+      iconRetinaUrl: '/assets/marker-icon-2x.png',
+      iconUrl: '/assets/marker-icon.png',
+      shadowUrl: '/assets/marker-shadow.png'
+    });
+  });
+
+  it('does nothing when Leaflet icon defaults are unavailable', async () => {
+    const assetLoader = jest.fn();
+
+    await configureLeafletMarkerAssets({}, assetLoader);
+
+    expect(assetLoader).not.toHaveBeenCalled();
   });
 });

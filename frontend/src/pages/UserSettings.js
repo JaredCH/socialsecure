@@ -16,7 +16,6 @@ const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
 const SETTINGS_SECTIONS = [
   { id: 'account', label: 'Account' },
   { id: 'profile', label: 'Profile' },
-  { id: 'social', label: 'Social layout' },
   { id: 'encryption', label: 'Encryption' },
   { id: 'security', label: 'Security center' },
   { id: 'pgp', label: 'PGP tools' },
@@ -782,143 +781,28 @@ function UserSettings({
                   placeholder="https://example.com\nhttps://github.com/username"
                 />
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-3 text-xs text-gray-500">
+                  Location can only be changed once every 7 days.
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                  <input name="city" value={form.city} onChange={handleChange} className="w-full border rounded p-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                  <input name="state" value={form.state} onChange={handleChange} className="w-full border rounded p-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                  <input name="country" value={form.country} onChange={handleChange} className="w-full border rounded p-2" />
+                </div>
+              </div>
             </section>
 
-            <section id="settings-section-social" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800">Social page customization</h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Profile Theme</label>
-                <select
-                  name="profileTheme"
-                  value={form.profileTheme}
-                  onChange={handleChange}
-                  className="w-full border rounded p-2"
-                >
-                  {PROFILE_THEMES.map((theme) => (
-                    <option key={theme} value={theme}>
-                      {theme}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-3 border rounded p-4 bg-gray-50">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-base font-semibold text-gray-800">Social layout controls</h4>
-                  <button
-                    type="button"
-                    onClick={handleResetSocialPreferences}
-                    className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100"
-                  >
-                    Reset defaults
-                  </button>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Accent Color Token</label>
-                  <select
-                    value={form.socialPagePreferences?.accentColorToken || 'blue'}
-                    onChange={(event) => {
-                      updateSocialPreferences((prev) => ({
-                        ...prev,
-                        accentColorToken: event.target.value
-                      }));
-                    }}
-                    className="w-full border rounded p-2"
-                  >
-                    {(THEME_TO_ALLOWED_ACCENTS[form.socialPagePreferences?.themePreset || form.profileTheme] || SOCIAL_ACCENT_TOKENS)
-                      .map((token) => (
-                        <option key={token} value={token}>
-                          {token}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-700">Section Visibility</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {SOCIAL_SECTION_IDS.map((sectionId) => {
-                      const isMandatory = SOCIAL_MANDATORY_SECTION_IDS.includes(sectionId);
-                      const isChecked = !(form.socialPagePreferences?.hiddenSections || []).includes(sectionId);
-                      return (
-                        <label key={sectionId} className="flex items-center gap-2 text-sm text-gray-700">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            disabled={isMandatory}
-                            onChange={() => handleToggleSection(sectionId)}
-                          />
-                          <span>{SOCIAL_SECTION_LABELS[sectionId] || sectionId}</span>
-                          {isMandatory ? <span className="text-xs text-gray-500">(required)</span> : null}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-700">Section Order</p>
-                  <ul className="space-y-1">
-                    {(form.socialPagePreferences?.sectionOrder || []).map((sectionId, index, arr) => (
-                      <li key={sectionId} className="flex items-center justify-between border rounded bg-white px-3 py-2 text-sm">
-                        <span>{SOCIAL_SECTION_LABELS[sectionId] || sectionId}</span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleMoveSection(sectionId, 'up')}
-                            disabled={index === 0}
-                            className="px-2 py-1 border rounded text-xs disabled:opacity-40"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveSection(sectionId, 'down')}
-                            disabled={index === arr.length - 1}
-                            className="px-2 py-1 border rounded text-xs disabled:opacity-40"
-                          >
-                            ↓
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-700">Optional Module Visibility</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {SOCIAL_MODULE_IDS.map((moduleId) => (
-                      <label key={moduleId} className="flex items-center gap-2 text-sm text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={!(form.socialPagePreferences?.hiddenModules || []).includes(moduleId)}
-                          onChange={() => handleToggleModule(moduleId)}
-                        />
-                        <span>{SOCIAL_MODULE_LABELS[moduleId] || moduleId}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="md:col-span-3 text-xs text-gray-500">
-            Location can only be changed once every 7 days.
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-            <input name="city" value={form.city} onChange={handleChange} className="w-full border rounded p-2" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-            <input name="state" value={form.state} onChange={handleChange} className="w-full border rounded p-2" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-            <input name="country" value={form.country} onChange={handleChange} className="w-full border rounded p-2" />
-          </div>
-        </div>
-
+            <section id="settings-section-pgp" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800">PGP tools</h3>
+              <div className="space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input
                     name="name"

@@ -22,6 +22,10 @@ describe('getSettingsSectionFromHash', () => {
   it('falls back to account for unknown section hashes', () => {
     expect(getSettingsSectionFromHash('#not-real')).toBe('account');
   });
+
+  it('falls back to account for removed social section hash', () => {
+    expect(getSettingsSectionFromHash('#social')).toBe('account');
+  });
 });
 
 describe('formatSecurityEventType', () => {

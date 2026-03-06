@@ -367,6 +367,10 @@ function App() {
     return <div className="min-h-screen grid place-items-center">Loading...</div>;
   }
 
+  const navLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700';
+  const navEmphasisLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50';
+  const navDangerButtonClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50';
+
   return (
     <Router>
       <div className="min-h-screen bg-gray-100">

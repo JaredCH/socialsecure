@@ -79,6 +79,61 @@ const MARKET_CATEGORIES = [
   }
 ];
 
+const CATEGORY_DETAIL_REQUIREMENTS = {
+  'for-sale': ['itemType', 'pickupDetails'],
+  services: ['serviceType', 'availability'],
+  housing: ['propertyType', 'availability'],
+  jobs: ['jobType', 'compensation'],
+  community: ['activityType', 'schedule']
+};
+
+const CATEGORY_PARENT_MAP = MARKET_CATEGORIES.reduce((acc, category) => {
+  acc[category.id] = category.id;
+  category.subcategories.forEach((sub) => {
+    acc[sub.id] = category.id;
+  });
+  return acc;
+}, {});
+
+const MARKET_CONDITIONS = ['new', 'like_new', 'good', 'fair', 'poor', 'not_applicable'];
+const MAX_DETAIL_KEY_LENGTH = 40;
+const MAX_DETAIL_VALUE_LENGTH = 500;
+
+const sanitizeAdditionalDetails = (details) => {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    return {};
+  }
+
+  return Object.entries(details).reduce((acc, [key, value]) => {
+    const normalizedKey = String(key).trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, MAX_DETAIL_KEY_LENGTH);
+    if (!normalizedKey) return acc;
+
+    const normalizedValue = typeof value === 'string' ? value.trim() : String(value || '').trim();
+    if (!normalizedValue) return acc;
+
+    acc[normalizedKey] = normalizedValue.slice(0, MAX_DETAIL_VALUE_LENGTH);
+    return acc;
+  }, {});
+};
+
+const getCategoryRequirementErrors = ({ category, condition, additionalDetails }) => {
+  const parentCategory = CATEGORY_PARENT_MAP[category];
+  const requiredFields = CATEGORY_DETAIL_REQUIREMENTS[parentCategory] || [];
+  const errors = [];
+
+  if (parentCategory === 'for-sale' && (!condition || condition === 'not_applicable')) {
+    errors.push({ msg: 'Condition is required for for-sale listings', param: 'condition' });
+  }
+
+  requiredFields.forEach((field) => {
+    if (!additionalDetails[field]) {
+      errors.push({ msg: `${field} is required for this category`, param: `additionalDetails.${field}` });
+    }
+  });
+
+  return errors;
+};
+
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -243,10 +298,12 @@ router.post('/listings', [
   body('title').trim().notEmpty().withMessage('Title is required').isLength({ max: 200 }).withMessage('Title too long'),
   body('description').trim().notEmpty().withMessage('Description is required').isLength({ max: 5000 }).withMessage('Description too long'),
   body('category').trim().notEmpty().withMessage('Category is required'),
+  body('condition').optional().isIn(MARKET_CONDITIONS).withMessage('Invalid condition'),
   body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number'),
   body('currency').optional().isLength({ min: 3, max: 3 }).withMessage('Currency must be 3 characters'),
   body('externalLink').optional({ checkFalsy: true }).isURL().withMessage('Valid URL is required'),
   body('images').optional().isArray().withMessage('Images must be an array'),
+  body('additionalDetails').optional().isObject().withMessage('Additional details must be an object'),
   body('latitude').optional().isFloat({ min: -90, max: 90 }),
   body('longitude').optional().isFloat({ min: -180, max: 180 }),
   body('city').optional().trim(),
@@ -263,10 +320,12 @@ router.post('/listings', [
       title,
       description,
       category,
+      condition = 'not_applicable',
       price,
       currency = 'USD',
       externalLink,
       images = [],
+      additionalDetails = {},
       latitude,
       longitude,
       city,
@@ -287,12 +346,23 @@ router.post('/listings', [
       title,
       description,
       category,
+      condition,
+      additionalDetails: sanitizeAdditionalDetails(additionalDetails),
       price: parseFloat(price),
       currency: currency.toUpperCase(),
       externalLink: externalLink || '',
       images,
       status: 'active'
     };
+
+    const requirementErrors = getCategoryRequirementErrors({
+      category,
+      condition,
+      additionalDetails: listingData.additionalDetails
+    });
+    if (requirementErrors.length > 0) {
+      return res.status(400).json({ errors: requirementErrors });
+    }
     
     // Add location if provided
     if (latitude && longitude) {
@@ -334,10 +404,12 @@ router.put('/listings/:listingId', [
   body('title').optional().trim().isLength({ max: 200 }).withMessage('Title too long'),
   body('description').optional().trim().isLength({ max: 5000 }).withMessage('Description too long'),
   body('category').optional().trim(),
+  body('condition').optional().isIn(MARKET_CONDITIONS).withMessage('Invalid condition'),
   body('price').optional().isFloat({ min: 0 }).withMessage('Price must be a positive number'),
   body('currency').optional().isLength({ min: 3, max: 3 }).withMessage('Currency must be 3 characters'),
   body('externalLink').optional({ checkFalsy: true }).isURL().withMessage('Valid URL is required'),
   body('images').optional().isArray().withMessage('Images must be an array'),
+  body('additionalDetails').optional().isObject().withMessage('Additional details must be an object'),
   body('status').optional().isIn(['active', 'sold', 'expired']).withMessage('Invalid status')
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -348,7 +420,10 @@ router.put('/listings/:listingId', [
   try {
     const { listingId } = req.params;
     const userId = req.user.userId;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+    if (updateData.additionalDetails !== undefined) {
+      updateData.additionalDetails = sanitizeAdditionalDetails(updateData.additionalDetails);
+    }
     
     const listing = await MarketListing.findById(listingId);
     if (!listing) {
@@ -361,12 +436,25 @@ router.put('/listings/:listingId', [
     }
     
     // Update allowed fields
-    const allowedFields = ['title', 'description', 'category', 'price', 'currency', 'externalLink', 'images', 'status'];
+    const allowedFields = ['title', 'description', 'category', 'condition', 'price', 'currency', 'externalLink', 'images', 'additionalDetails', 'status'];
     allowedFields.forEach(field => {
       if (updateData[field] !== undefined) {
         listing[field] = field === 'price' ? parseFloat(updateData[field]) : updateData[field];
       }
     });
+
+    const detailsForValidation = listing.additionalDetails instanceof Map
+      ? Object.fromEntries(listing.additionalDetails.entries())
+      : sanitizeAdditionalDetails(listing.additionalDetails);
+
+    const requirementErrors = getCategoryRequirementErrors({
+      category: listing.category,
+      condition: listing.condition,
+      additionalDetails: detailsForValidation
+    });
+    if (requirementErrors.length > 0) {
+      return res.status(400).json({ errors: requirementErrors });
+    }
     
     listing.updatedAt = new Date();
     await listing.save();
