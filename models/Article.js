@@ -39,6 +39,10 @@ const articleSchema = new mongoose.Schema({
     type: String,
     lowercase: true
   }],
+  assignedZipCode: {
+    type: String,
+    default: null
+  },
   language: {
     type: String,
     default: 'en'

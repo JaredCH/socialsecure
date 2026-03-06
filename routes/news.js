@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Parser = require('rss-parser');
 const NodeGeocoder = require('node-geocoder');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 // Import models
 const Article = require('../models/Article');
@@ -112,6 +113,7 @@ const SUPPORTED_RSS_PROVIDERS = [
 const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeTopicToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+const normalizeUsZipCode = (value) => normalizeZipCode(value).split('-')[0];
 
 const toUniqueNonEmptyStrings = (values = []) => [...new Set(values
   .map((value) => String(value || '').trim())
@@ -163,7 +165,10 @@ const inferLocationTokensFromText = (input = '') => {
   // Match US and Canadian zip codes
   const usZipMatches = text.match(/\b\d{5}(?:-\d{4})?\b/g) || [];
   const canadaZipMatches = text.match(/\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/gi) || [];
-  tokens.push(...usZipMatches, ...canadaZipMatches.map((zip) => zip.replace(/\s+/g, '').toUpperCase()));
+  tokens.push(
+    ...usZipMatches.map((zip) => normalizeZipCode(zip)),
+    ...canadaZipMatches.map((zip) => normalizeZipCode(zip))
+  );
 
   // Match "in/at/from/near <Place>" phrases
   const locationPhrases = lower.match(/\b(?:in|at|from|near)\s+([a-z][a-z\s\-]{1,40})\b/g) || [];
@@ -233,6 +238,51 @@ const getItemDescription = (item = {}) => {
     || '';
 };
 
+const ZIP_CODE_REGEX = /^\d{5}(?:-\d{4})?$/;
+const CANADA_POSTAL_REGEX = /^[A-Z]\d[A-Z]\d[A-Z]\d$/;
+
+const isZipLikeToken = (token) => ZIP_CODE_REGEX.test(token) || CANADA_POSTAL_REGEX.test(token);
+
+const extractZipTokens = (values = []) => toUniqueNonEmptyStrings(values
+  .map((value) => normalizeZipCode(value))
+  .filter((token) => token && isZipLikeToken(token)));
+
+const extractCityStateQueryFromTitle = (title = '') => {
+  const matches = String(title || '').match(/\b([A-Z][a-zA-Z\s]{1,25}),\s*([A-Z]{2})\b/g) || [];
+  if (matches.length === 0) return null;
+  return matches[0];
+};
+
+const resolveAssignedZipCode = async ({ locationTokens = [], source = {}, item = {}, query = null }) => {
+  const sourceZip = normalizeZipCode(source.zipCode || source.postalCode || '');
+  if (sourceZip && isZipLikeToken(sourceZip)) {
+    return sourceZip;
+  }
+
+  const directZip = extractZipTokens(locationTokens)[0];
+  if (directZip) {
+    return directZip;
+  }
+
+  const titleQuery = extractCityStateQueryFromTitle(item.title);
+  const sourceQuery = source.location || source.address || source.name || query || '';
+  const geocodeQuery = titleQuery || sourceQuery;
+  if (!geocodeQuery) return null;
+
+  try {
+    const results = await newsGeocoder.geocode(geocodeQuery);
+    const first = Array.isArray(results) ? results[0] : null;
+    const geocodedZip = normalizeZipCode(first?.zipcode || first?.postalcode || first?.postalCode || '');
+    if (geocodedZip && isZipLikeToken(geocodedZip)) {
+      return geocodedZip;
+    }
+  } catch (error) {
+    console.warn('News article zip assignment geocode failed:', geocodeQuery, error.message);
+  }
+
+  return null;
+};
+
 /**
  * Infer localityLevel from the detected location tokens of an article.
  * Returns 'city', 'county', 'state', 'country', or 'global'.
@@ -270,7 +320,7 @@ const getItemPublishedAt = (item = {}) => {
       return parsed;
     }
   }
-  return new Date();
+  return null;
 };
 
 const getItemImageUrl = (item = {}) => {
@@ -507,7 +557,18 @@ const articleMatchesLocation = (article, locationContext) => {
     .filter(Boolean)
     .some((value) => allLocationTokens.some((token) => articleMentionsLocationToken(token, value)));
 
-  const hasZipCode = matchesAnyLocationValue(locationContext?.zipCodeValues || [locationContext?.zipCode]);
+  const articleZipValues = extractZipTokens([...storedLocations, ...inferredTokens, article.assignedZipCode]);
+  const userZipValues = extractZipTokens(locationContext?.zipCodeValues || [locationContext?.zipCode]);
+  const hasZipCode = userZipValues.some((userZip) => articleZipValues.some((articleZip) => {
+    if (normalizeZipCode(userZip) === normalizeZipCode(articleZip)) return true;
+    if (ZIP_CODE_REGEX.test(userZip) && ZIP_CODE_REGEX.test(articleZip)) {
+      return normalizeUsZipCode(userZip).slice(0, 3) === normalizeUsZipCode(articleZip).slice(0, 3);
+    }
+    if (CANADA_POSTAL_REGEX.test(userZip) && CANADA_POSTAL_REGEX.test(articleZip)) {
+      return normalizeZipCode(userZip).slice(0, 3) === normalizeZipCode(articleZip).slice(0, 3);
+    }
+    return false;
+  }));
   const hasCity = matchesAnyLocationValue(locationContext?.cityValues || [locationContext?.city]);
   const hasCounty = matchesAnyLocationValue(locationContext?.countyValues || [locationContext?.county]);
   const hasState = matchesAnyLocationValue(locationContext?.stateValues || [locationContext?.state]);
@@ -602,11 +663,13 @@ const logNewsScopeEvent = ({ userId, eventType, metadata = {}, req }) => {
 async function fetchRssSource(source) {
   try {
     const feed = await parser.parseURL(source.url);
-    
-    return feed.items.map(item => {
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
       const providerId = detectProviderIdFromUrl(source.url);
       const locationTokens = buildArticleLocationTokens({ source, item });
       const localityLevel = inferLocalityLevel(locationTokens);
+      const assignedZipCode = await resolveAssignedZipCode({ locationTokens, source, item });
       
       return {
         title: item.title || 'Untitled',
@@ -618,12 +681,13 @@ async function fetchRssSource(source) {
         publishedAt: getItemPublishedAt(item),
         topics: toUniqueNonEmptyStrings(item.categories?.map(c => normalizeTopicToken(c)) || []),
         locations: locationTokens,
+        assignedZipCode,
         sourceType: 'rss',
         localityLevel,
         language: item.isoLanguage || feed.language || 'en',
         providerId
       };
-    });
+    }));
   } catch (error) {
     console.error(`Error fetching RSS source ${source.name}:`, error.message);
     // Mark source as unhealthy - using correct field names from RssSource model
@@ -647,7 +711,8 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
     
     const feed = await parser.parseURL(feedUrl);
     
-    return feed.items.map(item => {
+    const items = Array.isArray(feed.items) ? feed.items : [];
+    return await Promise.all(items.map(async (item) => {
       // Extract source name from title format: "Title - Source Name"
       let sourceName = 'Google News';
       const dashIndex = item.title?.lastIndexOf(' - ');
@@ -657,6 +722,12 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
 
       const locationTokens = buildArticleLocationTokens({ source: { name: sourceName, category: query }, item, query });
       const localityLevel = inferLocalityLevel(locationTokens);
+      const assignedZipCode = await resolveAssignedZipCode({
+        locationTokens,
+        source: { name: sourceName, category: query },
+        item,
+        query
+      });
       
       return {
         title: item.title || 'Untitled',
@@ -668,11 +739,12 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
         publishedAt: getItemPublishedAt(item),
         topics: toUniqueNonEmptyStrings([query.toLowerCase(), ...(item.categories || []).map((category) => normalizeTopicToken(category))]),
         locations: locationTokens,
+        assignedZipCode,
         sourceType,
         localityLevel,
         language: 'en'
       };
-    });
+    }));
   } catch (error) {
     console.error(`Error fetching Google News for "${query}":`, error.message);
     return [];
@@ -694,7 +766,8 @@ async function fetchYoutubeSource(channelUrl) {
     
     const feed = await parser.parseURL(rssUrl);
     
-    return feed.items.map(item => {
+    const items = Array.isArray(feed.items) ? feed.items : [];
+    return items.map(item => {
       return {
         title: item.title || 'Untitled',
         description: getItemDescription(item),
@@ -705,6 +778,7 @@ async function fetchYoutubeSource(channelUrl) {
         publishedAt: getItemPublishedAt(item),
         topics: ['youtube', 'video'],
         locations: buildArticleLocationTokens({ source: { name: 'YouTube' }, item }),
+        assignedZipCode: null,
         sourceType: 'youtube',
         localityLevel: 'global',
         language: 'en'
@@ -724,7 +798,8 @@ async function fetchPodcastSource(feedUrl) {
   try {
     const feed = await parser.parseURL(feedUrl);
     
-    return feed.items.map(item => {
+    const items = Array.isArray(feed.items) ? feed.items : [];
+    return items.map(item => {
       return {
         title: item.title || 'Untitled',
         description: getItemDescription(item),
@@ -735,6 +810,7 @@ async function fetchPodcastSource(feedUrl) {
         publishedAt: getItemPublishedAt(item),
         topics: ['podcast', 'audio'],
         locations: buildArticleLocationTokens({ source: { name: feed.title || 'Podcast' }, item }),
+        assignedZipCode: null,
         sourceType: 'podcast',
         localityLevel: 'global',
         language: feed.language || 'en'
@@ -781,10 +857,14 @@ async function processArticles(articles) {
 
   for (const article of articles) {
     try {
+      const normalizedUrlHash = article.url
+        ? crypto.createHash('sha256').update(String(article.url).toLowerCase().trim()).digest('hex').substring(0, 16)
+        : null;
       const sourceMomentum = getArticleMomentumSignal(article, momentumMap);
       const scoring = calculateViralScore(article, { sourceMomentum });
       const scoredArticle = {
         ...article,
+        normalizedUrlHash,
         viralScore: scoring.score,
         viralScoreVersion: scoring.scoreVersion,
         viralSignals: scoring.signals,
@@ -793,19 +873,26 @@ async function processArticles(articles) {
       };
 
       // Check for duplicate by URL hash
-      const existing = await Article.findOne({ normalizedUrlHash: article.normalizedUrlHash });
+      const existing = await Article.findDuplicate
+        ? await Article.findDuplicate(scoredArticle.url, scoredArticle.sourceId)
+        : await Article.findOne({ normalizedUrlHash: scoredArticle.normalizedUrlHash });
       
       if (existing) {
         // Update if newer
-        if (article.publishedAt > existing.publishedAt) {
+        const incomingPublishedAt = scoredArticle.publishedAt ? new Date(scoredArticle.publishedAt) : null;
+        const existingPublishedAt = existing.publishedAt ? new Date(existing.publishedAt) : null;
+        if (incomingPublishedAt && (!existingPublishedAt || incomingPublishedAt > existingPublishedAt)) {
           await Article.findByIdAndUpdate(existing._id, {
             $set: {
               title: scoredArticle.title,
               description: scoredArticle.description,
               imageUrl: scoredArticle.imageUrl,
               publishedAt: scoredArticle.publishedAt,
-              topics: [...new Set([...existing.topics, ...scoredArticle.topics])],
-              locations: scoredArticle.locations ? [...new Set([...existing.locations, ...scoredArticle.locations])] : existing.locations,
+              topics: [...new Set([...(existing.topics || []), ...(scoredArticle.topics || [])])],
+              locations: scoredArticle.locations
+                ? [...new Set([...(existing.locations || []), ...scoredArticle.locations])]
+                : (existing.locations || []),
+              assignedZipCode: scoredArticle.assignedZipCode || existing.assignedZipCode || null,
               viralScore: scoredArticle.viralScore,
               viralScoreVersion: scoredArticle.viralScoreVersion,
               viralSignals: scoredArticle.viralSignals,
@@ -1278,6 +1365,7 @@ router.get('/preferences', authenticateToken, async (req, res) => {
         gdletEnabled: true,
         locations: seededLocations,
         followedKeywords: [],
+        hiddenCategories: [],
         localPriorityEnabled: true,
         defaultScope: seededLocations.length > 0 ? 'local' : 'global'
       });
@@ -1799,5 +1887,12 @@ module.exports = {
     fetchYoutubeSource,
     fetchPodcastSource,
     fetchGovernmentSource
+  },
+  internals: {
+    processArticles,
+    getItemPublishedAt,
+    articleMatchesLocation,
+    resolveAssignedZipCode,
+    inferLocationTokensFromText
   }
 };
