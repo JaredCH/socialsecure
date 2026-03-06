@@ -386,6 +386,9 @@ router.post('/events', authenticateToken, discoveryLimiter, async (req, res) => 
       'profile_click',
       'post_click',
       'follow_click',
+      'social_profile_section_clicked',
+      'social_guest_preview_toggled',
+      'social_gallery_opened',
       'social_customization_preview_opened',
       'social_customization_saved',
       'social_customization_reset'
