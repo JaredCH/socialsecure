@@ -115,22 +115,19 @@ function OnboardingWizard({
 
     if (!seedPhrase) {
       setSeedPhraseQrDataUrl('');
-      return () => {
-        cancelled = true;
-      };
+    } else {
+      createRecoveryPhraseQrCodeDataUrl(seedPhrase)
+        .then((qrDataUrl) => {
+          if (!cancelled) {
+            setSeedPhraseQrDataUrl(qrDataUrl);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSeedPhraseQrDataUrl('');
+          }
+        });
     }
-
-    createRecoveryPhraseQrCodeDataUrl(seedPhrase)
-      .then((qrDataUrl) => {
-        if (!cancelled) {
-          setSeedPhraseQrDataUrl(qrDataUrl);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSeedPhraseQrDataUrl('');
-        }
-      });
 
     return () => {
       cancelled = true;
@@ -474,7 +471,7 @@ function OnboardingWizard({
                     height={150}
                   />
                 ) : (
-                  <p className="text-sm text-gray-600">Generating QR code…</p>
+                  <p className="text-sm text-gray-600">Generating QR code...</p>
                 )}
               </div>
 
