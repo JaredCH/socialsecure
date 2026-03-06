@@ -117,6 +117,28 @@ export const chatAPI = {
   getRoom: (roomId, page = 1, limit = 500) =>
     api.get(`/chat/rooms/${roomId}?page=${page}&limit=${limit}`),
   sendMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages`, data),
+  requestAudioUpload: (roomId, audioBlob, metadata = {}) => {
+    const formData = new FormData();
+    formData.append('roomId', roomId);
+    formData.append('audio', audioBlob, metadata.fileName || `voice-note.${(metadata.mimeType || 'audio/webm').split('/')[1] || 'webm'}`);
+    if (metadata.durationMs != null) {
+      formData.append('durationMs', String(metadata.durationMs));
+    }
+    if (Array.isArray(metadata.waveformBins)) {
+      formData.append('waveformBins', JSON.stringify(metadata.waveformBins));
+    }
+    return api.post('/chat/media/audio/upload-url', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  sendVoiceMessage: (roomId, audio) =>
+    api.post(`/chat/rooms/${roomId}/messages`, {
+      mediaType: 'audio',
+      audio,
+      messageType: 'text'
+    }),
   sendE2EEMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages/e2ee`, data),
   getMessages: (roomId, page = 1, limit = 500) =>
     api.get(`/chat/rooms/${roomId}/messages?page=${page}&limit=${limit}`),

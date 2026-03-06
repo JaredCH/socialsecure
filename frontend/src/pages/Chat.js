@@ -25,6 +25,8 @@ const MESSAGE_PAGE_SIZE = {
 const MAX_MESSAGES_IN_MEMORY = 1200;
 const MAX_VISIBLE_DECRYPT = 120;
 const SCROLL_BOTTOM_THRESHOLD = 48;
+const MAX_VOICE_DURATION_MS = 120000;
+const MAX_WAVEFORM_BINS = 48;
 
 const getMessageId = (message) => String(message?._id || `${message?.e2ee?.clientMessageId || 'msg'}:${message?.createdAt || ''}`);
 
@@ -51,6 +53,25 @@ const formatCompactTimestamp = (timestamp) => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${months[date.getMonth()]} ${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 };
+
+const formatDuration = (durationMs = 0) => {
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
+const WaveformBars = ({ bins = [] }) => (
+  <div className="flex items-end gap-[1px] h-8 w-full max-w-xs">
+    {bins.map((value, index) => (
+      <span
+        key={`${index}-${value}`}
+        className="block bg-blue-400/80 rounded-sm flex-1 min-w-[2px]"
+        style={{ height: `${Math.max(8, Math.round(value * 100))}%` }}
+      />
+    ))}
+  </div>
+);
 
 const hashString = (value = '') => {
   let hash = 0;
@@ -89,6 +110,15 @@ const Chat = () => {
   const [olderLoading, setOlderLoading] = useState(false);
   const [sendValue, setSendValue] = useState('');
   const [sending, setSending] = useState(false);
+  const [voiceState, setVoiceState] = useState('idle');
+  const [voiceBlob, setVoiceBlob] = useState(null);
+  const [voiceDurationMs, setVoiceDurationMs] = useState(0);
+  const [voiceWaveform, setVoiceWaveform] = useState([]);
+  const [voiceMimeType, setVoiceMimeType] = useState('');
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState('');
+  const [voiceError, setVoiceError] = useState('');
+  const [recordingStartedAt, setRecordingStartedAt] = useState(null);
+  const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
   const [nickByUserId, setNickByUserId] = useState({});
   const [localNickname, setLocalNickname] = useState('');
   const [useMonospace, setUseMonospace] = useState(false);
@@ -103,12 +133,36 @@ const Chat = () => {
   const latestPackageSyncByRoomRef = useRef({});
   const messageViewportRef = useRef(null);
   const messageCountRef = useRef(0);
+  const mediaRecorderRef = useRef(null);
+  const recordingStreamRef = useRef(null);
+  const recordingChunksRef = useRef([]);
 
   const isUnlocked = Boolean(session);
   const activeRoom = useMemo(
     () => rooms.find((room) => String(room._id) === String(activeRoomId)) || null,
     [rooms, activeRoomId]
   );
+
+  useEffect(() => () => {
+    if (voicePreviewUrl) {
+      URL.revokeObjectURL(voicePreviewUrl);
+    }
+    if (recordingStreamRef.current) {
+      recordingStreamRef.current.getTracks().forEach((track) => track.stop());
+    }
+  }, [voicePreviewUrl]);
+
+  useEffect(() => {
+    if (!recordingStartedAt || voiceState !== 'recording') return undefined;
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - recordingStartedAt;
+      setRecordingElapsedMs(elapsed);
+      if (elapsed >= MAX_VOICE_DURATION_MS && mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+    }, 250);
+    return () => clearInterval(interval);
+  }, [recordingStartedAt, voiceState]);
 
   const appendMessage = (incoming) => {
     if (!incoming) return;
@@ -541,6 +595,154 @@ const Chat = () => {
     }
   };
 
+  const resetVoiceDraft = () => {
+    if (voicePreviewUrl) {
+      URL.revokeObjectURL(voicePreviewUrl);
+    }
+    setVoiceBlob(null);
+    setVoiceDurationMs(0);
+    setVoiceWaveform([]);
+    setVoiceMimeType('');
+    setVoicePreviewUrl('');
+    setVoiceError('');
+    setRecordingElapsedMs(0);
+    setRecordingStartedAt(null);
+    setVoiceState('idle');
+  };
+
+  const buildWaveformBins = async (blob) => {
+    const AudioContextImpl = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextImpl) return Array.from({ length: 12 }, () => 0.3);
+
+    const audioContext = new AudioContextImpl();
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const decoded = await audioContext.decodeAudioData(arrayBuffer);
+      const channelData = decoded.getChannelData(0);
+      const segmentLength = Math.max(1, Math.floor(channelData.length / MAX_WAVEFORM_BINS));
+      const bins = [];
+      for (let i = 0; i < MAX_WAVEFORM_BINS; i += 1) {
+        const start = i * segmentLength;
+        if (start >= channelData.length) break;
+        const end = Math.min(channelData.length, start + segmentLength);
+        let sum = 0;
+        for (let j = start; j < end; j += 1) {
+          sum += Math.abs(channelData[j]);
+        }
+        const average = sum / Math.max(1, end - start);
+        bins.push(Math.min(1, Number(average.toFixed(4))));
+      }
+      return bins.length > 0 ? bins : Array.from({ length: 12 }, () => 0.3);
+    } finally {
+      await audioContext.close().catch(() => {});
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    if (!activeRoomId || !isUnlocked || voiceState === 'uploading' || sending) return;
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof window.MediaRecorder === 'undefined') {
+      toast.error('Voice recording is not supported in this browser.');
+      return;
+    }
+
+    try {
+      if (voicePreviewUrl) {
+        URL.revokeObjectURL(voicePreviewUrl);
+      }
+      setVoiceBlob(null);
+      setVoiceDurationMs(0);
+      setVoiceWaveform([]);
+      setVoiceMimeType('');
+      setVoicePreviewUrl('');
+      setVoiceError('');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      const preferredMime = ['audio/webm', 'audio/ogg', 'audio/mp4']
+        .find((mime) => window.MediaRecorder.isTypeSupported?.(mime)) || 'audio/webm';
+      const recorder = new MediaRecorder(stream, { mimeType: preferredMime });
+      mediaRecorderRef.current = recorder;
+      recordingChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+
+      const startedAt = Date.now();
+      recorder.onstop = async () => {
+        const chunks = recordingChunksRef.current;
+        recordingChunksRef.current = [];
+        const elapsed = Math.max(1, Date.now() - startedAt);
+        const blob = new Blob(chunks, { type: preferredMime });
+        const bins = await buildWaveformBins(blob);
+        const previewUrl = URL.createObjectURL(blob);
+
+        if (recordingStreamRef.current) {
+          recordingStreamRef.current.getTracks().forEach((track) => track.stop());
+          recordingStreamRef.current = null;
+        }
+
+        setVoiceBlob(blob);
+        setVoiceDurationMs(elapsed);
+        setVoiceWaveform(bins);
+        setVoiceMimeType(preferredMime);
+        setVoicePreviewUrl(previewUrl);
+        setRecordingElapsedMs(elapsed);
+        setVoiceState('preview');
+      };
+
+      setRecordingStartedAt(startedAt);
+      setRecordingElapsedMs(0);
+      setVoiceState('recording');
+      recorder.start();
+    } catch (error) {
+      setVoiceState('idle');
+      toast.error(error.message || 'Unable to access microphone.');
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const sendVoiceNote = async () => {
+    if (!voiceBlob || !activeRoomId || !isUnlocked || voiceState === 'uploading') return;
+    setVoiceState('uploading');
+    setVoiceError('');
+
+    try {
+      const uploadResponse = await chatAPI.requestAudioUpload(activeRoomId, voiceBlob, {
+        mimeType: voiceMimeType || voiceBlob.type || 'audio/webm',
+        durationMs: voiceDurationMs,
+        waveformBins: voiceWaveform
+      });
+      const audio = uploadResponse.data?.audio;
+      if (!audio) {
+        throw new Error('Upload did not return audio metadata.');
+      }
+
+      const sendResponse = await chatAPI.sendVoiceMessage(activeRoomId, audio);
+      const sentMessage = sendResponse.data?.message || sendResponse.data?.messageData;
+      if (sentMessage) {
+        appendMessage(sentMessage);
+      }
+      resetVoiceDraft();
+      toast.success('Voice note sent.');
+      if (isAtBottom) {
+        requestAnimationFrame(() => scrollToBottom());
+      }
+    } catch (error) {
+      const message = error.response?.data?.error || error.message || 'Failed to send voice note.';
+      setVoiceError(message);
+      setVoiceState('preview');
+      toast.error(message);
+    }
+  };
+
   const handleSlashCommand = async ({ command, argsRaw }) => {
     const parsed = parseCommandArguments(command, argsRaw);
     if (!parsed.ok) {
@@ -805,6 +1007,8 @@ const Chat = () => {
               const isE2EE = Boolean(message?.e2ee?.enabled);
               const author = getDisplayName(message);
               const messageType = message?.messageType || 'text';
+              const isAudioMessage = message?.mediaType === 'audio' && message?.audio;
+              const audioMeta = isAudioMessage ? message.audio : null;
               const compactTs = formatCompactTimestamp(message.createdAt);
               const fullTs = new Date(message.createdAt).toLocaleString();
 
@@ -839,9 +1043,17 @@ const Chat = () => {
                   ) : (
                     <>
                       <span className="font-semibold" style={{ color: stringToColor(author) }}>&lt;{author}&gt;</span>
-                      <span className={`ml-1 whitespace-pre-wrap ${decryptError ? 'text-red-600' : (messageType === 'command' ? 'text-indigo-700' : 'text-gray-900')}`}>
-                        {bodyText || '[Non-E2EE message]'}
-                      </span>
+                      {isAudioMessage ? (
+                        <span className="ml-2 inline-flex flex-col gap-1 align-middle">
+                          <span className="text-xs text-gray-600">🎤 Voice note ({formatDuration(audioMeta.durationMs)})</span>
+                          <WaveformBars bins={audioMeta.waveformBins || []} />
+                          <audio controls preload="none" className="h-8" src={audioMeta.url} />
+                        </span>
+                      ) : (
+                        <span className={`ml-1 whitespace-pre-wrap ${decryptError ? 'text-red-600' : (messageType === 'command' ? 'text-indigo-700' : 'text-gray-900')}`}>
+                          {bodyText || '[Non-E2EE message]'}
+                        </span>
+                      )}
                     </>
                   )}
                   <span className="ml-2 hidden group-hover:inline text-[10px] text-gray-400">{fullTs}</span>
@@ -874,19 +1086,68 @@ const Chat = () => {
             {decrypting ? <span className="text-xs text-gray-500 self-center">Decrypting visible messages...</span> : null}
           </div>
 
+          {voiceState === 'recording' ? (
+            <div className="flex items-center gap-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm">
+              <span className="text-red-600 font-medium">● Recording {formatDuration(recordingElapsedMs)}</span>
+              <button
+                type="button"
+                onClick={stopVoiceRecording}
+                className="px-3 py-1 rounded border border-red-300 text-red-700"
+              >
+                Stop
+              </button>
+            </div>
+          ) : null}
+
+          {voiceState === 'preview' || voiceState === 'uploading' ? (
+            <div className="rounded border bg-blue-50 px-3 py-2 space-y-2">
+              <div className="text-sm font-medium text-blue-800">Voice note preview ({formatDuration(voiceDurationMs)})</div>
+              <WaveformBars bins={voiceWaveform} />
+              {voicePreviewUrl ? <audio controls preload="metadata" className="w-full max-w-md" src={voicePreviewUrl} /> : null}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={sendVoiceNote}
+                  disabled={voiceState === 'uploading' || !voiceBlob}
+                  className="bg-blue-600 text-white rounded px-3 py-1 disabled:opacity-50"
+                >
+                  {voiceState === 'uploading' ? 'Uploading...' : 'Send voice note'}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetVoiceDraft}
+                  disabled={voiceState === 'uploading'}
+                  className="px-3 py-1 border rounded disabled:opacity-50"
+                >
+                  Discard
+                </button>
+              </div>
+              {voiceError ? <p className="text-xs text-red-600">{voiceError}</p> : null}
+            </div>
+          ) : null}
+
           <form onSubmit={handleSend} className="flex gap-2">
             <input
               type="text"
               value={sendValue}
               onChange={(event) => setSendValue(event.target.value)}
-              disabled={!isUnlocked || !activeRoomId || sending}
+              disabled={!isUnlocked || !activeRoomId || sending || voiceState === 'recording' || voiceState === 'uploading'}
               className="flex-1 border rounded p-2"
               maxLength={2000}
               placeholder={isUnlocked ? 'Type encrypted message or /join /leave /nick /msg /list' : 'Unlock encryption to send'}
             />
             <button
+              type="button"
+              onClick={startVoiceRecording}
+              disabled={!isUnlocked || !activeRoomId || sending || voiceState === 'recording' || voiceState === 'uploading'}
+              className="px-3 py-2 border rounded disabled:opacity-50"
+              title="Record voice note"
+            >
+              🎤
+            </button>
+            <button
               type="submit"
-              disabled={!isUnlocked || !activeRoomId || !sendValue.trim() || sending}
+              disabled={!isUnlocked || !activeRoomId || !sendValue.trim() || sending || voiceState === 'recording' || voiceState === 'uploading'}
               className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
             >
               {sending ? 'Sending...' : 'Send E2EE'}

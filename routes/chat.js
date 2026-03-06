@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+const fs = require('fs/promises');
+const path = require('path');
+const crypto = require('crypto');
+const multer = require('multer');
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
 const DeviceKey = require('../models/DeviceKey');
@@ -95,6 +99,18 @@ const COMMAND_DATA_LIMITS = {
   targetUsername: 64,
   nickname: 32
 };
+const AUDIO_MEDIA_TYPES = ['audio'];
+const AUDIO_MIME_TYPES = new Set(['audio/webm', 'audio/ogg', 'audio/mp4']);
+const MAX_AUDIO_DURATION_MS = 120000;
+const MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_AUDIO_WAVEFORM_BINS = 256;
+const AUDIO_UPLOAD_ROOT = path.join(__dirname, '..', 'private_uploads', 'chat-audio');
+const AUDIO_EXT_BY_MIME = {
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'mp4'
+};
+const AUDIO_STORAGE_KEY_PATTERN = /^[a-f0-9-]+\.(webm|ogg|mp4)$/;
 
 const isSafeString = (value, maxLength) => typeof value === 'string' && value.length > 0 && value.length <= maxLength;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -173,6 +189,83 @@ const sanitizeCommandData = (commandData) => {
 
   return Object.keys(sanitized).length > 0 ? sanitized : null;
 };
+
+const sanitizeWaveformBins = (waveformBins) => {
+  if (!Array.isArray(waveformBins)) return null;
+  if (waveformBins.length === 0 || waveformBins.length > MAX_AUDIO_WAVEFORM_BINS) return null;
+  const normalized = waveformBins.map((bin) => {
+    const value = Number(bin);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error('audio.waveformBins must contain numbers between 0 and 1');
+    }
+    return Number(value.toFixed(4));
+  });
+  return normalized;
+};
+
+const sanitizeAudioMetadata = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { error: 'audio metadata is required for audio messages' };
+  }
+
+  const storageKey = typeof payload.storageKey === 'string' ? payload.storageKey.trim() : '';
+  if (!storageKey || storageKey.length > 255 || !AUDIO_STORAGE_KEY_PATTERN.test(storageKey)) {
+    return { error: 'audio.storageKey is invalid' };
+  }
+
+  const url = typeof payload.url === 'string' ? payload.url.trim() : '';
+  if (!url || url.length > 1024 || !url.startsWith('/api/chat/media/')) {
+    return { error: 'audio.url is invalid' };
+  }
+
+  const durationMs = Number(payload.durationMs);
+  if (!Number.isInteger(durationMs) || durationMs < 1 || durationMs > MAX_AUDIO_DURATION_MS) {
+    return { error: `audio.durationMs must be between 1 and ${MAX_AUDIO_DURATION_MS}` };
+  }
+
+  const mimeType = typeof payload.mimeType === 'string' ? payload.mimeType.trim().toLowerCase() : '';
+  if (!AUDIO_MIME_TYPES.has(mimeType)) {
+    return { error: `audio.mimeType must be one of: ${Array.from(AUDIO_MIME_TYPES).join(', ')}` };
+  }
+
+  const sizeBytes = Number(payload.sizeBytes);
+  if (!Number.isInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > MAX_AUDIO_SIZE_BYTES) {
+    return { error: `audio.sizeBytes must be between 1 and ${MAX_AUDIO_SIZE_BYTES}` };
+  }
+
+  let waveformBins;
+  try {
+    waveformBins = sanitizeWaveformBins(payload.waveformBins);
+  } catch (error) {
+    return { error: error.message };
+  }
+  if (!waveformBins) {
+    return { error: `audio.waveformBins must contain 1-${MAX_AUDIO_WAVEFORM_BINS} normalized values` };
+  }
+
+  return {
+    value: {
+      storageKey,
+      url,
+      durationMs,
+      waveformBins,
+      mimeType,
+      sizeBytes
+    }
+  };
+};
+
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_AUDIO_SIZE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!AUDIO_MIME_TYPES.has(file.mimetype)) {
+      cb(new Error(`Unsupported audio mime type: ${file.mimetype}`));
+      return;
+    }
+    cb(null, true);
+  }
+});
 
 const createRoomEventMessage = async ({ roomId, userId, content, messageType = 'system', commandData = null }) => {
   const eventMessage = new ChatMessage({
@@ -475,9 +568,11 @@ router.get('/rooms/:roomId', authenticateToken, async (req, res) => {
 // Send message to chat room with rate limiting
 router.post('/rooms/:roomId/messages', [
   authenticateToken,
-  body('content').optional().trim().isLength({ max: 2000 }).withMessage('Message too long'),
+  body('content').optional({ nullable: true }).trim().isLength({ max: 2000 }).withMessage('Message too long'),
   body('encryptedContent').optional().trim(),
   body('messageType').optional().isIn(MESSAGE_TYPES).withMessage('Invalid message type'),
+  body('mediaType').optional({ nullable: true }).isIn(AUDIO_MEDIA_TYPES).withMessage('Invalid media type'),
+  body('audio').optional().isObject().withMessage('audio must be an object'),
   body('commandData').optional().isObject().withMessage('commandData must be an object'),
   body('latitude').optional().isFloat({ min: -90, max: 90 }),
   body('longitude').optional().isFloat({ min: -180, max: 180 })
@@ -493,11 +588,28 @@ router.post('/rooms/:roomId/messages', [
       content,
       encryptedContent,
       messageType,
+      mediaType,
+      audio,
       commandData,
       latitude,
       longitude
     } = req.body;
     const userId = req.user.userId;
+
+    if (!content && !encryptedContent && mediaType !== 'audio') {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    let normalizedAudio = null;
+    if (mediaType === 'audio') {
+      const parsedAudio = sanitizeAudioMetadata(audio);
+      if (parsedAudio.error) {
+        return res.status(400).json({ error: parsedAudio.error });
+      }
+      normalizedAudio = parsedAudio.value;
+    } else if (audio) {
+      return res.status(400).json({ error: 'audio metadata is only allowed when mediaType is audio' });
+    }
     
     // Get room
     const room = await ChatRoom.findById(roomId);
@@ -545,6 +657,8 @@ router.post('/rooms/:roomId/messages', [
       encryptedContent,
       isEncrypted: !!encryptedContent,
       messageType: normalizeMessageType(messageType),
+      mediaType: mediaType === 'audio' ? 'audio' : null,
+      audio: normalizedAudio,
       commandData: sanitizeCommandData(commandData),
       rateLimitKey: userCity === roomCity ? null : `${userId}:${roomId}:external`
     };
@@ -590,6 +704,132 @@ router.post('/rooms/:roomId/messages', [
   } catch (error) {
     console.error('Error sending message:', error);
     res.status(500).json({ error: 'Failed to send message', details: error.message });
+  }
+});
+
+// Upload voice-note media (controlled endpoint)
+router.post('/media/audio/upload-url', authenticateToken, (req, res) => {
+  audioUpload.single('audio')(req, res, async (uploadError) => {
+    if (uploadError instanceof multer.MulterError && uploadError.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: `Audio file exceeds ${MAX_AUDIO_SIZE_BYTES} bytes` });
+    }
+    if (uploadError) {
+      return res.status(400).json({ error: uploadError.message || 'Invalid audio upload' });
+    }
+
+    try {
+      const userId = req.user.userId;
+      const roomId = String(req.body?.roomId || '').trim();
+      const durationMs = parseInt(req.body?.durationMs, 10);
+      const file = req.file;
+
+      if (!roomId) {
+        return res.status(400).json({ error: 'roomId is required' });
+      }
+
+      if (!file) {
+        return res.status(400).json({ error: 'audio file is required' });
+      }
+
+      if (!Number.isInteger(durationMs) || durationMs < 1 || durationMs > MAX_AUDIO_DURATION_MS) {
+        return res.status(400).json({ error: `durationMs must be between 1 and ${MAX_AUDIO_DURATION_MS}` });
+      }
+
+      const room = await ChatRoom.findById(roomId).select('_id members');
+      if (!room) {
+        return res.status(404).json({ error: 'Chat room not found' });
+      }
+
+      if (!isRoomMember(room, userId)) {
+        return res.status(403).json({ error: 'You must be a room member to upload voice notes' });
+      }
+
+      let waveformBins = [];
+      if (typeof req.body?.waveformBins === 'string' && req.body.waveformBins.trim()) {
+        try {
+          waveformBins = JSON.parse(req.body.waveformBins);
+        } catch {
+          return res.status(400).json({ error: 'waveformBins must be valid JSON array' });
+        }
+      }
+
+      let normalizedBins;
+      try {
+        normalizedBins = sanitizeWaveformBins(waveformBins);
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+      if (!normalizedBins) {
+        return res.status(400).json({ error: `waveformBins must contain 1-${MAX_AUDIO_WAVEFORM_BINS} normalized values` });
+      }
+
+      const extension = AUDIO_EXT_BY_MIME[file.mimetype];
+      if (!extension) {
+        return res.status(400).json({ error: `Unsupported audio mime type: ${file.mimetype}` });
+      }
+
+      await fs.mkdir(AUDIO_UPLOAD_ROOT, { recursive: true });
+      const storageKey = `${crypto.randomUUID()}.${extension}`;
+      const destinationPath = path.join(AUDIO_UPLOAD_ROOT, storageKey);
+      await fs.writeFile(destinationPath, file.buffer);
+
+      return res.status(201).json({
+        success: true,
+        audio: {
+          storageKey,
+          url: `/api/chat/media/${storageKey}`,
+          durationMs,
+          waveformBins: normalizedBins,
+          mimeType: file.mimetype,
+          sizeBytes: file.size
+        },
+        moderation: {
+          transcriptionQueued: false
+        }
+      });
+    } catch (error) {
+      console.error('Error uploading chat audio:', error?.message || error);
+      return res.status(500).json({ error: 'Failed to upload audio' });
+    }
+  });
+});
+
+// Authorized retrieval of stored chat media
+router.get('/media/:mediaId', authenticateToken, async (req, res) => {
+  try {
+    const mediaId = String(req.params.mediaId || '').trim();
+    if (!AUDIO_STORAGE_KEY_PATTERN.test(mediaId)) {
+      return res.status(400).json({ error: 'Invalid media id' });
+    }
+
+    const message = await ChatMessage.findOne({
+      mediaType: 'audio',
+      'audio.storageKey': mediaId
+    }).select('roomId audio').lean();
+
+    if (!message?.audio?.storageKey) {
+      return res.status(404).json({ error: 'Media not found' });
+    }
+
+    const room = await ChatRoom.findById(message.roomId).select('_id members').lean();
+    if (!room) {
+      return res.status(404).json({ error: 'Chat room not found' });
+    }
+
+    if (!isRoomMember(room, req.user.userId)) {
+      return res.status(403).json({ error: 'Not authorized to access this media' });
+    }
+
+    const filePath = path.join(AUDIO_UPLOAD_ROOT, mediaId);
+    await fs.access(filePath);
+    res.setHeader('Content-Type', message.audio.mimeType || 'application/octet-stream');
+    return res.sendFile(filePath);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return res.status(404).json({ error: 'Media not found' });
+    }
+    console.error('Error retrieving chat media:', error?.message || error);
+    return res.status(500).json({ error: 'Failed to retrieve media' });
   }
 });
 

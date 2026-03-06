@@ -24,6 +24,48 @@ const chatMessageSchema = new mongoose.Schema({
     default: 'text',
     index: true
   },
+  mediaType: {
+    type: String,
+    enum: ['audio', null],
+    default: null,
+    index: true
+  },
+  audio: {
+    storageKey: {
+      type: String,
+      trim: true,
+      maxlength: 255,
+      default: null
+    },
+    url: {
+      type: String,
+      trim: true,
+      maxlength: 1024,
+      default: null
+    },
+    durationMs: {
+      type: Number,
+      min: 1,
+      max: 120000,
+      default: null
+    },
+    waveformBins: {
+      type: [Number],
+      default: []
+    },
+    mimeType: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+      default: null
+    },
+    sizeBytes: {
+      type: Number,
+      min: 1,
+      max: 10485760,
+      default: null
+    }
+  },
   commandData: {
     command: {
       type: String,
@@ -203,6 +245,8 @@ chatMessageSchema.statics.toPublicMessageShape = function(message) {
     isEncrypted: !!message.isEncrypted,
     isE2EE: !!message?.e2ee?.enabled,
     messageType: message.messageType || 'text',
+    mediaType: message.mediaType || null,
+    audio: message.mediaType === 'audio' ? (message.audio || null) : null,
     commandData: message.commandData || null,
     location: message.location,
     createdAt: message.createdAt,
