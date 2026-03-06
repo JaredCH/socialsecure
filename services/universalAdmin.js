@@ -12,19 +12,30 @@ const ensureUniversalAdminAccount = async ({
     throw new Error('Universal admin username is required');
   }
 
+  const resolvedEmail = typeof email === 'string' ? email.trim() : '';
+  const resolvedPassword = typeof password === 'string' ? password : '';
+  const resolvedEncryptionPassword = typeof encryptionPassword === 'string' ? encryptionPassword : '';
+
+  if (!resolvedEmail) {
+    throw new Error('Universal admin email is required');
+  }
+  if (!resolvedPassword) {
+    throw new Error('Universal admin password is required');
+  }
+
   let adminUser = await User.findOne({ username: normalizedUsername });
   const now = new Date();
 
   if (!adminUser) {
-    const passwordHash = await bcrypt.hash(password, 12);
-    const encryptionPasswordHash = encryptionPassword
-      ? await bcrypt.hash(encryptionPassword, 12)
+    const passwordHash = await bcrypt.hash(resolvedPassword, 12);
+    const encryptionPasswordHash = resolvedEncryptionPassword
+      ? await bcrypt.hash(resolvedEncryptionPassword, 12)
       : null;
 
     adminUser = new User({
       realName: 'System Administrator',
       username: normalizedUsername,
-      email,
+      email: resolvedEmail,
       passwordHash,
       country: 'US',
       registrationStatus: 'active',
@@ -55,8 +66,8 @@ const ensureUniversalAdminAccount = async ({
     privilegesRepaired = true;
   }
 
-  if (!adminUser.encryptionPasswordHash && encryptionPassword) {
-    adminUser.encryptionPasswordHash = await bcrypt.hash(encryptionPassword, 12);
+  if (!adminUser.encryptionPasswordHash && resolvedEncryptionPassword) {
+    adminUser.encryptionPasswordHash = await bcrypt.hash(resolvedEncryptionPassword, 12);
     adminUser.encryptionPasswordSetAt = now;
     adminUser.encryptionPasswordVersion = 1;
     updated = true;
