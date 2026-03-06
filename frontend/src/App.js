@@ -360,43 +360,49 @@ function App() {
     return <div className="min-h-screen grid place-items-center">Loading...</div>;
   }
 
+  const navLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700';
+  const navEmphasisLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50';
+  const navDangerButtonClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50';
+
   return (
     <Router>
       <div className="min-h-screen bg-gray-100">
-        <nav className="bg-white shadow-md p-4">
-          <div className="container mx-auto flex justify-between items-center">
-            <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
-            <div className="space-x-4">
-              {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600">Home</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600">Social</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600">Discover</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600">Chat</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600">Market</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600">Maps</Link>}
-              <Link to="/calendar" className="text-gray-600 hover:text-blue-600">Calendar</Link>
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/resume" className="text-gray-600 hover:text-blue-600">Resume</Link>}
-              {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && <Link to="/moderation" className="text-gray-600 hover:text-blue-600">Moderation</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && (
-                <NotificationCenter
-                  unreadCount={unreadNotificationCount}
-                  onUnreadCountChange={setUnreadNotificationCount}
-                  incomingNotification={incomingNotification}
-                />
-              )}
-              {isAuthenticated && onboardingRequired && <Link to="/onboarding" className="text-blue-600 font-medium">Onboarding</Link>}
-              {isAuthenticated ? (
-                <>
-                  <Link to="/settings" className="text-gray-600 hover:text-blue-600">User Settings</Link>
-                  <button onClick={handleLogout} className="text-red-600 font-medium">Logout</button>
-                </>
-              ) : (
-                <>
-                  <Link to="/login" className="text-blue-600 font-medium">Login</Link>
-                  <Link to="/register" className="text-blue-600 font-medium">Register</Link>
-                </>
-              )}
+        <nav className="border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+          <div className="container mx-auto px-3 py-3 sm:px-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <h1 className="shrink-0 text-xl font-bold text-blue-700">SocialSecure</h1>
+              <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1 sm:gap-2 md:justify-end md:pb-0">
+                {!encryptionPasswordRequired && <Link to="/" className={navLinkClass}>Home</Link>}
+                {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/social" className={navLinkClass}>Social</Link>}
+                {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/discover" className={navLinkClass}>Discover</Link>}
+                {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/chat" className={navLinkClass}>Chat</Link>}
+                {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/market" className={navLinkClass}>Market</Link>}
+                {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/news" className={navLinkClass}>News</Link>}
+                {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/maps" className={navLinkClass}>Maps</Link>}
+                <Link to="/calendar" className={navLinkClass}>Calendar</Link>
+                {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/resume" className={navLinkClass}>Resume</Link>}
+                {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && <Link to="/moderation" className={navLinkClass}>Moderation</Link>}
+                {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/refer" className={navLinkClass}>Refer Friend</Link>}
+                {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && (
+                  <NotificationCenter
+                    unreadCount={unreadNotificationCount}
+                    onUnreadCountChange={setUnreadNotificationCount}
+                    incomingNotification={incomingNotification}
+                  />
+                )}
+                {isAuthenticated && onboardingRequired && <Link to="/onboarding" className={navEmphasisLinkClass}>Onboarding</Link>}
+                {isAuthenticated ? (
+                  <>
+                    <Link to="/settings" className={navLinkClass}>User Settings</Link>
+                    <button onClick={handleLogout} className={navDangerButtonClass}>Logout</button>
+                  </>
+                ) : (
+                  <>
+                    <Link to="/login" className={navEmphasisLinkClass}>Login</Link>
+                    <Link to="/register" className={navEmphasisLinkClass}>Register</Link>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </nav>
