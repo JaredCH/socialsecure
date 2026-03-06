@@ -460,7 +460,8 @@ function ListingFormModal({ listing, onClose, onSaved }) {
         longitude: form.longitude ? parseFloat(form.longitude) : undefined,
       };
       if (form.externalLink.trim()) payload.externalLink = form.externalLink.trim();
-      if (isEdit && !hasImageUploads) payload.images = form.images;
+      const shouldIncludeImages = !hasImageUploads && Array.isArray(form.images) && form.images.length > 0;
+      if (shouldIncludeImages) payload.images = form.images;
       let res;
       if (hasImageUploads) {
         const formData = new FormData();
