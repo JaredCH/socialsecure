@@ -74,6 +74,7 @@ const ALL_CATEGORY_MAP = CATEGORIES.reduce((acc, cat) => {
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY'];
 const MAX_LISTING_IMAGES = 6;
+const MAX_LISTING_IMAGE_BYTES = 3 * 1024 * 1024;
 const CONDITION_OPTIONS = [
   { value: '', label: 'Select condition' },
   { value: 'new', label: 'New' },
@@ -466,7 +467,7 @@ function ListingFormModal({ listing, onClose, onSaved }) {
       if (hasImageUploads) {
         const formData = new FormData();
         Object.entries(payload).forEach(([key, value]) => {
-          if (value === undefined) return;
+          if (value == null) return;
           if (key === 'additionalDetails' || key === 'images') {
             formData.append(key, JSON.stringify(value));
           } else {
@@ -504,6 +505,13 @@ function ListingFormModal({ listing, onClose, onSaved }) {
     const files = Array.from(event.target.files || []);
     if (files.length > MAX_LISTING_IMAGES) {
       toast.error(`Please select up to ${MAX_LISTING_IMAGES} images.`);
+      event.target.value = '';
+      setForm(f => ({ ...f, imageFiles: [] }));
+      return;
+    }
+    const oversized = files.find(file => file.size > MAX_LISTING_IMAGE_BYTES);
+    if (oversized) {
+      toast.error(`${oversized.name} exceeds the 3MB limit.`);
       event.target.value = '';
       setForm(f => ({ ...f, imageFiles: [] }));
       return;

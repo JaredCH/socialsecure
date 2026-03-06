@@ -237,6 +237,9 @@ const ensureSingleImageSource = ({ hasUploads, hasImageList }) => {
 };
 
 const validateUploadedImage = (file) => {
+  if (!file?.buffer || !Buffer.isBuffer(file.buffer) || file.buffer.length === 0) {
+    return { ok: false, error: 'Uploaded image file is empty' };
+  }
   const mimeType = String(file.mimetype || '').toLowerCase();
   const ext = path.extname(String(file.originalname || '')).toLowerCase();
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
@@ -258,16 +261,14 @@ const getMarketUploadPath = (imageUrl) => {
 
 const removeMarketUploads = async (images = []) => {
   const paths = images.map(getMarketUploadPath).filter(Boolean);
-  await Promise.all(
-    paths.map((filePath) =>
-      fs.unlink(filePath).catch((unlinkError) => {
-        if (unlinkError?.code !== 'ENOENT') {
-          console.error('Failed to remove market upload:', filePath, unlinkError);
-          throw unlinkError;
-        }
-      })
-    )
+  const results = await Promise.allSettled(
+    paths.map((filePath) => fs.unlink(filePath))
   );
+  results.forEach((result, index) => {
+    if (result.status === 'rejected' && result.reason?.code !== 'ENOENT') {
+      console.error('Failed to remove market upload:', paths[index], result.reason);
+    }
+  });
 };
 
 const saveUploadedImages = async (files, ownerId) => {
@@ -689,13 +690,13 @@ router.put('/listings/:listingId', [
     } else if (hasImageList) {
       nextImages = imageListResult.images;
     }
+    let removedImages = [];
     if (nextImages) {
       const imageLimitCheck = ensureImageLimit(nextImages);
       if (!imageLimitCheck.ok) {
         return res.status(400).json({ error: imageLimitCheck.error });
       }
-      const removedImages = currentImages.filter((image) => !nextImages.includes(image));
-      await removeMarketUploads(removedImages);
+      removedImages = currentImages.filter((image) => !nextImages.includes(image));
       updateData.images = nextImages;
     }
 
@@ -722,6 +723,9 @@ router.put('/listings/:listingId', [
     
     listing.updatedAt = new Date();
     await listing.save();
+    if (removedImages.length > 0) {
+      await removeMarketUploads(removedImages);
+    }
     
     // Populate seller info
     await listing.populate('sellerId', 'username realName city state country');
