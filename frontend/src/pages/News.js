@@ -16,10 +16,10 @@ const ALL_CATEGORIES = [
 ];
 
 const NEWS_SCOPES = [
-  { id: 'local', label: 'Local' },
-  { id: 'regional', label: 'Regional' },
-  { id: 'national', label: 'National' },
-  { id: 'global', label: 'Global' }
+  { id: 'local', label: 'Local', icon: '📍' },
+  { id: 'regional', label: 'Regional', icon: '🗺️' },
+  { id: 'national', label: 'National', icon: '🏛️' },
+  { id: 'global', label: 'Global', icon: '🌍' }
 ];
 
 const SOURCE_FORMAT_GUIDANCE = {
@@ -397,15 +397,40 @@ function News() {
 
   if (loading && articles.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-48 mb-6"></div>
-            <div className="space-y-4">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-32 bg-gray-200 rounded"></div>
-              ))}
+      <div className="min-h-screen bg-gray-50 text-gray-900">
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
+            <div className="animate-pulse">
+              <div className="h-7 bg-gray-200 rounded-lg w-40 mb-4"></div>
+              <div className="flex gap-1 mb-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-9 bg-gray-100 rounded-lg w-24"></div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-8 bg-gray-100 rounded-full w-20"></div>
+                ))}
+              </div>
             </div>
+          </div>
+        </div>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+          <div className="animate-pulse space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="bg-white rounded-xl p-4 flex gap-4">
+                <div className="hidden sm:block w-40 h-28 bg-gray-200 rounded-lg shrink-0"></div>
+                <div className="flex-1 space-y-3">
+                  <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-100 rounded w-full"></div>
+                  <div className="h-4 bg-gray-100 rounded w-1/2"></div>
+                  <div className="flex gap-3">
+                    <div className="h-3 bg-gray-100 rounded w-16"></div>
+                    <div className="h-3 bg-gray-100 rounded w-20"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -415,47 +440,56 @@ function News() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">📰 Latest News</h1>
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3">
+          {/* Title Row */}
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gray-900">News</h1>
             <button
               onClick={() => setShowSettings(!showSettings)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 transition-colors"
+              className={`p-2 rounded-lg transition-colors ${
+                showSettings
+                  ? 'bg-gray-100 text-gray-900'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+              aria-label="Configure news preferences"
             >
-              <span>⚙️</span>
-              <span>Configure</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
             </button>
           </div>
-          
-          {/* Topic Filters - Only show visible categories */}
-          <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
+
+          {/* Scope Filters — Segmented Control */}
+          <div className="inline-flex items-center rounded-lg bg-gray-100 p-0.5 mb-3">
             {NEWS_SCOPES.map((scopeOption) => (
               <button
                 key={scopeOption.id}
                 onClick={() => handleScopeChange(scopeOption.id)}
-                className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
                   activeScope === scopeOption.id
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {scopeOption.label}
+                <span className="text-xs sm:text-sm">{scopeOption.icon}</span>
+                <span>{scopeOption.label}</span>
               </button>
             ))}
           </div>
           {scopeFallbackMessage && (
-            <p className="text-xs text-amber-600 mt-2">{scopeFallbackMessage}</p>
+            <p className="text-xs text-amber-600 mb-2">{scopeFallbackMessage}</p>
           )}
 
-          {/* Topic Filters - Only show visible categories */}
-          <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
+          {/* Topic Filters */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
             <button
               onClick={() => handleFilterChange('all')}
-              className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
+              className={`px-3 py-1 rounded-full text-sm whitespace-nowrap transition-all duration-150 font-medium ${
                 activeFilter === 'all' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? 'bg-gray-900 text-white' 
+                  : 'bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'
               }`}
             >
               All
@@ -464,13 +498,14 @@ function News() {
               <button
                 key={category.id}
                 onClick={() => handleFilterChange(category.id)}
-                className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
+                className={`px-3 py-1 rounded-full text-sm whitespace-nowrap transition-all duration-150 font-medium flex items-center gap-1 ${
                   activeFilter === category.id 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    ? 'bg-gray-900 text-white' 
+                    : 'bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                {category.icon} {category.name}
+                <span>{category.icon}</span>
+                <span>{category.name}</span>
               </button>
             ))}
           </div>
@@ -479,32 +514,32 @@ function News() {
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="bg-white border-b border-gray-200">
-          <div className="max-w-4xl mx-auto px-4 py-6">
-            <h2 className="text-xl font-semibold mb-4">News Preferences</h2>
+        <div className="bg-white border-b border-gray-100">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+            <h2 className="text-lg font-semibold mb-5 text-gray-900">Preferences</h2>
             
             {/* Default Scope */}
-            <div className="py-3 border-b border-gray-200">
-              <h3 className="font-medium">Default News Scope</h3>
-              <p className="text-sm text-gray-500 mb-2">Choose which scope opens by default each time you load News</p>
+            <div className="py-3 border-b border-gray-100">
+              <h3 className="text-sm font-medium text-gray-900">Default Scope</h3>
+              <p className="text-xs text-gray-500 mb-2">Scope that loads when you open News</p>
               <select
                 value={preferences?.defaultScope || 'local'}
                 onChange={(e) => handleDefaultScopeChange(e.target.value)}
-                className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
               >
                 {NEWS_SCOPES.map((scopeOption) => (
                   <option key={scopeOption.id} value={scopeOption.id}>
-                    {scopeOption.label}
+                    {scopeOption.icon} {scopeOption.label}
                   </option>
                 ))}
               </select>
             </div>
             
             {/* Google News Toggle */}
-            <div className="flex items-center justify-between py-3 border-b border-gray-200">
+            <div className="flex items-center justify-between py-3 border-b border-gray-100">
               <div>
-                <h3 className="font-medium">Google News Integration</h3>
-                <p className="text-sm text-gray-500">Include Google News in your feed</p>
+                <h3 className="text-sm font-medium text-gray-900">Google News</h3>
+                <p className="text-xs text-gray-500">Include Google News results in your feed</p>
               </div>
               <button
                 onClick={handleToggleGoogleNews}
@@ -519,9 +554,9 @@ function News() {
             </div>
             
             {/* Category Visibility Configuration */}
-            <div className="py-3 border-b border-gray-200">
-              <h3 className="font-medium mb-3">Category Visibility</h3>
-              <p className="text-sm text-gray-500 mb-3">Toggle categories to show or hide them from your feed</p>
+            <div className="py-3 border-b border-gray-100">
+              <h3 className="text-sm font-medium text-gray-900 mb-1">Category Visibility</h3>
+              <p className="text-xs text-gray-500 mb-3">Show or hide categories from your feed</p>
               <div className="flex flex-wrap gap-2">
                 {ALL_CATEGORIES.map(category => {
                   const isHidden = hiddenCategories.includes(category.id);
@@ -529,10 +564,10 @@ function News() {
                     <button
                       key={category.id}
                       onClick={() => handleToggleCategory(category.id)}
-                      className={`px-3 py-1.5 rounded-full text-sm flex items-center gap-1.5 transition-colors ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all duration-150 border ${
                         isHidden 
-                          ? 'bg-gray-200 text-gray-500 hover:bg-gray-300'
-                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                          ? 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
+                          : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
                       }`}
                     >
                       <span>{category.icon}</span>
@@ -549,18 +584,18 @@ function News() {
             </div>
             
             {/* Followed Keywords */}
-            <div className="py-3 border-b border-gray-200">
-              <h3 className="font-medium mb-3">Followed Keywords</h3>
+            <div className="py-3 border-b border-gray-100">
+              <h3 className="text-sm font-medium text-gray-900 mb-1">Followed Keywords</h3>
               <div className="flex flex-wrap gap-2 mb-3">
                 {preferences?.followedKeywords?.map((item) => (
                   <span 
                     key={item.keyword}
-                    className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full flex items-center gap-2"
+                    className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5"
                   >
                     {item.keyword}
                     <button
                       onClick={() => handleRemoveKeyword(item.keyword)}
-                      className="text-gray-400 hover:text-red-500"
+                      className="text-gray-400 hover:text-red-500 transition-colors"
                     >
                       ×
                     </button>
@@ -573,11 +608,11 @@ function News() {
                   value={newKeyword}
                   onChange={(e) => setNewKeyword(e.target.value)}
                   placeholder="Add keyword (e.g., AI, Bitcoin)"
-                  className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  className="px-4 py-1.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   Add
                 </button>
@@ -585,20 +620,20 @@ function News() {
             </div>
 
             {/* RSS Source Catalog + Custom Source Input */}
-            <div className="py-3 border-b border-gray-200">
-              <h3 className="font-medium mb-3">RSS Sources & Feed Catalog</h3>
-              <p className="text-sm text-gray-500 mb-3">
-                Choose which catalog sources are enabled and add your own feed links to fully customize your news mix.
+            <div className="py-3 border-b border-gray-100">
+              <h3 className="text-sm font-medium text-gray-900 mb-1">RSS Sources</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Manage catalog sources and add your own feeds.
               </p>
               <div className="space-y-2 mb-4">
                 {topUsedSources.length > 0 && (
-                  <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
-                    <p className="text-sm font-medium text-blue-800 mb-2">Top 10 active RSS sources</p>
+                  <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                    <p className="text-xs font-medium text-blue-800 mb-2">Top active sources</p>
                     <div className="space-y-1">
                       {topUsedSources.map((source, index) => (
                         <div key={source._id} className="text-xs text-blue-700 flex items-center justify-between gap-2">
                           <span className="truncate">{index + 1}. {source.name}</span>
-                          <span className="shrink-0">{source.fetchCount || 0} fetches</span>
+                          <span className="shrink-0 text-blue-500">{source.fetchCount || 0} fetches</span>
                         </div>
                       ))}
                     </div>
@@ -611,21 +646,21 @@ function News() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate">{source.name}</p>
                         <p className="text-xs text-gray-500">
-                          {getSourceTypeLabel(source.type)} • {source.category || 'general'}
+                          {getSourceTypeLabel(source.type)} · {source.category || 'general'}
                         </p>
                       </div>
                       <button
                         onClick={() => handleToggleSource(source._id, enabled)}
-                        className={`w-12 h-6 rounded-full transition-colors shrink-0 ${enabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+                        className={`w-10 h-5 rounded-full transition-colors shrink-0 ${enabled ? 'bg-blue-600' : 'bg-gray-300'}`}
                         aria-label={`Toggle ${source.name}`}
                       >
-                        <div className={`w-5 h-5 bg-white rounded-full transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
                       </button>
                     </div>
                   );
                 })}
                 {availableSources.length === 0 && (
-                  <p className="text-sm text-gray-500">No shared sources are available yet.</p>
+                  <p className="text-xs text-gray-500">No shared sources available yet.</p>
                 )}
               </div>
               <form onSubmit={handleAddSource} className="space-y-2">
@@ -635,19 +670,19 @@ function News() {
                     value={newSource.name}
                     onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
                     placeholder="Source name"
-                    className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                    className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   />
                   <input
                     type="url"
                     value={newSource.url}
                     onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
                     placeholder="Feed URL"
-                    className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                    className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   />
                   <select
                     value={newSource.type}
                     onChange={(e) => setNewSource({ ...newSource, type: e.target.value })}
-                    className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                    className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   >
                     <option value="rss">RSS / Atom</option>
                     <option value="podcast">Podcast</option>
@@ -660,18 +695,18 @@ function News() {
                     value={newSource.category}
                     onChange={(e) => setNewSource({ ...newSource, category: e.target.value })}
                     placeholder="Category (news, sports, podcast)"
-                    className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                    className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   />
                 </div>
-                <p className="text-xs text-gray-500">
-                  Format hint: {SOURCE_FORMAT_GUIDANCE[newSource.type] || SOURCE_FORMAT_GUIDANCE.rss}
+                <p className="text-xs text-gray-400">
+                  {SOURCE_FORMAT_GUIDANCE[newSource.type] || SOURCE_FORMAT_GUIDANCE.rss}
                 </p>
                 {sourceStatusMessage && (
                   <p className="text-xs text-gray-600">{sourceStatusMessage}</p>
                 )}
                 <button
                   type="submit"
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  className="w-full px-4 py-1.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   Add Source
                 </button>
@@ -680,9 +715,9 @@ function News() {
             
             {/* Location Preferences */}
             <div className="py-3">
-              <h3 className="font-medium mb-3">Location Preferences</h3>
-              <p className="text-sm text-gray-500 mb-3">
-                Add locations you want news for. Your primary location drives local/regional news; additional locations expand your coverage.
+              <h3 className="text-sm font-medium text-gray-900 mb-1">Locations</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Add locations for local and regional news coverage.
               </p>
               <div className="space-y-2 mb-3">
                 {preferences?.locations?.map((loc) => {
@@ -692,13 +727,13 @@ function News() {
                       key={loc._id}
                       className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
                     >
-                      <span className="text-gray-700">
+                      <span className="text-sm text-gray-700">
                         {parts.join(', ') || 'Unknown location'}
                         {loc.isPrimary && <span className="ml-2 text-xs text-blue-600 font-medium">Primary</span>}
                       </span>
                       <button
                         onClick={() => handleRemoveLocation(loc._id)}
-                        className="text-gray-400 hover:text-red-500"
+                        className="text-gray-400 hover:text-red-500 transition-colors"
                       >
                         ×
                       </button>
@@ -706,45 +741,45 @@ function News() {
                   );
                 })}
                 {(!preferences?.locations || preferences.locations.length === 0) && (
-                  <p className="text-sm text-gray-500">No locations added yet. Add your zip code or city to get local news.</p>
+                  <p className="text-xs text-gray-500">No locations added. Add a zip code or city for local news.</p>
                 )}
               </div>
               
               {/* Add Location Form */}
               <form onSubmit={handleAddLocation} className="space-y-2">
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <input
                     type="text"
                     value={newLocation.city}
                     onChange={(e) => setNewLocation({ ...newLocation, city: e.target.value })}
                     placeholder="City"
-                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                    className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   />
                   <input
                     type="text"
                     value={newLocation.zipCode}
                     onChange={(e) => setNewLocation({ ...newLocation, zipCode: e.target.value })}
-                    placeholder="ZIP / Postal"
-                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                    placeholder="ZIP"
+                    className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   />
                   <input
                     type="text"
                     value={newLocation.state}
                     onChange={(e) => setNewLocation({ ...newLocation, state: e.target.value })}
                     placeholder="State"
-                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                    className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   />
                   <input
                     type="text"
                     value={newLocation.country}
                     onChange={(e) => setNewLocation({ ...newLocation, country: e.target.value })}
                     placeholder="Country"
-                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                    className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  className="w-full px-4 py-1.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   Add Location
                 </button>
@@ -755,74 +790,70 @@ function News() {
       )}
 
       {/* News Feed */}
-      <div className="max-w-7xl mx-auto px-4 py-6 lg:grid lg:grid-cols-12 lg:gap-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:grid lg:grid-cols-12 lg:gap-8">
         <div className="lg:col-span-8">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
             {error}
           </div>
         )}
         
         {articles.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No news articles available</p>
-            <p className="text-gray-400 mt-2">Try adjusting your filters or preferences</p>
+          <div className="text-center py-16">
+            <div className="text-4xl mb-3">📭</div>
+            <p className="text-gray-500 font-medium">No articles found</p>
+            <p className="text-gray-400 text-sm mt-1">Try adjusting your filters or preferences</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {articles.map((article) => (
               <article 
                 key={article._id}
-                className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                className="bg-white rounded-xl overflow-hidden hover:shadow-md transition-all duration-200 border border-gray-100"
               >
                 <a 
                   href={article.url} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="block p-4"
+                  className="flex flex-col sm:flex-row gap-0 sm:gap-4 p-0 sm:p-4"
                 >
                   {article.imageUrl && (
-                    <div className="mb-3 rounded-lg overflow-hidden">
+                    <div className="sm:w-40 sm:h-28 shrink-0 overflow-hidden sm:rounded-lg">
                       <img 
                         src={article.imageUrl} 
                         alt=""
-                        className="w-full h-48 object-cover"
-                        onError={(e) => { e.target.style.display = 'none'; }}
+                        className="w-full h-40 sm:h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => { e.target.parentElement.style.display = 'none'; }}
                       />
                     </div>
                   )}
                   
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <h2 className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors">
-                        {article.title}
-                      </h2>
-                      
-                      {article.description && (
-                        <p className="mt-2 text-gray-600 line-clamp-2">
-                          {article.description.length > 200 
-                            ? article.description.substring(0, 200) + '...'
-                            : article.description
-                          }
-                        </p>
+                  <div className="flex-1 min-w-0 p-4 sm:p-0">
+                    <h2 className="text-base font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+                      {article.title}
+                    </h2>
+                    
+                    {article.description && (
+                      <p className="mt-1.5 text-sm text-gray-500 line-clamp-2 leading-relaxed">
+                        {article.description.length > 180 
+                          ? article.description.substring(0, 180) + '...'
+                          : article.description
+                        }
+                      </p>
+                    )}
+                    
+                    <div className="mt-2.5 flex items-center gap-2 text-xs text-gray-400">
+                      <span className="font-medium text-gray-500">{article.source}</span>
+                      <span>·</span>
+                      <span>{formatRelativeTime(article.publishedAt)}</span>
+                      {article.localityLevel && article.localityLevel !== 'global' && (
+                        <>
+                          <span>·</span>
+                          <span className="text-blue-500 font-medium">{article.localityLevel}</span>
+                        </>
                       )}
-                      
-                      <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <span>{getSourceTypeLabel(article.sourceType)}</span>
-                          <span>•</span>
-                          <span>{article.source}</span>
-                        </span>
-                        <span>•</span>
-                        <span>{formatRelativeTime(article.publishedAt)}</span>
-                        
-                        {article.localityLevel && article.localityLevel !== 'global' && (
-                          <>
-                            <span>•</span>
-                            <span className="text-blue-600">{article.localityLevel}</span>
-                          </>
-                        )}
-                      </div>
+                      <span className="ml-auto text-gray-300">{getSourceTypeLabel(article.sourceType)}</span>
                     </div>
                   </div>
                 </a>
@@ -837,54 +868,59 @@ function News() {
             <button
               onClick={loadMore}
               disabled={loading}
-              className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors disabled:opacity-50"
+              className="px-8 py-2 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 text-sm font-medium rounded-lg transition-all duration-150 disabled:opacity-50 hover:shadow-sm"
             >
-              {loading ? 'Loading...' : 'Load More'}
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-3 h-3 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></span>
+                  Loading…
+                </span>
+              ) : 'Load More'}
             </button>
           </div>
         )}
         
         {/* Pagination Info */}
-        <div className="mt-4 text-center text-sm text-gray-500">
-          Showing {articles.length} of {pagination.total} articles
+        <div className="mt-4 text-center text-xs text-gray-400">
+          {articles.length} of {pagination.total} articles
         </div>
         </div>
 
         <aside className="mt-6 lg:mt-0 lg:col-span-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sticky top-24">
-            <h2 className="text-lg font-semibold mb-3">Promoted News</h2>
+          <div className="bg-white rounded-xl border border-gray-100 p-4 sticky top-20">
+            <h2 className="text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wide">Trending</h2>
             {promotedLoading ? (
               <div className="space-y-3">
                 {[...Array(4)].map((_, index) => (
-                  <div key={index} className="animate-pulse border-b border-gray-100 pb-3">
-                    <div className="h-3 bg-gray-200 rounded w-3/4 mb-2" />
-                    <div className="h-2 bg-gray-200 rounded w-1/2" />
+                  <div key={index} className="animate-pulse border-b border-gray-50 pb-3">
+                    <div className="h-3 bg-gray-100 rounded w-3/4 mb-2" />
+                    <div className="h-2 bg-gray-100 rounded w-1/2" />
                   </div>
                 ))}
               </div>
             ) : promotedError ? (
-              <p className="text-sm text-red-600">{promotedError}</p>
+              <p className="text-xs text-red-500">{promotedError}</p>
             ) : promotedArticles.length === 0 ? (
-              <p className="text-sm text-gray-500">No promoted stories available right now.</p>
+              <p className="text-xs text-gray-400">No trending stories right now.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {promotedArticles.map((item) => (
                   <a
                     key={item.article._id}
                     href={item.article.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block border-b border-gray-100 pb-3 last:border-b-0 last:pb-0 hover:bg-gray-50 rounded px-1"
+                    className="block py-2.5 border-b border-gray-50 last:border-b-0 last:pb-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.article.title}</p>
-                      <span className="text-xs font-semibold bg-purple-100 text-purple-700 px-2 py-1 rounded whitespace-nowrap">
-                        Viral {Math.round(item.viralScore || 0)}
+                    <p className="text-sm font-medium text-gray-900 line-clamp-2 leading-snug">{item.article.title}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xs text-gray-400">
+                        {item.article.source} · {formatRelativeTime(item.article.publishedAt)}
+                      </span>
+                      <span className="ml-auto text-xs font-medium bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">
+                        🔥 {Math.round(item.viralScore || 0)}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {item.article.source} • {formatRelativeTime(item.article.publishedAt)}
-                    </p>
                   </a>
                 ))}
               </div>
