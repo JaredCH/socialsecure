@@ -414,6 +414,10 @@ function App() {
         <nav className="bg-white shadow-md p-4">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
+            <span id="nav-scroll-hint" className="sr-only">
+              Scrollable navigation links. Focus this row and use Left/Right arrows to scroll, Home/End to jump to the
+              start or end.
+            </span>
             <div
               className="flex flex-nowrap items-center gap-3 overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               tabIndex={0}
@@ -452,10 +456,6 @@ function App() {
                 </>
               )}
             </div>
-            <span id="nav-scroll-hint" className="sr-only">
-              Scrollable navigation links. Focus this row and use Left/Right arrows to scroll, Home/End to jump to the
-              start or end.
-            </span>
           </div>
         </nav>
 
