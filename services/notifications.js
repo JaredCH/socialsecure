@@ -42,7 +42,8 @@ const getUserNotificationPreferences = (user) => {
     follows: { inApp: true, email: false, push: false },
     messages: { inApp: true, email: false, push: false },
     system: { inApp: true, email: true, push: false },
-    securityAlerts: { inApp: true, email: true, push: false }
+    securityAlerts: { inApp: true, email: true, push: false },
+    realtime: { enabled: true, typingIndicators: true, presence: true }
   };
 
   const candidate = user?.notificationPreferences;
@@ -53,6 +54,19 @@ const getUserNotificationPreferences = (user) => {
   const normalized = { ...defaults };
   for (const key of Object.keys(defaults)) {
     if (!candidate[key] || typeof candidate[key] !== 'object') continue;
+    if (key === 'realtime') {
+      normalized[key] = {
+        enabled: typeof candidate[key].enabled === 'boolean' ? candidate[key].enabled : defaults[key].enabled,
+        typingIndicators: typeof candidate[key].typingIndicators === 'boolean'
+          ? candidate[key].typingIndicators
+          : defaults[key].typingIndicators,
+        presence: typeof candidate[key].presence === 'boolean'
+          ? candidate[key].presence
+          : defaults[key].presence
+      };
+      continue;
+    }
+
     normalized[key] = {
       inApp: typeof candidate[key].inApp === 'boolean' ? candidate[key].inApp : defaults[key].inApp,
       email: typeof candidate[key].email === 'boolean' ? candidate[key].email : defaults[key].email,

@@ -17,6 +17,16 @@ const createSelectLean = (value) => ({
   })
 });
 
+const createQueryResult = (value) => ({
+  select: jest.fn().mockResolvedValue(value),
+  then: (resolve, reject) => Promise.resolve(value).then(resolve, reject),
+  catch: (reject) => Promise.resolve(value).catch(reject)
+});
+
+const createLeanResult = (value) => ({
+  lean: jest.fn().mockResolvedValue(value)
+});
+
 const mockChatMessage = jest.fn();
 mockChatMessage.findOne = jest.fn();
 mockChatMessage.getRoomMessages = jest.fn();
@@ -25,9 +35,12 @@ mockChatMessage.getRoomMessagesByCursor = jest.fn();
 jest.mock('../models/ChatRoom', () => mockChatRoom);
 jest.mock('../models/ChatMessage', () => mockChatMessage);
 jest.mock('../models/DeviceKey', () => mockDeviceKey);
-jest.mock('../models/BlockList', () => mockBlockList);
 jest.mock('../models/RoomKeyPackage', () => mockRoomKeyPackage);
 jest.mock('../models/User', () => mockUser);
+jest.mock('../models/BlockList', () => mockBlockList);
+jest.mock('../services/realtime', () => ({
+  emitChatMessage: jest.fn()
+}));
 
 const jwt = require('jsonwebtoken');
 const chatRouter = require('./chat');
@@ -60,13 +73,14 @@ describe('Chat E2EE boundary hardening', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'user-1' }));
-    mockUser.findById.mockImplementation(() => ({
-      select: jest.fn().mockResolvedValue({ onboardingStatus: 'completed' })
+    mockUser.findById.mockImplementation(() => createQueryResult({
+      _id: 'user-1',
+      onboardingStatus: 'completed',
+      city: 'City',
+      location: { coordinates: [0, 0] }
     }));
     mockBlockList.findOne.mockReturnValue({
-      select: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue(null)
-      })
+      select: jest.fn().mockReturnValue(createLeanResult(null))
     });
   });
 
@@ -106,10 +120,8 @@ describe('Chat E2EE boundary hardening', () => {
     const app = buildApp();
 
     mockChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', incrementMessageCount: jest.fn(), addMember: jest.fn() });
-    mockUser.findById
-      .mockImplementationOnce(() => ({ select: jest.fn().mockResolvedValue({ onboardingStatus: 'completed' }) }))
-      .mockResolvedValue({ _id: 'user-1', city: 'City', location: { coordinates: [0, 0] } });
-    mockDeviceKey.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
+    mockUser.findById.mockImplementation(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] } }));
+    mockDeviceKey.findOne.mockReturnValue(createLeanResult(null));
 
     const response = await request(app)
       .post('/api/chat/rooms/room-1/messages/e2ee')
@@ -124,10 +136,8 @@ describe('Chat E2EE boundary hardening', () => {
     const app = buildApp();
 
     mockChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', incrementMessageCount: jest.fn(), addMember: jest.fn() });
-    mockUser.findById
-      .mockImplementationOnce(() => ({ select: jest.fn().mockResolvedValue({ onboardingStatus: 'completed' }) }))
-      .mockResolvedValue({ _id: 'user-1', city: 'City', location: { coordinates: [0, 0] } });
-    mockDeviceKey.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue({ _id: 'device-record' }) });
+    mockUser.findById.mockImplementation(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] } }));
+    mockDeviceKey.findOne.mockReturnValue(createLeanResult({ _id: 'device-record' }));
     mockChatMessage.findOne.mockReturnValue(createSelectLean({ _id: 'existing-message' }));
 
     const response = await request(app)
@@ -165,7 +175,7 @@ describe('Chat E2EE boundary hardening', () => {
     };
 
     mockChatRoom.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'room-1' }) });
-    mockDeviceKey.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue({ _id: 'device-record' }) });
+    mockDeviceKey.findOne.mockReturnValue(createLeanResult({ _id: 'device-record' }));
 
     mockChatMessage.findOne.mockImplementation((query) => {
       if (query && query._id === 'message-1' && query.roomId === 'room-1') {
@@ -245,7 +255,7 @@ describe('Chat E2EE boundary hardening', () => {
     };
 
     mockChatRoom.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'room-1' }) });
-    mockDeviceKey.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
+    mockDeviceKey.findOne.mockReturnValue(createLeanResult(null));
     mockChatMessage.findOne.mockImplementation((query) => {
       if (query && query._id === 'message-3' && query.roomId === 'room-1') {
         return Promise.resolve(legacyMessage);
@@ -300,10 +310,8 @@ describe('Chat E2EE boundary hardening', () => {
     };
 
     mockChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', incrementMessageCount: jest.fn(), addMember: jest.fn() });
-    mockUser.findById
-      .mockImplementationOnce(() => ({ select: jest.fn().mockResolvedValue({ onboardingStatus: 'completed' }) }))
-      .mockResolvedValue({ _id: 'user-1', city: 'City', location: { coordinates: [0, 0] } });
-    mockDeviceKey.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue({ _id: 'device-record' }) });
+    mockUser.findById.mockImplementation(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] } }));
+    mockDeviceKey.findOne.mockReturnValue(createLeanResult({ _id: 'device-record' }));
     mockChatMessage.findOne.mockReturnValue(createSelectLean(null));
     mockChatMessage.checkRateLimit = jest.fn().mockResolvedValue({ allowed: true, remaining: 1 });
     mockChatMessage.mockImplementation(() => savedDoc);

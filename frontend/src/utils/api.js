@@ -236,6 +236,8 @@ export const universalAPI = {
   resendInvitation: (id) => api.post(`/universal/invitations/${id}/resend`),
   // Revoke invitation
   revokeInvitation: (id, reason = '') => api.post(`/universal/invitations/${id}/revoke`, { reason }),
+  // Qualify and reward invitation
+  qualifyInvitation: (id) => api.post(`/universal/invitations/${id}/qualify`),
   // Register by referral code
   registerByCode: (data) => api.post('/universal/register-by-code', data),
 };

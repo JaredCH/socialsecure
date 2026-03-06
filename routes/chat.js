@@ -13,6 +13,7 @@ const ChatConversation = require('../models/ChatConversation');
 const ConversationMessage = require('../models/ConversationMessage');
 const User = require('../models/User');
 const { createNotification } = require('../services/notifications');
+const { emitChatMessage } = require('../services/realtime');
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -624,9 +625,9 @@ router.post('/rooms/:roomId/messages', [
     }
     
     // Check rate limit for non-resident cities
-    const userCity = user.city || '';
-    const roomCity = room.city || '';
-    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userCity, roomCity);
+    const userLocationKey = user.zipCode || user.city || '';
+    const roomLocationKey = room.zipCode || room.city || '';
+    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userLocationKey, roomLocationKey);
     
     if (!rateLimitCheck.allowed) {
       return res.status(429).json({ 
@@ -644,7 +645,7 @@ router.post('/rooms/:roomId/messages', [
       isEncrypted: !!encryptedContent,
       messageType: normalizeMessageType(messageType),
       commandData: sanitizeCommandData(commandData),
-      rateLimitKey: userCity === roomCity ? null : `${userId}:${roomId}:external`
+      rateLimitKey: userLocationKey === roomLocationKey ? null : `${userId}:${roomId}:external`
     };
     
     // Add location if provided
@@ -674,12 +675,15 @@ router.post('/rooms/:roomId/messages', [
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
     
     // Broadcast message via WebSocket (handled in server.js)
-    // The WebSocket server will handle real-time broadcasting
+    emitChatMessage({
+      userIds: room.members,
+      message: message.toPublicMessage()
+    });
     
     res.status(201).json({
       success: true,
       message: 'Message sent successfully',
-      message: message.toPublicMessage(),
+      message: publicMessage,
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining
@@ -768,9 +772,9 @@ router.post('/rooms/:roomId/messages/e2ee', [
       return res.status(409).json({ error: 'Duplicate clientMessageId for sender device' });
     }
 
-    const userCity = user.city || '';
-    const roomCity = room.city || '';
-    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userCity, roomCity);
+    const userLocationKey = user.zipCode || user.city || '';
+    const roomLocationKey = room.zipCode || room.city || '';
+    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userLocationKey, roomLocationKey);
 
     if (!rateLimitCheck.allowed) {
       return res.status(429).json({
@@ -787,7 +791,7 @@ router.post('/rooms/:roomId/messages/e2ee', [
       isEncrypted: true,
       messageType: normalizeMessageType(messageType),
       commandData: sanitizeCommandData(commandData),
-      rateLimitKey: userCity === roomCity ? null : `${userId}:${roomId}:external`,
+      rateLimitKey: userLocationKey === roomLocationKey ? null : `${userId}:${roomId}:external`,
       e2ee: {
         enabled: true,
         migrationFlag: 'native-e2ee',
@@ -827,10 +831,15 @@ router.post('/rooms/:roomId/messages/e2ee', [
     const senderLabel = user.username || user.realName || 'Someone';
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
 
+    emitChatMessage({
+      userIds: room.members,
+      message: message.toPublicMessage()
+    });
+
     return res.status(201).json({
       success: true,
       message: 'E2EE message envelope accepted',
-      messageData: message.toPublicMessage(),
+      messageData: publicMessage,
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining
@@ -1456,6 +1465,10 @@ router.post('/rooms/:roomId/join', authenticateToken, async (req, res) => {
       });
       await room.incrementMessageCount();
       systemMessage = event.toPublicMessage();
+      emitChatMessage({
+        userIds: room.members,
+        message: systemMessage
+      });
     }
     
     res.json({
@@ -1510,6 +1523,10 @@ router.post('/rooms/:roomId/leave', authenticateToken, async (req, res) => {
       });
       await room.incrementMessageCount();
       systemMessage = event.toPublicMessage();
+      emitChatMessage({
+        userIds: [userId, ...(Array.isArray(room.members) ? room.members : [])],
+        message: systemMessage
+      });
     }
     
     res.json({
@@ -1591,7 +1608,7 @@ router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
     
     // Get all rooms the user is now a member of (including existing ones)
     const userRooms = await ChatRoom.find({ members: userId })
-      .select('_id name type city state country location radius memberCount lastActivity')
+      .select('_id name type city state country zipCode location radius memberCount lastActivity')
       .lean();
     
     return res.json({
@@ -1606,6 +1623,7 @@ router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
         _id: room._id,
         name: room.name,
         type: room.type,
+        zipCode: room.zipCode,
         city: room.city,
         state: room.state,
         country: room.country,
@@ -1654,6 +1672,7 @@ router.get('/rooms/nearby', authenticateToken, async (req, res) => {
         _id: room._id,
         name: room.name,
         type: room.type,
+        zipCode: room.zipCode,
         city: room.city,
         state: room.state,
         country: room.country,

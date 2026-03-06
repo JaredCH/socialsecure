@@ -1,17 +1,64 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { authAPI, chatAPI, userAPI } from '../utils/api';
+import { authAPI, chatAPI } from '../utils/api';
+import {
+  parseSlashCommand,
+  runSlashCommand,
+  UNKNOWN_COMMAND_HELP,
+  SUPPORTED_COMMANDS
+} from '../utils/chatCommands';
+import {
+  createWrappedRoomKeyPackage,
+  decryptEnvelope,
+  encryptEnvelope,
+  getCacheLimit,
+  ingestWrappedRoomKeyPackage,
+  setBoundedPlaintextCache,
+  unlockOrCreateVault
+} from '../utils/e2ee';
+import EncryptionUnlockModal from '../components/EncryptionUnlockModal';
+import TypingIndicator from '../components/TypingIndicator';
+import {
+  emitTypingStart,
+  emitTypingStop,
+  getRealtimeSocket,
+  joinRealtimeRoom,
+  leaveRealtimeRoom,
+  onChatMessage,
+  onTyping
+} from '../utils/realtime';
 
-const CHANNELS = [
-  { key: 'zip', label: 'Zip Rooms' },
-  { key: 'dm', label: 'Direct Messages' },
-  { key: 'profile', label: 'Profile Threads' }
-];
+const MESSAGE_PAGE_SIZE = {
+  INITIAL_LOAD: 500,
+  OLDER_LOAD: 250
+};
+const MAX_MESSAGES_IN_MEMORY = 1200;
+const MAX_VISIBLE_DECRYPT = 120;
+const SCROLL_BOTTOM_THRESHOLD = 48;
+const CHAT_POLL_INTERVAL_MS = 15000;
+const TYPING_TIMEOUT_MS = 900;
+const REMOTE_TYPING_TTL_MS = 3000;
 
-const getConversationLabel = (conversation) => {
-  if (!conversation) return '';
-  if (conversation.type === 'zip-room') {
-    return conversation.title || (conversation.zipCode ? `Zip ${conversation.zipCode}` : 'Zip room');
+const getMessageId = (message) => String(message?._id || `${message?.e2ee?.clientMessageId || 'msg'}:${message?.createdAt || ''}`);
+
+const normalizeRoomLabel = (room) => {
+  if (!room) return '';
+  return room.name || [room.city, room.state].filter(Boolean).join(', ') || String(room._id);
+};
+
+const pad2 = (value) => String(value).padStart(2, '0');
+
+const formatCompactTimestamp = (timestamp) => {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '--:--';
+
+  const now = new Date();
+  const isSameDay = date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth()
+    && date.getDate() === now.getDate();
+
+  if (isSameDay) {
+    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
   }
   if (conversation.type === 'dm') {
     return conversation.peer?.username
@@ -42,6 +89,30 @@ function Chat() {
   const [messagesError, setMessagesError] = useState('');
   const [composerValue, setComposerValue] = useState('');
   const [sending, setSending] = useState(false);
+  const [nickByUserId, setNickByUserId] = useState({});
+  const [localNickname, setLocalNickname] = useState('');
+  const [useMonospace, setUseMonospace] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [replyToUsername, setReplyToUsername] = useState('');
+
+  const [decrypting, setDecrypting] = useState(false);
+  const [decryptErrors, setDecryptErrors] = useState({});
+  const [plaintextById, setPlaintextById] = useState({});
+  const [rateLimitInfo, setRateLimitInfo] = useState(null);
+  const plaintextCacheRef = useRef(new Map());
+  const latestPackageSyncByRoomRef = useRef({});
+  const messageViewportRef = useRef(null);
+  const messageCountRef = useRef(0);
+  const localTypingTimeoutRef = useRef(null);
+  const remoteTypingTimeoutsRef = useRef({});
+
+  const isUnlocked = Boolean(session);
+  const realtimeEnabled = profile?.realtimePreferences?.enabled !== false;
+  const activeRoom = useMemo(
+    () => rooms.find((room) => String(room._id) === String(activeRoomId)) || null,
+    [rooms, activeRoomId]
+  );
 
   const [dmQuery, setDmQuery] = useState('');
   const [dmSearchLoading, setDmSearchLoading] = useState(false);
@@ -62,50 +133,21 @@ function Chat() {
     return Array.isArray(hubData.profile) ? hubData.profile : [];
   }, [activeChannel, hubData]);
 
-  const activeConversation = useMemo(
-    () => conversationList.find((conversation) => String(conversation._id) === String(activeConversationId)) || null,
-    [conversationList, activeConversationId]
-  );
-
-  const applyDefaultConversationSelection = (channelKey, data) => {
-    if (channelKey === 'zip') {
-      const next = data?.zip?.current || (data?.zip?.nearby || [])[0] || null;
-      setActiveConversationId(next ? String(next._id) : '');
-      return;
-    }
-    if (channelKey === 'dm') {
-      const next = (data?.dm || [])[0] || null;
-      setActiveConversationId(next ? String(next._id) : '');
-      return;
-    }
-    const next = (data?.profile || [])[0] || null;
-    setActiveConversationId(next ? String(next._id) : '');
+  const scrollToBottom = () => {
+    const viewport = messageViewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTop = viewport.scrollHeight;
+    setUnreadCount(0);
+    setIsAtBottom(true);
   };
 
-  const refreshHub = async (channelToKeep = activeChannel) => {
-    const [{ data: me }, { data: conversationsData }] = await Promise.all([
-      authAPI.getProfile(),
-      chatAPI.getConversations()
-    ]);
-
-    setProfile(me.user || null);
-    const nextData = conversationsData?.conversations || { zip: { current: null, nearby: [] }, dm: [], profile: [] };
-    setHubData(nextData);
-
-    const stillExists = (() => {
-      if (!activeConversationId) return false;
-      if (channelToKeep === 'zip') {
-        const candidates = [nextData?.zip?.current, ...(nextData?.zip?.nearby || [])].filter(Boolean);
-        return candidates.some((conversation) => String(conversation._id) === String(activeConversationId));
-      }
-      if (channelToKeep === 'dm') {
-        return (nextData?.dm || []).some((conversation) => String(conversation._id) === String(activeConversationId));
-      }
-      return (nextData?.profile || []).some((conversation) => String(conversation._id) === String(activeConversationId));
-    })();
-
-    if (!stillExists) {
-      applyDefaultConversationSelection(channelToKeep, nextData);
+  const getDisplayName = (message) => {
+    const messageUserId = message?.userId?._id ? String(message.userId._id) : null;
+    if (messageUserId && nickByUserId[messageUserId]) {
+      return nickByUserId[messageUserId];
+    }
+    if (profile?._id && messageUserId && String(profile._id) === messageUserId && localNickname) {
+      return localNickname;
     }
   };
 
@@ -183,18 +225,354 @@ function Chat() {
     }
   };
 
-  const runDmSearch = async (event) => {
-    event.preventDefault();
-    if (!dmQuery.trim() || dmQuery.trim().length < 2) {
-      setDmResults([]);
+  const fetchMessagesPage = async (roomId, cursor, reset = false) => {
+    const viewport = messageViewportRef.current;
+    const preserveScroll = !reset && Boolean(cursor) && Boolean(viewport);
+    const prevScrollHeight = preserveScroll ? viewport.scrollHeight : 0;
+    const prevScrollTop = preserveScroll ? viewport.scrollTop : 0;
+
+    if (preserveScroll) {
+      setOlderLoading(true);
+    } else {
+      setMessagesLoading(true);
+    }
+
+    try {
+      const response = await chatAPI.getMessagesByCursor(
+        roomId,
+        cursor,
+        reset ? MESSAGE_PAGE_SIZE.INITIAL_LOAD : MESSAGE_PAGE_SIZE.OLDER_LOAD
+      );
+      const batch = Array.isArray(response.data?.messages) ? response.data.messages : [];
+      const pagination = response.data?.pagination || {};
+
+      setMessages((prev) => {
+        const combined = reset ? batch : [...batch, ...prev];
+        if (combined.length <= MAX_MESSAGES_IN_MEMORY) return combined;
+        return combined.slice(combined.length - MAX_MESSAGES_IN_MEMORY);
+      });
+
+      setHasMore(Boolean(pagination.hasMore));
+      setNextCursor(pagination.nextCursor || null);
+
+      if (preserveScroll && messageViewportRef.current) {
+        requestAnimationFrame(() => {
+          const currentViewport = messageViewportRef.current;
+          if (!currentViewport) return;
+          const nextScrollHeight = currentViewport.scrollHeight;
+          currentViewport.scrollTop = prevScrollTop + (nextScrollHeight - prevScrollHeight);
+        });
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to load encrypted messages.');
+    } finally {
+      setMessagesLoading(false);
+      setOlderLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!activeRoomId) {
+      setMessages([]);
+      setPlaintextById({});
+      setDecryptErrors({});
+      setNextCursor(null);
+      setHasMore(true);
+      setUnreadCount(0);
+      setTypingLabelsByRoom({});
       return;
     }
 
-    setDmSearchLoading(true);
+    setMessages([]);
+    setPlaintextById({});
+    setDecryptErrors({});
+    setNextCursor(null);
+    setHasMore(true);
+    setUnreadCount(0);
+    fetchMessagesPage(activeRoomId, null, true);
+
+    if (session) {
+      loadKeyPackages(activeRoomId, session).catch(() => {
+        toast.error('Unable to sync room key packages.');
+      });
+    }
+  }, [activeRoomId]);
+
+  useEffect(() => {
+    if (!profile?._id || !realtimeEnabled) {
+      return undefined;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return undefined;
+    }
+
+    getRealtimeSocket({ token, userId: profile._id });
+
+    const offChatMessage = onChatMessage((payload) => {
+      const incoming = payload?.message;
+      if (!incoming?._id) return;
+
+      if (String(incoming.roomId) !== String(activeRoomId)) {
+        return;
+      }
+
+      appendMessage(incoming);
+    });
+
+    const offTyping = onTyping((payload) => {
+      if (payload?.scope !== 'chat' || String(payload?.targetId) !== String(activeRoomId) || !payload?.userId) {
+        return;
+      }
+
+      const timeoutKey = String(payload.userId);
+      if (payload.status === 'stop') {
+        const timeoutId = remoteTypingTimeoutsRef.current[timeoutKey];
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+          delete remoteTypingTimeoutsRef.current[timeoutKey];
+        }
+        setTypingLabelsByRoom((prev) => {
+          const next = { ...(prev[String(activeRoomId)] || {}) };
+          delete next[timeoutKey];
+          return {
+            ...prev,
+            [String(activeRoomId)]: next
+          };
+        });
+        return;
+      }
+
+      setTypingLabelsByRoom((prev) => ({
+        ...prev,
+        [String(activeRoomId)]: {
+          ...(prev[String(activeRoomId)] || {}),
+          [timeoutKey]: payload.label || 'Someone'
+        }
+      }));
+
+      const existingTimeout = remoteTypingTimeoutsRef.current[timeoutKey];
+      if (existingTimeout) {
+        window.clearTimeout(existingTimeout);
+      }
+      remoteTypingTimeoutsRef.current[timeoutKey] = window.setTimeout(() => {
+        setTypingLabelsByRoom((prev) => {
+          const next = { ...(prev[String(activeRoomId)] || {}) };
+          delete next[timeoutKey];
+          return {
+            ...prev,
+            [String(activeRoomId)]: next
+          };
+        });
+        delete remoteTypingTimeoutsRef.current[timeoutKey];
+      }, REMOTE_TYPING_TTL_MS);
+    });
+
+    return () => {
+      offChatMessage();
+      offTyping();
+    };
+  }, [profile?._id, realtimeEnabled, activeRoomId]);
+
+  useEffect(() => {
+    if (!activeRoomId || !profile?._id || !realtimeEnabled) {
+      return undefined;
+    }
+
+    joinRealtimeRoom(activeRoomId);
+    return () => {
+      leaveRealtimeRoom(activeRoomId);
+    };
+  }, [activeRoomId, profile?._id, realtimeEnabled]);
+
+  useEffect(() => {
+    if (!activeRoomId || realtimeEnabled) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      fetchMessagesPage(activeRoomId, null, true);
+    }, CHAT_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeRoomId, realtimeEnabled]);
+
+  useEffect(() => () => {
+    if (localTypingTimeoutRef.current) {
+      window.clearTimeout(localTypingTimeoutRef.current);
+    }
+    Object.values(remoteTypingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+  }, []);
+
+  useEffect(() => {
+    const decryptVisible = async () => {
+      if (!session || !activeRoomId || messages.length === 0) return;
+
+      const visibleWindow = messages.slice(-MAX_VISIBLE_DECRYPT);
+      const plainUpdates = {};
+      const errorUpdates = {};
+      let changed = false;
+
+      setDecrypting(true);
+      try {
+        for (const msg of visibleWindow) {
+          const id = getMessageId(msg);
+          if (!msg?.e2ee?.enabled || !msg?.e2ee?.ciphertext) {
+            continue;
+          }
+          if (plaintextCacheRef.current.has(id)) {
+            plainUpdates[id] = plaintextCacheRef.current.get(id);
+            continue;
+          }
+
+          try {
+            const plaintext = await decryptEnvelope({
+              session,
+              roomId: activeRoomId,
+              envelope: msg.e2ee
+            });
+            setBoundedPlaintextCache(plaintextCacheRef.current, id, plaintext);
+            plainUpdates[id] = plaintext;
+            delete errorUpdates[id];
+            changed = true;
+          } catch {
+            errorUpdates[id] = 'Unable to decrypt (wrong key/password or tampered ciphertext).';
+            changed = true;
+          }
+        }
+      } finally {
+        setDecrypting(false);
+      }
+
+      if (changed) {
+        setPlaintextById((prev) => ({ ...prev, ...plainUpdates }));
+        setDecryptErrors((prev) => ({ ...prev, ...errorUpdates }));
+      }
+    };
+
+    decryptVisible();
+  }, [messages, session, activeRoomId]);
+
+  useEffect(() => {
+    if (!Array.isArray(messages) || messages.length === 0) return;
+
+    const nextNickByUserId = {};
+    for (const message of messages) {
+      if (message?.messageType !== 'command') continue;
+      if (message?.commandData?.command !== 'nick') continue;
+      const targetUserId = message?.commandData?.targetUserId || message?.userId?._id;
+      const nickname = message?.commandData?.nickname;
+      if (targetUserId && nickname) {
+        nextNickByUserId[String(targetUserId)] = nickname;
+      }
+    }
+
+    if (Object.keys(nextNickByUserId).length > 0) {
+      setNickByUserId((prev) => ({ ...prev, ...nextNickByUserId }));
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    if (!messageViewportRef.current) return;
+
+    if (isAtBottom) {
+      scrollToBottom();
+    } else {
+      const previousCount = messageCountRef.current;
+      const delta = Math.max(messages.length - previousCount, 0);
+      if (delta > 0) {
+        setUnreadCount((prev) => prev + delta);
+      }
+    }
+
+    messageCountRef.current = messages.length;
+  }, [messages, isAtBottom]);
+
+  useEffect(() => () => {
+    if (typingStopTimerRef.current) {
+      clearTimeout(typingStopTimerRef.current);
+    }
+  }, []);
+
+  const sendEncryptedPayload = async ({ plaintext, messageType = 'text', commandData = null }) => {
+    await loadKeyPackages(activeRoomId, session);
+    const { keyVersion, keyBytes } = await ensureRoomKey(activeRoomId, session);
+    const envelope = await encryptEnvelope({
+      session,
+      roomId: activeRoomId,
+      keyVersion,
+      roomKey: keyBytes,
+      plaintext
+    });
+
+    const response = await chatAPI.sendE2EEMessage(activeRoomId, {
+      e2ee: envelope,
+      messageType,
+      commandData
+    });
+
+    const sentMessage = response.data?.messageData;
+    if (sentMessage) {
+      appendMessage(sentMessage);
+    }
+  };
+
+  const handleCopyMessage = async (text) => {
+    const normalized = String(text || '').trim();
+    if (!normalized) return;
     try {
-      const { data } = await userAPI.search(dmQuery.trim());
-      const users = Array.isArray(data?.users) ? data.users : [];
-      setDmResults(users.filter((user) => String(user._id) !== String(profile?._id)));
+      await navigator.clipboard.writeText(normalized);
+      toast.success('Copied message');
+    } catch {
+      toast.error('Unable to copy message');
+    }
+  };
+
+  const handleReplyToUser = (username) => {
+    const normalized = String(username || '').trim();
+    if (!normalized) return;
+    setReplyToUsername(normalized);
+    setSendValue((prev) => {
+      if (prev.trim().startsWith(`@${normalized}`)) return prev;
+      if (prev.trim().length === 0) return `@${normalized} `;
+      return `@${normalized} ${prev}`;
+    });
+  };
+
+  const handleSlashCommand = async ({ command, argsRaw }) => {
+    const result = runSlashCommand({
+      command,
+      argsRaw,
+      username: localNickname || profile?.username || profile?.realName || 'user'
+    });
+
+    if (!result.ok) {
+      toast.error(result.error || UNKNOWN_COMMAND_HELP);
+      return;
+    }
+    await sendEncryptedPayload(result.payload);
+  };
+
+  const handleSend = async (event) => {
+    event.preventDefault();
+    const trimmed = sendValue.trim();
+    if (!trimmed || !activeRoomId || !session) return;
+
+    setSending(true);
+    try {
+      const parsed = parseSlashCommand(trimmed);
+      if (parsed) {
+        await handleSlashCommand(parsed);
+      } else {
+        const withReply = replyToUsername ? `@${replyToUsername} ${trimmed}` : trimmed;
+        await sendEncryptedPayload({ plaintext: withReply, messageType: 'text' });
+      }
+      setSendValue('');
+      setReplyToUsername('');
+      if (isAtBottom) {
+        requestAnimationFrame(() => scrollToBottom());
+      }
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to search users');
     } finally {
@@ -202,9 +580,32 @@ function Chat() {
     }
   };
 
-  if (loadingHub) {
-    return <div className="bg-white rounded-lg shadow p-6">Loading unified chat hub...</div>;
-  }
+  const handleInputChange = (value) => {
+    setSendValue(value);
+
+    if (!activeRoomId || !realtimeEnabled || !profile?._id) {
+      return;
+    }
+
+    if (!value.trim()) {
+      emitTypingStop({ scope: 'chat', targetId: activeRoomId });
+      if (localTypingTimeoutRef.current) {
+        window.clearTimeout(localTypingTimeoutRef.current);
+        localTypingTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    emitTypingStart({ scope: 'chat', targetId: activeRoomId });
+    if (localTypingTimeoutRef.current) {
+      window.clearTimeout(localTypingTimeoutRef.current);
+    }
+
+    localTypingTimeoutRef.current = window.setTimeout(() => {
+      emitTypingStop({ scope: 'chat', targetId: activeRoomId });
+      localTypingTimeoutRef.current = null;
+    }, TYPING_TIMEOUT_MS);
+  };
 
   return (
     <div className="bg-white rounded-lg shadow p-6 space-y-4">
@@ -308,10 +709,31 @@ function Chat() {
             <div className="text-sm bg-red-50 border border-red-200 text-red-700 rounded p-2">{messagesError}</div>
           ) : null}
 
-          <div className="max-h-[420px] overflow-y-auto border rounded p-2 bg-gray-50 space-y-2">
-            {messagesLoading ? (
-              <p className="text-sm text-gray-500">Loading messages...</p>
-            ) : messages.length === 0 ? (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => fetchMessagesPage(activeRoomId, nextCursor, false)}
+              disabled={!activeRoomId || !hasMore || messagesLoading || olderLoading}
+              className="px-3 py-2 border rounded text-sm disabled:opacity-50"
+            >
+              {olderLoading ? 'Loading...' : hasMore ? `Load Older (${MESSAGE_PAGE_SIZE.OLDER_LOAD})` : 'No More Messages'}
+            </button>
+            {decrypting ? <span className="text-xs text-gray-500 self-center">Decrypting visible messages...</span> : null}
+          </div>
+
+          <div
+            ref={messageViewportRef}
+            onScroll={(event) => {
+              const viewport = event.currentTarget;
+              const nearBottom = (viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop) <= SCROLL_BOTTOM_THRESHOLD;
+              setIsAtBottom(nearBottom);
+              if (nearBottom) {
+                setUnreadCount(0);
+              }
+            }}
+            className={`space-y-0.5 max-h-[480px] overflow-y-auto border rounded p-2 bg-gray-50 ${useMonospace ? 'font-mono text-[13px]' : 'text-sm'}`}
+          >
+            {messages.length === 0 && !messagesLoading ? (
               <p className="text-sm text-gray-500">No messages yet.</p>
             ) : (
               messages.map((message) => (
@@ -319,21 +741,74 @@ function Chat() {
                   <div className="text-xs text-gray-500">
                     @{message.userId?.username || message.userId?.realName || 'user'} · {new Date(message.createdAt).toLocaleString()}
                   </div>
-                  <div className="text-gray-900 whitespace-pre-wrap">{message.content}</div>
+                );
+              }
+
+              return (
+                <div key={id} className="group leading-5 py-0.5" title={fullTs}>
+                  <span className="text-gray-500">[{compactTs}] </span>
+                  {messageType === 'action' ? (
+                    <>
+                      <span className="text-gray-700 italic">* </span>
+                      <span className="font-semibold italic" style={{ color: stringToColor(author) }}>{author}</span>
+                      <span className={`ml-1 italic ${decryptError ? 'text-red-600' : 'text-gray-700'} whitespace-pre-wrap`}>{bodyText}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-semibold" style={{ color: stringToColor(author) }}>&lt;{author}&gt;</span>
+                      <span className={`ml-1 whitespace-pre-wrap ${decryptError ? 'text-red-600' : (messageType === 'command' ? 'text-indigo-700' : 'text-gray-900')}`}>
+                        {bodyText || '[Non-E2EE message]'}
+                      </span>
+                    </>
+                  )}
+                  <span className="ml-2 hidden group-hover:inline text-[10px] text-gray-400">{fullTs}</span>
+                  {messageType !== 'system' ? (
+                    <span className="ml-2 hidden group-hover:inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleReplyToUser(author)}
+                        className="text-[10px] text-blue-600 hover:underline"
+                      >
+                        Reply
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(bodyText)}
+                        className="text-[10px] text-blue-600 hover:underline"
+                      >
+                        Copy
+                      </button>
+                    </span>
+                  ) : null}
                 </div>
-              ))
-            )}
+              );
+            })}
           </div>
+
+          {!isAtBottom && unreadCount > 0 ? (
+            <div className="-mt-1">
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                className="text-xs px-2 py-1 rounded border bg-amber-50 border-amber-300 text-amber-800"
+              >
+                {unreadCount} unread message{unreadCount === 1 ? '' : 's'} ↓
+              </button>
+            </div>
+          ) : null}
 
           <form onSubmit={handleSend} className="flex gap-2">
             <input
               type="text"
+              value={sendValue}
+              onChange={(event) => handleInputChange(event.target.value)}
+              onBlur={() => emitTypingStop({ scope: 'chat', targetId: activeRoomId })}
+              disabled={!isUnlocked || !activeRoomId || sending}
               className="flex-1 border rounded p-2"
               value={composerValue}
               onChange={(event) => setComposerValue(event.target.value)}
               maxLength={2000}
-              disabled={!activeConversationId || sending}
-              placeholder={activeConversationId ? 'Type your message' : 'Choose a conversation to message'}
+              placeholder={isUnlocked ? `Type encrypted message or ${SUPPORTED_COMMANDS.map((name) => `/${name}`).join(' ')}` : 'Unlock encryption to send'}
             />
             <button
               type="submit"
@@ -343,6 +818,36 @@ function Chat() {
               {sending ? 'Sending...' : 'Send'}
             </button>
           </form>
+
+          {/* Rate limit info display */}
+          {rateLimitInfo && (
+            <div className={`text-xs p-2 rounded ${rateLimitInfo.allowed ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}`}>
+              {rateLimitInfo.bucket === 'primary' ? (
+                <span>✓ You're in this city - unlimited messages</span>
+              ) : rateLimitInfo.bucket === 'nearby' ? (
+                <span>📍 Nearby city ({rateLimitInfo.distance?.toFixed(0)} miles) - {rateLimitInfo.remaining}/{rateLimitInfo.limit} messages per {rateLimitInfo.windowSeconds}s remaining</span>
+              ) : (
+                <span>🌍 Remote city - {rateLimitInfo.allowed ? `${rateLimitInfo.remaining} message(s) remaining` : `Rate limited - try again in ${rateLimitInfo.retryAfter}s`}</span>
+              )}
+            </div>
+          )}
+
+          {replyToUsername ? (
+            <div className="text-xs text-gray-600 -mt-1">
+              Replying to <span className="font-semibold">@{replyToUsername}</span>
+              <button
+                type="button"
+                onClick={() => setReplyToUsername('')}
+                className="ml-2 text-blue-600 hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+          ) : null}
+
+          <p className="text-xs text-gray-500">
+            Slash commands: {SUPPORTED_COMMANDS.map((name) => `/${name}`).join(', ')}
+          </p>
         </section>
       </div>
     </div>

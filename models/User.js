@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { DEFAULT_REALTIME_PREFERENCES, normalizeRealtimePreferences } = require('../utils/realtimePreferences');
 
 const userSchema = new mongoose.Schema({
   universalId: {
@@ -96,6 +97,11 @@ const userSchema = new mongoose.Schema({
   city: String,
   state: String,
   country: String,
+  county: {
+    type: String,
+    trim: true,
+    default: null
+  },
   zipCode: {
     type: String,
     trim: true,
@@ -276,12 +282,31 @@ const userSchema = new mongoose.Schema({
       inApp: { type: Boolean, default: true },
       email: { type: Boolean, default: true },
       push: { type: Boolean, default: false }
+    },
+    realtime: {
+      enabled: { type: Boolean, default: true },
+      typingIndicators: { type: Boolean, default: true },
+      presence: { type: Boolean, default: true }
     }
   },
   unreadNotificationCount: {
     type: Number,
     default: 0,
     min: 0
+  },
+  realtimePreferences: {
+    enabled: {
+      type: Boolean,
+      default: DEFAULT_REALTIME_PREFERENCES.enabled
+    },
+    showPresence: {
+      type: Boolean,
+      default: DEFAULT_REALTIME_PREFERENCES.showPresence
+    },
+    showLastSeen: {
+      type: Boolean,
+      default: DEFAULT_REALTIME_PREFERENCES.showLastSeen
+    }
   },
   // Friend count (cached for performance)
   friendCount: {
@@ -304,6 +329,7 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ location: '2dsphere' });
 userSchema.index({ registrationStatus: 1, createdAt: -1 });
 userSchema.index({ city: 1, state: 1, country: 1 });
+userSchema.index({ zipCode: 1 });
 userSchema.index({ friendCount: -1, createdAt: -1 });
 
 // Compound index to support discovery queries: active users ordered by recency
@@ -359,6 +385,8 @@ userSchema.methods.toPublicProfile = function() {
     city: this.city,
     state: this.state,
     country: this.country,
+    county: this.county,
+    zipCode: this.zipCode,
     registrationStatus: this.registrationStatus,
     hasPGP: !!this.pgpPublicKey,
     hasEncryptionPassword,
@@ -374,6 +402,7 @@ userSchema.methods.toPublicProfile = function() {
       system: { inApp: true, email: true, push: false },
       securityAlerts: { inApp: true, email: true, push: false }
     },
+    realtimePreferences: normalizeRealtimePreferences(this.realtimePreferences),
     onboardingStatus: this.onboardingStatus || 'pending',
     onboardingStep: this.onboardingStep || 1,
     securityPreferences: this.securityPreferences || {

@@ -1,20 +1,31 @@
 const request = require('supertest');
 const express = require('express');
 
-jest.mock('jsonwebtoken');
-jest.mock('../models/User', () => ({
+jest.mock('jsonwebtoken', () => ({
+  verify: jest.fn()
+}));
+
+const mockUser = {
   findById: jest.fn(),
   find: jest.fn()
-}));
-jest.mock('../models/Friendship', () => ({
+};
+
+const mockFriendship = {
   find: jest.fn()
-}));
-jest.mock('../models/BlockList', () => ({
+};
+
+const mockBlockList = {
   find: jest.fn()
-}));
-jest.mock('../models/Post', () => ({
+};
+
+const mockPost = {
   find: jest.fn()
-}));
+};
+
+jest.mock('../models/User', () => mockUser);
+jest.mock('../models/Friendship', () => mockFriendship);
+jest.mock('../models/BlockList', () => mockBlockList);
+jest.mock('../models/Post', () => mockPost);
 
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
@@ -32,7 +43,7 @@ const buildApp = () => {
 
 const mockAuthUser = () => {
   jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'viewer-1' }));
-  User.findById.mockReturnValue({
+  mockUser.findById.mockReturnValue({
     select: jest.fn().mockResolvedValue({
       _id: 'viewer-1',
       onboardingStatus: 'completed',
@@ -44,7 +55,7 @@ const mockAuthUser = () => {
 };
 
 const mockFriendAndBlockLookups = () => {
-  Friendship.find.mockReturnValue({
+  mockFriendship.find.mockReturnValue({
     select: jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue([
         { requester: 'viewer-1', recipient: 'friend-1' }
@@ -52,7 +63,7 @@ const mockFriendAndBlockLookups = () => {
     })
   });
 
-  BlockList.find
+  mockBlockList.find
     .mockReturnValueOnce({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue([])
@@ -75,7 +86,7 @@ describe('Discovery routes', () => {
     mockAuthUser();
     mockFriendAndBlockLookups();
 
-    User.find.mockReturnValue({
+    mockUser.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         sort: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
@@ -128,7 +139,7 @@ describe('Discovery routes', () => {
     mockAuthUser();
     mockFriendAndBlockLookups();
 
-    User.find.mockReturnValue({
+    mockUser.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         sort: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
@@ -162,7 +173,7 @@ describe('Discovery routes', () => {
 
     expect(second.status).toBe(200);
     expect(second.body.cached).toBe(true);
-    expect(User.find).toHaveBeenCalledTimes(1);
+    expect(mockUser.find).toHaveBeenCalledTimes(1);
   });
 
   it('accepts click analytics events and rejects invalid event types', async () => {

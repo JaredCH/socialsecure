@@ -3,8 +3,10 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const ReferralInvitation = require('../models/ReferralInvitation');
+const REFERRAL_REWARD_AMOUNT = Number(process.env.REFERRAL_REWARD_AMOUNT || 100);
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -22,6 +24,22 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+const referralInviteLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many referral invites. Please try again later.' }
+});
+
+const referralQualificationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many referral qualification requests. Please try again later.' }
+});
 
 router.get('/search', async (req, res) => {
   try {
@@ -58,6 +76,7 @@ router.get('/search', async (req, res) => {
 
 router.post('/invite', [
   authenticateToken,
+  referralInviteLimiter,
   body('email').optional().isEmail().normalizeEmail(),
   body('phone').optional().trim(),
   body('message').optional().trim().isLength({ max: 500 })
@@ -301,6 +320,93 @@ router.post('/invitations/:id/revoke', authenticateToken, async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       error: 'Failed to revoke invitation',
+      details: error.message
+    });
+  }
+});
+
+router.post('/invitations/:id/qualify', referralQualificationLimiter, authenticateToken, async (req, res) => {
+  try {
+    const invitation = await ReferralInvitation.findOne({
+      _id: req.params.id,
+      inviterId: req.user.userId
+    });
+
+    if (!invitation) {
+      return res.status(404).json({ error: 'Invitation not found' });
+    }
+
+    if (!invitation.inviteeUserId) {
+      return res.status(400).json({ error: 'Invitee has not registered yet' });
+    }
+
+    if (!invitation._id) {
+      return res.status(500).json({ error: 'Invitation is missing a stable identifier' });
+    }
+
+    if (invitation.status === 'revoked' || invitation.status === 'expired') {
+      return res.status(400).json({ error: `Cannot qualify ${invitation.status} invitation` });
+    }
+
+    if (!['registered', 'qualified', 'rewarded'].includes(invitation.status)) {
+      return res.status(400).json({ error: 'Invitation is not eligible for qualification' });
+    }
+
+    const deterministicRewardId = invitation.rewardTransactionId || `reward_${invitation._id}`;
+
+    if (invitation.rewardStatus === 'processed' || invitation.status === 'rewarded') {
+      return res.json({
+        success: true,
+        alreadyRewarded: true,
+        invitation: {
+          id: invitation._id,
+          status: invitation.status,
+          rewardStatus: invitation.rewardStatus,
+          rewardAmount: invitation.rewardAmount,
+          rewardCurrency: invitation.rewardCurrency,
+          rewardTransactionId: invitation.rewardTransactionId
+        }
+      });
+    }
+
+    if (invitation.status === 'registered') {
+      const qualifies = await invitation.canQualify();
+      if (!qualifies) {
+        return res.status(400).json({
+          error: 'Invitee does not meet qualification criteria yet'
+        });
+      }
+      await invitation.markAsQualified();
+    }
+
+    await invitation.markAsRewarded(REFERRAL_REWARD_AMOUNT, deterministicRewardId);
+
+    console.log('REFERRAL_REWARDED', {
+      inviterId: req.user.userId,
+      invitationId: invitation._id,
+      inviteeUserId: invitation.inviteeUserId,
+      rewardAmount: REFERRAL_REWARD_AMOUNT,
+      rewardTransactionId: deterministicRewardId,
+      timestamp: new Date().toISOString()
+    });
+
+    return res.json({
+      success: true,
+      alreadyRewarded: false,
+      invitation: {
+        id: invitation._id,
+        status: invitation.status,
+        qualifiedAt: invitation.qualifiedAt,
+        rewardedAt: invitation.rewardedAt,
+        rewardStatus: invitation.rewardStatus,
+        rewardAmount: invitation.rewardAmount,
+        rewardCurrency: invitation.rewardCurrency,
+        rewardTransactionId: invitation.rewardTransactionId
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to process referral qualification',
       details: error.message
     });
   }

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { friendsAPI } from '../utils/api';
 import toast from 'react-hot-toast';
+import PresenceIndicator from './PresenceIndicator';
+import { getRealtimeSocket, onFriendPresence } from '../utils/realtime';
 
 function FriendsManager({ currentUser, onUserUpdate }) {
   const [friends, setFriends] = useState([]);
@@ -18,6 +20,34 @@ function FriendsManager({ currentUser, onUserUpdate }) {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?._id || currentUser?.realtimePreferences?.enabled === false) {
+      return undefined;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return undefined;
+    }
+
+    getRealtimeSocket({ token, userId: currentUser._id });
+
+    const offFriendPresence = onFriendPresence((payload) => {
+      const userId = String(payload?.userId || '').trim();
+      if (!userId) return;
+
+      setFriends((prev) => prev.map((friend) => (
+        String(friend._id) === userId
+          ? { ...friend, presence: { status: payload.status, lastSeen: payload.lastSeen || null } }
+          : friend
+      )));
+    });
+
+    return () => {
+      offFriendPresence();
+    };
+  }, [currentUser?._id, currentUser?.realtimePreferences?.enabled]);
 
   const loadData = async () => {
     setLoading(true);
@@ -192,6 +222,7 @@ function FriendsManager({ currentUser, onUserUpdate }) {
                   <div>
                     <p className="font-medium">@{friend.username}</p>
                     <p className="text-sm text-gray-500">{friend.realName}</p>
+                    <PresenceIndicator presence={friend.presence} />
                   </div>
                 </div>
                 <div className="flex gap-2">
