@@ -1560,6 +1560,9 @@ const Social = () => {
                       className="border rounded px-3 py-2 text-sm"
                     />
                   </div>
+                  <p className="text-xs text-gray-500">
+                    Default timezone is from your browser. Update it if needed (examples: UTC, America/New_York, Europe/London).
+                  </p>
                   <input
                     type="url"
                     value={postForm.interaction.countdown.linkUrl}

@@ -473,6 +473,14 @@ const interactionSubmissionLimiter = rateLimit({
   message: { error: 'Too many interaction submissions, please try again shortly.' }
 });
 
+const interactionReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many interaction requests, please try again shortly.' }
+});
+
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -911,7 +919,7 @@ router.post('/post/:postId/comment', [
   }
 });
 
-router.post('/post/:postId/vote', authenticateToken, interactionSubmissionLimiter, async (req, res) => {
+router.post('/post/:postId/vote', interactionSubmissionLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = String(req.user.userId);
@@ -982,7 +990,7 @@ router.post('/post/:postId/vote', authenticateToken, interactionSubmissionLimite
   }
 });
 
-router.post('/post/:postId/quiz-answer', authenticateToken, interactionSubmissionLimiter, async (req, res) => {
+router.post('/post/:postId/quiz-answer', interactionSubmissionLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = String(req.user.userId);
@@ -1043,7 +1051,7 @@ router.post('/post/:postId/quiz-answer', authenticateToken, interactionSubmissio
   }
 });
 
-router.post('/post/:postId/countdown-follow', authenticateToken, interactionSubmissionLimiter, async (req, res) => {
+router.post('/post/:postId/countdown-follow', interactionSubmissionLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = String(req.user.userId);
@@ -1092,7 +1100,7 @@ router.post('/post/:postId/countdown-follow', authenticateToken, interactionSubm
   }
 });
 
-router.get('/post/:postId/interaction', authenticateToken, async (req, res) => {
+router.get('/post/:postId/interaction', interactionReadLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = String(req.user.userId);
