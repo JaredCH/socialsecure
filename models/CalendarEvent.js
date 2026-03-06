@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeRelationshipAudience } = require('../utils/relationshipAudience');
 
 const calendarEventSchema = new mongoose.Schema({
   calendarId: {
@@ -66,6 +67,24 @@ const calendarEventSchema = new mongoose.Schema({
     max: 10080,
     default: null
   },
+  invitees: {
+    type: [String],
+    default: []
+  },
+  announceToFeed: {
+    type: Boolean,
+    default: false
+  },
+  announceTarget: {
+    type: String,
+    enum: ['none', 'feed', 'post'],
+    default: 'none'
+  },
+  relationshipAudience: {
+    type: String,
+    enum: ['social', 'secure'],
+    default: 'social'
+  },
   isDeleted: {
     type: Boolean,
     default: false,
@@ -81,5 +100,10 @@ const calendarEventSchema = new mongoose.Schema({
 
 calendarEventSchema.index({ calendarId: 1, startAt: 1 });
 calendarEventSchema.index({ ownerId: 1, startAt: 1 });
+
+calendarEventSchema.pre('validate', function normalizeAudience(next) {
+  this.relationshipAudience = normalizeRelationshipAudience(this.relationshipAudience);
+  next();
+});
 
 module.exports = mongoose.model('CalendarEvent', calendarEventSchema);
