@@ -129,7 +129,9 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
   // Create room name based on location type
   let name;
   if (type === 'city') {
-    name = zipCode ? `ZIP ${zipCode}` : (city ? `${city}, ${state || ''}` : 'Unknown City');
+    name = zipCode
+      ? (city ? `${city} (ZIP ${zipCode})` : `ZIP ${zipCode}`)
+      : (city ? `${city}, ${state || ''}` : 'Unknown City');
   } else if (type === 'state') {
     name = state || 'Unknown State';
   } else if (type === 'county') {

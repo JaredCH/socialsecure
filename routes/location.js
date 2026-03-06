@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, query, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const NodeGeocoder = require('node-geocoder');
 const User = require('../models/User');
 const ChatRoom = require('../models/ChatRoom');
@@ -14,6 +15,13 @@ const geocoder = NodeGeocoder({
 });
 
 const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+const zipLookupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many zip lookup requests. Please try again later.' }
+});
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -307,7 +315,7 @@ router.post('/distance', [
 });
 
 // Get user's primary city and nearby cities based on zip code
-router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
+router.get('/zip/:zipCode', zipLookupLimiter, authenticateToken, async (req, res) => {
   try {
     const normalizedZipCode = normalizeZipCode(req.params.zipCode);
     
@@ -323,7 +331,7 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
         const result = results[0];
         locationData = {
           zipCode: normalizedZipCode,
-          county: result.county || null,
+          county: result.county || undefined,
           city: result.city,
           state: result.state,
           country: result.country,
@@ -340,21 +348,27 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
     }
 
     // Find or create primary city room
+    const primaryRoomCriteria = [{ city: locationData.city, state: locationData.state }];
+    if (locationData.zipCode) {
+      primaryRoomCriteria.unshift({ zipCode: locationData.zipCode });
+    }
+
     let primaryRoom = await ChatRoom.findOne({
       type: 'city',
-      $or: [
-        { zipCode: locationData.zipCode },
-        { city: locationData.city, state: locationData.state }
-      ],
+      $or: primaryRoomCriteria,
       isActive: true
     });
 
     // Find nearby cities (within 50 miles)
+    const nearbyLocationCriteria = [{ city: locationData.city, state: locationData.state }];
+    if (locationData.zipCode) {
+      nearbyLocationCriteria.push({ zipCode: locationData.zipCode });
+    }
+
     const nearbyCities = await ChatRoom.find({
       isActive: true,
       $or: [
-        { city: locationData.city, state: locationData.state },
-        { zipCode: locationData.zipCode },
+        ...nearbyLocationCriteria,
         {
           location: {
             $near: {
@@ -391,9 +405,8 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
       }));
 
     // Update user's location
-    await User.findByIdAndUpdate(req.user.userId, {
+    const locationUpdate = {
       zipCode: locationData.zipCode,
-      county: locationData.county,
       city: locationData.city,
       state: locationData.state,
       country: locationData.country,
@@ -401,7 +414,12 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
         type: 'Point',
         coordinates: [locationData.longitude, locationData.latitude]
       }
-    });
+    };
+    if (locationData.county) {
+      locationUpdate.county = locationData.county;
+    }
+
+    await User.findByIdAndUpdate(req.user.userId, locationUpdate);
 
     res.json({
       success: true,
