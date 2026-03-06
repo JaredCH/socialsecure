@@ -653,7 +653,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
       return {
         ...article,
         matchedKeywords,
-        isFollowingMatch: matchedKeywords.length > 0,
+        isFollowingMatch: matchedKeywords.length > 0, // kept for existing frontend badge logic
         _boostScore: matchedKeywords.length,
         _scopeTier: scopeTier,
         _rankingScore:
@@ -889,7 +889,7 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       updateData.defaultScope = defaultScope;
     } else if (localPriorityEnabled !== undefined && defaultScope === undefined) {
       // Backwards compatible mapping from legacy toggle to scope preference.
-      // Remove this mapping after all clients send defaultScope explicitly.
+      // Remove this mapping after Q2 2026 once all clients send defaultScope explicitly.
       updateData.defaultScope = localPriorityEnabled ? 'local' : 'global';
     }
     if (localPriorityEnabled !== undefined) updateData.localPriorityEnabled = localPriorityEnabled;
