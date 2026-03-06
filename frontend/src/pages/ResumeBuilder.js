@@ -68,6 +68,7 @@ const splitLines = (input) => input
   .filter(Boolean);
 
 const linesToText = (lines) => Array.isArray(lines) ? lines.join('\n') : '';
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 
 const normalizeForForm = (resume) => {
   if (!resume) return emptyResume;
@@ -158,6 +159,42 @@ function ResumeBuilder() {
   }, [loading, resume, skillText]);
 
   const previewResume = useMemo(() => buildPayload(resume, skillText), [resume, skillText]);
+  const requiredFieldErrors = useMemo(() => {
+    const fullName = String(resume.basics.fullName || '').trim();
+    const headline = String(resume.basics.headline || '').trim();
+    const email = String(resume.basics.email || '').trim();
+    let emailError = '';
+    if (!email) {
+      emailError = 'Email is required.';
+    } else if (!isValidEmail(email)) {
+      emailError = 'Enter a valid email address.';
+    }
+
+    return {
+      fullName: fullName ? '' : 'Full name is required.',
+      headline: headline ? '' : 'Headline is required.',
+      email: emailError
+    };
+  }, [resume.basics.email, resume.basics.fullName, resume.basics.headline]);
+  const completionSummary = useMemo(() => {
+    const sectionScore = [
+      !requiredFieldErrors.fullName,
+      !requiredFieldErrors.headline,
+      !requiredFieldErrors.email,
+      Boolean(String(resume.summary || '').trim()),
+      resume.experience.length > 0,
+      resume.education.length > 0,
+      splitLines(skillText).length > 0
+    ];
+
+    const completed = sectionScore.filter(Boolean).length;
+    const total = sectionScore.length;
+    return {
+      completed,
+      total,
+      percent: Math.round((completed / total) * 100)
+    };
+  }, [requiredFieldErrors, resume.education.length, resume.experience.length, resume.summary, skillText]);
 
   const updateBasics = (name, value) => {
     setResume((prev) => ({
@@ -289,7 +326,10 @@ function ResumeBuilder() {
       `}</style>
 
       <div className="resume-builder-controls bg-white rounded-xl shadow p-4 border border-gray-100 flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-semibold text-gray-900">Resume Builder</h2>
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Resume Builder</h2>
+          <p className="text-sm text-gray-600">Required fields are marked with * and shown inline to help you avoid save errors.</p>
+        </div>
         <div className="ml-auto flex flex-wrap gap-2">
           <button
             type="button"
@@ -325,31 +365,75 @@ function ResumeBuilder() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className="resume-builder-editor space-y-4">
+          <section className="bg-blue-50 rounded-xl border border-blue-100 p-4 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-medium text-blue-900">Completion progress</h3>
+              <span className="text-sm font-semibold text-blue-800">{completionSummary.completed}/{completionSummary.total}</span>
+            </div>
+            <div className="h-2 rounded-full bg-blue-100 overflow-hidden" aria-hidden="true">
+              <div className="h-full bg-blue-600" style={{ width: `${completionSummary.percent}%` }} />
+            </div>
+            <p className="text-sm text-blue-900">Fill basics, summary, experience, education, and skills for a complete profile.</p>
+          </section>
+
           <section className="bg-white rounded-xl shadow p-4 border border-gray-100 space-y-3">
             <h3 className="font-medium text-gray-900">Basics</h3>
+            <p className="text-sm text-gray-600">Start here so your identity and contact details are ready for applications.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input className="border rounded px-3 py-2" placeholder="Full name *" value={resume.basics.fullName} onChange={(e) => updateBasics('fullName', e.target.value)} />
-              <input className="border rounded px-3 py-2" placeholder="Headline *" value={resume.basics.headline} onChange={(e) => updateBasics('headline', e.target.value)} />
-              <input className="border rounded px-3 py-2" placeholder="Email *" value={resume.basics.email} onChange={(e) => updateBasics('email', e.target.value)} />
-              <input className="border rounded px-3 py-2" placeholder="Phone" value={resume.basics.phone} onChange={(e) => updateBasics('phone', e.target.value)} />
-              <input className="border rounded px-3 py-2" placeholder="City" value={resume.basics.city} onChange={(e) => updateBasics('city', e.target.value)} />
-              <input className="border rounded px-3 py-2" placeholder="State" value={resume.basics.state} onChange={(e) => updateBasics('state', e.target.value)} />
-              <input className="border rounded px-3 py-2" placeholder="Country" value={resume.basics.country} onChange={(e) => updateBasics('country', e.target.value)} />
-              <input className="border rounded px-3 py-2" placeholder="Website" value={resume.basics.website} onChange={(e) => updateBasics('website', e.target.value)} />
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-800">Full name *</span>
+                <input className={`w-full border rounded px-3 py-2 ${requiredFieldErrors.fullName ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} placeholder="Jane Smith" value={resume.basics.fullName} onChange={(e) => updateBasics('fullName', e.target.value)} autoComplete="name" />
+                {requiredFieldErrors.fullName ? <span className="text-xs text-red-700">{requiredFieldErrors.fullName}</span> : <span className="text-xs text-gray-500">Use your legal or preferred professional name.</span>}
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-800">Headline *</span>
+                <input className={`w-full border rounded px-3 py-2 ${requiredFieldErrors.headline ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} placeholder="Senior Software Engineer" value={resume.basics.headline} onChange={(e) => updateBasics('headline', e.target.value)} />
+                {requiredFieldErrors.headline ? <span className="text-xs text-red-700">{requiredFieldErrors.headline}</span> : <span className="text-xs text-gray-500">A short role statement works best (3-8 words).</span>}
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-800">Email *</span>
+                <input className={`w-full border rounded px-3 py-2 ${requiredFieldErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} placeholder="jane@example.com" value={resume.basics.email} onChange={(e) => updateBasics('email', e.target.value)} type="email" autoComplete="email" />
+                {requiredFieldErrors.email ? <span className="text-xs text-red-700">{requiredFieldErrors.email}</span> : <span className="text-xs text-gray-500">Use an address recruiters can reach quickly.</span>}
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-800">Phone</span>
+                <input className="w-full border border-gray-300 rounded px-3 py-2" placeholder="(555) 123-4567" value={resume.basics.phone} onChange={(e) => updateBasics('phone', e.target.value)} autoComplete="tel" />
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-800">City</span>
+                <input className="w-full border border-gray-300 rounded px-3 py-2" placeholder="Austin" value={resume.basics.city} onChange={(e) => updateBasics('city', e.target.value)} autoComplete="address-level2" />
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-800">State / Province</span>
+                <input className="w-full border border-gray-300 rounded px-3 py-2" placeholder="TX" value={resume.basics.state} onChange={(e) => updateBasics('state', e.target.value)} autoComplete="address-level1" />
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-800">Country</span>
+                <input className="w-full border border-gray-300 rounded px-3 py-2" placeholder="USA" value={resume.basics.country} onChange={(e) => updateBasics('country', e.target.value)} autoComplete="country-name" />
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-800">Website</span>
+                <input className="w-full border border-gray-300 rounded px-3 py-2" placeholder="https://example.com" value={resume.basics.website} onChange={(e) => updateBasics('website', e.target.value)} type="url" autoComplete="url" />
+              </label>
             </div>
-            <select
-              className="border rounded px-3 py-2"
-              value={resume.visibility}
-              onChange={(e) => setResume((prev) => ({ ...prev, visibility: e.target.value }))}
-            >
-              <option value="private">Private</option>
-              <option value="unlisted">Unlisted</option>
-              <option value="public">Public</option>
-            </select>
+            <label className="space-y-1 block">
+              <span className="text-sm font-medium text-gray-800">Resume visibility</span>
+              <select
+                className="border rounded px-3 py-2 w-full md:w-auto"
+                value={resume.visibility}
+                onChange={(e) => setResume((prev) => ({ ...prev, visibility: e.target.value }))}
+              >
+                <option value="private">Private</option>
+                <option value="unlisted">Unlisted</option>
+                <option value="public">Public</option>
+              </select>
+              <span className="text-xs text-gray-500">Private keeps your resume hidden. Unlisted requires a direct link.</span>
+            </label>
           </section>
 
           <section className="bg-white rounded-xl shadow p-4 border border-gray-100 space-y-2">
             <h3 className="font-medium text-gray-900">Professional Summary</h3>
+            <p className="text-sm text-gray-600">2-4 short lines about your impact, strengths, and target role.</p>
             <textarea
               className="w-full border rounded px-3 py-2 min-h-[120px]"
               value={resume.summary}
@@ -361,8 +445,9 @@ function ResumeBuilder() {
           <section className="bg-white rounded-xl shadow p-4 border border-gray-100 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-medium text-gray-900">Work Experience</h3>
-              <button type="button" className="text-sm text-blue-600" onClick={() => addListItem('experience', emptyExperience)}>Add</button>
+              <button type="button" className="text-sm text-blue-600" onClick={() => addListItem('experience', emptyExperience)}>Add experience</button>
             </div>
+            <p className="text-sm text-gray-600">Add your most recent role first. Use one accomplishment per bullet line.</p>
             {resume.experience.map((item, index) => (
               <div key={`experience-${index}`} className="border rounded p-3 space-y-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -394,8 +479,9 @@ function ResumeBuilder() {
           <section className="bg-white rounded-xl shadow p-4 border border-gray-100 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-medium text-gray-900">Education</h3>
-              <button type="button" className="text-sm text-blue-600" onClick={() => addListItem('education', emptyEducation)}>Add</button>
+              <button type="button" className="text-sm text-blue-600" onClick={() => addListItem('education', emptyEducation)}>Add education</button>
             </div>
+            <p className="text-sm text-gray-600">Include degree details and dates so timelines stay clear for reviewers.</p>
             {resume.education.map((item, index) => (
               <div key={`education-${index}`} className="border rounded p-3 space-y-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -427,6 +513,7 @@ function ResumeBuilder() {
 
           <section className="bg-white rounded-xl shadow p-4 border border-gray-100 space-y-2">
             <h3 className="font-medium text-gray-900">Skills (one per line)</h3>
+            <p className="text-sm text-gray-600">Prioritize role-relevant skills first. Up to 50 skills are saved.</p>
             <textarea
               className="w-full border rounded px-3 py-2 min-h-[100px]"
               value={skillText}
@@ -437,7 +524,7 @@ function ResumeBuilder() {
           <section className="bg-white rounded-xl shadow p-4 border border-gray-100 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-medium text-gray-900">Certifications (optional)</h3>
-              <button type="button" className="text-sm text-blue-600" onClick={() => addListItem('certifications', emptyCertification)}>Add</button>
+              <button type="button" className="text-sm text-blue-600" onClick={() => addListItem('certifications', emptyCertification)}>Add certification</button>
             </div>
             {resume.certifications.map((item, index) => (
               <div key={`cert-${index}`} className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -455,8 +542,9 @@ function ResumeBuilder() {
           <section className="bg-white rounded-xl shadow p-4 border border-gray-100 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-medium text-gray-900">Projects (optional)</h3>
-              <button type="button" className="text-sm text-blue-600" onClick={() => addListItem('projects', emptyProject)}>Add</button>
+              <button type="button" className="text-sm text-blue-600" onClick={() => addListItem('projects', emptyProject)}>Add project</button>
             </div>
+            <p className="text-sm text-gray-600">Show impact with concise descriptions and measurable outcomes where possible.</p>
             {resume.projects.map((item, index) => (
               <div key={`project-${index}`} className="border rounded p-3 space-y-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
