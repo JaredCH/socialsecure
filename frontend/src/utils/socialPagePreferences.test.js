@@ -1,13 +1,18 @@
-import { buildDefaultSocialPreferences, normalizeSocialPreferences } from './socialPagePreferences';
+import {
+  SOCIAL_LAYOUT_PRESETS,
+  SOCIAL_THEME_STYLE_PRESETS,
+  buildDefaultSocialPreferences,
+  normalizeSocialPreferences
+} from './socialPagePreferences';
 
 describe('socialPagePreferences layout normalization', () => {
-  it('uses compact defaults for social header and grid-ready sizes', () => {
+  it('uses balanced defaults for full panel set with grid placements', () => {
     const preferences = buildDefaultSocialPreferences('default');
 
-    expect(preferences.panels.profile_header.visible).toBe(false);
-    expect(preferences.panels.guest_preview_notice.area).toBe('main');
-    expect(preferences.panels.guest_preview_notice.size).toBe('fourCols');
-    expect(preferences.panels.guest_preview_notice.height).toBe('halfRow');
+    expect(preferences.panels.profile_header.visible).toBe(true);
+    expect(preferences.panels.guest_preview_notice.gridPlacement).toEqual({ row: 0, col: 0 });
+    expect(preferences.panels.timeline.size).toBe('threeCols');
+    expect(preferences.panels.timeline.height).toBe('twoRows');
   });
 
   it('maps legacy main tile sizes to modern width tokens', () => {
@@ -40,6 +45,11 @@ describe('socialPagePreferences layout normalization', () => {
     });
 
     expect(normalized.panels.guest_lookup.gridPlacement).toEqual({ row: 18, col: 0 });
-    expect(normalized.panels.composer.gridPlacement).toBeUndefined();
+    expect(normalized.panels.composer.gridPlacement).toEqual({ row: 1, col: 2 });
+  });
+
+  it('includes curated layout and theme presets for quick starts', () => {
+    expect(SOCIAL_LAYOUT_PRESETS.map((preset) => preset.id)).toEqual(expect.arrayContaining(['compact', 'balanced', 'content-first']));
+    expect(SOCIAL_THEME_STYLE_PRESETS.map((preset) => preset.id)).toEqual(expect.arrayContaining(['oceanic', 'midnight', 'sunrise']));
   });
 });

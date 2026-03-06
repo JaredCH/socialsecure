@@ -26,8 +26,10 @@ describe('SocialDesignStudioModal layout studio', () => {
     root = null;
   });
 
-  it('lets users define panel size and placement by selecting top-left and bottom-right corners', async () => {
-    const onPanelLayoutChange = jest.fn();
+  it('surfaces curated layout/theme presets and panel reset controls', async () => {
+    const onApplyTemplate = jest.fn();
+    const onApplyLayoutPreset = jest.fn();
+    const onPanelOverrideToggle = jest.fn();
 
     await act(async () => {
       root.render(
@@ -39,11 +41,12 @@ describe('SocialDesignStudioModal layout studio', () => {
           activeConfigId=""
           sharedDesigns={[]}
           favoriteDesigns={[]}
-          onApplyTemplate={jest.fn()}
+          onApplyTemplate={onApplyTemplate}
+          onApplyLayoutPreset={onApplyLayoutPreset}
           onGlobalStylesChange={jest.fn()}
-          onPanelOverrideToggle={jest.fn()}
+          onPanelOverrideToggle={onPanelOverrideToggle}
           onPanelStyleChange={jest.fn()}
-          onPanelLayoutChange={onPanelLayoutChange}
+          onPanelLayoutChange={jest.fn()}
           onCreateConfig={jest.fn()}
           onUpdateConfig={jest.fn()}
           onApplyConfig={jest.fn()}
@@ -58,40 +61,27 @@ describe('SocialDesignStudioModal layout studio', () => {
       );
     });
 
-    const guestLookupButton = getButtonContainingText('Guest Lookup');
-    expect(guestLookupButton).toBeTruthy();
+    const compactPreset = getButtonContainingText('Compact');
+    expect(compactPreset).toBeTruthy();
     await act(async () => {
-      guestLookupButton.click();
+      compactPreset.click();
     });
-    expect(container.textContent).toContain('Select its top-left corner on the grid');
+    expect(onApplyLayoutPreset).toHaveBeenCalled();
 
-    const topLeftCell = container.querySelector('[aria-label="Grid cell row 19 col 1"]');
-    expect(topLeftCell).toBeTruthy();
+    const oceanicPreset = getButtonContainingText('Oceanic');
+    expect(oceanicPreset).toBeTruthy();
     await act(async () => {
-      topLeftCell.click();
+      oceanicPreset.click();
     });
-    expect(container.textContent).toContain('Now select the bottom-right corner');
-    expect(container.querySelectorAll('.pointer-events-none').length).toBeGreaterThan(0);
+    expect(onApplyTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: 'oceanic' }));
 
-    const bottomRightCell = container.querySelector('[aria-label="Grid cell row 20 col 8"]');
-    expect(bottomRightCell).toBeTruthy();
+    const resetButtons = Array.from(container.querySelectorAll('button'))
+      .filter((button) => button.textContent && button.textContent.includes('Reset to global'));
+    expect(resetButtons.length).toBeGreaterThan(0);
     await act(async () => {
-      bottomRightCell.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      resetButtons[0].click();
     });
-    expect(container.querySelectorAll('.bg-emerald-400').length).toBeGreaterThan(1);
-
-    await act(async () => {
-      bottomRightCell.click();
-    });
-    expect(onPanelLayoutChange).toHaveBeenCalledWith(
-        'guest_lookup',
-      expect.objectContaining({
-        size: 'fourCols',
-        height: 'fullRow',
-        gridPlacement: { row: 18, col: 0 },
-        order: 0
-      })
-    );
+    expect(onPanelOverrideToggle).toHaveBeenCalledWith('profile_header', false);
   });
 
   it('keeps explicit grid placements ahead of auto-placed panels', async () => {
@@ -100,7 +90,17 @@ describe('SocialDesignStudioModal layout studio', () => {
         <SocialDesignStudioModal
           isOpen
           onClose={jest.fn()}
-          preferences={{ panels: { timeline: { gridPlacement: { row: 0, col: 0 } } } }}
+          preferences={{
+            panels: {
+              timeline: { gridPlacement: { row: 0, col: 0 } },
+              guest_preview_notice: { visible: false },
+              guest_lookup: { visible: false },
+              composer: { visible: false },
+              circles: { visible: false },
+              moderation_status: { visible: false },
+              gallery: { visible: false }
+            }
+          }}
           configs={[]}
           activeConfigId=""
           sharedDesigns={[]}
@@ -124,7 +124,7 @@ describe('SocialDesignStudioModal layout studio', () => {
       );
     });
 
-    const timelinePreview = Array.from(container.querySelectorAll('div[draggable="true"]'))
+    const timelinePreview = Array.from(container.querySelectorAll('div[role="button"]'))
       .find((element) => element.textContent && element.textContent.includes('Timeline'));
     expect(timelinePreview).toBeTruthy();
     expect(timelinePreview.style.left).toBe('calc(0% + 4px)');

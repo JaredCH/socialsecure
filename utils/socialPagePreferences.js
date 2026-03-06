@@ -3,7 +3,8 @@ const SOCIAL_ACCENT_TOKENS = ['blue', 'violet', 'emerald', 'rose', 'amber'];
 const SOCIAL_FONT_FAMILIES = ['Inter', 'Manrope', 'Space Grotesk', 'Merriweather', 'Fira Sans', 'Georgia'];
 const SOCIAL_FONT_SIZE_TOKENS = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl'];
 const SOCIAL_LAYOUT_AREAS = ['top', 'sideLeft', 'main', 'sideRight'];
-const SOCIAL_LAYOUT_SIZES = ['sidePanelFull', 'sidePanelHalfHeight', 'quarterTile', 'halfTile', 'fullTile'];
+const SOCIAL_LAYOUT_SIZES = ['sidePanelFull', 'sidePanelHalfHeight', 'quarterTile', 'halfTile', 'fullTile', 'halfCol', 'oneCol', 'twoCols', 'threeCols', 'fourCols'];
+const SOCIAL_LAYOUT_HEIGHTS = ['halfRow', 'fullRow', 'twoRows', 'threeRows', 'fourRows'];
 const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
 const SOCIAL_PANEL_IDS = [
   'profile_header',
@@ -24,6 +25,8 @@ const SOCIAL_PRIMARY_SECTION_IDS = ['timeline', 'gallery'];
 const SOCIAL_MANDATORY_SECTION_IDS = ['profile_header'];
 const SOCIAL_DEFAULT_SECTION_ORDER = [...SOCIAL_PANEL_IDS];
 const SOCIAL_PREFERENCES_VERSION = 2;
+const LAYOUT_GRID_COLUMNS = 12;
+const LAYOUT_GRID_ROWS = 20;
 
 const LEGACY_SECTION_ID_ALIASES = {
   header: 'profile_header',
@@ -70,19 +73,19 @@ const DEFAULT_GLOBAL_STYLES = Object.freeze({
 });
 
 const DEFAULT_PANEL_LAYOUTS = Object.freeze({
-  profile_header: { area: 'top', size: 'fullTile', order: 0, visible: true },
-  guest_preview_notice: { area: 'top', size: 'fullTile', order: 1, visible: true },
-  shortcuts: { area: 'sideLeft', size: 'sidePanelFull', order: 0, visible: true },
-  snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', order: 1, visible: true },
-  guest_lookup: { area: 'main', size: 'halfTile', order: 0, visible: true },
-  composer: { area: 'main', size: 'fullTile', order: 1, visible: true },
-  circles: { area: 'main', size: 'halfTile', order: 2, visible: true },
-  timeline: { area: 'main', size: 'fullTile', order: 3, visible: true },
-  moderation_status: { area: 'main', size: 'halfTile', order: 4, visible: true },
-  gallery: { area: 'main', size: 'fullTile', order: 5, visible: true },
-  chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', order: 0, visible: true },
-  top_friends: { area: 'sideRight', size: 'sidePanelFull', order: 1, visible: true },
-  community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', order: 2, visible: true }
+  profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, visible: true, gridPlacement: { row: 15, col: 0 } },
+  guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 0, visible: true, gridPlacement: { row: 0, col: 0 } },
+  shortcuts: { area: 'sideLeft', size: 'sidePanelFull', height: 'twoRows', order: 0, visible: true, gridPlacement: { row: 0, col: 8 } },
+  snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', height: 'fullRow', order: 1, visible: true, gridPlacement: { row: 4, col: 8 } },
+  guest_lookup: { area: 'main', size: 'oneCol', height: 'fullRow', order: 1, visible: true, gridPlacement: { row: 1, col: 0 } },
+  composer: { area: 'main', size: 'threeCols', height: 'fullRow', order: 2, visible: true, gridPlacement: { row: 1, col: 2 } },
+  circles: { area: 'main', size: 'twoCols', height: 'fullRow', order: 3, visible: true, gridPlacement: { row: 3, col: 0 } },
+  timeline: { area: 'main', size: 'threeCols', height: 'twoRows', order: 4, visible: true, gridPlacement: { row: 5, col: 0 } },
+  moderation_status: { area: 'main', size: 'oneCol', height: 'fullRow', order: 5, visible: true, gridPlacement: { row: 3, col: 4 } },
+  gallery: { area: 'main', size: 'threeCols', height: 'twoRows', order: 6, visible: true, gridPlacement: { row: 5, col: 6 } },
+  chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, visible: true, gridPlacement: { row: 0, col: 10 } },
+  top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, visible: true, gridPlacement: { row: 2, col: 10 } },
+  community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, visible: true, gridPlacement: { row: 6, col: 10 } }
 });
 
 const SOCIAL_DESIGN_TEMPLATES = Object.freeze([
@@ -237,19 +240,54 @@ const normalizeArea = (value, fallback) => {
 
 const normalizeSizeForArea = (size, area, fallback) => {
   const requested = typeof size === 'string' && SOCIAL_LAYOUT_SIZES.includes(size.trim()) ? size.trim() : fallback;
+  const legacyToModern = {
+    quarterTile: 'halfCol',
+    halfTile: 'oneCol',
+    fullTile: 'twoCols'
+  };
 
   if (area === 'sideLeft' || area === 'sideRight') {
-    if (requested === 'sidePanelFull' || requested === 'sidePanelHalfHeight') {
-      return requested;
-    }
-    return requested === 'quarterTile' ? 'sidePanelHalfHeight' : 'sidePanelFull';
+    if (requested === 'sidePanelHalfHeight' || requested === 'quarterTile') return 'sidePanelHalfHeight';
+    return 'sidePanelFull';
   }
 
   if (area === 'top') {
     return 'fullTile';
   }
 
-  return ['quarterTile', 'halfTile', 'fullTile'].includes(requested) ? requested : 'fullTile';
+  const normalized = legacyToModern[requested] || requested;
+  const fallbackNormalized = legacyToModern[fallback] || fallback;
+  return ['halfCol', 'oneCol', 'twoCols', 'threeCols', 'fourCols'].includes(normalized)
+    ? normalized
+    : fallbackNormalized;
+};
+
+const normalizeHeightForArea = (height, area, fallback, sizeToken) => {
+  if (area === 'top') return 'fullRow';
+
+  if (area === 'sideLeft' || area === 'sideRight') {
+    const fallbackHeight = sizeToken === 'sidePanelHalfHeight'
+      ? 'halfRow'
+      : sizeToken === 'sidePanelFull'
+        ? 'fullRow'
+        : (SOCIAL_LAYOUT_HEIGHTS.includes(fallback) ? fallback : 'fullRow');
+    return ['halfRow', 'fullRow', 'twoRows', 'fourRows'].includes(height) ? height : fallbackHeight;
+  }
+
+  const fallbackHeight = SOCIAL_LAYOUT_HEIGHTS.includes(fallback) ? fallback : 'fullRow';
+  return SOCIAL_LAYOUT_HEIGHTS.includes(height) ? height : fallbackHeight;
+};
+
+const normalizeGridPlacement = (gridPlacement, fallback) => {
+  const row = Number(gridPlacement?.row);
+  const col = Number(gridPlacement?.col);
+  if (!Number.isFinite(row) || !Number.isFinite(col)) {
+    return isPlainObject(fallback) ? fallback : undefined;
+  }
+  if (row < 0 || row >= LAYOUT_GRID_ROWS || col < 0 || col >= LAYOUT_GRID_COLUMNS) {
+    return isPlainObject(fallback) ? fallback : undefined;
+  }
+  return { row: Math.floor(row), col: Math.floor(col) };
 };
 
 const buildDefaultPanels = () => SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
@@ -257,8 +295,10 @@ const buildDefaultPanels = () => SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
   acc[panelId] = {
     area: defaults.area,
     size: defaults.size,
+    height: defaults.height,
     order: defaults.order,
     visible: defaults.visible,
+    gridPlacement: defaults.gridPlacement ? { ...defaults.gridPlacement } : undefined,
     useCustomStyles: false,
     styles: {}
   };
@@ -354,15 +394,17 @@ const normalizePanelStyles = (styles = {}, fallback = DEFAULT_GLOBAL_STYLES) => 
   fontSizes: normalizeFontSizeMap(styles.fontSizes, fallback.fontSizes)
 });
 
-const normalizePanelEntry = (rawPanel = {}, defaults) => {
+const normalizePanelEntry = (rawPanel = {}, defaults, globalStyles = DEFAULT_GLOBAL_STYLES) => {
   const area = normalizeArea(rawPanel.area, defaults.area);
   return {
     area,
     size: normalizeSizeForArea(rawPanel.size, area, defaults.size),
+    height: normalizeHeightForArea(rawPanel.height, area, defaults.height, rawPanel.size),
     order: Number.isFinite(Number(rawPanel.order)) ? Number(rawPanel.order) : defaults.order,
     visible: rawPanel.visible !== false,
+    gridPlacement: normalizeGridPlacement(rawPanel.gridPlacement, defaults.gridPlacement),
     useCustomStyles: Boolean(rawPanel.useCustomStyles),
-    styles: normalizePanelStyles(rawPanel.styles || {}, DEFAULT_GLOBAL_STYLES)
+    styles: normalizePanelStyles(rawPanel.styles || {}, globalStyles)
   };
 };
 
@@ -480,6 +522,7 @@ module.exports = {
   SOCIAL_FONT_SIZE_TOKENS,
   SOCIAL_LAYOUT_AREAS,
   SOCIAL_LAYOUT_SIZES,
+  SOCIAL_LAYOUT_HEIGHTS,
   SOCIAL_MODULE_IDS,
   SOCIAL_PANEL_IDS,
   SOCIAL_PRIMARY_SECTION_IDS,
