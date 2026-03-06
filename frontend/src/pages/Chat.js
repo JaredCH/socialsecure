@@ -369,7 +369,7 @@ function Chat() {
   }
 
   return (
-    <div className={`h-full w-full flex flex-col ${activeTheme.shell}`}>
+    <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${activeTheme.shell}`}>
       <div className="flex flex-col gap-3 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Classic Chat Lounge</h2>
@@ -397,7 +397,7 @@ function Chat() {
       </div>
 
       <div className="grid flex-1 min-h-0 grid-cols-1 gap-0 lg:grid-cols-12">
-        <aside className={`lg:col-span-3 border-b p-3 space-y-3 overflow-y-auto lg:border-b-0 lg:border-r ${activeTheme.panel}`}>
+        <aside className={`lg:col-span-3 min-h-0 border-b p-3 space-y-3 overflow-y-auto lg:border-b-0 lg:border-r ${activeTheme.panel}`}>
           <h3 className="font-semibold">Channels & Actions</h3>
           <div className="space-y-2">
             {CHANNELS.map((channel) => (

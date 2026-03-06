@@ -197,11 +197,18 @@ describe('Chat zip room indicator', () => {
     expect(chatShell).not.toBeNull();
     expect(chatShell.className).toContain('h-full');
     expect(chatShell.className).toContain('w-full');
+    expect(chatShell.className).toContain('min-h-0');
+    expect(chatShell.className).toContain('overflow-hidden');
     expect(chatShell.className).toContain('flex');
 
     const emptyMessages = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'No messages yet.');
     expect(emptyMessages).not.toBeUndefined();
     expect(emptyMessages.parentElement.className).toContain('flex-1');
+    expect(emptyMessages.parentElement.className).toContain('overflow-y-auto');
     expect(emptyMessages.parentElement.className).not.toContain('max-h-[460px]');
+
+    const sidebars = container.querySelectorAll('aside');
+    expect(sidebars.length).toBeGreaterThanOrEqual(2);
+    expect(sidebars[0].className).toContain('overflow-y-auto');
   });
 });

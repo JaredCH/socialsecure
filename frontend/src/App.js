@@ -385,7 +385,7 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-100 flex flex-col">
-        <nav className="bg-white shadow-md p-4">
+        <nav className="bg-white shadow-md border-b border-gray-200 p-4">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
             <div className="flex flex-nowrap items-center gap-3 overflow-x-auto">
