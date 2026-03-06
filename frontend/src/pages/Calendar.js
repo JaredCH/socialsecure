@@ -446,7 +446,7 @@ function Calendar() {
             <div data-testid="calendar-month-grid" className="border border-gray-200 rounded-xl overflow-hidden flex min-h-0 flex-1 flex-col">
               <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
                 {WEEKDAY_LABELS.map((label) => (
-                  <div key={label} className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+                  <div key={label} className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
                 ))}
               </div>
               <div className="grid grid-cols-7 auto-rows-fr flex-1 min-h-0">
@@ -459,7 +459,7 @@ function Calendar() {
                       key={day.toISOString()}
                       type="button"
                       onClick={() => handleDayClick(day, dayEvents)}
-                      className={`min-h-0 h-full border-b border-r border-gray-100 p-1.5 text-left align-top ${inActiveMonth ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50`}
+                      className={`min-h-[72px] border-b border-r border-gray-100 p-2 text-left align-top ${inActiveMonth ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50`}
                     >
                       <p className={`text-xs font-semibold ${isToday ? 'text-blue-700' : 'text-gray-500'}`}>{day.getDate()}</p>
                       <div className="mt-1 space-y-1">
@@ -482,7 +482,7 @@ function Calendar() {
               {weekDays.map((day) => {
                 const dayEvents = sortedEvents.filter((event) => eventOverlapsDay(event, day));
                 return (
-                  <div key={day.toISOString()} className="border border-gray-200 rounded-lg p-2 min-h-0">
+                  <div key={day.toISOString()} className="border border-gray-200 rounded-lg p-2 min-h-[140px]">
                     <p className="text-xs uppercase tracking-wide text-gray-500">{day.toLocaleDateString(undefined, { weekday: 'short' })}</p>
                     <p className="text-sm font-semibold text-gray-900">{day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
                     <div className="mt-2 space-y-2">
