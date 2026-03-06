@@ -42,7 +42,7 @@ function Register({ onSuccess, onWelcomeRequired }) {
     const selectedCountry = COUNTRY_CODE_OPTIONS.find((option) => option.code === countryCode);
 
     if (!selectedCountry) {
-      toast.error('Please select a valid country code');
+      toast.error('Please select a valid country');
       return;
     }
 
@@ -184,7 +184,7 @@ function Register({ onSuccess, onWelcomeRequired }) {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Country Code</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
             <select
               name="countryCode"
               value={form.countryCode}
@@ -192,10 +192,10 @@ function Register({ onSuccess, onWelcomeRequired }) {
               className="border rounded p-2 w-full"
               required
             >
-              <option value="">Select country code</option>
+              <option value="">Select country</option>
               {COUNTRY_CODE_OPTIONS.map((option) => (
                 <option key={option.code} value={option.code}>
-                  {option.name} ({option.code})
+                  {option.name}
                 </option>
               ))}
             </select>
