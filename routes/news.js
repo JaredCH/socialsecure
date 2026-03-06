@@ -467,6 +467,24 @@ const scoreLocalityLevel = (scope, localityLevel) => {
   return 0;
 };
 
+const articlePassesScope = (scope, scopeTier) => {
+  if (scope === 'local') return Boolean(scopeTier <= 2);
+  if (scope === 'regional') return Boolean(scopeTier === 0);
+  if (scope === 'national') return Boolean(scopeTier === 0);
+  return true;
+};
+
+const sortScopedArticles = (articles) => {
+  articles.sort((a, b) => {
+    if (a._scopeTier !== b._scopeTier) return a._scopeTier - b._scopeTier;
+    if (a._boostScore !== b._boostScore) return b._boostScore - a._boostScore;
+    if (a._rankingScore !== b._rankingScore) return b._rankingScore - a._rankingScore;
+    const publishedDiff = new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime();
+    if (publishedDiff !== 0) return publishedDiff;
+    return String(a._id).localeCompare(String(b._id));
+  });
+};
+
 const logNewsScopeEvent = ({ userId, eventType, metadata = {}, req }) => {
   const payload = {
     eventType,
@@ -860,7 +878,10 @@ router.get('/feed', authenticateToken, async (req, res) => {
     const locationContext = await resolveLocationContext({ preferences, user });
     const defaultScope = resolveDefaultScope({ preferences, locationContext });
     const requestedScope = NEWS_SCOPE_VALUES.includes(scope) ? scope : defaultScope;
-    const { activeScope, fallbackApplied } = resolveActiveScope({ requestedScope, locationContext });
+    const { activeScope: contextResolvedScope, fallbackApplied: contextFallbackApplied } = resolveActiveScope({ requestedScope, locationContext });
+    let activeScope = contextResolvedScope;
+    let fallbackApplied = contextFallbackApplied;
+    let fallbackReason = contextFallbackApplied ? 'context_unavailable' : null;
 
     if (NEWS_SCOPE_VALUES.includes(scope)) {
       logNewsScopeEvent({
@@ -869,7 +890,8 @@ router.get('/feed', authenticateToken, async (req, res) => {
         metadata: {
           requestedScope,
           activeScope,
-          fallbackApplied
+          fallbackApplied,
+          fallbackReason
         },
         req
       });
@@ -923,68 +945,77 @@ router.get('/feed', authenticateToken, async (req, res) => {
         ].flatMap((value) => getTopicAliases(value)))]
       : [];
 
-    articles = articles.map((article) => {
+    const scopedCandidates = articles.map((article) => {
       const articleText = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
       const matchedKeywords = followedKeywords.filter((keyword) => articleText.includes(keyword.toLowerCase()));
       const locationMatches = articleMatchesLocation(article, locationContext);
-      const scopeTier = getScopeTier(activeScope, locationMatches);
-      const recencyScore = scoreRecency(article.publishedAt, article.freshnessScore);
-      const localityLevelScore = scoreLocalityLevel(activeScope, article.localityLevel);
 
       return {
         ...article,
+        _searchText: articleText,
+        _locationMatches: locationMatches,
+        _topicTokens: (article.topics || []).map((item) => normalizeTopicToken(item)),
         matchedKeywords,
         isFollowingMatch: matchedKeywords.length > 0, // kept for existing frontend badge logic
-        _boostScore: matchedKeywords.length,
-        _scopeTier: scopeTier,
-        _rankingScore:
-          (matchedKeywords.length * KEYWORD_MATCH_WEIGHT) +
-          ((MAX_SCOPE_TIERS - scopeTier) * SCOPE_TIER_WEIGHT) +
-          recencyScore +
-          localityLevelScore
+        _boostScore: matchedKeywords.length
       };
     });
 
-    articles = articles.filter((article) => {
-      if (topicAliases.length > 0) {
-        const text = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
-        if (!topicAliases.some((alias) => text.includes(alias.toLowerCase()))) {
-          return false;
-        }
-      } else if (preferredTopicAliases.length > 0) {
-        const text = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
-        if (!preferredTopicAliases.some((alias) => text.includes(alias.toLowerCase()))) {
-          return false;
-        }
-      }
+    const buildScopedArticles = (scopeValue) => {
+      const scoped = scopedCandidates
+        .map((article) => {
+          const scopeTier = getScopeTier(scopeValue, article._locationMatches);
+          const recencyScore = scoreRecency(article.publishedAt, article.freshnessScore);
+          const localityLevelScore = scoreLocalityLevel(scopeValue, article.localityLevel);
 
-      if (hiddenCategorySet.size > 0) {
-        const articleTopics = (article.topics || []).map((item) => normalizeTopicToken(item));
-        if (articleTopics.some((item) => hiddenCategorySet.has(item))) {
-          return false;
+          return {
+            ...article,
+            _scopeTier: scopeTier,
+            _rankingScore:
+              (article._boostScore * KEYWORD_MATCH_WEIGHT) +
+              ((MAX_SCOPE_TIERS - scopeTier) * SCOPE_TIER_WEIGHT) +
+              recencyScore +
+              localityLevelScore
+          };
+        })
+        .filter((article) => {
+          if (topicAliases.length > 0) {
+            if (!topicAliases.some((alias) => article._searchText.includes(alias.toLowerCase()))) {
+              return false;
+            }
+          } else if (preferredTopicAliases.length > 0) {
+            if (!preferredTopicAliases.some((alias) => article._searchText.includes(alias.toLowerCase()))) {
+              return false;
+            }
+          }
+
+          if (hiddenCategorySet.size > 0 && article._topicTokens.some((item) => hiddenCategorySet.has(item))) {
+            return false;
+          }
+
+          return articlePassesScope(scopeValue, article._scopeTier);
+        });
+
+      sortScopedArticles(scoped);
+      return scoped;
+    };
+
+    let scopeFilteredArticles = buildScopedArticles(activeScope);
+    if (scopeFilteredArticles.length === 0 && activeScope !== 'global') {
+      const fallbackChain = getFallbackScopeOrder(activeScope).slice(1);
+      for (const fallbackScope of fallbackChain) {
+        const fallbackArticles = buildScopedArticles(fallbackScope);
+        if (fallbackArticles.length > 0) {
+          activeScope = fallbackScope;
+          scopeFilteredArticles = fallbackArticles;
+          fallbackApplied = true;
+          fallbackReason = 'no_scope_matches';
+          break;
         }
       }
+    }
 
-      if (activeScope === 'local') {
-        return Boolean(article._scopeTier <= 2);
-      }
-      if (activeScope === 'regional') {
-        return Boolean(article._scopeTier === 0);
-      }
-      if (activeScope === 'national') {
-        return Boolean(article._scopeTier === 0);
-      }
-      return true;
-    });
-
-    articles.sort((a, b) => {
-      if (a._scopeTier !== b._scopeTier) return a._scopeTier - b._scopeTier;
-      if (a._boostScore !== b._boostScore) return b._boostScore - a._boostScore;
-      if (a._rankingScore !== b._rankingScore) return b._rankingScore - a._rankingScore;
-      const publishedDiff = new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime();
-      if (publishedDiff !== 0) return publishedDiff;
-      return String(a._id).localeCompare(String(b._id));
-    });
+    articles = scopeFilteredArticles;
     
     const total = articles.length;
     const startIndex = Math.max(0, skip);
@@ -1015,6 +1046,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
         requestedScope,
         activeScope,
         fallbackApplied,
+        fallbackReason,
         locationContext: {
           source: locationContext.source,
           hasZipCode: Boolean(locationContext.zipCode),
@@ -1040,6 +1072,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
         metadata: {
           requestedScope,
           activeScope,
+          fallbackReason,
           articleCount: articles.length
         },
         req

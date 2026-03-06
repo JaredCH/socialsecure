@@ -401,4 +401,63 @@ describe('News scope routing', () => {
     expect(response.body.articles).toHaveLength(1);
     expect(response.body.articles[0]._id).toBe('state-1');
   });
+
+  it('falls back to national scope when regional scope has no matching local articles', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'us-1',
+        title: 'National infrastructure update',
+        description: '',
+        source: 'US Wire',
+        sourceType: 'rss',
+        sourceId: 'us-wire',
+        topics: ['politics'],
+        locations: ['United States', 'US'],
+        localityLevel: 'country',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      },
+      {
+        _id: 'global-4',
+        title: 'Global market update',
+        description: '',
+        source: 'Global Wire',
+        sourceType: 'rss',
+        sourceId: 'global-wire',
+        topics: ['finance'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'regional',
+      locations: [{ country: 'US', zipCode: '78666', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: 'US', zipCode: '78666' }) });
+    mockGeocode.mockResolvedValue([{
+      city: 'San Marcos',
+      county: 'Hays County',
+      state: 'Texas',
+      stateCode: 'TX',
+      country: 'United States',
+      countryCode: 'US'
+    }]);
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=regional')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.requestedScope).toBe('regional');
+    expect(response.body.personalization.activeScope).toBe('national');
+    expect(response.body.personalization.fallbackApplied).toBe(true);
+    expect(response.body.personalization.fallbackReason).toBe('no_scope_matches');
+    expect(response.body.articles).toHaveLength(1);
+    expect(response.body.articles[0]._id).toBe('us-1');
+  });
 });
