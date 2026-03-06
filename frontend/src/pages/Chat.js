@@ -361,12 +361,16 @@ function Chat() {
   };
 
   if (loadingHub) {
-    return <div className="bg-white rounded-lg shadow p-6">Loading unified chat hub...</div>;
+    return (
+      <div className="h-full w-full grid place-items-center bg-white">
+        <div className="text-sm opacity-80">Loading unified chat hub...</div>
+      </div>
+    );
   }
 
   return (
-    <div className={`rounded-lg shadow p-5 space-y-4 ${activeTheme.shell}`}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className={`h-full w-full flex flex-col ${activeTheme.shell}`}>
+      <div className="flex flex-col gap-3 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Classic Chat Lounge</h2>
           <p className="text-sm opacity-90">
@@ -392,8 +396,8 @@ function Chat() {
         </label>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <aside className={`lg:col-span-3 border rounded p-3 space-y-3 ${activeTheme.panel}`}>
+      <div className="grid flex-1 min-h-0 grid-cols-1 gap-0 lg:grid-cols-12">
+        <aside className={`lg:col-span-3 border-b p-3 space-y-3 overflow-y-auto lg:border-b-0 lg:border-r ${activeTheme.panel}`}>
           <h3 className="font-semibold">Channels & Actions</h3>
           <div className="space-y-2">
             {CHANNELS.map((channel) => (
@@ -490,7 +494,7 @@ function Chat() {
           </div>
         </aside>
 
-        <section className={`lg:col-span-6 border rounded p-3 space-y-3 ${activeTheme.panel}`}>
+        <section className={`lg:col-span-6 border-b p-3 space-y-3 flex flex-col min-h-0 lg:border-b-0 lg:border-r ${activeTheme.panel}`}>
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
             <div className="text-xs opacity-80">Guided Flow: 1) Channel 2) Room 3) Chat</div>
@@ -499,7 +503,7 @@ function Chat() {
             <div className="text-sm bg-red-50 border border-red-200 text-red-700 rounded p-2">{messagesError}</div>
           ) : null}
 
-          <div className={`max-h-[460px] overflow-y-auto border rounded p-2 space-y-2 ${activeTheme.messages}`}>
+          <div className={`flex-1 min-h-0 overflow-y-auto border rounded p-2 space-y-2 ${activeTheme.messages}`}>
             {messagesLoading ? (
               <p className="text-sm opacity-80">Loading messages...</p>
             ) : messages.length === 0 ? (
@@ -536,14 +540,14 @@ function Chat() {
           </form>
         </section>
 
-        <aside className={`lg:col-span-3 border rounded p-3 space-y-2 ${activeTheme.panel}`}>
+        <aside className={`lg:col-span-3 p-3 space-y-2 min-h-0 flex flex-col ${activeTheme.panel}`}>
           <h3 className="font-semibold">Users in Room</h3>
           {activeConversation ? (
             <p className="text-xs opacity-80">{getConversationLabel(activeConversation)}</p>
           ) : (
             <p className="text-xs opacity-80">Select a room to view users.</p>
           )}
-          <div className="border rounded max-h-[460px] overflow-auto">
+          <div className="border rounded overflow-auto flex-1 min-h-0">
             {roomUsersLoading ? (
               <p className="text-xs p-2 opacity-80">Loading users...</p>
             ) : roomUsers.length === 0 ? (
