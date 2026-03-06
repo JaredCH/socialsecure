@@ -1,6 +1,6 @@
 jest.mock('../utils/api', () => ({ mapsAPI: {} }));
 
-const { resolveLeafletModule } = require('./Maps');
+import { resolveLeafletModule } from './Maps';
 
 describe('resolveLeafletModule', () => {
   it('uses default export when it contains Leaflet map API', () => {
@@ -20,5 +20,9 @@ describe('resolveLeafletModule', () => {
     const moduleShape = { default: { map: null }, map: jest.fn() };
 
     expect(resolveLeafletModule(moduleShape)).toBe(moduleShape);
+  });
+
+  it('throws when no valid map API exists on either export shape', () => {
+    expect(() => resolveLeafletModule({ default: {} })).toThrow('Leaflet map API is unavailable');
   });
 });
