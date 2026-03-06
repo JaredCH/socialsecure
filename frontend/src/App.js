@@ -397,13 +397,31 @@ function App() {
             <div className="flex flex-nowrap items-center gap-3 overflow-x-auto">
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Home</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Social</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Discover</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Chat</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Market</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">News</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Maps</Link>}
-              <Link to="/calendar" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Calendar</Link>
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/resume" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Resume</Link>}
+              <details className="relative" data-testid="features-menu">
+                <summary className="flex cursor-pointer list-none items-center gap-1 text-gray-600 hover:text-blue-600 whitespace-nowrap">
+                  Features
+                  <span aria-hidden="true">▾</span>
+                </summary>
+                <div className="absolute right-0 z-20 mt-2 min-w-40 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+                  {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && (
+                    <Link to="/discover" className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
+                      Discover
+                    </Link>
+                  )}
+                  <Link to="/calendar" className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
+                    Calendar
+                  </Link>
+                  {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && (
+                    <Link to="/resume" className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
+                      Resume
+                    </Link>
+                  )}
+                </div>
+              </details>
               {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/control-panel" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Control Panel</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Refer Friend</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && (
