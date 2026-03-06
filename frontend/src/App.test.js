@@ -104,6 +104,13 @@ describe('App navbar features dropdown', () => {
 
     const featuresMenu = container.querySelector('[data-testid="features-menu"]');
     expect(featuresMenu).not.toBeNull();
+    const featuresButton = featuresMenu.querySelector('button');
+    expect(featuresButton).not.toBeNull();
+
+    await act(async () => {
+      featuresButton.click();
+    });
+
     expect(featuresMenu.textContent).toContain('Features');
     expect(featuresMenu.textContent).toContain('Discover');
     expect(featuresMenu.textContent).toContain('Calendar');
@@ -117,6 +124,13 @@ describe('App navbar features dropdown', () => {
 
     const featuresMenu = container.querySelector('[data-testid="features-menu"]');
     expect(featuresMenu).not.toBeNull();
+    const featuresButton = featuresMenu.querySelector('button');
+    expect(featuresButton).not.toBeNull();
+
+    await act(async () => {
+      featuresButton.click();
+    });
+
     expect(featuresMenu.textContent).toContain('Calendar');
     expect(featuresMenu.textContent).not.toContain('Discover');
     expect(featuresMenu.textContent).not.toContain('Resume');
