@@ -8,7 +8,9 @@ jest.mock('jsonwebtoken', () => ({
 
 jest.mock('../models/Article', () => ({
   find: jest.fn(),
-  countDocuments: jest.fn()
+  countDocuments: jest.fn(),
+  findDuplicate: jest.fn(),
+  findByIdAndUpdate: jest.fn()
 }));
 
 jest.mock('../models/RssSource', () => ({
@@ -68,6 +70,7 @@ describe('News scope routing', () => {
     jest.clearAllMocks();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'user-1' }));
     Article.countDocuments.mockResolvedValue(2);
+    Article.findDuplicate.mockResolvedValue(null);
     mockGeocode.mockResolvedValue([]);
   });
 
@@ -251,6 +254,7 @@ describe('News scope routing', () => {
       expect.objectContaining({
         user: 'user-1',
         defaultScope: 'local',
+        hiddenCategories: [],
         locations: [
           expect.objectContaining({
             city: 'Austin',
@@ -593,5 +597,77 @@ describe('News scope routing', () => {
     expect(response.body.personalization.activeScope).toBe('regional');
     expect(response.body.articles.length).toBeGreaterThanOrEqual(1);
     expect(response.body.articles[0]._id).toBe('state-name-1');
+  });
+
+  it('treats nearby zip prefixes as local proximity matches', async () => {
+    const proximityMatch = newsRoutes.internals.articleMatchesLocation(
+      {
+        title: 'Local transit update',
+        description: '',
+        locations: [],
+        assignedZipCode: '78759'
+      },
+      {
+        zipCode: '78701',
+        zipCodeValues: ['78701'],
+        cityValues: [],
+        countyValues: [],
+        stateValues: [],
+        countryValues: []
+      }
+    );
+
+    expect(proximityMatch.zipCode).toBe(true);
+  });
+
+  it('uses findDuplicate and updates existing article only when incoming publishedAt is newer', async () => {
+    const older = new Date('2026-03-01T00:00:00.000Z');
+    const newer = new Date('2026-03-02T00:00:00.000Z');
+    Article.findDuplicate.mockResolvedValue({
+      _id: 'existing-1',
+      publishedAt: older,
+      topics: ['technology'],
+      locations: ['austin'],
+      assignedZipCode: '78701'
+    });
+
+    const result = await newsRoutes.internals.processArticles([
+      {
+        title: 'Austin update',
+        description: '',
+        source: 'Wire',
+        sourceId: 'wire-1',
+        url: 'https://example.com/article-1',
+        publishedAt: newer,
+        topics: ['ai'],
+        locations: ['austin'],
+        assignedZipCode: '78759'
+      }
+    ]);
+
+    expect(Article.findDuplicate).toHaveBeenCalledWith('https://example.com/article-1', 'wire-1');
+    expect(Article.findByIdAndUpdate).toHaveBeenCalledTimes(1);
+    expect(result.updated).toBe(1);
+    expect(result.inserted).toBe(0);
+  });
+
+  it('returns null for unparseable publication dates', () => {
+    const parsed = newsRoutes.internals.getItemPublishedAt({
+      isoDate: 'not-a-date',
+      pubDate: null
+    });
+
+    expect(parsed).toBeNull();
+  });
+
+  it('assigns article zip from title location geocoding when zip is not already present', async () => {
+    mockGeocode.mockResolvedValue([{ zipcode: '10001' }]);
+    const assignedZip = await newsRoutes.internals.resolveAssignedZipCode({
+      locationTokens: [],
+      source: { name: 'Metro Wire' },
+      item: { title: 'Transit expansions announced in New York, NY' }
+    });
+
+    expect(assignedZip).toBe('10001');
   });
 });

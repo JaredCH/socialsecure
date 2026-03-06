@@ -69,7 +69,7 @@ function News() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showSettings, setShowSettings] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
-  const [activeScope, setActiveScope] = useState('global');
+  const [activeScope, setActiveScope] = useState('local');
   const [scopeFallbackMessage, setScopeFallbackMessage] = useState('');
   const [availableSources, setAvailableSources] = useState([]);
   const [topUsedSources, setTopUsedSources] = useState([]);
@@ -122,7 +122,7 @@ function News() {
       setPromotedLoading(true);
       
       const [feedRes, prefsRes, topicsRes, promotedRes] = await Promise.all([
-        newsAPI.getFeed({ page: 1, limit: 20 }),
+        newsAPI.getFeed({ page: 1, limit: 20, scope: 'local' }),
         newsAPI.getPreferences().catch(() => ({ data: { preferences: null } })),
         newsAPI.getTopics(),
         newsAPI.getPromoted({ limit: 8 }).catch(() => ({ data: { items: [] } }))
@@ -132,7 +132,7 @@ function News() {
       setArticles(feedRes.data.articles);
       setPagination(feedRes.data.pagination);
       setPreferences(prefsRes.data.preferences);
-      setActiveScope(feedRes.data.personalization?.activeScope || prefsRes.data.preferences?.defaultScope || 'global');
+      setActiveScope(feedRes.data.personalization?.activeScope || 'local');
       if (feedRes.data.personalization?.fallbackApplied) {
         setScopeFallbackMessage(`Showing ${feedRes.data.personalization.activeScope} scope because ${feedRes.data.personalization.requestedScope} scope is unavailable for your current location data.`);
       } else {
@@ -485,7 +485,7 @@ function News() {
               <h3 className="font-medium">Default News Scope</h3>
               <p className="text-sm text-gray-500 mb-2">Choose which scope opens by default each time you load News</p>
               <select
-                value={preferences?.defaultScope || 'global'}
+                value={preferences?.defaultScope || 'local'}
                 onChange={(e) => handleDefaultScopeChange(e.target.value)}
                 className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
               >
