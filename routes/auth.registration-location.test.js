@@ -123,7 +123,7 @@ describe('Auth registration location fields', () => {
     expect(response.status).toBe(400);
     expect(response.body.errors).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ msg: expect.stringMatching(/country/i) })
+        expect.objectContaining({ msg: expect.stringMatching(/country.*list/i) })
       ])
     );
     expect(mockUserModel).not.toHaveBeenCalled();

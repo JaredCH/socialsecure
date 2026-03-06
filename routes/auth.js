@@ -270,7 +270,7 @@ router.post('/register', [
     .notEmpty()
     .withMessage('Country is required')
     .matches(/^[A-Z]{2}$/)
-    .withMessage('Country must be a valid selection'),
+    .withMessage('Please select a country from the list'),
   body('county')
     .trim()
     .notEmpty()
