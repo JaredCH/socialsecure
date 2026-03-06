@@ -431,7 +431,7 @@ router.get('/local', optionalAuth, async (req, res) => {
         category: s.category,
         state: s.state,
         reactions: s.reactions,
-        user: req.user ? { 
+        user: req.user && s.user ? { 
           username: s.user.username, 
           avatarUrl: s.user.avatarUrl 
         } : null
@@ -492,10 +492,10 @@ router.get('/community', optionalAuth, async (req, res) => {
         category: s.category,
         state: s.state,
         reactions: s.reactions,
-        user: { 
+        user: s.user ? { 
           username: s.user.username, 
           avatarUrl: s.user.avatarUrl 
-        }
+        } : null
       })),
       heatmap
     });

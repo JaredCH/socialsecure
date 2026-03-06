@@ -1,5 +1,45 @@
 const mongoose = require('mongoose');
 
+// Simple geohash encoding function
+function encodeGeohash(lat, lng, precision) {
+  const base32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+  let latInterval = [-90, 90];
+  let lngInterval = [-180, 180];
+  let hash = '';
+  let bit = 0;
+  let ch = 0;
+  
+  for (let i = 0; i < precision; i++) {
+    for (let j = 0; j < 5; j++) {
+      // Longitude bit
+      if (bit % 2 === 0) {
+        const mid = (lngInterval[0] + lngInterval[1]) / 2;
+        if (lng >= mid) {
+          ch |= (1 << (4 - j));
+          lngInterval[0] = mid;
+        } else {
+          lngInterval[1] = mid;
+        }
+      } else {
+        // Latitude bit
+        const mid = (latInterval[0] + latInterval[1]) / 2;
+        if (lat >= mid) {
+          ch |= (1 << (4 - j));
+          latInterval[0] = mid;
+        } else {
+          latInterval[1] = mid;
+        }
+      }
+      bit++;
+    }
+    hash += base32[ch];
+    ch = 0;
+    bit = 0;
+  }
+  
+  return hash;
+}
+
 const spotlightSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -85,6 +125,11 @@ const spotlightSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  // Geohash for efficient heatmap aggregation queries
+  geohash: {
+    type: String,
+    index: true
   }
 }, {
   timestamps: true
@@ -96,10 +141,14 @@ spotlightSchema.index({ state: 1, isActive: 1 });
 spotlightSchema.index({ user: 1, createdAt: -1 });
 spotlightSchema.index({ category: 1, state: 1 });
 
-// Pre-save hook to set expiration (24 hours default)
+// Pre-save hook to set expiration and generate geohash
 spotlightSchema.pre('save', function(next) {
   if (!this.expiresAt) {
     this.expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  }
+  if (this.location && this.location.coordinates) {
+    const [lng, lat] = this.location.coordinates;
+    this.geohash = encodeGeohash(lat, lng, 6);
   }
   next();
 });
@@ -202,7 +251,7 @@ spotlightSchema.statics.getByLocation = async function(lat, lng, radius = 5000, 
     }
   };
   
-  if (state) query.state = state;
+  if (state) query.state = Array.isArray(state) ? { $in: state } : state;
   if (category) query.category = category;
   
   return this.find(query)
