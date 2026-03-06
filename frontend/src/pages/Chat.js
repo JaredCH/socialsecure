@@ -74,6 +74,10 @@ const Chat = () => {
   const [rooms, setRooms] = useState([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [activeRoomId, setActiveRoomId] = useState('');
+  const [showAllRooms, setShowAllRooms] = useState(false);
+  const [roomQuery, setRoomQuery] = useState('');
+  const [roomTags, setRoomTags] = useState('');
+  const [roomStatus, setRoomStatus] = useState('');
 
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlocking, setUnlocking] = useState(false);
@@ -168,6 +172,12 @@ const Chat = () => {
     return message?.userId?.username || message?.userId?.realName || 'user';
   };
 
+  const loadDiscoverRooms = async ({ query = '', tags = '', status = '' } = {}) => {
+    const discover = await chatAPI.discoverRooms({ query, tags, status, page: 1, limit: 50 });
+    const discoveredRooms = Array.isArray(discover.data?.rooms) ? discover.data.rooms : [];
+    return discoveredRooms;
+  };
+
   useEffect(() => {
     const bootstrap = async () => {
       try {
@@ -211,9 +221,11 @@ const Chat = () => {
           console.warn('Location room sync skipped:', syncError.response?.data?.error);
         }
 
-        // Get nearby rooms using user's location or browser geolocation
-        const nearby = await chatAPI.getNearbyRooms(location.latitude, location.longitude, 100);
-        const roomList = Array.isArray(nearby.data?.rooms) ? nearby.data.rooms : [];
+        let roomList = await loadDiscoverRooms();
+        if (roomList.length === 0) {
+          const nearby = await chatAPI.getNearbyRooms(location.latitude, location.longitude, 100);
+          roomList = Array.isArray(nearby.data?.rooms) ? nearby.data.rooms : [];
+        }
         setRooms(roomList);
         if (roomList.length > 0) {
           setActiveRoomId(String(roomList[0]._id));
@@ -227,6 +239,65 @@ const Chat = () => {
 
     bootstrap();
   }, []);
+
+  const handleRoomDiscovery = async (event) => {
+    event.preventDefault();
+    setShowAllRooms(false);
+    setRoomsLoading(true);
+    try {
+      const roomList = await loadDiscoverRooms({
+        query: roomQuery.trim(),
+        tags: roomTags.trim(),
+        status: roomStatus
+      });
+      setRooms(roomList);
+      if (roomList.length > 0) {
+        setActiveRoomId(String(roomList[0]._id));
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to discover rooms.');
+    } finally {
+      setRoomsLoading(false);
+    }
+  };
+
+  const handleShowAllRooms = async () => {
+    if (!showAllRooms) {
+      setRoomsLoading(true);
+      try {
+        const response = await chatAPI.getAllRooms(1, 100);
+        const roomList = Array.isArray(response.data?.rooms) ? response.data.rooms : [];
+        setRooms(roomList);
+        if (roomList.length > 0) {
+          setActiveRoomId(String(roomList[0]._id));
+        }
+        setShowAllRooms(true);
+      } catch (error) {
+        toast.error(error.response?.data?.error || 'Failed to load all chat rooms.');
+      } finally {
+        setRoomsLoading(false);
+      }
+      return;
+    }
+
+    setRoomsLoading(true);
+    try {
+      const roomList = await loadDiscoverRooms({
+        query: roomQuery.trim(),
+        tags: roomTags.trim(),
+        status: roomStatus
+      });
+      setRooms(roomList);
+      if (roomList.length > 0) {
+        setActiveRoomId(String(roomList[0]._id));
+      }
+      setShowAllRooms(false);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to load discover rooms.');
+    } finally {
+      setRoomsLoading(false);
+    }
+  };
 
   const loadKeyPackages = async (roomId, unlockedSession) => {
     if (!unlockedSession) return;
@@ -730,11 +801,55 @@ const Chat = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <aside className="md:col-span-1 border rounded p-3">
-          <h3 className="font-semibold mb-2">Nearby Rooms</h3>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <h3 className="font-semibold">{showAllRooms ? 'All Rooms' : 'Discover Rooms'}</h3>
+            <button
+              type="button"
+              onClick={handleShowAllRooms}
+              className="text-xs px-2 py-1 rounded border hover:bg-gray-50"
+            >
+              {showAllRooms ? 'Back to Discover' : 'Show all chat rooms'}
+            </button>
+          </div>
+          {!showAllRooms ? (
+            <form onSubmit={handleRoomDiscovery} className="space-y-2 mb-3">
+              <input
+                type="text"
+                value={roomQuery}
+                onChange={(event) => setRoomQuery(event.target.value)}
+                placeholder="Search events"
+                className="w-full border rounded px-2 py-1 text-sm"
+              />
+              <input
+                type="text"
+                value={roomTags}
+                onChange={(event) => setRoomTags(event.target.value)}
+                placeholder="Tags (mma,nfl,tv)"
+                className="w-full border rounded px-2 py-1 text-sm"
+              />
+              <div className="flex gap-1">
+                <button type="button" onClick={() => setRoomTags('tv')} className="flex-1 text-xs border rounded px-2 py-1 hover:bg-gray-50">TV</button>
+                <button type="button" onClick={() => setRoomTags('mma,nfl,mls,nba,mlb')} className="flex-1 text-xs border rounded px-2 py-1 hover:bg-gray-50">Live Sports</button>
+              </div>
+              <select
+                value={roomStatus}
+                onChange={(event) => setRoomStatus(event.target.value)}
+                className="w-full border rounded px-2 py-1 text-sm"
+              >
+                <option value="">TV + Live Sports</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="live">Live</option>
+                <option value="completed">Completed</option>
+              </select>
+              <button type="submit" className="w-full text-xs bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700">
+                Search Discovery
+              </button>
+            </form>
+          ) : null}
           {roomsLoading ? (
             <p className="text-sm text-gray-500">Loading rooms...</p>
           ) : rooms.length === 0 ? (
-            <p className="text-sm text-gray-500">No rooms found for current location.</p>
+            <p className="text-sm text-gray-500">{showAllRooms ? 'No rooms found.' : 'No discoverable rooms found.'}</p>
           ) : (
             <ul className="space-y-2">
               {rooms.map((room) => {

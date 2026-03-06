@@ -248,6 +248,8 @@ const io = require('socket.io')(server, {
 });
 
 const { setNotificationIo } = require('./services/notifications');
+const { startEventScheduleIngestionScheduler } = require('./services/eventScheduleIngestion');
+const { startEventRoomLifecycleScheduler } = require('./services/eventRoomLifecycle');
 setNotificationIo(io);
 
 // Socket.io connection handling
@@ -278,5 +280,14 @@ io.on('connection', (socket) => {
     console.log('Client disconnected:', socket.id);
   });
 });
+
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    startEventScheduleIngestionScheduler();
+    startEventRoomLifecycleScheduler();
+  } catch (error) {
+    console.error('Failed to start event schedulers:', error);
+  }
+}
 
 module.exports = { app, server };

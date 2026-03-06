@@ -112,8 +112,15 @@ export const galleryAPI = {
 
 // Chat API
 export const chatAPI = {
-  getNearbyRooms: (longitude, latitude, maxDistance = 50) => 
-    api.get(`/chat/rooms/nearby?longitude=${longitude}&latitude=${latitude}&maxDistance=${maxDistance}`),
+  discoverRooms: ({ query = '', tags = '', status = '', page = 1, limit = 20 } = {}) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (query) params.append('query', query);
+    if (tags) params.append('tags', tags);
+    if (status) params.append('status', status);
+    return api.get(`/chat/rooms/discover?${params.toString()}`);
+  },
+  getUpcomingEventRooms: (days = 7) => api.get(`/chat/rooms/events/upcoming?days=${days}`),
+  getAllRooms: (page = 1, limit = 20) => api.get(`/chat/rooms/all?page=${page}&limit=${limit}`),
   getRoom: (roomId, page = 1, limit = 500) =>
     api.get(`/chat/rooms/${roomId}?page=${page}&limit=${limit}`),
   sendMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages`, data),

@@ -8,7 +8,7 @@ const chatRoomSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['city', 'state', 'county'],
+    enum: ['city', 'state', 'county', 'event'],
     required: true
   },
   location: {
@@ -32,6 +32,38 @@ const chatRoomSchema = new mongoose.Schema({
   state: String,
   country: String,
   county: String,
+  eventRef: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'EventSchedule',
+    default: null
+  },
+  stableKey: {
+    type: String,
+    default: null,
+    index: true
+  },
+  discoverable: {
+    type: Boolean,
+    default: true
+  },
+  autoLifecycle: {
+    type: Boolean,
+    default: false
+  },
+  visibilityWindow: {
+    startAt: {
+      type: Date,
+      default: null
+    },
+    endAt: {
+      type: Date,
+      default: null
+    }
+  },
+  archivedAt: {
+    type: Date,
+    default: null
+  },
   members: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -74,6 +106,9 @@ const chatRoomSchema = new mongoose.Schema({
 // Geospatial index for location-based queries
 chatRoomSchema.index({ location: '2dsphere' });
 chatRoomSchema.index({ type: 1, city: 1, state: 1, country: 1 });
+chatRoomSchema.index({ type: 1, discoverable: 1, lastActivity: -1 });
+chatRoomSchema.index({ eventRef: 1 }, { sparse: true });
+chatRoomSchema.index({ stableKey: 1 }, { sparse: true, unique: true });
 
 // Static method to find rooms near a location
 chatRoomSchema.statics.findNearby = function(longitude, latitude, maxDistanceMiles = 50) {
