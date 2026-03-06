@@ -93,6 +93,7 @@ function App() {
   });
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [incomingNotification, setIncomingNotification] = useState(null);
+  const [isFeaturesMenuOpen, setIsFeaturesMenuOpen] = useState(false);
   const [welcomeConfirmationPending, setWelcomeConfirmationPending] = useState(
     () => sessionStorage.getItem(WELCOME_PENDING_KEY) === 'true'
   );
@@ -105,11 +106,15 @@ function App() {
     }
   });
   const notificationSocketRef = useRef(null);
+  const featuresMenuRef = useRef(null);
+  const firstFeatureItemRef = useRef(null);
+  const lastFeatureItemRef = useRef(null);
 
   const isAuthenticated = useMemo(() => Boolean(localStorage.getItem('token') && user), [user]);
   const onboardingRequired = isAuthenticated && onboardingStatus.status !== 'completed';
   const encryptionPasswordRequired = isAuthenticated && !encryptionPasswordStatus.hasEncryptionPassword;
   const passwordResetRequired = isAuthenticated && !!user?.mustResetPassword;
+  const canUseProtectedFeatures = isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired;
 
   const refreshEncryptionPasswordStatus = async () => {
     if (!localStorage.getItem('token')) {
@@ -308,6 +313,38 @@ function App() {
     };
   }, [isAuthenticated, user?._id]);
 
+  useEffect(() => {
+    if (!isFeaturesMenuOpen) {
+      return undefined;
+    }
+
+    const handleMouseDown = (event) => {
+      if (featuresMenuRef.current && !featuresMenuRef.current.contains(event.target)) {
+        setIsFeaturesMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsFeaturesMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isFeaturesMenuOpen]);
+
+  useEffect(() => {
+    if (isFeaturesMenuOpen && firstFeatureItemRef.current) {
+      firstFeatureItemRef.current.focus();
+    }
+  }, [isFeaturesMenuOpen]);
+
   const handleAuthSuccess = (payload) => {
     localStorage.setItem('token', payload.token);
     setUser(payload.user);
@@ -396,17 +433,86 @@ function App() {
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
             <div className="flex flex-nowrap items-center gap-3 overflow-x-auto">
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Home</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Social</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Discover</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Chat</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Market</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">News</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Maps</Link>}
-              <Link to="/calendar" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Calendar</Link>
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/resume" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Resume</Link>}
-              {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/control-panel" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Control Panel</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Refer Friend</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && (
+              {canUseProtectedFeatures && <Link to="/social" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Social</Link>}
+              {canUseProtectedFeatures && <Link to="/chat" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Chat</Link>}
+              {canUseProtectedFeatures && <Link to="/market" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Market</Link>}
+              {canUseProtectedFeatures && <Link to="/news" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">News</Link>}
+              {canUseProtectedFeatures && <Link to="/maps" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Maps</Link>}
+              <div
+                className="relative"
+                data-testid="features-menu"
+                ref={featuresMenuRef}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) {
+                    setIsFeaturesMenuOpen(false);
+                  }
+                }}
+              >
+                <button
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={isFeaturesMenuOpen}
+                  aria-controls="features-menu-panel"
+                  onClick={() => setIsFeaturesMenuOpen((prev) => !prev)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowDown') {
+                      event.preventDefault();
+                      if (!isFeaturesMenuOpen) {
+                        setIsFeaturesMenuOpen(true);
+                      } else if (firstFeatureItemRef.current) {
+                        firstFeatureItemRef.current.focus();
+                      }
+                    }
+                    if (event.key === 'ArrowUp') {
+                      event.preventDefault();
+                      if (!isFeaturesMenuOpen) {
+                        setIsFeaturesMenuOpen(true);
+                      } else if (lastFeatureItemRef.current) {
+                        lastFeatureItemRef.current.focus();
+                      }
+                    }
+                  }}
+                  className="flex items-center gap-1 text-gray-600 hover:text-blue-600 whitespace-nowrap"
+                >
+                  Features
+                  <span aria-hidden="true">▾</span>
+                </button>
+                {isFeaturesMenuOpen ? (
+                  <div
+                    id="features-menu-panel"
+                    role="menu"
+                    className="absolute right-0 z-20 mt-2 min-w-40 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+                  >
+                    {canUseProtectedFeatures && (
+                      <Link ref={firstFeatureItemRef} to="/discover" role="menuitem" onClick={() => setIsFeaturesMenuOpen(false)} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
+                        Discover
+                      </Link>
+                    )}
+                    <Link
+                      ref={(node) => {
+                        if (!canUseProtectedFeatures) {
+                          firstFeatureItemRef.current = node;
+                          lastFeatureItemRef.current = node;
+                        }
+                      }}
+                      to="/calendar"
+                      role="menuitem"
+                      onClick={() => setIsFeaturesMenuOpen(false)}
+                      className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap"
+                    >
+                      Calendar
+                    </Link>
+                    {canUseProtectedFeatures && (
+                      <Link ref={lastFeatureItemRef} to="/resume" role="menuitem" onClick={() => setIsFeaturesMenuOpen(false)} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
+                        Resume
+                      </Link>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              {canUseProtectedFeatures && user?.isAdmin && <Link to="/control-panel" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Control Panel</Link>}
+              {canUseProtectedFeatures && <Link to="/refer" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Refer Friend</Link>}
+              {canUseProtectedFeatures && (
                 <NotificationCenter
                   unreadCount={unreadNotificationCount}
                   onUnreadCountChange={setUnreadNotificationCount}
