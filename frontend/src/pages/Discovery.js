@@ -189,7 +189,6 @@ const Discovery = () => {
   const loadUsers = useCallback(async (page) => {
     setUsersLoading(true);
     setUsersError('');
-    setUsersLoaded(true);
     try {
       const { data } = await discoveryAPI.getUsers('', page, 20);
       if (page === 1) {
@@ -202,6 +201,7 @@ const Discovery = () => {
     } catch (err) {
       setUsersError(err?.response?.data?.error || 'Failed to load suggestions. Please try again.');
     } finally {
+      setUsersLoaded(true);
       setUsersLoading(false);
     }
   }, []);
@@ -209,7 +209,6 @@ const Discovery = () => {
   const loadPosts = useCallback(async (page) => {
     setPostsLoading(true);
     setPostsError('');
-    setPostsLoaded(true);
     try {
       const lat = viewerCoords?.latitude ?? null;
       const lon = viewerCoords?.longitude ?? null;
@@ -224,6 +223,7 @@ const Discovery = () => {
     } catch (err) {
       setPostsError(err?.response?.data?.error || 'Failed to load posts. Please try again.');
     } finally {
+      setPostsLoaded(true);
       setPostsLoading(false);
     }
   }, [viewerCoords]);
