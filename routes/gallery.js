@@ -101,14 +101,6 @@ const validateImageUrl = (urlString) => {
     return { ok: false, error: 'Image URL must be a valid http/https URL' };
   }
 
-  const ext = extractExtensionFromUrl(normalized);
-  if (!ALLOWED_EXTENSIONS.has(ext)) {
-    return {
-      ok: false,
-      error: `Image URL extension must be one of: ${Array.from(ALLOWED_EXTENSIONS).join(', ')}`
-    };
-  }
-
   return { ok: true, mediaUrl: normalized };
 };
 

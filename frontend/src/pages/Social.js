@@ -144,6 +144,7 @@ const Social = () => {
 
   const [isAuthenticated, setIsAuthenticated] = useState(Boolean(localStorage.getItem('token')));
   const [currentUser, setCurrentUser] = useState(null);
+  const [isGuestPreview, setIsGuestPreview] = useState(false);
   const [guestUser, setGuestUser] = useState(initialGuestUser);
   const [guestProfile, setGuestProfile] = useState(null);
   const [posts, setPosts] = useState([]);
@@ -186,12 +187,14 @@ const Social = () => {
   });
 
   const galleryOwnerIdentifier = useMemo(() => {
-    if (galleryTarget) {
-      return galleryTarget;
-    }
-
+    // Authenticated users always see their own gallery on /social
     if (isAuthenticated && currentUser?._id) {
       return String(currentUser._id);
+    }
+
+    // Guest mode: browse by explicit galleryTarget input
+    if (galleryTarget) {
+      return galleryTarget;
     }
 
     if (guestProfile?._id) {
@@ -199,15 +202,16 @@ const Social = () => {
     }
 
     return guestUser.trim();
-  }, [galleryTarget, isAuthenticated, currentUser?._id, guestProfile?._id, guestUser]);
+  }, [isAuthenticated, currentUser?._id, galleryTarget, guestProfile?._id, guestUser]);
 
-  const viewerCanReact = isAuthenticated && Boolean(currentUser?._id);
+  const viewerCanReact = isAuthenticated && !isGuestPreview && Boolean(currentUser?._id);
   const normalizedGalleryOwnerIdentifier = String(galleryOwnerIdentifier || '').trim().toLowerCase();
   const normalizedCurrentUserId = String(currentUser?._id || '').trim().toLowerCase();
   const normalizedCurrentUsername = String(currentUser?.username || '').trim().toLowerCase();
 
   const canManageGallery =
     viewerCanReact
+    && !isGuestPreview
     && Boolean(galleryOwnerIdentifier)
     && (
       normalizedGalleryOwnerIdentifier === normalizedCurrentUserId
@@ -866,12 +870,49 @@ const Social = () => {
             Social
           </h2>
           <p className="text-sm leading-relaxed text-white/95 sm:text-base">
-            {isAuthenticated
-              ? 'Share updates, browse your timeline, and connect with your community.'
-              : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
+            {isAuthenticated && isGuestPreview
+              ? 'Guest preview mode: interaction controls are hidden. This is how your page appears to visitors.'
+              : isAuthenticated
+                ? 'Share updates, browse your timeline, and connect with your community.'
+                : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
           </p>
+          {isAuthenticated && (
+            <div className="pt-1">
+              {isGuestPreview ? (
+                <button
+                  type="button"
+                  onClick={() => setIsGuestPreview(false)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30"
+                >
+                  ← Exit Guest Preview
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsGuestPreview(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30"
+                >
+                  👁 View as Guest
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {isGuestPreview && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <span className="font-semibold">Guest Preview</span>
+          <span className="text-amber-700">You are previewing how your profile appears to non-authenticated visitors. Controls that require sign-in are hidden.</span>
+          <button
+            type="button"
+            onClick={() => setIsGuestPreview(false)}
+            className="ml-auto shrink-0 rounded border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+          >
+            Exit Preview
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         <aside className="xl:col-span-3 space-y-4 xl:sticky xl:top-6">
@@ -954,7 +995,7 @@ const Social = () => {
             </div>
           )}
 
-          {isAuthenticated && (
+          {isAuthenticated && !isGuestPreview && (
             <form onSubmit={handleSubmitPost} className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100">
               <h3 className="text-lg font-medium">Create Post</h3>
 
@@ -1028,7 +1069,7 @@ const Social = () => {
             </form>
           )}
 
-          {isAuthenticated && (
+          {isAuthenticated && !isGuestPreview && (
             <CircleManager
               circles={circles}
               friends={friends}
@@ -1041,7 +1082,7 @@ const Social = () => {
 
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold">{isAuthenticated ? 'Timeline' : 'Public Timeline'}</h3>
+              <h3 className="text-xl font-semibold">{(isAuthenticated && !isGuestPreview) ? 'Timeline' : 'Public Timeline'}</h3>
               <button
                 type="button"
                 onClick={loadFeed}
@@ -1113,7 +1154,7 @@ const Social = () => {
                       <span>{post.commentsCount} comment{post.commentsCount === 1 ? '' : 's'}</span>
                     </div>
 
-                    {isAuthenticated && postAuthorId && postAuthorId !== String(currentUser?._id) && (
+                    {isAuthenticated && !isGuestPreview && postAuthorId && postAuthorId !== String(currentUser?._id) && (
                       <div className="flex flex-wrap gap-2">
                         <BlockButton
                           isBlocked={isBlocked}
@@ -1137,7 +1178,7 @@ const Social = () => {
                       </div>
                     )}
 
-          {isAuthenticated && (
+          {isAuthenticated && !isGuestPreview && (
             <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-3">
               <h3 className="text-lg font-semibold">Moderation Transparency</h3>
               <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
@@ -1158,7 +1199,7 @@ const Social = () => {
             </section>
           )}
 
-                    {isAuthenticated ? (
+                    {isAuthenticated && !isGuestPreview ? (
                       <div className="space-y-3">
                         <button
                           type="button"
@@ -1246,40 +1287,6 @@ const Social = () => {
                     className="border border-gray-300 px-4 py-2 rounded hover:bg-gray-100 disabled:opacity-60"
                   >
                     Load Gallery
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {isAuthenticated && (
-              <div className="space-y-2 border rounded-lg p-3 bg-gray-50">
-                <p className="text-sm text-gray-600">Viewing gallery for your account by default. You can view another user gallery by username or user ID.</p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    value={galleryTargetInput}
-                    onChange={(event) => setGalleryTargetInput(event.target.value)}
-                    placeholder="leave blank for my gallery, or enter username/user ID"
-                    className="flex-1 border rounded px-3 py-2"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setGalleryTarget(galleryTargetInput.trim())}
-                    disabled={galleryBusy || galleryLoading}
-                    className="border border-gray-300 px-4 py-2 rounded hover:bg-gray-100 disabled:opacity-60"
-                  >
-                    View
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGalleryTargetInput('');
-                      setGalleryTarget('');
-                    }}
-                    disabled={galleryBusy || galleryLoading}
-                    className="border border-gray-300 px-4 py-2 rounded hover:bg-gray-100 disabled:opacity-60"
-                  >
-                    My Gallery
                   </button>
                 </div>
               </div>
