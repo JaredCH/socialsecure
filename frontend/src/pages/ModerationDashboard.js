@@ -48,6 +48,19 @@ function ModerationDashboard() {
   const [muteDurationKey, setMuteDurationKey] = useState('24h');
   const [infractionAction, setInfractionAction] = useState('warning');
   const [actionReason, setActionReason] = useState('');
+  const [ingestionFilters, setIngestionFilters] = useState({
+    source: '',
+    tag: '',
+    zipCode: '',
+    region: '',
+    processingStatus: '',
+    sortBy: 'createdAt',
+    sortDir: 'desc'
+  });
+  const [ingestion, setIngestion] = useState({ rows: [], page: 1, totalPages: 1, total: 0, loading: false });
+  const [ingestionDetail, setIngestionDetail] = useState({ open: false, record: null, loading: false });
+  const [ingestionTimeline, setIngestionTimeline] = useState([]);
+  const [ingestionLogs, setIngestionLogs] = useState([]);
 
   const muteDurations = useMemo(() => overview?.muteDurations || FALLBACK_MUTE_DURATIONS, [overview]);
 
@@ -65,7 +78,44 @@ function ModerationDashboard() {
 
   useEffect(() => {
     loadOverview();
+    loadIngestionRecords(1);
   }, []);
+
+  const loadIngestionRecords = async (page = ingestion.page || 1, filters = ingestionFilters) => {
+    setIngestion((prev) => ({ ...prev, loading: true }));
+    try {
+      const { data } = await moderationAPI.getNewsIngestionRecords({ ...filters, page, limit: 20 });
+      setIngestion({
+        rows: Array.isArray(data.records) ? data.records : [],
+        page: data.pagination?.page || page,
+        totalPages: data.pagination?.totalPages || 1,
+        total: data.pagination?.total || 0,
+        loading: false
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to load ingestion observability');
+      setIngestion((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  const openIngestionDetail = async (recordId) => {
+    setIngestionDetail({ open: true, record: null, loading: true });
+    try {
+      const [{ data: detailData }, { data: timelineData }, { data: logsData }] = await Promise.all([
+        moderationAPI.getNewsIngestionRecord(recordId),
+        moderationAPI.getNewsIngestionTimeline(recordId),
+        moderationAPI.getNewsIngestionLogs(recordId)
+      ]);
+      setIngestionDetail({ open: true, record: detailData.record || null, loading: false });
+      setIngestionTimeline(Array.isArray(timelineData.timeline) ? timelineData.timeline : []);
+      setIngestionLogs(Array.isArray(logsData.logs) ? logsData.logs : []);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to load ingestion record detail');
+      setIngestionDetail({ open: true, record: null, loading: false });
+      setIngestionTimeline([]);
+      setIngestionLogs([]);
+    }
+  };
 
   const openDetails = async (section, page = 1) => {
     setDetails((prev) => ({ ...prev, open: true, section, loading: true }));
@@ -86,7 +136,11 @@ function ModerationDashboard() {
   };
 
   const refreshAll = async () => {
-    await Promise.all([loadOverview(), details.open ? openDetails(details.section, details.page) : Promise.resolve()]);
+    await Promise.all([
+      loadOverview(),
+      details.open ? openDetails(details.section, details.page) : Promise.resolve(),
+      loadIngestionRecords(ingestion.page || 1)
+    ]);
   };
 
   const handleDeletePost = async (postId) => {
@@ -245,6 +299,122 @@ function ModerationDashboard() {
         </div>
       </section>
 
+      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold">News Ingestion Observability</h2>
+            <p className="text-xs text-gray-500">Inspect scraped records, dedupe outcomes, persistence details, and processing logs.</p>
+          </div>
+          <button type="button" onClick={() => loadIngestionRecords(1)} className="px-3 py-1 text-xs rounded border">Refresh</button>
+        </div>
+        <div className="grid gap-2 md:grid-cols-4">
+          <input
+            value={ingestionFilters.source}
+            onChange={(e) => setIngestionFilters((prev) => ({ ...prev, source: e.target.value }))}
+            placeholder="Source"
+            className="rounded border px-2 py-1 text-sm"
+          />
+          <input
+            value={ingestionFilters.tag}
+            onChange={(e) => setIngestionFilters((prev) => ({ ...prev, tag: e.target.value }))}
+            placeholder="Tag"
+            className="rounded border px-2 py-1 text-sm"
+          />
+          <input
+            value={ingestionFilters.zipCode}
+            onChange={(e) => setIngestionFilters((prev) => ({ ...prev, zipCode: e.target.value }))}
+            placeholder="ZIP"
+            className="rounded border px-2 py-1 text-sm"
+          />
+          <select
+            value={ingestionFilters.region}
+            onChange={(e) => setIngestionFilters((prev) => ({ ...prev, region: e.target.value }))}
+            className="rounded border px-2 py-1 text-sm"
+          >
+            <option value="">All scopes</option>
+            <option value="local">Local</option>
+            <option value="regional">Regional</option>
+            <option value="national">National</option>
+            <option value="global">Global</option>
+          </select>
+          <select
+            value={ingestionFilters.processingStatus}
+            onChange={(e) => setIngestionFilters((prev) => ({ ...prev, processingStatus: e.target.value }))}
+            className="rounded border px-2 py-1 text-sm"
+          >
+            <option value="">Any status</option>
+            <option value="processed">Processed</option>
+            <option value="failed">Failed</option>
+          </select>
+          <select
+            value={ingestionFilters.sortBy}
+            onChange={(e) => setIngestionFilters((prev) => ({ ...prev, sortBy: e.target.value }))}
+            className="rounded border px-2 py-1 text-sm"
+          >
+            <option value="createdAt">Created</option>
+            <option value="scrapedAt">Scraped</option>
+            <option value="resolvedScope">Scope</option>
+            <option value="processingStatus">Status</option>
+          </select>
+          <select
+            value={ingestionFilters.sortDir}
+            onChange={(e) => setIngestionFilters((prev) => ({ ...prev, sortDir: e.target.value }))}
+            className="rounded border px-2 py-1 text-sm"
+          >
+            <option value="desc">Newest first</option>
+            <option value="asc">Oldest first</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => loadIngestionRecords(1)}
+            className="rounded border px-2 py-1 text-sm bg-gray-50"
+          >
+            Apply Filters
+          </button>
+        </div>
+        {ingestion.loading ? (
+          <p className="text-sm text-gray-500">Loading ingestion records...</p>
+        ) : (
+          <div className="space-y-2">
+            <div className="text-xs text-gray-500">Total records: {ingestion.total}</div>
+            <div className="divide-y rounded border">
+              {ingestion.rows.map((row) => (
+                <button
+                  type="button"
+                  key={row._id}
+                  onClick={() => openIngestionDetail(row._id)}
+                  className="w-full px-3 py-2 text-left hover:bg-gray-50"
+                >
+                  <p className="text-sm font-medium text-gray-900 truncate">{row.normalized?.title || '(untitled)'}</p>
+                  <p className="text-xs text-gray-600">
+                    {row.source?.name || 'Unknown source'} • {row.resolvedScope} • {row.dedupe?.outcome} • {row.processingStatus}
+                  </p>
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <button
+                type="button"
+                disabled={ingestion.page <= 1}
+                onClick={() => loadIngestionRecords(Math.max(1, ingestion.page - 1))}
+                className="rounded border px-2 py-1 disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span>Page {ingestion.page} / {ingestion.totalPages}</span>
+              <button
+                type="button"
+                disabled={ingestion.page >= ingestion.totalPages}
+                onClick={() => loadIngestionRecords(Math.min(ingestion.totalPages, ingestion.page + 1))}
+                className="rounded border px-2 py-1 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
       {details.open ? (
         <Modal title={`Detail: ${details.section}`} onClose={() => setDetails((prev) => ({ ...prev, open: false }))}>
           {details.loading ? (
@@ -306,6 +476,46 @@ function ModerationDashboard() {
                 <button type="button" onClick={() => openDetails(details.section, Math.min(details.page + 1, details.totalPages))} disabled={details.page >= details.totalPages} className="rounded border px-3 py-1 text-xs disabled:opacity-40">Next</button>
               </div>
             </div>
+          )}
+        </Modal>
+      ) : null}
+
+      {ingestionDetail.open ? (
+        <Modal title="News Ingestion Record Detail" onClose={() => setIngestionDetail({ open: false, record: null, loading: false })}>
+          {ingestionDetail.loading ? (
+            <p className="text-sm text-gray-500">Loading...</p>
+          ) : ingestionDetail.record ? (
+            <div className="space-y-4 text-sm">
+              <div className="rounded border p-3">
+                <p className="font-semibold">{ingestionDetail.record.normalized?.title || '(untitled)'}</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Source: {ingestionDetail.record.source?.name || 'Unknown'} • Scope: {ingestionDetail.record.resolvedScope} • Outcome: {ingestionDetail.record.dedupe?.outcome}
+                </p>
+                <p className="text-xs text-gray-600">ZIP: {ingestionDetail.record.normalized?.assignedZipCode || 'N/A'} • Tags: {(ingestionDetail.record.tags || []).join(', ') || 'none'}</p>
+              </div>
+              <div className="rounded border p-3">
+                <p className="font-medium">Timeline</p>
+                <ul className="mt-2 space-y-2">
+                  {ingestionTimeline.map((entry, idx) => (
+                    <li key={`${entry.timestamp}-${entry.eventType}-${idx}`} className="text-xs">
+                      <span className="font-semibold">{entry.severity.toUpperCase()}</span> • {entry.eventType} • {new Date(entry.timestamp).toLocaleString()} — {entry.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded border p-3">
+                <p className="font-medium">Log events</p>
+                <ul className="mt-2 space-y-2">
+                  {ingestionLogs.map((entry, idx) => (
+                    <li key={`${entry.timestamp}-${entry.eventType}-log-${idx}`} className="text-xs">
+                      [{new Date(entry.timestamp).toLocaleTimeString()}] {entry.severity.toUpperCase()} {entry.eventType}: {entry.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No record selected.</p>
           )}
         </Modal>
       ) : null}

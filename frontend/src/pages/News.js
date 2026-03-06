@@ -57,6 +57,16 @@ const getSourceTypeLabel = (sourceType) => {
   return labels[sourceType] || sourceType;
 };
 
+const getScopeFallbackMessage = (personalization = {}) => {
+  if (!personalization?.fallbackApplied) return '';
+  const activeScope = personalization?.activeScope || 'broader';
+  const requestedScope = personalization?.requestedScope || 'selected';
+  if (personalization?.fallbackReason === 'no_scope_matches') {
+    return `Showing ${activeScope} scope because there are no ${requestedScope} articles available right now.`;
+  }
+  return `Showing ${activeScope} scope because ${requestedScope} scope is unavailable for your current location data.`;
+};
+
 function News() {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -121,23 +131,24 @@ function News() {
       setLoading(true);
       setPromotedLoading(true);
       
-      const [feedRes, prefsRes, topicsRes, promotedRes] = await Promise.all([
-        newsAPI.getFeed({ page: 1, limit: 20, scope: 'local' }),
+      const [prefsRes, topicsRes, promotedRes] = await Promise.all([
         newsAPI.getPreferences().catch(() => ({ data: { preferences: null } })),
         newsAPI.getTopics(),
         newsAPI.getPromoted({ limit: 8 }).catch(() => ({ data: { items: [] } }))
       ]);
+      const preferredScope = prefsRes.data.preferences?.defaultScope;
+      const feedRes = await newsAPI.getFeed({
+        page: 1,
+        limit: 20,
+        scope: preferredScope || undefined
+      });
       const sourcesRes = await newsAPI.getSources().catch(() => ({ data: { sources: [] } }));
       
       setArticles(feedRes.data.articles);
       setPagination(feedRes.data.pagination);
       setPreferences(prefsRes.data.preferences);
       setActiveScope(feedRes.data.personalization?.activeScope || 'local');
-      if (feedRes.data.personalization?.fallbackApplied) {
-        setScopeFallbackMessage(`Showing ${feedRes.data.personalization.activeScope} scope because ${feedRes.data.personalization.requestedScope} scope is unavailable for your current location data.`);
-      } else {
-        setScopeFallbackMessage('');
-      }
+      setScopeFallbackMessage(getScopeFallbackMessage(feedRes.data.personalization));
       setTopics(topicsRes.data.topics);
       setPromotedArticles(promotedRes.data.items || []);
       setAvailableSources(sourcesRes.data.sources || []);
@@ -194,11 +205,7 @@ function News() {
       
       setArticles(res.data.articles);
       setPagination(res.data.pagination);
-      if (res.data.personalization?.fallbackApplied) {
-        setScopeFallbackMessage(`Showing ${res.data.personalization.activeScope} scope because ${res.data.personalization.requestedScope} scope is unavailable for your current location data.`);
-      } else {
-        setScopeFallbackMessage('');
-      }
+      setScopeFallbackMessage(getScopeFallbackMessage(res.data.personalization));
       await loadPromoted(topic);
     } catch (err) {
       console.error('Error filtering:', err);
@@ -244,11 +251,7 @@ function News() {
       setArticles(res.data.articles);
       setPagination(res.data.pagination);
       setActiveScope(res.data.personalization?.activeScope || scope);
-      if (res.data.personalization?.fallbackApplied) {
-        setScopeFallbackMessage(`Showing ${res.data.personalization.activeScope} scope because ${res.data.personalization.requestedScope} scope is unavailable for your current location data.`);
-      } else {
-        setScopeFallbackMessage('');
-      }
+      setScopeFallbackMessage(getScopeFallbackMessage(res.data.personalization));
       await loadPromoted(activeFilter);
     } catch (err) {
       console.error('Error updating feed scope:', err);
