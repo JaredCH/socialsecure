@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
 const DeviceKey = require('../models/DeviceKey');
@@ -85,6 +86,15 @@ const E2EE_LIMITS = {
   hashAlgorithm: 32,
   publicKey: 16384
 };
+const NEARBY_ZIP_THRESHOLD = 25;
+const MAX_NEARBY_ZIP_ROOMS = 100;
+const unifiedChatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many chat requests, please slow down.' }
+});
 
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 500;
@@ -145,7 +155,7 @@ const areZipCodesNearby = (zipA, zipB) => {
   const a = parseInt(zipA, 10);
   const b = parseInt(zipB, 10);
   if (!Number.isNaN(a) && !Number.isNaN(b)) {
-    return Math.abs(a - b) <= 25;
+    return Math.abs(a - b) <= NEARBY_ZIP_THRESHOLD;
   }
   return zipA.slice(0, 3) === zipB.slice(0, 3);
 };
@@ -159,7 +169,7 @@ const getNearbyActiveZipRooms = async (zipCode) => {
   })
     .select('_id title zipCode messageCount lastMessageAt')
     .sort({ lastMessageAt: -1 })
-    .limit(100)
+    .limit(MAX_NEARBY_ZIP_ROOMS)
     .lean();
 
   return rooms.filter((room) => areZipCodesNearby(zipCode, room.zipCode));
@@ -1660,7 +1670,7 @@ router.get('/rooms/nearby', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/zip/nearby', authenticateToken, async (req, res) => {
+router.get('/zip/nearby', unifiedChatLimiter, authenticateToken, async (req, res) => {
   try {
     const requester = await User.findById(req.user.userId).select('zipCode').lean();
     const normalizedZipCode = normalizeZipCode(req.query.zipCode || requester?.zipCode);
@@ -1687,7 +1697,7 @@ router.get('/zip/nearby', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/conversations', authenticateToken, async (req, res) => {
+router.get('/conversations', unifiedChatLimiter, authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const user = await User.findById(userId).select('_id username realName zipCode').lean();
@@ -1743,7 +1753,7 @@ router.get('/conversations', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/conversations/:conversationId/messages', authenticateToken, async (req, res) => {
+router.get('/conversations/:conversationId/messages', unifiedChatLimiter, authenticateToken, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const userId = req.user.userId;
@@ -1789,10 +1799,12 @@ router.get('/conversations/:conversationId/messages', authenticateToken, async (
   }
 });
 
-router.post('/conversations/:conversationId/messages', [
+router.post(
+  '/conversations/:conversationId/messages',
+  unifiedChatLimiter,
   authenticateToken,
-  body('content').trim().notEmpty().isLength({ max: 2000 }).withMessage('Message content is required and must be <= 2000 chars')
-], async (req, res) => {
+  body('content').trim().notEmpty().isLength({ max: 2000 }).withMessage('Message content is required and must be <= 2000 chars'),
+  async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -1844,12 +1856,15 @@ router.post('/conversations/:conversationId/messages', [
     console.error('Error sending conversation message:', error);
     return res.status(500).json({ error: 'Failed to send conversation message' });
   }
-});
+  }
+);
 
-router.post('/dm/start', [
+router.post(
+  '/dm/start',
+  unifiedChatLimiter,
   authenticateToken,
-  body('targetUserId').isMongoId().withMessage('Valid targetUserId is required')
-], async (req, res) => {
+  body('targetUserId').isMongoId().withMessage('Valid targetUserId is required'),
+  async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -1906,9 +1921,10 @@ router.post('/dm/start', [
     console.error('Error starting DM thread:', error);
     return res.status(500).json({ error: 'Failed to start DM thread' });
   }
-});
+  }
+);
 
-router.get('/profile/:userId/thread', authenticateToken, async (req, res) => {
+router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, async (req, res) => {
   try {
     const viewerId = String(req.user.userId);
     const profileUserId = String(req.params.userId);

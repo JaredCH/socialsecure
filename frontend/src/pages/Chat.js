@@ -122,13 +122,11 @@ function Chat() {
     };
 
     bootstrap();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     applyDefaultConversationSelection(activeChannel, hubData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChannel]);
+  }, [activeChannel, hubData]);
 
   useEffect(() => {
     const loadMessages = async () => {

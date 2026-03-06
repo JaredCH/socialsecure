@@ -5,35 +5,35 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn()
 }));
 
-const ChatRoom = {};
-const ChatMessage = {};
-const DeviceKey = {};
-const SecurityEvent = {};
-const BlockList = { findOne: jest.fn() };
-const RoomKeyPackage = {};
-const User = { findById: jest.fn(), find: jest.fn() };
-const ChatConversation = {
+const mockChatRoom = {};
+const mockChatMessage = {};
+const mockDeviceKey = {};
+const mockSecurityEvent = {};
+const mockBlockList = { findOne: jest.fn() };
+const mockRoomKeyPackage = {};
+const mockUser = { findById: jest.fn(), find: jest.fn() };
+const mockChatConversation = {
   findOneAndUpdate: jest.fn(),
   find: jest.fn(),
   findById: jest.fn(),
   findOne: jest.fn(),
   create: jest.fn()
 };
-const ConversationMessage = {
+const mockConversationMessage = {
   find: jest.fn(),
   countDocuments: jest.fn(),
   create: jest.fn()
 };
 
-jest.mock('../models/ChatRoom', () => ChatRoom);
-jest.mock('../models/ChatMessage', () => ChatMessage);
-jest.mock('../models/DeviceKey', () => DeviceKey);
-jest.mock('../models/SecurityEvent', () => SecurityEvent);
-jest.mock('../models/BlockList', () => BlockList);
-jest.mock('../models/RoomKeyPackage', () => RoomKeyPackage);
-jest.mock('../models/User', () => User);
-jest.mock('../models/ChatConversation', () => ChatConversation);
-jest.mock('../models/ConversationMessage', () => ConversationMessage);
+jest.mock('../models/ChatRoom', () => mockChatRoom);
+jest.mock('../models/ChatMessage', () => mockChatMessage);
+jest.mock('../models/DeviceKey', () => mockDeviceKey);
+jest.mock('../models/SecurityEvent', () => mockSecurityEvent);
+jest.mock('../models/BlockList', () => mockBlockList);
+jest.mock('../models/RoomKeyPackage', () => mockRoomKeyPackage);
+jest.mock('../models/User', () => mockUser);
+jest.mock('../models/ChatConversation', () => mockChatConversation);
+jest.mock('../models/ConversationMessage', () => mockConversationMessage);
 jest.mock('../services/notifications', () => ({ createNotification: jest.fn() }));
 
 const jwt = require('jsonwebtoken');
@@ -60,13 +60,13 @@ describe('Unified chat hub routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: '507f1f77bcf86cd799439011' }));
-    User.findById.mockImplementation(() => createSelectResolved({ onboardingStatus: 'completed' }));
-    User.find.mockReturnValue({
+    mockUser.findById.mockImplementation(() => createSelectResolved({ onboardingStatus: 'completed' }));
+    mockUser.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue([])
       })
     });
-    BlockList.findOne.mockReturnValue({
+    mockBlockList.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue(null)
       })
@@ -75,7 +75,7 @@ describe('Unified chat hub routes', () => {
 
   it('defaults to user zip room and nearby active zip rooms', async () => {
     const app = buildApp();
-    User.findById
+    mockUser.findById
       .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
       .mockImplementationOnce(() => createSelectLean({
         _id: '507f1f77bcf86cd799439011',
@@ -83,17 +83,19 @@ describe('Unified chat hub routes', () => {
         zipCode: '02115-1234'
       }));
 
-    ChatConversation.findOneAndUpdate.mockResolvedValue({
-      _id: 'conv-zip',
-      type: 'zip-room',
-      title: 'Zip 02115',
-      zipCode: '02115',
-      participants: [],
-      messageCount: 0,
-      lastMessageAt: new Date('2024-01-01T00:00:00.000Z')
+    mockChatConversation.findOneAndUpdate.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        _id: 'conv-zip',
+        type: 'zip-room',
+        title: 'Zip 02115',
+        zipCode: '02115',
+        participants: [],
+        messageCount: 0,
+        lastMessageAt: new Date('2024-01-01T00:00:00.000Z')
+      })
     });
 
-    ChatConversation.find.mockImplementation((query) => {
+    mockChatConversation.find.mockImplementation((query) => {
       if (query?.type === 'zip-room') {
         return {
           select: jest.fn().mockReturnValue({
@@ -141,7 +143,7 @@ describe('Unified chat hub routes', () => {
 
   it('enforces participant permissions for DM conversations', async () => {
     const app = buildApp();
-    ChatConversation.findById.mockResolvedValue({
+    mockChatConversation.findById.mockResolvedValue({
       _id: 'conv-dm',
       type: 'dm',
       participants: ['507f1f77bcf86cd799439099']
@@ -158,7 +160,7 @@ describe('Unified chat hub routes', () => {
 
   it('creates profile thread and returns shared conversation id', async () => {
     const app = buildApp();
-    User.findById
+    mockUser.findById
       .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
       .mockImplementationOnce(() => createSelectLean({
         _id: '507f1f77bcf86cd799439022',
@@ -166,8 +168,8 @@ describe('Unified chat hub routes', () => {
         realName: 'Profile Owner'
       }));
 
-    ChatConversation.findOne.mockResolvedValue(null);
-    ChatConversation.create.mockResolvedValue({
+    mockChatConversation.findOne.mockResolvedValue(null);
+    mockChatConversation.create.mockResolvedValue({
       _id: 'profile-thread-1',
       type: 'profile-thread',
       title: 'Profile thread: @profileOwner',

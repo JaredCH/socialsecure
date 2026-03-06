@@ -109,6 +109,7 @@ function UserSettings({
   const [profileThreadSending, setProfileThreadSending] = useState(false);
 
   const hasEncryptionPassword = !!encryptionPasswordStatus?.hasEncryptionPassword;
+  const profileUserId = user?._id || null;
 
   useEffect(() => {
     if (!user) return;
@@ -132,10 +133,10 @@ function UserSettings({
 
   useEffect(() => {
     const loadProfileThread = async () => {
-      if (!user?._id) return;
+      if (!profileUserId) return;
       setProfileThreadLoading(true);
       try {
-        const { data: threadData } = await chatAPI.getProfileThread(user._id);
+        const { data: threadData } = await chatAPI.getProfileThread(profileUserId);
         const threadId = threadData?.conversation?._id ? String(threadData.conversation._id) : '';
         setProfileThreadId(threadId);
         if (!threadId) {
@@ -152,7 +153,7 @@ function UserSettings({
     };
 
     loadProfileThread();
-  }, [user?._id]);
+  }, [profileUserId]);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
