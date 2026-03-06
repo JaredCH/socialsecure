@@ -519,6 +519,134 @@ router.get('/control-panel/details', authenticateToken, requireAdmin, async (req
       });
     }
 
+    if (section === 'reports') {
+      const [reports, total] = await Promise.all([
+        Report.find({})
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('reporterId', 'username realName')
+          .populate('targetUserId', 'username realName')
+          .lean(),
+        Report.countDocuments({})
+      ]);
+      return res.json({
+        section,
+        rows: reports.map((r) => ({
+          _id: r._id,
+          reporter: r.reporterId ? { _id: r.reporterId._id, username: r.reporterId.username, realName: r.reporterId.realName } : null,
+          targetUser: r.targetUserId ? { _id: r.targetUserId._id, username: r.targetUserId.username, realName: r.targetUserId.realName } : null,
+          targetType: r.targetType,
+          category: r.category,
+          description: r.description || '',
+          status: r.status,
+          priority: r.priority,
+          createdAt: r.createdAt
+        })),
+        pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
+      });
+    }
+
+    if (section === 'blocks') {
+      const [blocks, total] = await Promise.all([
+        BlockList.find({})
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('userId', 'username realName')
+          .populate('blockedUserId', 'username realName')
+          .lean(),
+        BlockList.countDocuments({})
+      ]);
+      return res.json({
+        section,
+        rows: blocks.map((b) => ({
+          _id: b._id,
+          user: b.userId ? { _id: b.userId._id, username: b.userId.username, realName: b.userId.realName } : null,
+          blockedUser: b.blockedUserId ? { _id: b.blockedUserId._id, username: b.blockedUserId.username, realName: b.blockedUserId.realName } : null,
+          reason: b.reason || '',
+          createdAt: b.createdAt
+        })),
+        pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
+      });
+    }
+
+    if (section === 'mutes') {
+      const [mutes, total] = await Promise.all([
+        MuteList.find({})
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('userId', 'username realName')
+          .populate('mutedUserId', 'username realName')
+          .lean(),
+        MuteList.countDocuments({})
+      ]);
+      return res.json({
+        section,
+        rows: mutes.map((m) => ({
+          _id: m._id,
+          user: m.userId ? { _id: m.userId._id, username: m.userId.username, realName: m.userId.realName } : null,
+          mutedUser: m.mutedUserId ? { _id: m.mutedUserId._id, username: m.mutedUserId.username, realName: m.mutedUserId.realName } : null,
+          expiresAt: m.expiresAt,
+          createdAt: m.createdAt
+        })),
+        pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
+      });
+    }
+
+    if (section === 'rooms') {
+      const [rooms, total] = await Promise.all([
+        ChatRoom.find({})
+          .sort({ lastActivity: -1 })
+          .skip(skip)
+          .limit(limit)
+          .select('_id name type city state zipCode messageCount lastActivity createdAt')
+          .lean(),
+        ChatRoom.countDocuments({})
+      ]);
+      return res.json({
+        section,
+        rows: rooms.map((r) => ({
+          _id: r._id,
+          name: r.name || '',
+          type: r.type,
+          city: r.city || '',
+          state: r.state || '',
+          zipCode: r.zipCode || '',
+          messageCount: r.messageCount || 0,
+          lastActivity: r.lastActivity,
+          createdAt: r.createdAt
+        })),
+        pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
+      });
+    }
+
+    if (section === 'conversations') {
+      const [conversations, total] = await Promise.all([
+        ChatConversation.find({})
+          .sort({ lastMessageAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .select('_id type title zipCode messageCount lastMessageAt createdAt')
+          .lean(),
+        ChatConversation.countDocuments({})
+      ]);
+      return res.json({
+        section,
+        rows: conversations.map((c) => ({
+          _id: c._id,
+          type: c.type,
+          title: c.title || '',
+          zipCode: c.zipCode || '',
+          messageCount: c.messageCount || 0,
+          lastMessageAt: c.lastMessageAt,
+          createdAt: c.createdAt
+        })),
+        pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
+      });
+    }
+
     return res.status(400).json({ error: 'Unsupported control panel section' });
   } catch (error) {
     console.error('Control panel details error:', error);
@@ -591,6 +719,9 @@ router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, asy
         scrapedAt: record.scrapedAt,
         normalized: {
           title: record.normalized?.title || '',
+          description: record.normalized?.description || '',
+          url: record.normalized?.url || '',
+          publishedAt: record.normalized?.publishedAt || null,
           topics: record.normalized?.topics || [],
           assignedZipCode: record.normalized?.assignedZipCode || null,
           locations: record.normalized?.locations || [],

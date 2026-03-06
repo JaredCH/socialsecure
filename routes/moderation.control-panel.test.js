@@ -62,27 +62,42 @@ jest.mock('../models/ConversationMessage', () => ({
   deleteMany: jest.fn().mockResolvedValue({})
 }));
 
+const mockReportFind = jest.fn();
+const mockReportCountDocuments = jest.fn().mockResolvedValue(0);
 jest.mock('../models/Report', () => ({
-  countDocuments: jest.fn().mockResolvedValue(0),
+  countDocuments: (...args) => mockReportCountDocuments(...args),
+  find: (...args) => mockReportFind(...args),
   deleteMany: jest.fn().mockResolvedValue({})
 }));
 
+const mockBlockListFind = jest.fn();
+const mockBlockListCountDocuments = jest.fn().mockResolvedValue(0);
 jest.mock('../models/BlockList', () => ({
-  countDocuments: jest.fn().mockResolvedValue(0),
+  countDocuments: (...args) => mockBlockListCountDocuments(...args),
+  find: (...args) => mockBlockListFind(...args),
   deleteMany: jest.fn().mockResolvedValue({})
 }));
 
+const mockMuteListFind = jest.fn();
+const mockMuteListCountDocuments = jest.fn().mockResolvedValue(0);
 jest.mock('../models/MuteList', () => ({
-  countDocuments: jest.fn().mockResolvedValue(0),
+  countDocuments: (...args) => mockMuteListCountDocuments(...args),
+  find: (...args) => mockMuteListFind(...args),
   deleteMany: jest.fn().mockResolvedValue({})
 }));
 
+const mockChatRoomFind = jest.fn();
+const mockChatRoomCountDocuments = jest.fn().mockResolvedValue(0);
 jest.mock('../models/ChatRoom', () => ({
-  countDocuments: jest.fn().mockResolvedValue(0)
+  countDocuments: (...args) => mockChatRoomCountDocuments(...args),
+  find: (...args) => mockChatRoomFind(...args)
 }));
 
+const mockChatConversationFind = jest.fn();
+const mockChatConversationCountDocuments = jest.fn().mockResolvedValue(0);
 jest.mock('../models/ChatConversation', () => ({
-  countDocuments: jest.fn().mockResolvedValue(0)
+  countDocuments: (...args) => mockChatConversationCountDocuments(...args),
+  find: (...args) => mockChatConversationFind(...args)
 }));
 
 const mockArticleFindById = jest.fn();
@@ -138,6 +153,16 @@ describe('Moderation control panel admin actions', () => {
     mockNewsIngestionRecordCountDocuments.mockResolvedValue(0);
     mockNewsIngestionRecordFindById.mockReturnValue(buildChain([]));
     mockArticleFindById.mockReturnValue(buildChain([]));
+    mockReportFind.mockReturnValue(buildChain([]));
+    mockReportCountDocuments.mockResolvedValue(0);
+    mockBlockListFind.mockReturnValue(buildChain([]));
+    mockBlockListCountDocuments.mockResolvedValue(0);
+    mockMuteListFind.mockReturnValue(buildChain([]));
+    mockMuteListCountDocuments.mockResolvedValue(0);
+    mockChatRoomFind.mockReturnValue(buildChain([]));
+    mockChatRoomCountDocuments.mockResolvedValue(0);
+    mockChatConversationFind.mockReturnValue(buildChain([]));
+    mockChatConversationCountDocuments.mockResolvedValue(0);
   });
 
   it('resets password with random 8-digit temporary password and flags one-time reset', async () => {
@@ -255,5 +280,140 @@ describe('Moderation control panel admin actions', () => {
     expect(logsRes.status).toBe(200);
     expect(logsRes.body.logs).toHaveLength(1);
     expect(logsRes.body.logs[0].severity).toBe('warn');
+  });
+
+  it('returns reports details with reporter and target user info', async () => {
+    const app = buildApp();
+    mockReportFind.mockReturnValue(buildChain([
+      {
+        _id: 'report-1',
+        reporterId: { _id: 'user-1', username: 'alice', realName: 'Alice' },
+        targetUserId: { _id: 'user-2', username: 'bob', realName: 'Bob' },
+        targetType: 'post',
+        category: 'spam',
+        description: 'Spam post',
+        status: 'pending',
+        priority: 'medium',
+        createdAt: new Date('2026-03-06T00:00:00.000Z')
+      }
+    ]));
+    mockReportCountDocuments.mockResolvedValue(1);
+
+    const response = await request(app)
+      .get('/api/moderation/control-panel/details?section=reports')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.section).toBe('reports');
+    expect(response.body.rows).toHaveLength(1);
+    expect(response.body.rows[0].category).toBe('spam');
+    expect(response.body.rows[0].reporter.username).toBe('alice');
+    expect(response.body.rows[0].targetUser.username).toBe('bob');
+    expect(response.body.pagination.total).toBe(1);
+  });
+
+  it('returns blocks details with user relationships', async () => {
+    const app = buildApp();
+    mockBlockListFind.mockReturnValue(buildChain([
+      {
+        _id: 'block-1',
+        userId: { _id: 'user-1', username: 'alice', realName: 'Alice' },
+        blockedUserId: { _id: 'user-2', username: 'bob', realName: 'Bob' },
+        reason: 'Harassment',
+        createdAt: new Date('2026-03-06T00:00:00.000Z')
+      }
+    ]));
+    mockBlockListCountDocuments.mockResolvedValue(1);
+
+    const response = await request(app)
+      .get('/api/moderation/control-panel/details?section=blocks')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.section).toBe('blocks');
+    expect(response.body.rows).toHaveLength(1);
+    expect(response.body.rows[0].user.username).toBe('alice');
+    expect(response.body.rows[0].blockedUser.username).toBe('bob');
+    expect(response.body.rows[0].reason).toBe('Harassment');
+  });
+
+  it('returns mutes details with user relationships', async () => {
+    const app = buildApp();
+    mockMuteListFind.mockReturnValue(buildChain([
+      {
+        _id: 'mute-1',
+        userId: { _id: 'user-1', username: 'alice', realName: 'Alice' },
+        mutedUserId: { _id: 'user-2', username: 'bob', realName: 'Bob' },
+        expiresAt: null,
+        createdAt: new Date('2026-03-06T00:00:00.000Z')
+      }
+    ]));
+    mockMuteListCountDocuments.mockResolvedValue(1);
+
+    const response = await request(app)
+      .get('/api/moderation/control-panel/details?section=mutes')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.section).toBe('mutes');
+    expect(response.body.rows).toHaveLength(1);
+    expect(response.body.rows[0].user.username).toBe('alice');
+    expect(response.body.rows[0].mutedUser.username).toBe('bob');
+  });
+
+  it('returns rooms details with room metadata', async () => {
+    const app = buildApp();
+    mockChatRoomFind.mockReturnValue(buildChain([
+      {
+        _id: 'room-1',
+        name: 'San Marcos Chat',
+        type: 'city',
+        city: 'San Marcos',
+        state: 'TX',
+        zipCode: '78666',
+        messageCount: 42,
+        lastActivity: new Date('2026-03-06T00:00:00.000Z'),
+        createdAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ]));
+    mockChatRoomCountDocuments.mockResolvedValue(1);
+
+    const response = await request(app)
+      .get('/api/moderation/control-panel/details?section=rooms')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.section).toBe('rooms');
+    expect(response.body.rows).toHaveLength(1);
+    expect(response.body.rows[0].name).toBe('San Marcos Chat');
+    expect(response.body.rows[0].type).toBe('city');
+    expect(response.body.rows[0].messageCount).toBe(42);
+  });
+
+  it('returns conversations details with conversation metadata', async () => {
+    const app = buildApp();
+    mockChatConversationFind.mockReturnValue(buildChain([
+      {
+        _id: 'conv-1',
+        type: 'dm',
+        title: 'Alice & Bob',
+        zipCode: null,
+        messageCount: 15,
+        lastMessageAt: new Date('2026-03-06T00:00:00.000Z'),
+        createdAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ]));
+    mockChatConversationCountDocuments.mockResolvedValue(1);
+
+    const response = await request(app)
+      .get('/api/moderation/control-panel/details?section=conversations')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.section).toBe('conversations');
+    expect(response.body.rows).toHaveLength(1);
+    expect(response.body.rows[0].type).toBe('dm');
+    expect(response.body.rows[0].title).toBe('Alice & Bob');
+    expect(response.body.rows[0].messageCount).toBe(15);
   });
 });
