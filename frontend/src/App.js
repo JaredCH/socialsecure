@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -50,6 +50,17 @@ const ProtectedRoute = ({
   }
 
   return children;
+};
+
+const RouteMain = ({ children }) => {
+  const location = useLocation();
+  const isChatRoute = location.pathname === '/chat';
+
+  return (
+    <main className={isChatRoute ? 'flex-1 min-h-0 overflow-hidden' : 'container mx-auto mt-8'}>
+      {children}
+    </main>
+  );
 };
 
 function App() {
@@ -373,7 +384,7 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-gray-100">
+      <div className="min-h-screen bg-gray-100 flex flex-col">
         <nav className="bg-white shadow-md p-4">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
@@ -428,7 +439,7 @@ function App() {
           </div>
         ) : null}
 
-        <main className="container mx-auto mt-8">
+        <RouteMain>
           <Routes>
             <Route
               path="/"
@@ -685,7 +696,7 @@ function App() {
             <Route path="/pgp" element={<Navigate to="/settings?deprecated=pgp" replace />} />
             <Route path="*" element={<Navigate to={isAuthenticated ? (passwordResetRequired ? '/settings#account' : '/social') : '/'} replace />} />
           </Routes>
-        </main>
+        </RouteMain>
         
         <Toaster position="bottom-right" />
       </div>

@@ -176,4 +176,32 @@ describe('Chat zip room indicator', () => {
     expect(userAPI.search).toHaveBeenCalledWith('bu');
     expect(container.textContent).toContain('@buddy');
   });
+
+  it('uses full-height shell and flexible message viewport layout', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const chatShell = container.firstElementChild;
+    expect(chatShell).not.toBeNull();
+    expect(chatShell.className).toContain('h-full');
+    expect(chatShell.className).toContain('w-full');
+    expect(chatShell.className).toContain('flex');
+
+    const emptyMessages = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'No messages yet.');
+    expect(emptyMessages).not.toBeUndefined();
+    expect(emptyMessages.parentElement.className).toContain('flex-1');
+    expect(emptyMessages.parentElement.className).not.toContain('max-h-[460px]');
+  });
 });
