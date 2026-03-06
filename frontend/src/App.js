@@ -367,14 +367,14 @@ function App() {
     return <div className="min-h-screen grid place-items-center">Loading...</div>;
   }
 
-  const navScrollStep = 160;
+  const NAV_SCROLL_STEP_PX = 160;
   const handleNavScrollKeyDown = (event) => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
       return;
     }
 
     event.preventDefault();
-    const delta = event.key === 'ArrowRight' ? navScrollStep : -navScrollStep;
+    const delta = event.key === 'ArrowRight' ? NAV_SCROLL_STEP_PX : -NAV_SCROLL_STEP_PX;
     const target = event.currentTarget;
     if (typeof target?.scrollBy === 'function') {
       target.scrollBy({ left: delta, behavior: 'smooth' });
