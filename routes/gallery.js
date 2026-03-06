@@ -8,6 +8,13 @@ const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const GalleryImage = require('../models/GalleryImage');
+const {
+  RELATIONSHIP_AUDIENCE_VALUES,
+  normalizeRelationshipAudience,
+  socialOrUnsetAudienceQuery,
+  isViewerSecureFriendOfOwner,
+  logRelationshipAudienceEvent
+} = require('../utils/relationshipAudience');
 
 const router = express.Router();
 
@@ -153,9 +160,24 @@ const toGalleryItem = (image, viewerId) => {
     likesCount,
     dislikesCount,
     viewerReaction: image.getViewerReaction(viewerId),
+    relationshipAudience: normalizeRelationshipAudience(image.relationshipAudience),
     createdAt: image.createdAt,
     updatedAt: image.updatedAt
   };
+};
+
+const getGalleryViewerContext = async (ownerId, viewerId) => {
+  const normalizedOwnerId = String(ownerId || '');
+  const normalizedViewerId = String(viewerId || '');
+  if (!normalizedViewerId) {
+    return { isOwner: false, isSecureFriend: false };
+  }
+  if (normalizedOwnerId && normalizedOwnerId === normalizedViewerId) {
+    return { isOwner: true, isSecureFriend: true };
+  }
+
+  const isSecureFriend = await isViewerSecureFriendOfOwner(normalizedViewerId, normalizedOwnerId);
+  return { isOwner: false, isSecureFriend };
 };
 
 const authenticateToken = (req, res, next) => {
@@ -206,15 +228,37 @@ router.get('/:ownerId', optionalAuthenticateToken, async (req, res) => {
 
     const { page, limit, skip } = pagination;
 
+    const viewerId = req.user?.userId ? String(req.user.userId) : null;
+    const viewerContext = await getGalleryViewerContext(owner._id, viewerId);
+    const query = {
+      ownerId: owner._id,
+      ...(!viewerContext.isOwner && !viewerContext.isSecureFriend
+        ? socialOrUnsetAudienceQuery('relationshipAudience')
+        : {})
+    };
+
     const [images, total] = await Promise.all([
-      GalleryImage.find({ ownerId: owner._id })
+      GalleryImage.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
-      GalleryImage.countDocuments({ ownerId: owner._id })
+      GalleryImage.countDocuments(query)
     ]);
-
-    const viewerId = req.user?.userId ? String(req.user.userId) : null;
+    const secureVisibleCount = images.filter(
+      (image) => normalizeRelationshipAudience(image.relationshipAudience) === 'secure'
+    ).length;
+    if (secureVisibleCount > 0 && viewerId) {
+      logRelationshipAudienceEvent({
+        eventType: 'secure_content_viewed',
+        viewerId,
+        ownerId: owner._id,
+        req,
+        metadata: {
+          route: 'gallery_list',
+          secureVisibleCount
+        }
+      });
+    }
 
     return res.json({
       success: true,
@@ -237,7 +281,10 @@ router.post(
   '/:ownerId',
   authenticateToken,
   upload.single('image'),
-  [body('caption').optional().isString().isLength({ max: 280 })],
+  [
+    body('caption').optional().isString().isLength({ max: 280 }),
+    body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES).withMessage('Invalid relationship audience')
+  ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -261,6 +308,7 @@ router.post(
       }
 
       const caption = normalizeCaption(req.body.caption);
+      const relationshipAudience = normalizeRelationshipAudience(req.body.relationshipAudience);
       let mediaUrl = null;
       let mediaType = 'url';
       let storageFileName = null;
@@ -301,7 +349,20 @@ router.post(
         mediaUrl,
         mediaType,
         storageFileName,
-        caption
+        caption,
+        relationshipAudience
+      });
+
+      logRelationshipAudienceEvent({
+        eventType: 'content_audience_selected',
+        viewerId: requesterId,
+        ownerId: owner._id,
+        req,
+        metadata: {
+          contentType: 'gallery_image',
+          contentId: String(created._id),
+          relationshipAudience
+        }
       });
 
       return res.status(201).json({
@@ -324,7 +385,8 @@ router.patch(
   authenticateToken,
   [
     body('caption').optional().isString().isLength({ max: 280 }),
-    body('mediaUrl').optional().isString().isLength({ max: URL_MAX_LENGTH })
+    body('mediaUrl').optional().isString().isLength({ max: URL_MAX_LENGTH }),
+    body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES).withMessage('Invalid relationship audience')
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -362,6 +424,21 @@ router.patch(
           return res.status(400).json({ error: validation.error });
         }
         image.mediaUrl = validation.mediaUrl;
+      }
+
+      if (req.body.relationshipAudience !== undefined) {
+        image.relationshipAudience = normalizeRelationshipAudience(req.body.relationshipAudience);
+        logRelationshipAudienceEvent({
+          eventType: 'content_audience_selected',
+          viewerId: requesterId,
+          ownerId: owner._id,
+          req,
+          metadata: {
+            contentType: 'gallery_image',
+            contentId: String(image._id),
+            relationshipAudience: image.relationshipAudience
+          }
+        });
       }
 
       await image.save();
@@ -446,6 +523,36 @@ router.post(
       }
 
       const userId = String(req.user.userId || '');
+      const viewerContext = await getGalleryViewerContext(owner._id, userId);
+      if (!image.canView(userId, viewerContext)) {
+        if (normalizeRelationshipAudience(image.relationshipAudience) === 'secure') {
+          logRelationshipAudienceEvent({
+            eventType: 'secure_content_access_denied',
+            viewerId: userId,
+            ownerId: owner._id,
+            req,
+            metadata: {
+              route: 'gallery_reaction',
+              imageId: String(image._id)
+            }
+          });
+        }
+        return res.status(404).json({ error: 'Gallery image not found' });
+      }
+
+      if (normalizeRelationshipAudience(image.relationshipAudience) === 'secure') {
+        logRelationshipAudienceEvent({
+          eventType: 'secure_content_viewed',
+          viewerId: userId,
+          ownerId: owner._id,
+          req,
+          metadata: {
+            route: 'gallery_reaction',
+            imageId: String(image._id)
+          }
+        });
+      }
+
       const reactionType = req.body.type;
       const reactionState = image.applyReaction(userId, reactionType);
 

@@ -39,6 +39,10 @@ const PRIVACY_BADGE_LABELS = {
   specific_users: 'Specific Users',
   private: 'Private'
 };
+const RELATIONSHIP_AUDIENCE_LABELS = {
+  social: 'Social',
+  secure: 'Secure'
+};
 
 const SOCIAL_SECTION_IDS = ['header', 'shortcuts', 'snapshot', 'guestLookup', 'composer', 'circles', 'timeline', 'gallery', 'moderation', 'chatPanel', 'communityNotes'];
 const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
@@ -236,6 +240,7 @@ const normalizePost = (post) => {
       typeof post.commentsCount === 'number'
         ? post.commentsCount
         : normalizedComments.length,
+    relationshipAudience: post.relationshipAudience === 'secure' ? 'secure' : 'social',
     mediaUrls: normalizeMediaUrls(post.mediaUrls),
     interaction: post.interaction
       ? {
@@ -253,6 +258,7 @@ const normalizeGalleryItem = (item) => ({
   viewerReaction: item?.viewerReaction || null,
   caption: item?.caption || '',
   mediaType: item?.mediaType || 'url',
+  relationshipAudience: item?.relationshipAudience === 'secure' ? 'secure' : 'social',
 });
 
 const Social = () => {
@@ -276,6 +282,7 @@ const Social = () => {
     mediaUrlInput: '',
     mediaUrls: [],
     visibility: 'public',
+    relationshipAudience: 'social',
     visibleToCircles: [],
     visibleToUsers: [],
     excludeUsers: [],
@@ -316,6 +323,7 @@ const Social = () => {
   const [galleryTarget, setGalleryTarget] = useState(initialGuestUser.trim());
   const [galleryUrlInput, setGalleryUrlInput] = useState('');
   const [galleryCaptionInput, setGalleryCaptionInput] = useState('');
+  const [galleryRelationshipAudience, setGalleryRelationshipAudience] = useState('social');
   const [galleryError, setGalleryError] = useState('');
   const [galleryBusy, setGalleryBusy] = useState(false);
   const [galleryLoading, setGalleryLoading] = useState(false);
@@ -1087,6 +1095,10 @@ const Social = () => {
       setFeedError('Add post content or at least one media URL before publishing.');
       return;
     }
+    if ((postForm.relationshipAudience || 'social') === 'secure' && postForm.visibility !== 'friends') {
+      setFeedError('Secure audience currently supports only Friends visibility.');
+      return;
+    }
 
     if (contentType === 'poll') {
       const poll = postForm.interaction.poll;
@@ -1177,6 +1189,7 @@ const Social = () => {
         content,
         mediaUrls: postForm.mediaUrls,
         visibility: postForm.visibility,
+        relationshipAudience: postForm.relationshipAudience,
         visibleToCircles: postForm.visibleToCircles,
         visibleToUsers: postForm.visibleToUsers,
         excludeUsers: postForm.excludeUsers,
@@ -1210,6 +1223,7 @@ const Social = () => {
         mediaUrlInput: '',
         mediaUrls: [],
         visibility: 'public',
+        relationshipAudience: 'social',
         visibleToCircles: [],
         visibleToUsers: [],
         excludeUsers: [],
@@ -1406,6 +1420,7 @@ const Social = () => {
       const response = await galleryAPI.createGalleryItem(galleryOwnerIdentifier, {
         mediaUrl: value,
         caption: galleryCaptionInput,
+        relationshipAudience: galleryRelationshipAudience,
       });
 
       const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
@@ -1452,7 +1467,8 @@ const Social = () => {
       const response = await galleryAPI.uploadGalleryItem(
         galleryOwnerIdentifier,
         file,
-        galleryCaptionInput
+        galleryCaptionInput,
+        galleryRelationshipAudience
       );
 
       const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
@@ -2077,9 +2093,18 @@ const Social = () => {
                         </p>
                         <p className="text-xs text-gray-500">{formatDate(post.createdAt)}</p>
                       </div>
-                      <span className="text-xs uppercase tracking-wide bg-gray-100 px-2 py-1 rounded">
-                        {PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs uppercase tracking-wide bg-gray-100 px-2 py-1 rounded">
+                          {PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}
+                        </span>
+                        <span className={`text-xs uppercase tracking-wide px-2 py-1 rounded ${
+                          post.relationshipAudience === 'secure'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-sky-100 text-sky-800'
+                        }`}>
+                          {RELATIONSHIP_AUDIENCE_LABELS[post.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
+                        </span>
+                      </div>
                     </header>
 
                     <div className="flex flex-wrap gap-2 text-xs text-gray-600">
@@ -2441,6 +2466,17 @@ const Social = () => {
                   maxLength={280}
                   className="w-full border rounded px-3 py-2"
                 />
+                <label className="flex flex-col gap-1 text-sm text-gray-700">
+                  <span>Audience</span>
+                  <select
+                    value={galleryRelationshipAudience}
+                    onChange={(event) => setGalleryRelationshipAudience(event.target.value)}
+                    className="border rounded px-3 py-2"
+                  >
+                    <option value="social">Social</option>
+                    <option value="secure">Secure</option>
+                  </select>
+                </label>
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700">
                   <input
                     type="file"
@@ -2476,6 +2512,9 @@ const Social = () => {
                         {image.caption ? (
                           <p className="text-sm text-gray-700 whitespace-pre-wrap">{image.caption}</p>
                         ) : null}
+                        <p className="text-xs font-medium text-gray-500">
+                          Audience: {RELATIONSHIP_AUDIENCE_LABELS[image.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
+                        </p>
 
                         <div className="flex items-center gap-2 text-sm">
                           <button

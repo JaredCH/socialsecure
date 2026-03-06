@@ -149,11 +149,14 @@ export const galleryAPI = {
     api.get(`/gallery/${encodeURIComponent(ownerIdOrUsername)}?page=${page}&limit=${limit}`),
   createGalleryItem: (ownerIdOrUsername, data) =>
     api.post(`/gallery/${encodeURIComponent(ownerIdOrUsername)}`, data),
-  uploadGalleryItem: (ownerIdOrUsername, file, caption = '') => {
+  uploadGalleryItem: (ownerIdOrUsername, file, caption = '', relationshipAudience = 'social') => {
     const formData = new FormData();
     formData.append('image', file);
     if (caption) {
       formData.append('caption', caption);
+    }
+    if (relationshipAudience) {
+      formData.append('relationshipAudience', relationshipAudience);
     }
 
     return api.post(`/gallery/${encodeURIComponent(ownerIdOrUsername)}`, formData, {
