@@ -102,6 +102,7 @@ const articleSchema = new mongoose.Schema({
 articleSchema.index({ publishedAt: -1 });
 articleSchema.index({ topics: 1, publishedAt: -1 });
 articleSchema.index({ locations: 1, publishedAt: -1 });
+articleSchema.index({ localityLevel: 1, publishedAt: -1 });
 articleSchema.index({ sourceType: 1, publishedAt: -1 });
 articleSchema.index({ normalizedUrlHash: 1 });
 articleSchema.index({ isActive: 1, isPromoted: 1, viralScore: -1, publishedAt: -1 });
