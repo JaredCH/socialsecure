@@ -30,4 +30,16 @@ describe('socialPagePreferences layout normalization', () => {
 
     expect(normalized.panels.chat_panel.height).toBe('halfRow');
   });
+
+  it('preserves valid grid placement coordinates when provided', () => {
+    const normalized = normalizeSocialPreferences({
+      panels: {
+        guest_lookup: { gridPlacement: { row: 18, col: 0 } },
+        composer: { gridPlacement: { row: 22, col: -1 } }
+      }
+    });
+
+    expect(normalized.panels.guest_lookup.gridPlacement).toEqual({ row: 18, col: 0 });
+    expect(normalized.panels.composer.gridPlacement).toBeUndefined();
+  });
 });

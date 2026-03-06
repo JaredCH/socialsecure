@@ -388,7 +388,7 @@ const SocialDesignStudioModal = ({
                             setHoverCell(null);
                           }}
                           onClick={() => openPanelEditor(panel.id)}
-                          className={`absolute cursor-grab rounded-md border border-black/10 px-1 py-1 text-[10px] font-semibold shadow-sm ${activePanelId === panel.id ? 'ring-2 ring-blue-400' : ''}`}
+                          className={`absolute cursor-grab rounded-md border border-black/10 px-1 py-1 text-[10px] font-semibold shadow-sm ${activePanelId === panel.id ? 'ring-2 ring-blue-400' : ''} ${selectionStart ? 'pointer-events-none' : ''}`}
                           style={{
                             left: `calc(${(panel.gridPlacement.col / GRID_COLUMNS) * 100}% + 4px)`,
                             top: `calc(${(panel.gridPlacement.row / GRID_ROWS) * 100}% + 4px)`,

@@ -36,6 +36,20 @@ const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 const FEED_POLL_INTERVAL_MS = 30000;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
+const PANEL_WIDTH_UNITS_BY_SIZE = {
+  halfCol: 1,
+  oneCol: 2,
+  twoCols: 4,
+  threeCols: 6,
+  fourCols: 8
+};
+const PANEL_HEIGHT_UNITS_BY_SIZE = {
+  halfRow: 1,
+  fullRow: 2,
+  twoRows: 4,
+  threeRows: 6,
+  fourRows: 8
+};
 
 const PRIVACY_BADGE_LABELS = {
   public: 'Public',
@@ -2263,6 +2277,11 @@ const Social = () => {
         : panel.size === 'fullTile'
           ? 'twoCols'
           : panel.size;
+    const widthUnits = PANEL_WIDTH_UNITS_BY_SIZE[normalizedSize] || 8;
+    const heightUnits = PANEL_HEIGHT_UNITS_BY_SIZE[panel.height] || 2;
+    const hasMainGridPlacement = panel.area === 'main'
+      && Number.isFinite(Number(panel.gridPlacement?.row))
+      && Number.isFinite(Number(panel.gridPlacement?.col));
     const rowSpan = panel.height === 'halfRow'
       ? 'md:[grid-row:span_1/span_1]'
       : panel.height === 'twoRows'
@@ -2280,10 +2299,20 @@ const Social = () => {
           ? 'min-h-[30rem]'
           : 'min-h-[11rem]';
     const className = panel.area === 'main'
-      ? `${normalizedSize === 'halfCol' ? 'md:col-span-1' : normalizedSize === 'oneCol' ? 'md:col-span-2' : normalizedSize === 'twoCols' ? 'md:col-span-4' : normalizedSize === 'threeCols' ? 'md:col-span-6' : 'md:col-span-8'} ${rowSpan}`
+      ? hasMainGridPlacement
+        ? 'md:[grid-column:var(--panel-col)_/_span_var(--panel-width)] md:[grid-row:var(--panel-row)_/_span_var(--panel-height)]'
+        : `${normalizedSize === 'halfCol' ? 'md:col-span-1' : normalizedSize === 'oneCol' ? 'md:col-span-2' : normalizedSize === 'twoCols' ? 'md:col-span-4' : normalizedSize === 'threeCols' ? 'md:col-span-6' : 'md:col-span-8'} ${rowSpan}`
       : panel.area === 'sideLeft' || panel.area === 'sideRight'
         ? sideHeightClass
         : '';
+    const style = hasMainGridPlacement
+      ? {
+        '--panel-col': Number(panel.gridPlacement.col) + 1,
+        '--panel-row': Number(panel.gridPlacement.row) + 1,
+        '--panel-width': widthUnits,
+        '--panel-height': heightUnits
+      }
+      : {};
 
     return (
       <SocialEditablePanel
@@ -2297,6 +2326,7 @@ const Social = () => {
         onPanelChange={(patch) => updatePanelPreferences(panel.id, patch)}
         onMove={(direction) => movePanel(panel.id, direction)}
         className={className}
+        style={style}
       >
         {renderPanelBody(panel.id)}
       </SocialEditablePanel>
@@ -2323,7 +2353,7 @@ const Social = () => {
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(240px,0.95fr)_minmax(0,2fr)_minmax(240px,0.95fr)]">
           <div className="space-y-6">{panelsByArea.sideLeft.map(renderPanel)}</div>
-          <div className="grid grid-cols-1 gap-6 md:auto-rows-[5.5rem] md:grid-cols-8">{panelsByArea.main.map(renderPanel)}</div>
+          <div className="grid grid-cols-1 gap-6 md:auto-rows-[5.5rem] md:grid-cols-12">{panelsByArea.main.map(renderPanel)}</div>
           <div className="space-y-6">{panelsByArea.sideRight.map(renderPanel)}</div>
         </div>
       </div>

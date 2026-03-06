@@ -193,6 +193,8 @@ export const SOCIAL_DESIGN_TEMPLATES = [
 
 const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
 const isHex = (value) => typeof value === 'string' && /^#([0-9a-fA-F]{3,8})$/.test(value.trim());
+const LAYOUT_GRID_COLUMNS = 12;
+const LAYOUT_GRID_ROWS = 20;
 
 const normalizeFontSizes = (value = {}, fallback = DEFAULT_GLOBAL_STYLES.fontSizes) => ({
   header: SOCIAL_FONT_SIZE_TOKENS.includes(value.header) ? value.header : fallback.header,
@@ -232,6 +234,18 @@ const normalizeHeightForArea = (height, area, fallback, rawSize) => {
 
   const fallbackHeight = SOCIAL_LAYOUT_HEIGHTS.includes(fallback) ? fallback : 'fullRow';
   return SOCIAL_LAYOUT_HEIGHTS.includes(height) ? height : fallbackHeight;
+};
+
+const normalizeGridPlacement = (gridPlacement, fallback) => {
+  const row = Number(gridPlacement?.row);
+  const col = Number(gridPlacement?.col);
+  if (!Number.isFinite(row) || !Number.isFinite(col)) {
+    return isPlainObject(fallback) ? fallback : undefined;
+  }
+  if (row < 0 || row >= LAYOUT_GRID_ROWS || col < 0 || col >= LAYOUT_GRID_COLUMNS) {
+    return isPlainObject(fallback) ? fallback : undefined;
+  }
+  return { row: Math.floor(row), col: Math.floor(col) };
 };
 
 export const buildDefaultSocialPreferences = (profileTheme = 'default') => ({
@@ -282,6 +296,7 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default') => {
       visible: panelRaw.visible !== false,
       size: normalizeSizeForArea(panelRaw.size, area, defaults.panels[panelId].size),
       height: normalizeHeightForArea(panelRaw.height, area, defaults.panels[panelId].height, panelRaw.size),
+      gridPlacement: normalizeGridPlacement(panelRaw.gridPlacement, defaults.panels[panelId].gridPlacement),
       useCustomStyles: Boolean(panelRaw.useCustomStyles),
       styles: {
         panelColor: isHex(panelRaw.styles?.panelColor || '') ? panelRaw.styles.panelColor : globalStyles.panelColor,
