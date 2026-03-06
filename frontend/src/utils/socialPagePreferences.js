@@ -2,7 +2,8 @@ export const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'fore
 export const SOCIAL_FONT_FAMILIES = ['Inter', 'Manrope', 'Space Grotesk', 'Merriweather', 'Fira Sans', 'Georgia'];
 export const SOCIAL_FONT_SIZE_TOKENS = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl'];
 export const SOCIAL_LAYOUT_AREAS = ['top', 'sideLeft', 'main', 'sideRight'];
-export const SOCIAL_LAYOUT_SIZES = ['sidePanelFull', 'sidePanelHalfHeight', 'quarterTile', 'halfTile', 'fullTile'];
+export const SOCIAL_LAYOUT_SIZES = ['sidePanelFull', 'sidePanelHalfHeight', 'quarterTile', 'halfTile', 'fullTile', 'halfCol', 'oneCol', 'twoCols', 'threeCols', 'fourCols'];
+export const SOCIAL_LAYOUT_HEIGHTS = ['halfRow', 'fullRow', 'twoRows', 'threeRows', 'fourRows'];
 export const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
 export const SOCIAL_PANEL_IDS = [
   'profile_header',
@@ -46,9 +47,22 @@ export const SOCIAL_AREA_LABELS = {
 export const SOCIAL_SIZE_LABELS = {
   sidePanelFull: 'Side panel full',
   sidePanelHalfHeight: 'Side panel half height',
-  quarterTile: 'quarterTile',
-  halfTile: 'halfTile',
-  fullTile: 'fullTile'
+  quarterTile: '½ column',
+  halfTile: '1 column',
+  fullTile: '2 columns',
+  halfCol: '½ column',
+  oneCol: '1 column',
+  twoCols: '2 columns',
+  threeCols: '3 columns',
+  fourCols: '4 columns'
+};
+
+export const SOCIAL_HEIGHT_LABELS = {
+  halfRow: '½ row',
+  fullRow: '1 row',
+  twoRows: '2 rows',
+  threeRows: '3 rows',
+  fourRows: '4 rows'
 };
 
 export const FONT_SIZE_LABELS = {
@@ -92,19 +106,19 @@ export const DEFAULT_GLOBAL_STYLES = {
 };
 
 export const DEFAULT_PANEL_LAYOUTS = {
-  profile_header: { area: 'top', size: 'fullTile', order: 0, visible: true },
-  guest_preview_notice: { area: 'top', size: 'fullTile', order: 1, visible: true },
-  shortcuts: { area: 'sideLeft', size: 'sidePanelFull', order: 0, visible: true },
-  snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', order: 1, visible: true },
-  guest_lookup: { area: 'main', size: 'halfTile', order: 0, visible: true },
-  composer: { area: 'main', size: 'fullTile', order: 1, visible: true },
-  circles: { area: 'main', size: 'halfTile', order: 2, visible: true },
-  timeline: { area: 'main', size: 'fullTile', order: 3, visible: true },
-  moderation_status: { area: 'main', size: 'halfTile', order: 4, visible: true },
-  gallery: { area: 'main', size: 'fullTile', order: 5, visible: true },
-  chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', order: 0, visible: true },
-  top_friends: { area: 'sideRight', size: 'sidePanelFull', order: 1, visible: true },
-  community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', order: 2, visible: true }
+  profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, visible: false },
+  guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 1, visible: true },
+  shortcuts: { area: 'sideLeft', size: 'sidePanelFull', height: 'twoRows', order: 0, visible: true },
+  snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', height: 'fullRow', order: 1, visible: true },
+  guest_lookup: { area: 'main', size: 'twoCols', height: 'fullRow', order: 0, visible: true },
+  composer: { area: 'main', size: 'fourCols', height: 'fullRow', order: 2, visible: true },
+  circles: { area: 'main', size: 'twoCols', height: 'fullRow', order: 3, visible: true },
+  timeline: { area: 'main', size: 'fourCols', height: 'twoRows', order: 4, visible: true },
+  moderation_status: { area: 'main', size: 'oneCol', height: 'fullRow', order: 5, visible: true },
+  gallery: { area: 'main', size: 'threeCols', height: 'twoRows', order: 6, visible: true },
+  chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, visible: true },
+  top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, visible: true },
+  community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, visible: true }
 };
 
 export const SOCIAL_DESIGN_TEMPLATES = [
@@ -194,7 +208,30 @@ const normalizeSizeForArea = (size, area, fallback) => {
       : (fallback === 'sidePanelHalfHeight' ? 'sidePanelHalfHeight' : 'sidePanelFull');
   }
   if (area === 'top') return 'fullTile';
-  return ['quarterTile', 'halfTile', 'fullTile'].includes(size) ? size : fallback;
+  const legacyToModern = {
+    quarterTile: 'halfCol',
+    halfTile: 'oneCol',
+    fullTile: 'twoCols'
+  };
+  const normalized = legacyToModern[size] || size;
+  const normalizedFallback = legacyToModern[fallback] || fallback;
+  return ['halfCol', 'oneCol', 'twoCols', 'threeCols', 'fourCols'].includes(normalized) ? normalized : normalizedFallback;
+};
+
+const normalizeHeightForArea = (height, area, fallback, rawSize) => {
+  if (area === 'top') return 'fullRow';
+
+  if (area === 'sideLeft' || area === 'sideRight') {
+    const fallbackHeight = rawSize === 'sidePanelHalfHeight'
+      ? 'halfRow'
+      : rawSize === 'sidePanelFull'
+        ? 'fullRow'
+        : (SOCIAL_LAYOUT_HEIGHTS.includes(fallback) ? fallback : 'fullRow');
+    return ['halfRow', 'fullRow', 'twoRows', 'fourRows'].includes(height) ? height : fallbackHeight;
+  }
+
+  const fallbackHeight = SOCIAL_LAYOUT_HEIGHTS.includes(fallback) ? fallback : 'fullRow';
+  return SOCIAL_LAYOUT_HEIGHTS.includes(height) ? height : fallbackHeight;
 };
 
 export const buildDefaultSocialPreferences = (profileTheme = 'default') => ({
@@ -244,6 +281,7 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default') => {
       order: Number.isFinite(Number(panelRaw.order)) ? Number(panelRaw.order) : defaults.panels[panelId].order,
       visible: panelRaw.visible !== false,
       size: normalizeSizeForArea(panelRaw.size, area, defaults.panels[panelId].size),
+      height: normalizeHeightForArea(panelRaw.height, area, defaults.panels[panelId].height, panelRaw.size),
       useCustomStyles: Boolean(panelRaw.useCustomStyles),
       styles: {
         panelColor: isHex(panelRaw.styles?.panelColor || '') ? panelRaw.styles.panelColor : globalStyles.panelColor,
@@ -343,10 +381,24 @@ export const getFontSizeClass = (token) => ({
 export const getPanelSpanClass = (panel) => {
   if (!panel) return 'col-span-4';
   if (panel.area === 'sideLeft' || panel.area === 'sideRight') {
-    return panel.size === 'sidePanelHalfHeight' ? 'min-h-[12rem]' : 'min-h-[18rem]';
+    const sideHeight = panel.height || (panel.size === 'sidePanelHalfHeight' ? 'halfRow' : 'fullRow');
+    if (sideHeight === 'halfRow') return 'min-h-[7rem]';
+    if (sideHeight === 'twoRows') return 'min-h-[16rem]';
+    if (sideHeight === 'fourRows') return 'min-h-[30rem]';
+    return 'min-h-[11rem]';
   }
   if (panel.area === 'top') return 'col-span-4';
-  if (panel.size === 'quarterTile') return 'col-span-1';
-  if (panel.size === 'halfTile') return 'col-span-2';
+  const size = panel.size === 'quarterTile'
+    ? 'halfCol'
+    : panel.size === 'halfTile'
+      ? 'oneCol'
+      : panel.size === 'fullTile'
+        ? 'twoCols'
+        : panel.size;
+  if (size === 'halfCol') return 'col-span-1';
+  if (size === 'oneCol') return 'col-span-2';
+  if (size === 'twoCols') return 'col-span-4';
+  if (size === 'threeCols') return 'col-span-6';
+  if (size === 'fourCols') return 'col-span-8';
   return 'col-span-4';
 };

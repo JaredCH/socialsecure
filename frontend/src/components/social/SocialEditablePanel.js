@@ -4,6 +4,7 @@ import {
   SOCIAL_AREA_LABELS,
   SOCIAL_FONT_FAMILIES,
   SOCIAL_FONT_SIZE_TOKENS,
+  SOCIAL_HEIGHT_LABELS,
   SOCIAL_LAYOUT_SIZES,
   SOCIAL_PANEL_LABELS,
   SOCIAL_SIZE_LABELS,
@@ -18,7 +19,17 @@ const getAvailableSizes = (area) => {
   if (area === 'top') {
     return ['fullTile'];
   }
-  return ['quarterTile', 'halfTile', 'fullTile'];
+  return ['halfCol', 'oneCol', 'twoCols', 'threeCols', 'fourCols'];
+};
+
+const getAvailableHeights = (area) => {
+  if (area === 'sideLeft' || area === 'sideRight') {
+    return ['halfRow', 'fullRow', 'twoRows', 'fourRows'];
+  }
+  if (area === 'top') {
+    return ['fullRow'];
+  }
+  return ['halfRow', 'fullRow', 'twoRows', 'threeRows', 'fourRows'];
 };
 
 const getHeaderTextColor = (hex) => {
@@ -56,6 +67,7 @@ const SocialEditablePanel = ({
   const resolvedStyles = panel?.resolvedStyles || panel?.styles || {};
   const headerTextColor = getHeaderTextColor(resolvedStyles.headerColor);
   const availableSizes = getAvailableSizes(panel?.area);
+  const availableHeights = getAvailableHeights(panel?.area);
 
   return (
     <section
@@ -76,7 +88,7 @@ const SocialEditablePanel = ({
             {title || SOCIAL_PANEL_LABELS[panelId] || panelId}
           </h3>
           <p className={`opacity-90 ${getFontSizeClass(resolvedStyles.fontSizes?.small)}`}>
-            {SOCIAL_AREA_LABELS[panel?.area] || panel?.area} • {SOCIAL_SIZE_LABELS[panel?.size] || panel?.size}
+            {SOCIAL_AREA_LABELS[panel?.area] || panel?.area} • {SOCIAL_SIZE_LABELS[panel?.size] || panel?.size} • {SOCIAL_HEIGHT_LABELS[panel?.height] || panel?.height || '1 row'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -154,6 +166,17 @@ const SocialEditablePanel = ({
               ))}
             </select>
           </StyleControl>
+          <StyleControl label="Layout height">
+            <select
+              value={panel.height || 'fullRow'}
+              onChange={(event) => onPanelChange({ height: event.target.value })}
+              className="rounded-lg border border-slate-200 px-2 py-1.5"
+            >
+              {availableHeights.map((value) => (
+                <option key={value} value={value}>{SOCIAL_HEIGHT_LABELS[value]}</option>
+              ))}
+            </select>
+          </StyleControl>
           <div className="flex flex-col gap-2 text-xs font-medium text-slate-600">
             <span>Snapping</span>
             <div className="flex flex-wrap gap-2">
@@ -170,7 +193,7 @@ const SocialEditablePanel = ({
         </div>
       ) : null}
 
-      <div className={`px-4 py-4 ${contentClassName} [&_button]:font-inherit [&_input]:font-inherit [&_select]:font-inherit [&_textarea]:font-inherit [&_p]:text-inherit [&_span]:text-inherit [&_li]:text-inherit`}> 
+      <div className={`px-4 py-4 ${contentClassName} [&_button]:font-inherit [&_input]:font-inherit [&_select]:font-inherit [&_textarea]:font-inherit [&_p]:!text-inherit [&_span]:!text-inherit [&_li]:!text-inherit [&_a]:!text-inherit [&_h4]:!text-inherit [&_h5]:!text-inherit`}> 
         {children}
       </div>
     </section>
