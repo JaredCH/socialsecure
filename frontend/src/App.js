@@ -431,7 +431,7 @@ function App() {
         <nav className="bg-white shadow-md border-b border-gray-200 p-4">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
-            <div className="flex flex-nowrap items-center gap-3 overflow-x-auto">
+            <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible">
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Home</Link>}
               {canUseProtectedFeatures && <Link to="/social" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Social</Link>}
               {canUseProtectedFeatures && <Link to="/chat" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Chat</Link>}
@@ -481,7 +481,7 @@ function App() {
                   <div
                     id="features-menu-panel"
                     role="menu"
-                    className="absolute right-0 z-20 mt-2 min-w-40 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+                    className="absolute right-0 top-full z-20 mt-2 min-w-40 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg"
                   >
                     {canUseProtectedFeatures && (
                       <Link ref={firstFeatureItemRef} to="/discover" role="menuitem" onClick={() => setIsFeaturesMenuOpen(false)} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
