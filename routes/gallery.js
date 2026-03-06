@@ -101,6 +101,14 @@ const validateImageUrl = (urlString) => {
     return { ok: false, error: 'Image URL must be a valid http/https URL' };
   }
 
+  const ext = extractExtensionFromUrl(normalized);
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return {
+      ok: false,
+      error: `Image URL must end with an allowed image extension (${Array.from(ALLOWED_EXTENSIONS).join(', ')})`
+    };
+  }
+
   return { ok: true, mediaUrl: normalized };
 };
 
@@ -447,4 +455,3 @@ router.use((error, req, res, next) => {
 });
 
 module.exports = router;
-

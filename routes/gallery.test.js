@@ -103,35 +103,37 @@ describe('Gallery routes', () => {
     expect(response.body.error).toMatch(/http\/https/i);
   });
 
-  it('accepts URL without a recognized image file extension', async () => {
+  it('rejects URL without a recognized image file extension', async () => {
     const app = buildApp();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
     mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
     mockGalleryImage.countDocuments.mockResolvedValue(0);
-
-    const createdDoc = {
-      _id: 'img-cdn',
-      ownerId: 'owner-1',
-      mediaUrl: 'https://cdn.example.com/media/abc123',
-      mediaType: 'url',
-      caption: '',
-      createdAt: new Date('2024-01-01T00:00:00.000Z'),
-      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
-      getReactionCounts: jest.fn().mockReturnValue({ likesCount: 0, dislikesCount: 0 }),
-      getViewerReaction: jest.fn().mockReturnValue(null)
-    };
-    mockGalleryImage.create.mockResolvedValue(createdDoc);
 
     const response = await request(app)
       .post('/api/gallery/owner-1')
       .set('Authorization', 'Bearer token')
       .send({ mediaUrl: 'https://cdn.example.com/media/abc123' });
 
-    expect(response.status).toBe(201);
-    expect(response.body.item).toMatchObject({
-      _id: 'img-cdn',
-      mediaUrl: 'https://cdn.example.com/media/abc123'
-    });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/allowed image extension/i);
+  });
+
+  it('rejects upload when MIME type is not allowed', async () => {
+    const app = buildApp();
+    jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
+    mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
+    mockGalleryImage.countDocuments.mockResolvedValue(0);
+
+    const response = await request(app)
+      .post('/api/gallery/owner-1')
+      .set('Authorization', 'Bearer token')
+      .attach('image', Buffer.from('not-an-image'), {
+        filename: 'payload.txt',
+        contentType: 'text/plain'
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/unsupported image mime type/i);
   });
 
   it('creates gallery image for owner via URL', async () => {
@@ -215,4 +217,3 @@ describe('Gallery routes', () => {
     expect(imageDoc.applyReaction).toHaveBeenCalledWith('viewer-1', 'like');
   });
 });
-
