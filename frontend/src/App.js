@@ -12,6 +12,7 @@ import Market from './pages/Market';
 import News from './pages/News';
 import Maps from './pages/Maps';
 import Discovery from './pages/Discovery';
+import Calendar from './pages/Calendar';
 import OnboardingPage from './pages/OnboardingPage';
 import PostRegistrationWelcome from './pages/PostRegistrationWelcome';
 import SecurityCenter from './pages/SecurityCenter';
@@ -372,6 +373,7 @@ function App() {
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600">Market</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600">Maps</Link>}
+              <Link to="/calendar" className="text-gray-600 hover:text-blue-600">Calendar</Link>
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/security" className="text-gray-600 hover:text-blue-600">Security</Link>}
               {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && <Link to="/moderation" className="text-gray-600 hover:text-blue-600">Moderation</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
@@ -507,6 +509,7 @@ function App() {
               </ProtectedRoute>
             )} />
             <Route path="/profile" element={<Navigate to="/settings" replace />} />
+            <Route path="/calendar" element={<Calendar />} />
             <Route
               path="/security"
               element={(

@@ -383,6 +383,18 @@ export const discoveryAPI = {
     api.post('/discovery/posts/impression', { postId }),
 };
 
+export const calendarAPI = {
+  getMyCalendar: () => api.get('/calendar/me'),
+  updateMyCalendarSettings: (data) => api.patch('/calendar/me/settings', data),
+  getMyEvents: (params = {}) => api.get('/calendar/me/events', { params }),
+  createEvent: (data) => api.post('/calendar/me/events', data),
+  updateEvent: (eventId, data) => api.put(`/calendar/me/events/${encodeURIComponent(eventId)}`, data),
+  deleteEvent: (eventId) => api.delete(`/calendar/me/events/${encodeURIComponent(eventId)}`),
+  getUserCalendar: (username) => api.get(`/calendar/user/${encodeURIComponent(username)}`),
+  getUserCalendarEvents: (username, params = {}) =>
+    api.get(`/calendar/user/${encodeURIComponent(username)}/events`, { params }),
+};
+
 // News API
 export const newsAPI = {
   // Get personalized news feed
