@@ -1,8 +1,8 @@
 export const COMMAND_REGEX = /^\/(\w+)(?:\s+([\s\S]*))?$/;
 
-export const SUPPORTED_COMMANDS = ['join', 'leave', 'nick', 'msg', 'list'];
+export const SUPPORTED_COMMANDS = ['me', 'sing', 'shout', 'cry', 'dice', 'diceN'];
 
-export const UNKNOWN_COMMAND_HELP = 'Unknown command. Available: /join, /leave, /nick, /msg, /list';
+export const UNKNOWN_COMMAND_HELP = 'Unknown command. Available: /me, /sing, /shout, /cry, /dice, /diceN';
 
 export const parseSlashCommand = (input = '') => {
   const match = String(input).trim().match(COMMAND_REGEX);
@@ -14,35 +14,104 @@ export const parseSlashCommand = (input = '') => {
   };
 };
 
-export const parseCommandArguments = (command, argsRaw = '') => {
-  const args = String(argsRaw || '').trim();
-
-  switch (command) {
-    case 'join': {
-      if (!args) return { ok: false, error: 'Usage: /join [room]' };
-      return { ok: true, data: { roomQuery: args } };
-    }
-    case 'leave':
-    case 'list':
-      return { ok: true, data: {} };
-    case 'nick': {
-      if (!args) return { ok: false, error: 'Usage: /nick [name]' };
-      const nickname = args.slice(0, 32);
-      if (!/^[A-Za-z0-9_-]{2,32}$/.test(nickname)) {
-        return { ok: false, error: 'Nickname must be 2-32 chars: letters, numbers, _ or -' };
-      }
-      return { ok: true, data: { nickname } };
-    }
-    case 'msg': {
-      const [target, ...rest] = args.split(/\s+/);
-      const message = rest.join(' ').trim();
-      if (!target || !message) {
-        return { ok: false, error: 'Usage: /msg [user] [message]' };
-      }
-      return { ok: true, data: { target: target.slice(0, 64), message: message.slice(0, 2000) } };
-    }
-    default:
-      return { ok: false, error: UNKNOWN_COMMAND_HELP };
-  }
+const rollDice = (sides) => {
+  const normalizedSides = Math.max(1, Math.floor(Number(sides) || 6));
+  const roll = Math.floor(Math.random() * normalizedSides) + 1;
+  return { sides: normalizedSides, roll };
 };
 
+const ensureArgs = (args, usage) => {
+  if (!args) {
+    return { ok: false, error: usage };
+  }
+  return { ok: true };
+};
+
+export const runSlashCommand = ({ command, argsRaw = '', username = 'user' }) => {
+  const args = String(argsRaw || '').trim();
+  const normalizedName = String(username || 'user').trim() || 'user';
+
+  if (command === 'me') {
+    const validation = ensureArgs(args, 'Usage: /me <action>');
+    if (!validation.ok) return validation;
+    return {
+      ok: true,
+      payload: {
+        messageType: 'action',
+        plaintext: args,
+        commandData: {
+          command: 'me',
+          processedContent: `* ${normalizedName} ${args}`
+        }
+      }
+    };
+  }
+
+  if (command === 'sing') {
+    const validation = ensureArgs(args, 'Usage: /sing <text>');
+    if (!validation.ok) return validation;
+    return {
+      ok: true,
+      payload: {
+        messageType: 'text',
+        plaintext: `♪ ${args} ♪`,
+        commandData: null
+      }
+    };
+  }
+
+  if (command === 'shout') {
+    const validation = ensureArgs(args, 'Usage: /shout <text>');
+    if (!validation.ok) return validation;
+    return {
+      ok: true,
+      payload: {
+        messageType: 'text',
+        plaintext: `${args.toUpperCase()}!`,
+        commandData: null
+      }
+    };
+  }
+
+  if (command === 'cry') {
+    const validation = ensureArgs(args, 'Usage: /cry <text>');
+    if (!validation.ok) return validation;
+    return {
+      ok: true,
+      payload: {
+        messageType: 'text',
+        plaintext: `${args} 😢`,
+        commandData: null
+      }
+    };
+  }
+
+  if (command === 'dice' || command.startsWith('dice')) {
+    const suffix = command === 'dice' ? '' : command.slice(4);
+    if (suffix && !/^\d+$/.test(suffix)) {
+      return { ok: false, error: UNKNOWN_COMMAND_HELP };
+    }
+
+    const sides = suffix ? parseInt(suffix, 10) : 6;
+    if (!Number.isFinite(sides) || sides <= 0) {
+      return { ok: false, error: 'Dice sides must be a positive integer.' };
+    }
+
+    const result = rollDice(sides);
+    const processedContent = `🎲 ${normalizedName} rolled a ${result.roll} (1-${result.sides})`;
+    return {
+      ok: true,
+      payload: {
+        messageType: 'command',
+        plaintext: processedContent,
+        commandData: {
+          command: suffix ? `dice${result.sides}` : 'dice',
+          result,
+          processedContent
+        }
+      }
+    };
+  }
+
+  return { ok: false, error: UNKNOWN_COMMAND_HELP };
+};
