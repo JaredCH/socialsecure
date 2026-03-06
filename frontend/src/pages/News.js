@@ -46,6 +46,9 @@ function News() {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [promotedArticles, setPromotedArticles] = useState([]);
+  const [promotedLoading, setPromotedLoading] = useState(true);
+  const [promotedError, setPromotedError] = useState(null);
   const [preferences, setPreferences] = useState(null);
   const [topics, setTopics] = useState([]);
   const [activeFilter, setActiveFilter] = useState('all');
@@ -69,20 +72,41 @@ function News() {
     bootstrap();
   }, []);
 
+  const loadPromoted = async (topicFilter = activeFilter) => {
+    try {
+      setPromotedLoading(true);
+      const promotedRes = await newsAPI.getPromoted({
+        limit: 8,
+        topic: topicFilter !== 'all' ? topicFilter : undefined
+      });
+      setPromotedArticles(promotedRes.data.items || []);
+      setPromotedError(null);
+    } catch (err) {
+      console.error('Error loading promoted news:', err);
+      setPromotedError('Failed to load promoted news');
+    } finally {
+      setPromotedLoading(false);
+    }
+  };
+
   const bootstrap = async () => {
     try {
       setLoading(true);
+      setPromotedLoading(true);
       
-      const [feedRes, prefsRes, topicsRes] = await Promise.all([
+      const [feedRes, prefsRes, topicsRes, promotedRes] = await Promise.all([
         newsAPI.getFeed({ page: 1, limit: 20 }),
         newsAPI.getPreferences().catch(() => ({ data: { preferences: null } })),
-        newsAPI.getTopics()
+        newsAPI.getTopics(),
+        newsAPI.getPromoted({ limit: 8 }).catch(() => ({ data: { items: [] } }))
       ]);
       
       setArticles(feedRes.data.articles);
       setPagination(feedRes.data.pagination);
       setPreferences(prefsRes.data.preferences);
       setTopics(topicsRes.data.topics);
+      setPromotedArticles(promotedRes.data.items || []);
+      setPromotedError(null);
       
       // Set hidden categories from preferences
       if (prefsRes.data.preferences?.hiddenCategories) {
@@ -95,6 +119,7 @@ function News() {
       setError('Failed to load news feed');
     } finally {
       setLoading(false);
+      setPromotedLoading(false);
     }
   };
 
@@ -131,6 +156,7 @@ function News() {
       
       setArticles(res.data.articles);
       setPagination(res.data.pagination);
+      await loadPromoted(topic);
     } catch (err) {
       console.error('Error filtering:', err);
     } finally {
@@ -487,7 +513,8 @@ function News() {
       )}
 
       {/* News Feed */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-6 lg:grid lg:grid-cols-12 lg:gap-6">
+        <div className="lg:col-span-8">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
             {error}
@@ -579,6 +606,49 @@ function News() {
         <div className="mt-4 text-center text-sm text-gray-500">
           Showing {articles.length} of {pagination.total} articles
         </div>
+        </div>
+
+        <aside className="mt-6 lg:mt-0 lg:col-span-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sticky top-24">
+            <h2 className="text-lg font-semibold mb-3">Promoted News</h2>
+            {promotedLoading ? (
+              <div className="space-y-3">
+                {[...Array(4)].map((_, index) => (
+                  <div key={index} className="animate-pulse border-b border-gray-100 pb-3">
+                    <div className="h-3 bg-gray-200 rounded w-3/4 mb-2" />
+                    <div className="h-2 bg-gray-200 rounded w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : promotedError ? (
+              <p className="text-sm text-red-600">{promotedError}</p>
+            ) : promotedArticles.length === 0 ? (
+              <p className="text-sm text-gray-500">No promoted stories available right now.</p>
+            ) : (
+              <div className="space-y-3">
+                {promotedArticles.map((item) => (
+                  <a
+                    key={item.article._id}
+                    href={item.article.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block border-b border-gray-100 pb-3 last:border-b-0 last:pb-0 hover:bg-gray-50 rounded px-1"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.article.title}</p>
+                      <span className="text-xs font-semibold bg-purple-100 text-purple-700 px-2 py-1 rounded whitespace-nowrap">
+                        Viral {Math.round(item.viralScore || 0)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {item.article.source} • {formatRelativeTime(item.article.publishedAt)}
+                    </p>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   );
