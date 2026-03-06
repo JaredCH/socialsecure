@@ -3,6 +3,12 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
+const {
+  RELATIONSHIP_AUDIENCE_VALUES,
+  normalizeRelationshipAudience,
+  socialOrUnsetAudienceQuery,
+  isViewerSecureFriendOfOwner
+} = require('../utils/relationshipAudience');
 
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
@@ -134,6 +140,10 @@ const eventResponse = (event) => ({
   color: event.color || '',
   recurrence: event.recurrence || 'none',
   reminderMinutes: event.reminderMinutes,
+  invitees: Array.isArray(event.invitees) ? event.invitees : [],
+  announceToFeed: Boolean(event.announceToFeed),
+  announceTarget: ['feed', 'post'].includes(event.announceTarget) ? event.announceTarget : 'none',
+  relationshipAudience: normalizeRelationshipAudience(event.relationshipAudience),
   createdAt: event.createdAt,
   updatedAt: event.updatedAt
 });
@@ -247,7 +257,12 @@ const eventValidation = [
   body('location').optional({ nullable: true }).isString().trim().isLength({ max: 200 }),
   body('color').optional({ nullable: true }).isIn(['', 'blue', 'green', 'red', 'purple', 'orange', 'gray']),
   body('recurrence').optional().isIn(['none', 'daily', 'weekly', 'monthly']),
-  body('reminderMinutes').optional({ nullable: true }).isInt({ min: 0, max: 10080 })
+  body('reminderMinutes').optional({ nullable: true }).isInt({ min: 0, max: 10080 }),
+  body('invitees').optional({ nullable: true }).isArray({ max: 20 }),
+  body('invitees.*').optional().isString().trim().isLength({ min: 1, max: 120 }),
+  body('announceToFeed').optional().isBoolean(),
+  body('announceTarget').optional().isIn(['none', 'feed', 'post']),
+  body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES)
 ];
 
 const buildEventPayload = (input) => {
@@ -266,7 +281,16 @@ const buildEventPayload = (input) => {
     location,
     color: typeof input.color === 'string' ? input.color : '',
     recurrence: typeof input.recurrence === 'string' ? input.recurrence : 'none',
-    reminderMinutes: Number.isInteger(input.reminderMinutes) ? input.reminderMinutes : null
+    reminderMinutes: Number.isInteger(input.reminderMinutes) ? input.reminderMinutes : null,
+    invitees: Array.isArray(input.invitees)
+      ? input.invitees
+        .map((invitee) => sanitizeText(invitee, 120))
+        .filter(Boolean)
+        .slice(0, 20)
+      : [],
+    announceToFeed: Boolean(input.announceToFeed || ['feed', 'post'].includes(input.announceTarget)),
+    announceTarget: ['feed', 'post'].includes(input.announceTarget) ? input.announceTarget : 'none',
+    relationshipAudience: normalizeRelationshipAudience(input.relationshipAudience)
   };
 };
 
@@ -462,6 +486,11 @@ router.get('/user/:username/events', optionalAuth, async (req, res) => {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 25, 1), 100);
     const skip = (page - 1) * limit;
 
+    const viewerId = req.user?.userId ? String(req.user.userId) : null;
+    const viewerCanSeeSecure = access.isOwner
+      ? true
+      : await isViewerSecureFriendOfOwner(viewerId, owner._id);
+
     const query = {
       calendarId: calendar._id,
       ownerId: owner._id,
@@ -469,6 +498,9 @@ router.get('/user/:username/events', optionalAuth, async (req, res) => {
       startAt: { $lte: range.to },
       endAt: { $gte: range.from }
     };
+    if (!access.isOwner && !viewerCanSeeSecure) {
+      Object.assign(query, socialOrUnsetAudienceQuery('relationshipAudience'));
+    }
 
     const [events, total] = await Promise.all([
       CalendarEvent.find(query).sort({ startAt: 1, _id: 1 }).skip(skip).limit(limit).lean(),
