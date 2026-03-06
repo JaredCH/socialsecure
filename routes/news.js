@@ -468,9 +468,9 @@ const scoreLocalityLevel = (scope, localityLevel) => {
 };
 
 const articlePassesScope = (scope, scopeTier) => {
-  if (scope === 'local') return Boolean(scopeTier <= 2);
-  if (scope === 'regional') return Boolean(scopeTier === 0);
-  if (scope === 'national') return Boolean(scopeTier === 0);
+  if (scope === 'local') return scopeTier <= 2;
+  if (scope === 'regional') return scopeTier === 0;
+  if (scope === 'national') return scopeTier === 0;
   return true;
 };
 
@@ -1001,7 +1001,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
     };
 
     let scopeFilteredArticles = buildScopedArticles(activeScope);
-    if (scopeFilteredArticles.length === 0 && activeScope !== 'global') {
+    if (scopeFilteredArticles.length === 0) {
       const fallbackChain = getFallbackScopeOrder(activeScope).slice(1);
       for (const fallbackScope of fallbackChain) {
         const fallbackArticles = buildScopedArticles(fallbackScope);
