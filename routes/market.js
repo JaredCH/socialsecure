@@ -229,6 +229,13 @@ const ensureImageLimit = (images) => {
   return { ok: true };
 };
 
+const ensureSingleImageSource = ({ hasUploads, hasImageList }) => {
+  if (hasUploads && hasImageList) {
+    return { ok: false, error: 'Provide either uploaded images or image URLs, not both' };
+  }
+  return { ok: true };
+};
+
 const validateUploadedImage = (file) => {
   const mimeType = String(file.mimetype || '').toLowerCase();
   const ext = path.extname(String(file.originalname || '')).toLowerCase();
@@ -239,6 +246,28 @@ const validateUploadedImage = (file) => {
     return { ok: false, error: 'Unsupported image file extension' };
   }
   return { ok: true, ext };
+};
+
+const getMarketUploadPath = (imageUrl) => {
+  if (typeof imageUrl !== 'string') return null;
+  if (!imageUrl.startsWith('/uploads/market/')) return null;
+  const relativePath = imageUrl.replace('/uploads/market/', '');
+  if (!relativePath || relativePath.includes('..')) return null;
+  return path.join(marketUploadRoot, relativePath);
+};
+
+const removeMarketUploads = async (images = []) => {
+  const paths = images.map(getMarketUploadPath).filter(Boolean);
+  await Promise.all(
+    paths.map((filePath) =>
+      fs.unlink(filePath).catch((unlinkError) => {
+        if (unlinkError?.code !== 'ENOENT') {
+          console.error('Failed to remove market upload:', filePath, unlinkError);
+          throw unlinkError;
+        }
+      })
+    )
+  );
 };
 
 const saveUploadedImages = async (files, ownerId) => {
@@ -273,28 +302,6 @@ const saveUploadedImages = async (files, ownerId) => {
 
   return { ok: true, images: savedImages };
 };
-
-const getMarketUploadPath = (imageUrl) => {
-  if (typeof imageUrl !== 'string') return null;
-  if (!imageUrl.startsWith('/uploads/market/')) return null;
-  const relativePath = imageUrl.replace('/uploads/market/', '');
-  if (!relativePath || relativePath.includes('..')) return null;
-  return path.join(marketUploadRoot, relativePath);
-};
-
-async function removeMarketUploads(images = []) {
-  const paths = images.map(getMarketUploadPath).filter(Boolean);
-  await Promise.all(
-    paths.map((filePath) =>
-      fs.unlink(filePath).catch((unlinkError) => {
-        if (unlinkError?.code !== 'ENOENT') {
-          console.error('Failed to remove market upload:', filePath, unlinkError);
-          throw unlinkError;
-        }
-      })
-    )
-  );
-}
 
 const getCategoryRequirementErrors = ({ category, condition, additionalDetails }) => {
   const parentCategory = CATEGORY_PARENT_MAP[category];
@@ -540,8 +547,9 @@ router.post('/listings', [
     }
     const hasUploads = uploadResult.images.length > 0;
     const hasImageList = imageListResult.images !== undefined;
-    if (hasUploads && hasImageList) {
-      return res.status(400).json({ error: 'Provide either uploaded images or image URLs, not both' });
+    const sourceCheck = ensureSingleImageSource({ hasUploads, hasImageList });
+    if (!sourceCheck.ok) {
+      return res.status(400).json({ error: sourceCheck.error });
     }
     const images = hasUploads
       ? uploadResult.images
@@ -671,8 +679,9 @@ router.put('/listings/:listingId', [
     const currentImages = Array.isArray(listing.images) ? listing.images : [];
     const hasUploads = uploadResult.images.length > 0;
     const hasImageList = imageListResult.images !== undefined;
-    if (hasUploads && hasImageList) {
-      return res.status(400).json({ error: 'Provide either uploaded images or image URLs, not both' });
+    const sourceCheck = ensureSingleImageSource({ hasUploads, hasImageList });
+    if (!sourceCheck.ok) {
+      return res.status(400).json({ error: sourceCheck.error });
     }
     let nextImages;
     if (hasUploads) {

@@ -658,7 +658,7 @@ function ListingFormModal({ listing, onClose, onSaved }) {
                   <img
                     key={img}
                     src={img}
-                    alt={`Existing listing ${index + 1}`}
+                    alt={`${form.title || 'Listing'} image ${index + 1}`}
                     className="h-20 w-28 rounded object-cover flex-shrink-0 border border-gray-200"
                   />
                 ))}
