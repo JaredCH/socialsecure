@@ -37,6 +37,30 @@ export const resolveLeafletModule = (leafletModule) => {
   return resolvedModule;
 };
 
+const defaultLeafletAssetLoader = () => Promise.all([
+  import('leaflet/dist/images/marker-icon-2x.png'),
+  import('leaflet/dist/images/marker-icon.png'),
+  import('leaflet/dist/images/marker-shadow.png')
+]);
+const resolveLeafletAssetUrl = (assetModule) => assetModule?.default || assetModule;
+
+export const configureLeafletMarkerAssets = async (
+  leafletModule,
+  assetLoader = defaultLeafletAssetLoader
+) => {
+  if (typeof leafletModule?.Icon?.Default?.mergeOptions !== 'function') {
+    return;
+  }
+
+  const [iconRetina, icon, shadow] = await assetLoader();
+
+  leafletModule.Icon.Default.mergeOptions({
+    iconRetinaUrl: resolveLeafletAssetUrl(iconRetina),
+    iconUrl: resolveLeafletAssetUrl(icon),
+    shadowUrl: resolveLeafletAssetUrl(shadow)
+  });
+};
+
 function Maps() {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -99,6 +123,7 @@ function Maps() {
         if (cancelled) return;
 
         leafletRef.current = L;
+        await configureLeafletMarkerAssets(L);
 
         const createMap = (center, zoom) => {
           if (!mapRef.current || cancelled) return;
