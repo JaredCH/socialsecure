@@ -930,6 +930,11 @@ const Social = () => {
                 </Link>
               </li>
               <li>
+                <Link to="/calendar" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                  Calendar
+                </Link>
+              </li>
+              <li>
                 <Link to="/settings" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
                   User Settings
                 </Link>
@@ -988,9 +993,17 @@ const Social = () => {
                 </button>
               </div>
               {guestProfile && (
-                <p className="text-sm text-gray-700">
-                  Viewing public posts for <span className="font-medium">@{guestProfile.username}</span>
-                </p>
+                <div className="space-y-2 text-sm text-gray-700">
+                  <p>
+                    Viewing public posts for <span className="font-medium">@{guestProfile.username}</span>
+                  </p>
+                  <Link
+                    to={`/calendar?user=${encodeURIComponent(guestProfile.username)}`}
+                    className="inline-flex text-blue-600 hover:text-blue-700"
+                  >
+                    View calendar
+                  </Link>
+                </div>
               )}
             </div>
           )}

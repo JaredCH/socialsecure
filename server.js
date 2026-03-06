@@ -156,6 +156,7 @@ registerRoute('/api/circles', () => require('./routes/circles'));
 registerRoute('/api/moderation', () => require('./routes/moderation'));
 registerRoute('/api/notifications', () => require('./routes/notifications'));
 registerRoute('/api/discovery', () => require('./routes/discovery'));
+registerRoute('/api/calendar', () => require('./routes/calendar'));
 
 let newsRoutes = null;
 let mapsRoutes = null;
