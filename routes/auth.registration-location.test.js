@@ -11,6 +11,7 @@ const mockUserSave = jest.fn().mockResolvedValue(true);
 const mockToPublicProfile = jest.fn(() => ({
   _id: 'user-1',
   username: 'new_user',
+  country: 'US',
   county: 'Orange County',
   zipCode: 'K1A0B1'
 }));
@@ -62,16 +63,19 @@ describe('Auth registration location fields', () => {
         username: 'new_user',
         email: 'new@example.com',
         password: 'StrongPass1',
+        countryCode: 'us',
         county: '  Orange County  ',
         zipCode: 'k1a 0b1'
       });
 
     expect(response.status).toBe(201);
     expect(mockUserModel).toHaveBeenCalledWith(expect.objectContaining({
+      country: 'US',
       county: 'Orange County',
       zipCode: 'K1A0B1'
     }));
     expect(response.body.user).toMatchObject({
+      country: 'US',
       county: 'Orange County',
       zipCode: 'K1A0B1'
     });
@@ -87,6 +91,7 @@ describe('Auth registration location fields', () => {
         username: 'new_user',
         email: 'new@example.com',
         password: 'StrongPass1',
+        countryCode: 'US',
         county: 'Orange County',
         zipCode: '12'
       });
@@ -95,6 +100,30 @@ describe('Auth registration location fields', () => {
     expect(response.body.errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ msg: expect.stringMatching(/zip code must be a valid/i) })
+      ])
+    );
+    expect(mockUserModel).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid country code', async () => {
+    const app = buildApp();
+
+    const response = await request(app)
+      .post('/api/auth/register')
+      .send({
+        realName: 'New User',
+        username: 'new_user',
+        email: 'new@example.com',
+        password: 'StrongPass1',
+        countryCode: 'USA',
+        county: 'Orange County',
+        zipCode: 'K1A0B1'
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ msg: expect.stringMatching(/country code/i) })
       ])
     );
     expect(mockUserModel).not.toHaveBeenCalled();

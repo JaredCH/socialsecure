@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { authAPI, evaluateRegisterPassword } from '../utils/api';
+import { COUNTRY_CODE_OPTIONS } from '../utils/countryCodes';
 
 function Register({ onSuccess, onWelcomeRequired }) {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ function Register({ onSuccess, onWelcomeRequired }) {
     username: '',
     email: '',
     password: '',
+    countryCode: '',
     county: '',
     zipCode: '',
     referralCode: token || ''
@@ -36,6 +38,13 @@ function Register({ onSuccess, onWelcomeRequired }) {
     e.preventDefault();
     const county = form.county.trim();
     const zipCode = form.zipCode.trim().toUpperCase().replace(/\s+/g, '');
+    const countryCode = form.countryCode.trim().toUpperCase();
+    const selectedCountry = COUNTRY_CODE_OPTIONS.find((option) => option.code === countryCode);
+
+    if (!selectedCountry) {
+      toast.error('Please select a valid country code');
+      return;
+    }
 
     if (!county || county.length > 100) {
       toast.error('County is required and must be 100 characters or fewer');
@@ -56,6 +65,7 @@ function Register({ onSuccess, onWelcomeRequired }) {
         username: form.username.trim().toLowerCase(),
         email: form.email.trim().toLowerCase(),
         password: form.password,
+        countryCode: selectedCountry.code,
         county,
         zipCode,
         referralCode: form.referralCode || undefined
@@ -172,7 +182,25 @@ function Register({ onSuccess, onWelcomeRequired }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Country Code</label>
+            <select
+              name="countryCode"
+              value={form.countryCode}
+              onChange={handleChange}
+              className="border rounded p-2 w-full"
+              required
+            >
+              <option value="">Select country code</option>
+              {COUNTRY_CODE_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.name} ({option.code})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Top 20 population countries are pinned first.</p>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">County</label>
             <input
