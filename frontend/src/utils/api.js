@@ -301,6 +301,10 @@ export const discoveryAPI = {
     return api.get(`/discovery/posts?${params.toString()}`);
   },
   trackEvent: (eventType, metadata = {}) => api.post('/discovery/events', { eventType, metadata }),
+  trackUserImpression: (userId) =>
+    api.post('/discovery/users/impression', { userId }),
+  trackPostImpression: (postId) =>
+    api.post('/discovery/posts/impression', { postId }),
 };
 
 // News API
@@ -377,28 +381,6 @@ export const moderationAPI = {
   submitAppeal: (data) => api.post('/moderation/appeals', data),
   getAppeals: () => api.get('/moderation/appeals'),
   processAppeal: (reportId, data) => api.put(`/moderation/appeals/${encodeURIComponent(reportId)}`, data)
-};
-
-// Discovery API
-export const discoveryAPI = {
-  // Discover suggested users (ranked by mutual friends, location, recency)
-  getUsers: (page = 1, limit = 20) =>
-    api.get(`/discovery/users?page=${page}&limit=${limit}`),
-  // Discover suggested posts (ranked by engagement, recency, location, friends)
-  getPosts: (page = 1, limit = 20, latitude = null, longitude = null) => {
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
-    if (latitude !== null && longitude !== null) {
-      params.append('latitude', String(latitude));
-      params.append('longitude', String(longitude));
-    }
-    return api.get(`/discovery/posts?${params.toString()}`);
-  },
-  // Track user impression analytics
-  trackUserImpression: (userId) =>
-    api.post('/discovery/users/impression', { userId }),
-  // Track post impression analytics
-  trackPostImpression: (postId) =>
-    api.post('/discovery/posts/impression', { postId }),
 };
 
 export default api;

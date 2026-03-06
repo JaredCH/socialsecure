@@ -5,16 +5,16 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn()
 }));
 
-const User = { findOne: jest.fn() };
-const GalleryImage = {
+const mockUser = { findOne: jest.fn() };
+const mockGalleryImage = {
   find: jest.fn(),
   countDocuments: jest.fn(),
   create: jest.fn(),
   findOne: jest.fn()
 };
 
-jest.mock('../models/User', () => User);
-jest.mock('../models/GalleryImage', () => GalleryImage);
+jest.mock('../models/User', () => mockUser);
+jest.mock('../models/GalleryImage', () => mockGalleryImage);
 
 const jwt = require('jsonwebtoken');
 const galleryRouter = require('./gallery');
@@ -27,7 +27,7 @@ const buildApp = () => {
 };
 
 const mockOwnerLookup = (owner) => {
-  User.findOne.mockReturnValue({
+  mockUser.findOne.mockReturnValue({
     select: jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue(owner)
     })
@@ -55,12 +55,12 @@ describe('Gallery routes', () => {
       getViewerReaction: jest.fn().mockReturnValue(null)
     };
 
-    GalleryImage.find.mockReturnValue({
+    mockGalleryImage.find.mockReturnValue({
       sort: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([imageDoc])
     });
-    GalleryImage.countDocuments.mockResolvedValue(1);
+    mockGalleryImage.countDocuments.mockResolvedValue(1);
 
     const response = await request(app).get('/api/gallery/owner');
 
@@ -88,26 +88,57 @@ describe('Gallery routes', () => {
     expect(response.body.error).toMatch(/only the owner/i);
   });
 
-  it('rejects create for invalid image URL extension', async () => {
+  it('rejects create for non-http/https image URL', async () => {
     const app = buildApp();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
     mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
-    GalleryImage.countDocuments.mockResolvedValue(0);
+    mockGalleryImage.countDocuments.mockResolvedValue(0);
 
     const response = await request(app)
       .post('/api/gallery/owner-1')
       .set('Authorization', 'Bearer token')
-      .send({ mediaUrl: 'https://example.com/not-image.txt' });
+      .send({ mediaUrl: 'ftp://example.com/photo.jpg' });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toMatch(/extension/i);
+    expect(response.body.error).toMatch(/http\/https/i);
+  });
+
+  it('accepts URL without a recognized image file extension', async () => {
+    const app = buildApp();
+    jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
+    mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
+    mockGalleryImage.countDocuments.mockResolvedValue(0);
+
+    const createdDoc = {
+      _id: 'img-cdn',
+      ownerId: 'owner-1',
+      mediaUrl: 'https://cdn.example.com/media/abc123',
+      mediaType: 'url',
+      caption: '',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      getReactionCounts: jest.fn().mockReturnValue({ likesCount: 0, dislikesCount: 0 }),
+      getViewerReaction: jest.fn().mockReturnValue(null)
+    };
+    mockGalleryImage.create.mockResolvedValue(createdDoc);
+
+    const response = await request(app)
+      .post('/api/gallery/owner-1')
+      .set('Authorization', 'Bearer token')
+      .send({ mediaUrl: 'https://cdn.example.com/media/abc123' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.item).toMatchObject({
+      _id: 'img-cdn',
+      mediaUrl: 'https://cdn.example.com/media/abc123'
+    });
   });
 
   it('creates gallery image for owner via URL', async () => {
     const app = buildApp();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
     mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
-    GalleryImage.countDocuments.mockResolvedValue(0);
+    mockGalleryImage.countDocuments.mockResolvedValue(0);
 
     const createdDoc = {
       _id: 'img-created',
@@ -120,7 +151,7 @@ describe('Gallery routes', () => {
       getReactionCounts: jest.fn().mockReturnValue({ likesCount: 0, dislikesCount: 0 }),
       getViewerReaction: jest.fn().mockReturnValue(null)
     };
-    GalleryImage.create.mockResolvedValue(createdDoc);
+    mockGalleryImage.create.mockResolvedValue(createdDoc);
 
     const response = await request(app)
       .post('/api/gallery/owner-1')
@@ -133,7 +164,7 @@ describe('Gallery routes', () => {
       mediaUrl: 'https://example.com/photo.jpg',
       caption: 'hello'
     });
-    expect(GalleryImage.create).toHaveBeenCalledWith(
+    expect(mockGalleryImage.create).toHaveBeenCalledWith(
       expect.objectContaining({
         ownerId: 'owner-1',
         mediaUrl: 'https://example.com/photo.jpg',
@@ -168,7 +199,7 @@ describe('Gallery routes', () => {
       }),
       save: jest.fn().mockResolvedValue(true)
     };
-    GalleryImage.findOne.mockResolvedValue(imageDoc);
+    mockGalleryImage.findOne.mockResolvedValue(imageDoc);
 
     const response = await request(app)
       .post('/api/gallery/owner-1/image-1/reaction')
