@@ -20,6 +20,7 @@ const STATE_ICONS = {
 };
 const GEOLOCATION_OPTIONS_TIMEOUT_MS = 8000;
 const GEOLOCATION_OPTIONS_MAX_AGE_MS = 300000;
+const HEATMAP_CIRCLE_RADIUS_METERS = 2000;
 const createFallbackResponse = (data) => ({ data });
 
 export const withDataFallback = (request, fallbackData) =>
@@ -327,27 +328,37 @@ function Maps() {
     const L = leafletRef.current;
     if (!map || !L) return;
     
-    // Clear existing layers
+    // Clear existing non-tile layers
     map.eachLayer((layer) => {
       if (layer._url && layer._url.includes('tile')) return; // Keep tile layer
-      if (layer._heat) return; // Keep heatmap layer
       map.removeLayer(layer);
     });
+    
+    // Add user's own location pin
+    if (userLocation) {
+      const userIcon = L.divIcon({
+        className: 'user-marker',
+        html: `<div style="background:#3b82f6;width:28px;height:28px;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(59,130,246,0.5);">📍</div>`,
+        iconSize: [28, 28]
+      });
+      
+      L.marker(userLocation, { icon: userIcon, zIndexOffset: 1000 })
+        .bindPopup('<b>You are here</b>')
+        .addTo(map);
+    }
     
     // Add friends markers
     if (layers.friends && friendsLocations.length > 0) {
       friendsLocations.forEach(friend => {
-        if (friend.locationName && map) {
-          // Coarse location marker
+        if (friend.lat != null && friend.lng != null) {
           const icon = L.divIcon({
             className: 'friend-marker',
             html: `<div style="background:#10b981;width:24px;height:24px;border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`,
             iconSize: [24, 24]
           });
           
-          // Use city/state for marker position (coarse location)
-          L.marker([39.8283, -98.5795], { icon }) // Default until we have coords
-            .bindPopup(`<b>${friend.user?.username || 'Friend'}</b><br/>${friend.city || friend.locationName || 'Location hidden'}`)
+          L.marker([friend.lat, friend.lng], { icon })
+            .bindPopup(`<b>${friend.user?.username || 'Friend'}</b><br/>${friend.city || friend.locationName || 'Location shared'}`)
             .addTo(map);
         }
       });
@@ -356,29 +367,49 @@ function Maps() {
     // Add spotlight markers
     if (layers.spotlights && spotlights.length > 0) {
       spotlights.forEach(spotlight => {
-        // Note: In production, we'd store coordinates. For now, we use placeholder
-        const stateIcon = STATE_ICONS[spotlight.state] || '📍';
-        const categoryIcon = CATEGORY_ICONS[spotlight.category] || '📍';
-        
-        const icon = L.divIcon({
-          className: 'spotlight-marker',
-          html: `<div style="background:#f59e0b;width:32px;height:32px;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.3);">${stateIcon}</div>`,
-          iconSize: [32, 32]
-        });
-        
-        // Placeholder position - in production would use spotlight.location.coordinates
-        L.marker([39.8283, -98.5795], { icon })
-          .bindPopup(`
-            <b>${spotlight.locationName}</b><br/>
-            ${spotlight.description || ''}<br/>
-            ${categoryIcon} ${spotlight.category}<br/>
-            ❤️ ${spotlight.reactions?.heart || 0} 🔥 ${spotlight.reactions?.fire || 0} 😎 ${spotlight.reactions?.cool || 0}
-          `)
-          .addTo(map);
+        if (spotlight.lat != null && spotlight.lng != null) {
+          const stateIcon = STATE_ICONS[spotlight.state] || '📍';
+          const categoryIcon = CATEGORY_ICONS[spotlight.category] || '📍';
+          
+          const icon = L.divIcon({
+            className: 'spotlight-marker',
+            html: `<div style="background:#f59e0b;width:32px;height:32px;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.3);">${stateIcon}</div>`,
+            iconSize: [32, 32]
+          });
+          
+          L.marker([spotlight.lat, spotlight.lng], { icon })
+            .bindPopup(`
+              <b>${spotlight.locationName}</b><br/>
+              ${spotlight.description || ''}<br/>
+              ${categoryIcon} ${spotlight.category}<br/>
+              ❤️ ${spotlight.reactions?.heart || 0} 🔥 ${spotlight.reactions?.fire || 0} 😎 ${spotlight.reactions?.cool || 0}
+            `)
+            .addTo(map);
+        }
       });
     }
     
-  }, [map, friendsLocations, spotlights, layers]);
+    // Render heatmap overlay as colored circles
+    if (layers.heatmap && heatmapData.length > 0) {
+      heatmapData.forEach(point => {
+        if (point.lat != null && point.lng != null && point.intensity > 0) {
+          const intensity = Math.min(point.intensity, 1);
+          const red = Math.round(255 * intensity);
+          const green = Math.round(80 * (1 - intensity));
+          const color = `rgb(${red}, ${green}, 0)`;
+          
+          L.circle([point.lat, point.lng], {
+            radius: HEATMAP_CIRCLE_RADIUS_METERS,
+            color: 'transparent',
+            fillColor: color,
+            fillOpacity: 0.25 + intensity * 0.35,
+            interactive: false
+          }).addTo(map);
+        }
+      });
+    }
+    
+  }, [map, userLocation, friendsLocations, spotlights, heatmapData, layers]);
 
   const retryMapInitialization = () => {
     if (mapInstanceRef.current) {

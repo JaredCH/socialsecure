@@ -183,22 +183,27 @@ router.get('/friends', authenticateToken, async (req, res) => {
   try {
     const locations = await LocationPresence.getFriendsLocations(req.user.userId);
     
-    // Sanitize: remove exact coordinates, return only coarse location
-    const sanitized = locations.map(loc => ({
-      user: {
-        _id: loc.user._id,
-        username: loc.user.username,
-        realName: loc.user.realName,
-        avatarUrl: loc.user.avatarUrl
-      },
-      locationName: loc.locationName,
-      city: loc.city,
-      state: loc.state,
-      country: loc.country,
-      precisionLevel: loc.precisionLevel,
-      lastActivityAt: loc.lastActivityAt,
-      isActive: loc.isActive
-    }));
+    // Return coarse (already rounded by precision level) coordinates for map display
+    const sanitized = locations.map(loc => {
+      const [lng = null, lat = null] = loc.location?.coordinates || [];
+      return {
+        user: {
+          _id: loc.user._id,
+          username: loc.user.username,
+          realName: loc.user.realName,
+          avatarUrl: loc.user.avatarUrl
+        },
+        lat,
+        lng,
+        locationName: loc.locationName,
+        city: loc.city,
+        state: loc.state,
+        country: loc.country,
+        precisionLevel: loc.precisionLevel,
+        lastActivityAt: loc.lastActivityAt,
+        isActive: loc.isActive
+      };
+    });
     
     res.json({ friends: sanitized });
   } catch (error) {
@@ -472,17 +477,22 @@ router.get('/local', optionalAuth, async (req, res) => {
     }));
     
     res.json({
-      spotlights: spotlights.map(s => ({
-        _id: s._id,
-        locationName: s.locationName,
-        category: s.category,
-        state: s.state,
-        reactions: s.reactions,
-        user: req.user && s.user ? { 
-          username: s.user.username, 
-          avatarUrl: s.user.avatarUrl 
-        } : null
-      })),
+      spotlights: spotlights.map(s => {
+        const [sLng = null, sLat = null] = s.location?.coordinates || [];
+        return {
+          _id: s._id,
+          lat: sLat,
+          lng: sLng,
+          locationName: s.locationName,
+          category: s.category,
+          state: s.state,
+          reactions: s.reactions,
+          user: req.user && s.user ? { 
+            username: s.user.username, 
+            avatarUrl: s.user.avatarUrl 
+          } : null
+        };
+      }),
       heatmap
     });
   } catch (error) {
@@ -537,17 +547,22 @@ router.get('/community', optionalAuth, async (req, res) => {
     }));
     
     res.json({
-      spotlights: spotlights.map(s => ({
-        _id: s._id,
-        locationName: s.locationName,
-        category: s.category,
-        state: s.state,
-        reactions: s.reactions,
-        user: s.user ? { 
-          username: s.user.username, 
-          avatarUrl: s.user.avatarUrl 
-        } : null
-      })),
+      spotlights: spotlights.map(s => {
+        const [sLng = null, sLat = null] = s.location?.coordinates || [];
+        return {
+          _id: s._id,
+          lat: sLat,
+          lng: sLng,
+          locationName: s.locationName,
+          category: s.category,
+          state: s.state,
+          reactions: s.reactions,
+          user: s.user ? { 
+            username: s.user.username, 
+            avatarUrl: s.user.avatarUrl 
+          } : null
+        };
+      }),
       heatmap
     });
   } catch (error) {
