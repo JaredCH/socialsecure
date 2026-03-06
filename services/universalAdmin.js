@@ -23,7 +23,7 @@ const ensureUniversalAdminAccount = async ({
 
     adminUser = new User({
       realName: 'System Administrator',
-      username,
+      username: normalizedUsername,
       email,
       passwordHash,
       country: 'US',

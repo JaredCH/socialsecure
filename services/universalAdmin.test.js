@@ -33,7 +33,7 @@ describe('services/universalAdmin', () => {
     expect(bcrypt.hash).toHaveBeenNthCalledWith(1, 'AdminPass123', 12);
     expect(bcrypt.hash).toHaveBeenNthCalledWith(2, 'EncryptionPass123', 12);
     expect(mockUser).toHaveBeenCalledWith(expect.objectContaining({
-      username: 'ADMIN',
+      username: 'admin',
       email: 'admin@socialsecure.local',
       passwordHash: 'hashed-admin-password',
       encryptionPasswordHash: 'hashed-encryption-password',
