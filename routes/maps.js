@@ -185,7 +185,7 @@ router.get('/friends', authenticateToken, async (req, res) => {
     
     // Return coarse (already rounded by precision level) coordinates for map display
     const sanitized = locations.map(loc => {
-      const [lng, lat] = loc.location?.coordinates || [];
+      const [lng = null, lat = null] = loc.location?.coordinates || [];
       return {
         user: {
           _id: loc.user._id,
@@ -193,8 +193,8 @@ router.get('/friends', authenticateToken, async (req, res) => {
           realName: loc.user.realName,
           avatarUrl: loc.user.avatarUrl
         },
-        lat: lat ?? null,
-        lng: lng ?? null,
+        lat,
+        lng,
         locationName: loc.locationName,
         city: loc.city,
         state: loc.state,
@@ -478,11 +478,11 @@ router.get('/local', optionalAuth, async (req, res) => {
     
     res.json({
       spotlights: spotlights.map(s => {
-        const [sLng, sLat] = s.location?.coordinates || [];
+        const [sLng = null, sLat = null] = s.location?.coordinates || [];
         return {
           _id: s._id,
-          lat: sLat ?? null,
-          lng: sLng ?? null,
+          lat: sLat,
+          lng: sLng,
           locationName: s.locationName,
           category: s.category,
           state: s.state,
@@ -548,11 +548,11 @@ router.get('/community', optionalAuth, async (req, res) => {
     
     res.json({
       spotlights: spotlights.map(s => {
-        const [sLng, sLat] = s.location?.coordinates || [];
+        const [sLng = null, sLat = null] = s.location?.coordinates || [];
         return {
           _id: s._id,
-          lat: sLat ?? null,
-          lng: sLng ?? null,
+          lat: sLat,
+          lng: sLng,
           locationName: s.locationName,
           category: s.category,
           state: s.state,

@@ -20,6 +20,7 @@ const STATE_ICONS = {
 };
 const GEOLOCATION_OPTIONS_TIMEOUT_MS = 8000;
 const GEOLOCATION_OPTIONS_MAX_AGE_MS = 300000;
+const HEATMAP_CIRCLE_RADIUS_METERS = 2000;
 const createFallbackResponse = (data) => ({ data });
 
 export const withDataFallback = (request, fallbackData) =>
@@ -398,7 +399,7 @@ function Maps() {
           const color = `rgb(${red}, ${green}, 0)`;
           
           L.circle([point.lat, point.lng], {
-            radius: 2000,
+            radius: HEATMAP_CIRCLE_RADIUS_METERS,
             color: 'transparent',
             fillColor: color,
             fillOpacity: 0.25 + intensity * 0.35,
