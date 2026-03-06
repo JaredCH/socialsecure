@@ -122,6 +122,32 @@ describe('App navbar features dropdown', () => {
     expect(featuresMenu.textContent).toContain('Resume');
   });
 
+  it('opens Features dropdown on hover and closes on mouse leave', async () => {
+    localStorage.setItem('token', 'token');
+
+    await renderApp();
+
+    const featuresMenu = container.querySelector('[data-testid="features-menu"]');
+    expect(featuresMenu).not.toBeNull();
+
+    expect(container.querySelector('#features-menu-panel')).toBeNull();
+
+    await act(async () => {
+      featuresMenu.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+
+    expect(container.querySelector('#features-menu-panel')).not.toBeNull();
+    expect(featuresMenu.textContent).toContain('Discover');
+    expect(featuresMenu.textContent).toContain('Calendar');
+    expect(featuresMenu.textContent).toContain('Resume');
+
+    await act(async () => {
+      featuresMenu.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+    });
+
+    expect(container.querySelector('#features-menu-panel')).toBeNull();
+  });
+
   it('keeps calendar in Features when not authenticated', async () => {
     await renderApp();
 

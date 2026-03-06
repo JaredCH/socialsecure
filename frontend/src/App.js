@@ -442,6 +442,8 @@ function App() {
                 className="relative"
                 data-testid="features-menu"
                 ref={featuresMenuRef}
+                onMouseEnter={() => setIsFeaturesMenuOpen(true)}
+                onMouseLeave={() => setIsFeaturesMenuOpen(false)}
                 onBlur={(event) => {
                   if (!event.currentTarget.contains(event.relatedTarget)) {
                     setIsFeaturesMenuOpen(false);
