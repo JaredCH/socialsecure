@@ -7,7 +7,7 @@ jest.mock('axios', () => ({
   })
 }));
 
-import { evaluateRegisterPassword } from './api';
+import { evaluateRegisterPassword, normalizeApiBaseUrl } from './api';
 
 describe('evaluateRegisterPassword', () => {
   it('marks all requirements unmet for an empty password', () => {
@@ -38,5 +38,23 @@ describe('evaluateRegisterPassword', () => {
 
     expect(evaluation.allRequirementsMet).toBe(true);
     expect(evaluation.strengthLabel).toBe('Strong');
+  });
+});
+
+describe('normalizeApiBaseUrl', () => {
+  it('uses /api when no value is provided', () => {
+    expect(normalizeApiBaseUrl()).toBe('/api');
+  });
+
+  it('ensures relative base URLs are rooted from the app origin', () => {
+    expect(normalizeApiBaseUrl('api')).toBe('/api');
+  });
+
+  it('keeps already rooted base URLs unchanged', () => {
+    expect(normalizeApiBaseUrl('/api')).toBe('/api');
+  });
+
+  it('keeps absolute API URLs unchanged', () => {
+    expect(normalizeApiBaseUrl('https://example.com/api')).toBe('https://example.com/api');
   });
 });
