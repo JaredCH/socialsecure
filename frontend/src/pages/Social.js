@@ -1,16 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI } from '../utils/api';
+import { authAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
-import ProfileHeaderSection from '../components/social/ProfileHeaderSection';
-import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
-import SocialLeftRail from '../components/social/SocialLeftRail';
-import SocialRightRail from '../components/social/SocialRightRail';
-import { SOCIAL_SECTION_IDS } from '../components/social/sectionRegistry';
+import SocialEditablePanel from '../components/social/SocialEditablePanel';
+import SocialDesignStudioModal from '../components/social/SocialDesignStudioModal';
+import {
+  getFontSizeClass,
+  getPanelsByArea,
+  mergeDesignPatch,
+  normalizeSocialPreferences as normalizePageDesign,
+  SOCIAL_DESIGN_TEMPLATES,
+  SOCIAL_PANEL_LABELS
+} from '../utils/socialPagePreferences';
 import {
   emitTypingStart,
   emitTypingStop,
@@ -44,23 +49,7 @@ const RELATIONSHIP_AUDIENCE_LABELS = {
   secure: 'Secure'
 };
 
-const SOCIAL_SECTION_ORDER_IDS = Object.values(SOCIAL_SECTION_IDS);
 const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
-const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest'];
-const THEME_TO_DEFAULT_ACCENT = {
-  default: 'blue',
-  light: 'violet',
-  dark: 'emerald',
-  sunset: 'rose',
-  forest: 'emerald'
-};
-const THEME_TO_ALLOWED_ACCENTS = {
-  default: ['blue', 'violet', 'emerald', 'rose'],
-  light: ['blue', 'violet', 'emerald'],
-  dark: ['blue', 'violet', 'emerald', 'rose', 'amber'],
-  sunset: ['rose', 'amber', 'violet'],
-  forest: ['emerald', 'blue', 'amber']
-};
 const THEME_ACCENT_TO_HEADER_CLASS = {
   blue: 'from-blue-700 via-indigo-700 to-violet-700',
   violet: 'from-violet-700 via-fuchsia-700 to-purple-700',
@@ -76,33 +65,7 @@ const THEME_TO_PAGE_CLASS = {
   forest: 'bg-emerald-50 text-gray-900'
 };
 
-const uniqueStrings = (items) => {
-  if (!Array.isArray(items)) return [];
-  return [...new Set(items.filter((item) => typeof item === 'string').map((item) => item.trim()).filter(Boolean))];
-};
-
-const normalizeSocialPreferences = (input, profileTheme = 'default') => {
-  const themePreset = SOCIAL_THEME_PRESETS.includes(input?.themePreset)
-    ? input.themePreset
-    : (SOCIAL_THEME_PRESETS.includes(profileTheme) ? profileTheme : 'default');
-  const allowedAccents = THEME_TO_ALLOWED_ACCENTS[themePreset] || THEME_TO_ALLOWED_ACCENTS.default;
-  const accentColorToken = allowedAccents.includes(input?.accentColorToken)
-    ? input.accentColorToken
-    : (allowedAccents.includes(THEME_TO_DEFAULT_ACCENT[themePreset]) ? THEME_TO_DEFAULT_ACCENT[themePreset] : allowedAccents[0]);
-
-  const requestedOrder = uniqueStrings(input?.sectionOrder).filter((id) => SOCIAL_SECTION_ORDER_IDS.includes(id));
-  const sectionOrder = [...requestedOrder, ...SOCIAL_SECTION_ORDER_IDS.filter((id) => !requestedOrder.includes(id))];
-  const hiddenSections = uniqueStrings(input?.hiddenSections).filter((id) => SOCIAL_SECTION_ORDER_IDS.includes(id) && id !== SOCIAL_SECTION_IDS.profile_header);
-  const hiddenModules = uniqueStrings(input?.hiddenModules).filter((id) => SOCIAL_MODULE_IDS.includes(id));
-
-  return {
-    themePreset,
-    accentColorToken,
-    sectionOrder,
-    hiddenSections,
-    hiddenModules
-  };
-};
+const normalizeSocialPreferences = (input, profileTheme = 'default') => normalizePageDesign(input, profileTheme);
 
 const isRenderableMediaUrl = (value) => {
   if (typeof value !== 'string') return false;
@@ -339,8 +302,21 @@ const Social = () => {
     targetUserId: null
   });
   const [commentTypingByPostId, setCommentTypingByPostId] = useState({});
+  const [designStudioOpen, setDesignStudioOpen] = useState(false);
+  const [inlineEditingPanelId, setInlineEditingPanelId] = useState('');
+  const [draftSocialPreferences, setDraftSocialPreferences] = useState(null);
+  const [socialConfigs, setSocialConfigs] = useState([]);
+  const [favoriteDesigns, setFavoriteDesigns] = useState([]);
+  const [sharedDesigns, setSharedDesigns] = useState([]);
+  const [socialTemplates, setSocialTemplates] = useState(SOCIAL_DESIGN_TEMPLATES);
+  const [designBusy, setDesignBusy] = useState(false);
+  const [designError, setDesignError] = useState('');
+  const [designSuccessMessage, setDesignSuccessMessage] = useState('');
+  const [activeDesignConfigId, setActiveDesignConfigId] = useState(null);
   const localTypingTimeoutsRef = useRef({});
   const remoteTypingTimeoutsRef = useRef({});
+  const designAutosaveRef = useRef(null);
+  const designDirtyRef = useRef(false);
 
   const realtimeEnabled = currentUser?.realtimePreferences?.enabled !== false;
 
@@ -359,15 +335,13 @@ const Social = () => {
     ? currentUser
     : guestProfile;
   const socialPreferences = useMemo(
-    () => normalizeSocialPreferences(activeProfile?.socialPagePreferences, activeProfile?.profileTheme),
-    [activeProfile?.socialPagePreferences, activeProfile?.profileTheme]
+    () => normalizeSocialPreferences(draftSocialPreferences || activeProfile?.socialPagePreferences, activeProfile?.profileTheme),
+    [draftSocialPreferences, activeProfile?.socialPagePreferences, activeProfile?.profileTheme]
   );
-  const sectionRank = useMemo(() => (
-    socialPreferences.sectionOrder.reduce((acc, sectionId, index) => ({ ...acc, [sectionId]: index }), {})
-  ), [socialPreferences.sectionOrder]);
+  const panelsByArea = useMemo(() => getPanelsByArea(socialPreferences), [socialPreferences]);
   const isSectionVisible = useCallback(
-    (sectionId) => !socialPreferences.hiddenSections.includes(sectionId),
-    [socialPreferences.hiddenSections]
+    (sectionId) => socialPreferences.effective?.panels?.[sectionId]?.visible !== false,
+    [socialPreferences]
   );
   const isModuleVisible = useCallback(
     (moduleId) => !socialPreferences.hiddenModules.includes(moduleId),
@@ -507,6 +481,21 @@ const Social = () => {
     ));
   }, []);
 
+  const fetchTimelineWithRetry = useCallback(async () => {
+    try {
+      return await feedAPI.getTimeline();
+    } catch (firstError) {
+      const statusCode = Number(firstError?.response?.status || 0);
+      const shouldRetry = !statusCode || statusCode >= 500;
+      if (!shouldRetry) {
+        throw firstError;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      return feedAPI.getTimeline();
+    }
+  }, []);
+
   const loadAuthenticatedFeed = useCallback(async () => {
     const [profileResponse, resumeMetaResponse] = await Promise.all([
       authAPI.getProfile(),
@@ -539,7 +528,7 @@ const Social = () => {
     setMutedUserIds((mutesResponse.data?.mutedUsers || []).map((entry) => String(entry._id)));
     setMyReports(Array.isArray(reportsResponse.data?.reports) ? reportsResponse.data.reports : []);
 
-    const timelineResponse = await feedAPI.getTimeline();
+    const timelineResponse = await fetchTimelineWithRetry();
     const timelinePosts = Array.isArray(timelineResponse.data?.posts)
       ? timelineResponse.data.posts
       : [];
@@ -547,7 +536,7 @@ const Social = () => {
     const hydratedPosts = await hydrateInteractionsForPosts(normalizedPosts);
     setPosts(hydratedPosts);
     setGuestProfile(null);
-  }, [hydrateInteractionsForPosts]);
+  }, [fetchTimelineWithRetry, hydrateInteractionsForPosts]);
 
   const loadGuestFeed = useCallback(async () => {
     if (!guestUser.trim()) {
@@ -800,6 +789,271 @@ const Social = () => {
     Object.values(localTypingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
     Object.values(remoteTypingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
   }, []);
+
+  const loadDesignData = useCallback(async () => {
+    if (!isOwnSocialContext) {
+      setSocialConfigs([]);
+      setFavoriteDesigns([]);
+      return;
+    }
+
+    try {
+      const response = await socialPageAPI.getConfigs();
+      setSocialConfigs(Array.isArray(response.data?.configs) ? response.data.configs : []);
+      setFavoriteDesigns(Array.isArray(response.data?.favorites) ? response.data.favorites : []);
+      setSocialTemplates(Array.isArray(response.data?.templates) && response.data.templates.length > 0
+        ? response.data.templates
+        : SOCIAL_DESIGN_TEMPLATES);
+      setActiveDesignConfigId(response.data?.activeConfigId || null);
+      if (response.data?.currentPreferences) {
+        setCurrentUser((prev) => (prev ? {
+          ...prev,
+          socialPagePreferences: response.data.currentPreferences
+        } : prev));
+      }
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to load social page designs.');
+    }
+  }, [isOwnSocialContext]);
+
+  const loadSharedDesigns = useCallback(async () => {
+    if (!requestedProfileIdentifier || isOwnSocialContext) {
+      setSharedDesigns([]);
+      return;
+    }
+
+    try {
+      const response = await socialPageAPI.getSharedByUser(requestedProfileIdentifier);
+      const configs = Array.isArray(response.data?.configs) ? response.data.configs : [];
+      const activeSharedConfigId = response.data?.activeConfigId ? String(response.data.activeConfigId) : '';
+      const ordered = [...configs].sort((left, right) => {
+        if (String(left._id) === activeSharedConfigId) return -1;
+        if (String(right._id) === activeSharedConfigId) return 1;
+        return 0;
+      });
+      setSharedDesigns(ordered);
+    } catch {
+      setSharedDesigns([]);
+    }
+  }, [requestedProfileIdentifier, isOwnSocialContext]);
+
+  useEffect(() => {
+    loadDesignData();
+  }, [loadDesignData]);
+
+  useEffect(() => {
+    loadSharedDesigns();
+  }, [loadSharedDesigns]);
+
+  useEffect(() => () => {
+    if (designAutosaveRef.current) {
+      window.clearTimeout(designAutosaveRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOwnSocialContext || !draftSocialPreferences || !designDirtyRef.current) {
+      return undefined;
+    }
+
+    if (designAutosaveRef.current) {
+      window.clearTimeout(designAutosaveRef.current);
+    }
+
+    designAutosaveRef.current = window.setTimeout(async () => {
+      setDesignBusy(true);
+      try {
+        const response = await socialPageAPI.savePreferences(draftSocialPreferences, true);
+        const savedPreferences = normalizeSocialPreferences(
+          response.data?.preferences || draftSocialPreferences,
+          currentUser?.profileTheme || activeProfile?.profileTheme || 'default'
+        );
+        setCurrentUser((prev) => (prev ? { ...prev, socialPagePreferences: savedPreferences } : prev));
+        setDraftSocialPreferences(savedPreferences);
+        setActiveDesignConfigId(savedPreferences.activeConfigId || null);
+        setDesignError('');
+        setDesignSuccessMessage('Layout saved');
+        designDirtyRef.current = false;
+      } catch (error) {
+        setDesignError(error.response?.data?.error || 'Failed to save social page customization.');
+      } finally {
+        setDesignBusy(false);
+      }
+    }, 700);
+
+    return () => {
+      if (designAutosaveRef.current) {
+        window.clearTimeout(designAutosaveRef.current);
+      }
+    };
+  }, [draftSocialPreferences, isOwnSocialContext, currentUser?.profileTheme, activeProfile?.profileTheme]);
+
+  const patchDraftPreferences = useCallback((updater) => {
+    setDesignError('');
+    setDesignSuccessMessage('');
+    setDraftSocialPreferences((prev) => {
+      const base = prev || socialPreferences;
+      const nextValue = typeof updater === 'function' ? updater(base) : updater;
+      return normalizeSocialPreferences(nextValue, currentUser?.profileTheme || activeProfile?.profileTheme || 'default');
+    });
+    designDirtyRef.current = true;
+  }, [socialPreferences, currentUser?.profileTheme, activeProfile?.profileTheme]);
+
+  const updateGlobalStyles = useCallback((patch) => {
+    patchDraftPreferences((prev) => mergeDesignPatch(prev, { globalStyles: patch }));
+  }, [patchDraftPreferences]);
+
+  const updatePanelPreferences = useCallback((panelId, patch) => {
+    patchDraftPreferences((prev) => mergeDesignPatch(prev, {
+      panels: {
+        [panelId]: patch
+      }
+    }));
+  }, [patchDraftPreferences]);
+
+  const movePanel = useCallback((panelId, direction) => {
+    patchDraftPreferences((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const panel = next.panels?.[panelId];
+      if (!panel) return next;
+      const siblings = Object.entries(next.panels)
+        .filter(([, value]) => value.area === panel.area)
+        .sort((left, right) => (left[1].order || 0) - (right[1].order || 0));
+      const index = siblings.findIndex(([id]) => id === panelId);
+      const targetIndex = index + direction;
+      if (index < 0 || targetIndex < 0 || targetIndex >= siblings.length) return next;
+      const [currentId] = siblings[index];
+      const [targetId] = siblings[targetIndex];
+      const currentOrder = next.panels[currentId].order;
+      next.panels[currentId].order = next.panels[targetId].order;
+      next.panels[targetId].order = currentOrder;
+      return next;
+    });
+  }, [patchDraftPreferences]);
+
+  const applyTemplate = useCallback((template) => {
+    if (!template?.design) return;
+    patchDraftPreferences((prev) => mergeDesignPatch(prev, template.design));
+  }, [patchDraftPreferences]);
+
+  const saveNewConfig = useCallback(async (name) => {
+    setDesignBusy(true);
+    setDesignError('');
+    try {
+      const response = await socialPageAPI.createConfig({
+        name,
+        design: draftSocialPreferences || socialPreferences,
+        apply: false
+      });
+      const created = response.data?.config;
+      if (created) {
+        setSocialConfigs((prev) => [created, ...prev]);
+      }
+      setDesignSuccessMessage('Saved configuration created');
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to create saved configuration.');
+    } finally {
+      setDesignBusy(false);
+    }
+  }, [draftSocialPreferences, socialPreferences]);
+
+  const saveConfigUpdate = useCallback(async (configId, payload) => {
+    setDesignBusy(true);
+    setDesignError('');
+    try {
+      const response = await socialPageAPI.updateConfig(configId, payload);
+      const updated = response.data?.config;
+      if (updated) {
+        setSocialConfigs((prev) => prev.map((config) => (config._id === configId ? updated : config)));
+      }
+      setDesignSuccessMessage('Configuration updated');
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to update configuration.');
+    } finally {
+      setDesignBusy(false);
+    }
+  }, []);
+
+  const applySavedConfig = useCallback(async (configId) => {
+    setDesignBusy(true);
+    setDesignError('');
+    try {
+      const response = await socialPageAPI.applyConfig(configId);
+      const preferences = normalizeSocialPreferences(response.data?.preferences || socialPreferences, currentUser?.profileTheme || 'default');
+      setCurrentUser((prev) => (prev ? { ...prev, socialPagePreferences: preferences } : prev));
+      setDraftSocialPreferences(preferences);
+      setActiveDesignConfigId(response.data?.activeConfigId || configId);
+      setInlineEditingPanelId('');
+      setDesignSuccessMessage('Configuration applied');
+      await loadDesignData();
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to apply configuration.');
+    } finally {
+      setDesignBusy(false);
+    }
+  }, [socialPreferences, currentUser?.profileTheme, loadDesignData]);
+
+  const duplicateConfig = useCallback(async (configId, name) => {
+    setDesignBusy(true);
+    try {
+      const response = await socialPageAPI.duplicateConfig(configId, { name, apply: false });
+      if (response.data?.config) {
+        setSocialConfigs((prev) => [response.data.config, ...prev]);
+      }
+      setDesignSuccessMessage('Configuration duplicated');
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to duplicate configuration.');
+    } finally {
+      setDesignBusy(false);
+    }
+  }, []);
+
+  const deleteConfig = useCallback(async (configId) => {
+    setDesignBusy(true);
+    try {
+      const response = await socialPageAPI.deleteConfig(configId);
+      setSocialConfigs((prev) => prev.filter((config) => config._id !== configId));
+      setActiveDesignConfigId(response.data?.activeConfigId || null);
+      await loadDesignData();
+      setDesignSuccessMessage('Configuration deleted');
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to delete configuration.');
+    } finally {
+      setDesignBusy(false);
+    }
+  }, [loadDesignData]);
+
+  const toggleFavoriteSharedDesign = useCallback(async (config) => {
+    try {
+      if (config.isFavorite) {
+        await socialPageAPI.unfavoriteShared(config._id);
+      } else {
+        await socialPageAPI.favoriteShared(config._id);
+      }
+      await Promise.all([loadSharedDesigns(), loadDesignData()]);
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to update favorite design.');
+    }
+  }, [loadDesignData, loadSharedDesigns]);
+
+  const cloneSharedDesign = useCallback(async (config, name, apply = false) => {
+    setDesignBusy(true);
+    try {
+      const response = await socialPageAPI.cloneShared(config._id, { name, apply });
+      if (response.data?.config) {
+        setSocialConfigs((prev) => [response.data.config, ...prev]);
+      }
+      await loadDesignData();
+      if (apply && response.data?.config?._id) {
+        await applySavedConfig(response.data.config._id);
+      }
+      setDesignSuccessMessage(apply ? 'Shared design cloned and applied' : 'Shared design cloned');
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to clone shared design.');
+    } finally {
+      setDesignBusy(false);
+    }
+  }, [applySavedConfig, loadDesignData]);
 
   const handleCommentInputChange = (postId, value) => {
     setCommentInputs((prev) => ({ ...prev, [postId]: value }));
@@ -1600,1024 +1854,357 @@ const Social = () => {
     }
   };
 
-  return (
-    <div className={`space-y-6 rounded-xl p-3 sm:p-4 ${pageThemeClass}`}>
-      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${headerGradientClass} p-5 text-white shadow-lg ring-1 ring-white/20 sm:p-6 md:p-8`}>
-        <div className="max-w-3xl space-y-2 sm:space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100/95">
-            Community Hub
-          </p>
-          <h2 className="text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
-            Social
-          </h2>
-          <p className="text-sm leading-relaxed text-white/95 sm:text-base">
-            {isViewingAnotherProfile
-              ? `Viewing public profile for @${requestedProfileIdentifier}. Gallery and posts are read-only in this view.`
-              : isAuthenticated && isGuestPreview
-              ? 'Guest preview mode: interaction controls are hidden. This is how your page appears to visitors.'
-              : isAuthenticated
-                ? 'Share updates, browse your timeline, and connect with your community.'
-                : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
-          </p>
-          {isOwnSocialContext && (
-            <div className="pt-1">
-              {isGuestPreview ? (
-                <button
-                  type="button"
-                  onClick={() => setIsGuestPreview(false)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30"
-                >
-                  ← Exit Guest Preview
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsGuestPreview(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30"
-                >
-                  👁 View as Guest
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+  const ownerEditingEnabled = isOwnSocialContext && !isGuestPreview;
 
-      <GuestPreviewNotice
-        sectionId={SOCIAL_SECTION_IDS.guest_preview_notice}
-        isGuestPreview={isGuestPreview}
-        onExitPreview={() => handleGuestPreviewToggle(false)}
-      />
-
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        <aside className="xl:col-span-3 flex flex-col gap-4 xl:sticky xl:top-6">
-          {isSectionVisible('shortcuts') && (
-            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.shortcuts ?? 0 }}>
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Shortcuts</h3>
-            <ul className="mt-3 space-y-2 text-sm">
-              <li>
-                <Link to="/social" className="block px-3 py-2 rounded-lg bg-blue-50 text-blue-700 font-medium">
-                  Social Stream
-                </Link>
-              </li>
-              {isModuleVisible('marketplaceShortcut') && (
-                <li>
-                  <Link to="/market" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                    Marketplace
-                  </Link>
-                </li>
-              )}
-              {isModuleVisible('calendarShortcut') && (
-                <li>
-                  <Link to="/calendar" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                    Calendar
-                  </Link>
-                </li>
-              )}
-              {isModuleVisible('settingsShortcut') && (
-                <li>
-                  <Link to="/settings" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                    User Settings
-                  </Link>
-                </li>
-              )}
-              {isModuleVisible('referShortcut') && (
-                <li>
-                  <Link to="/refer" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
-                    Refer Friend
-                  </Link>
-                </li>
-              )}
-            </ul>
-          </section>
-          )}
-
-          {isSectionVisible('snapshot') && (
-            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.snapshot ?? 1 }}>
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Social Snapshot</h3>
-            <div className="mt-3 space-y-3 text-sm text-gray-700">
-              <p>
-                Active profile:{' '}
-                <span className="font-medium">
-                  {currentUser?.username ? `@${currentUser.username}` : 'Guest'}
-                </span>
+  const renderPanelBody = (panelId) => {
+    switch (panelId) {
+      case 'profile_header':
+        return (
+          <div className={`rounded-2xl bg-gradient-to-r ${headerGradientClass} p-6 text-white shadow-lg`}>
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100/95">Community Hub</p>
+              <h2 className="text-3xl font-semibold tracking-tight">Social</h2>
+              <p className={`${getFontSizeClass(socialPreferences.globalStyles.fontSizes?.regular)} text-white/90`}>
+                {isViewingAnotherProfile
+                  ? `Viewing public profile for @${requestedProfileIdentifier}. Design sharing actions are safe and never copy content.`
+                  : isAuthenticated && isGuestPreview
+                    ? 'Guest preview mode is active. Editing controls are hidden until you exit preview.'
+                    : isAuthenticated
+                      ? 'Customize your live social page directly here with native panel editing, saved appearances, and shareable layouts.'
+                      : 'Guest mode: browse public social pages, then sign in to personalize your own experience.'}
               </p>
-              <p>
-                Loaded posts:{' '}
-                <span className="font-medium">{posts.length}</span>
-              </p>
-              {!isAuthenticated && guestProfile?.username && (
-                <p>
-                  Viewing public profile:{' '}
-                  <span className="font-medium">@{guestProfile.username}</span>
-                </p>
-              )}
-              {visibleResumeInfo && (
-                <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
-                  <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Resume</p>
-                  {visibleResumeInfo.resumeHeadline && (
-                    <p className="mt-1 text-sm text-blue-900">{visibleResumeInfo.resumeHeadline}</p>
-                  )}
-                  <Link
-                    to={visibleResumeInfo.resumeUrl}
-                    onClick={() => handleResumeProfileLinkClick(visibleResumeInfo.username)}
-                    className="mt-1 inline-flex text-sm font-medium text-blue-700 hover:text-blue-800"
-                  >
-                    View hosted resume
-                  </Link>
-                  {visibleResumeInfo.canManage && (
-                    <Link
-                      to="/settings"
-                      className="ml-3 inline-flex text-sm font-medium text-slate-700 hover:text-slate-900"
-                    >
-                      Manage
-                    </Link>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-          )}
-        </aside>
-
-        <section className="xl:col-span-6 flex flex-col gap-6">
-          {!isAuthenticated && isSectionVisible('guestLookup') && (
-            <div className="bg-white rounded-xl shadow p-6 space-y-3 border border-gray-100" style={{ order: sectionRank.guestLookup ?? 0 }}>
-              <h3 className="text-lg font-medium">Guest Public Feed</h3>
-              <p className="text-sm text-gray-600">Enter a username or user ID to load a public feed.</p>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  value={guestUser}
-                  onChange={(event) => setGuestUser(event.target.value)}
-                  placeholder="username or user ID"
-                  className="flex-1 border rounded px-3 py-2"
-                />
-                <button
-                  type="button"
-                  onClick={loadFeed}
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                  disabled={loadingFeed}
-                >
-                  Load
-                </button>
-              </div>
-              {guestProfile && (
-                <div className="space-y-2 text-sm text-gray-700">
-                  <p>
-                    Viewing public posts for <span className="font-medium">@{guestProfile.username}</span>
-                  </p>
-                  <Link
-                    to={`/calendar?user=${encodeURIComponent(guestProfile.username)}`}
-                    className="inline-flex text-blue-600 hover:text-blue-700"
-                  >
-                    View calendar
-                  </Link>
-                  {guestProfile?.hasPublicResume && guestProfile?.resumeUrl && (
-                    <Link
-                      to={guestProfile.resumeUrl}
-                      onClick={() => handleResumeProfileLinkClick(guestProfile.username)}
-                      className="ml-3 inline-flex text-blue-600 hover:text-blue-700"
-                    >
-                      View hosted resume
-                    </Link>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {isOwnSocialContext && !isGuestPreview && isSectionVisible('composer') && (
-            <form onSubmit={handleSubmitPost} className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100" style={{ order: sectionRank.composer ?? 1 }}>
-              <h3 className="text-lg font-medium">Create Post</h3>
-
-              <textarea
-                value={postForm.content}
-                onChange={(event) => setPostForm((prev) => ({ ...prev, content: event.target.value }))}
-                placeholder="What's on your mind?"
-                className="w-full border rounded px-3 py-2 min-h-28"
-                maxLength={5000}
-              />
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Post Type</label>
-                <select
-                  value={postForm.contentType}
-                  onChange={(event) => setPostForm((prev) => ({ ...prev, contentType: event.target.value }))}
-                  className="border rounded px-3 py-2"
-                >
-                  {COMPOSER_CONTENT_TYPES.map((option) => (
-                    <option key={option} value={option}>
-                      {option.charAt(0).toUpperCase() + option.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Media URLs</label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="url"
-                    value={postForm.mediaUrlInput}
-                    onChange={(event) =>
-                      setPostForm((prev) => ({ ...prev, mediaUrlInput: event.target.value }))
-                    }
-                    placeholder="https://example.com/image.jpg"
-                    className="flex-1 border rounded px-3 py-2"
-                  />
+              {isOwnSocialContext ? (
+                <div className="flex flex-wrap gap-3 pt-1">
                   <button
                     type="button"
-                    onClick={handleAddMediaUrl}
-                    className="border border-blue-600 text-blue-600 px-4 py-2 rounded hover:bg-blue-50"
+                    onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
+                    className="rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/25"
                   >
-                    Add URL
+                    {isGuestPreview ? 'Exit guest preview' : 'View as guest'}
                   </button>
+                  {!isGuestPreview ? (
+                    <button
+                      type="button"
+                      onClick={() => setDesignStudioOpen(true)}
+                      className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+                    >
+                      Open design studio
+                    </button>
+                  ) : null}
                 </div>
-
-                {postForm.mediaUrls.length > 0 && (
-                  <ul className="space-y-1">
-                    {postForm.mediaUrls.map((url, index) => (
-                      <li
-                        key={`${url}-${index}`}
-                        className="flex items-center justify-between text-sm bg-gray-50 border rounded px-2 py-1"
-                      >
-                        <span className="truncate pr-2">{url}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveMediaUrl(index)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              ) : null}
+            </div>
+          </div>
+        );
+      case 'guest_preview_notice':
+        return isOwnSocialContext ? (
+          <div className={`rounded-xl border px-4 py-4 ${isGuestPreview ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+            <p className="font-semibold">{isGuestPreview ? 'Guest preview is on' : 'Owner view is active'}</p>
+            <p className="mt-1 text-sm">
+              {isGuestPreview
+                ? 'Your visitors do not see edit controls, inline panel tools, or the global design studio.'
+                : 'Use the floating edit button or any panel edit icon to customize the page in place.'}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+            Guest viewers always see a clean, read-only version of the social page.
+          </div>
+        );
+      case 'shortcuts':
+        return (
+          <ul className="space-y-2 text-sm">
+            <li><Link to="/social" className="block rounded-xl bg-blue-50 px-3 py-2 font-medium text-blue-700">Social Stream</Link></li>
+            {isModuleVisible('marketplaceShortcut') ? <li><Link to="/market" className="block rounded-xl px-3 py-2 hover:bg-slate-50">Marketplace</Link></li> : null}
+            {isModuleVisible('calendarShortcut') ? <li><Link to="/calendar" className="block rounded-xl px-3 py-2 hover:bg-slate-50">Calendar</Link></li> : null}
+            {isModuleVisible('settingsShortcut') ? <li><Link to="/settings" className="block rounded-xl px-3 py-2 hover:bg-slate-50">User Settings</Link></li> : null}
+            {isModuleVisible('referShortcut') ? <li><Link to="/refer" className="block rounded-xl px-3 py-2 hover:bg-slate-50">Refer Friend</Link></li> : null}
+          </ul>
+        );
+      case 'snapshot':
+        return (
+          <div className="space-y-3 text-sm">
+            <p>Active profile: <span className="font-semibold">{activeProfile?.username ? `@${activeProfile.username}` : 'Guest'}</span></p>
+            <p>Loaded posts: <span className="font-semibold">{posts.length}</span></p>
+            <p>Friends loaded: <span className="font-semibold">{friends.length}</span></p>
+            <p>Top friends: <span className="font-semibold">{topFriends.length}</span></p>
+            {visibleResumeInfo ? (
+              <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Resume</p>
+                {visibleResumeInfo.resumeHeadline ? <p className="mt-1 text-sm text-blue-900">{visibleResumeInfo.resumeHeadline}</p> : null}
+                <Link to={visibleResumeInfo.resumeUrl} onClick={() => handleResumeProfileLinkClick(visibleResumeInfo.username)} className="mt-2 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">View hosted resume</Link>
               </div>
-
-              <PrivacySelector
-                form={postForm}
-                circles={circles}
-                friends={friends}
-                onChange={handlePostFormField}
-                onToggleCircle={handleToggleCircle}
-                onToggleVisibleUser={handleToggleVisibleUser}
-                onToggleExcludeUser={handleToggleExcludeUser}
-              />
-
-              {postForm.contentType === 'poll' && (
-                <div className="border rounded p-3 space-y-3 bg-blue-50/40">
-                  <h4 className="text-sm font-semibold text-gray-700">Poll Settings</h4>
-                  <input
-                    type="text"
-                    value={postForm.interaction.poll.question}
-                    onChange={(event) => updateInteractionField('poll', 'question', event.target.value)}
-                    placeholder="Poll question"
-                    className="w-full border rounded px-3 py-2 text-sm"
-                  />
-                  <div className="space-y-2">
-                    {postForm.interaction.poll.options.map((option, index) => (
-                      <div key={`poll-option-${index}`} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={option}
-                          onChange={(event) => updateInteractionOption('poll', index, event.target.value)}
-                          placeholder={`Option ${index + 1}`}
-                          className="flex-1 border rounded px-3 py-2 text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeInteractionOption('poll', index)}
-                          className="px-2 text-red-600"
-                          disabled={postForm.interaction.poll.options.length <= 2}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => addInteractionOption('poll')}
-                      className="text-sm text-blue-700 hover:underline"
-                      disabled={postForm.interaction.poll.options.length >= INTERACTION_MAX_OPTIONS}
-                    >
-                      Add poll option
-                    </button>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={postForm.interaction.poll.allowMultiple}
-                        onChange={(event) => updateInteractionField('poll', 'allowMultiple', event.target.checked)}
-                      />
-                      Allow multiple selections
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={postForm.interaction.poll.expiresAt}
-                      onChange={(event) => updateInteractionField('poll', 'expiresAt', event.target.value)}
-                      className="border rounded px-3 py-2 text-sm"
-                    />
-                  </div>
+            ) : null}
+            {!isOwnSocialContext && isAuthenticated && sharedDesigns.length > 0 ? (
+              <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Shared design</p>
+                <p className="mt-1 text-sm text-violet-900">Favorite or clone @{requestedProfileIdentifier}'s shared social page design.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => toggleFavoriteSharedDesign(sharedDesigns[0])} className="rounded-lg border border-violet-200 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-white">{sharedDesigns[0]?.isFavorite ? 'Unfavorite' : 'Favorite'}</button>
+                  <button type="button" onClick={() => cloneSharedDesign(sharedDesigns[0], `${sharedDesigns[0]?.name || 'Shared design'} Clone`, false)} className="rounded-lg border border-violet-200 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-white">Clone</button>
                 </div>
-              )}
-
-              {postForm.contentType === 'quiz' && (
-                <div className="border rounded p-3 space-y-3 bg-violet-50/40">
-                  <h4 className="text-sm font-semibold text-gray-700">Quiz Settings</h4>
-                  <input
-                    type="text"
-                    value={postForm.interaction.quiz.question}
-                    onChange={(event) => updateInteractionField('quiz', 'question', event.target.value)}
-                    placeholder="Quiz question"
-                    className="w-full border rounded px-3 py-2 text-sm"
-                  />
-                  <div className="space-y-2">
-                    {postForm.interaction.quiz.options.map((option, index) => (
-                      <div key={`quiz-option-${index}`} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={option}
-                          onChange={(event) => updateInteractionOption('quiz', index, event.target.value)}
-                          placeholder={`Option ${index + 1}`}
-                          className="flex-1 border rounded px-3 py-2 text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeInteractionOption('quiz', index)}
-                          className="px-2 text-red-600"
-                          disabled={postForm.interaction.quiz.options.length <= 2}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => addInteractionOption('quiz')}
-                      className="text-sm text-blue-700 hover:underline"
-                      disabled={postForm.interaction.quiz.options.length >= INTERACTION_MAX_OPTIONS}
-                    >
-                      Add quiz option
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <select
-                      value={postForm.interaction.quiz.correctOptionIndex}
-                      onChange={(event) => updateInteractionField('quiz', 'correctOptionIndex', Number(event.target.value))}
-                      className="border rounded px-3 py-2 text-sm"
-                    >
-                      {postForm.interaction.quiz.options.map((_, index) => (
-                        <option key={`quiz-correct-${index}`} value={index}>
-                          Correct option #{index + 1}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="datetime-local"
-                      value={postForm.interaction.quiz.expiresAt}
-                      onChange={(event) => updateInteractionField('quiz', 'expiresAt', event.target.value)}
-                      className="border rounded px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <textarea
-                    value={postForm.interaction.quiz.explanation}
-                    onChange={(event) => updateInteractionField('quiz', 'explanation', event.target.value)}
-                    placeholder="Explanation shown after answer (optional)"
-                    className="w-full border rounded px-3 py-2 text-sm"
-                    rows={2}
-                  />
-                </div>
-              )}
-
-              {postForm.contentType === 'countdown' && (
-                <div className="border rounded p-3 space-y-3 bg-emerald-50/40">
-                  <h4 className="text-sm font-semibold text-gray-700">Countdown Settings</h4>
-                  <input
-                    type="text"
-                    value={postForm.interaction.countdown.label}
-                    onChange={(event) => updateInteractionField('countdown', 'label', event.target.value)}
-                    placeholder="Countdown label"
-                    className="w-full border rounded px-3 py-2 text-sm"
-                  />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input
-                      type="datetime-local"
-                      value={postForm.interaction.countdown.targetAt}
-                      onChange={(event) => updateInteractionField('countdown', 'targetAt', event.target.value)}
-                      className="border rounded px-3 py-2 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={postForm.interaction.countdown.timezone}
-                      onChange={(event) => updateInteractionField('countdown', 'timezone', event.target.value)}
-                      placeholder="Timezone (e.g. UTC)"
-                      className="border rounded px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Default timezone is from your browser. Update it if needed (examples: UTC, America/New_York, Europe/London).
-                  </p>
-                  <input
-                    type="url"
-                    value={postForm.interaction.countdown.linkUrl}
-                    onChange={(event) => updateInteractionField('countdown', 'linkUrl', event.target.value)}
-                    placeholder="Optional link URL"
-                    className="w-full border rounded px-3 py-2 text-sm"
-                  />
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={submittingPost}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-              >
-                {submittingPost ? 'Publishing...' : 'Publish Post'}
-              </button>
-            </form>
-          )}
-
-          {isOwnSocialContext && !isGuestPreview && isSectionVisible('circles') && (
-            <div style={{ order: sectionRank.circles ?? 2 }}>
-              <CircleManager
-                circles={circles}
-                friends={friends}
-                onCreateCircle={handleCreateCircle}
-                onDeleteCircle={handleDeleteCircle}
-                onAddMember={handleAddCircleMember}
-                onRemoveMember={handleRemoveCircleMember}
-              />
+              </div>
+            ) : null}
+          </div>
+        );
+      case 'guest_lookup':
+        return !isAuthenticated ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">Enter a username or user ID to load a public feed.</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input type="text" value={guestUser} onChange={(event) => setGuestUser(event.target.value)} placeholder="username or user ID" className="flex-1 rounded-xl border px-3 py-2" />
+              <button type="button" onClick={loadFeed} className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700" disabled={loadingFeed}>{loadingFeed ? 'Loading…' : 'Load profile'}</button>
             </div>
-          )}
+            {guestProfile ? (
+              <div className="text-sm text-slate-600">
+                Viewing public posts for <span className="font-semibold">@{guestProfile.username}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="text-sm text-slate-500">Guest lookup is hidden for signed-in owners and guest profile viewers.</div>
+        );
+      case 'composer':
+        return isOwnSocialContext && !isGuestPreview ? (
+          <form onSubmit={handleSubmitPost} className="space-y-4">
+            <textarea value={postForm.content} onChange={(event) => setPostForm((prev) => ({ ...prev, content: event.target.value }))} placeholder="What's on your mind?" className="min-h-28 w-full rounded-xl border px-3 py-2" maxLength={5000} />
 
-          {isSectionVisible('timeline') && (
-            <section className="space-y-4" style={{ order: sectionRank.timeline ?? 3 }}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold">{(isOwnSocialContext && !isGuestPreview) ? 'Timeline' : 'Public Timeline'}</h3>
-              <button
-                type="button"
-                onClick={loadFeed}
-                className="text-sm px-3 py-2 border rounded hover:bg-gray-50"
-                disabled={loadingFeed}
-              >
-                {loadingFeed ? 'Refreshing...' : 'Refresh'}
-              </button>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Post Type</label>
+              <select value={postForm.contentType} onChange={(event) => setPostForm((prev) => ({ ...prev, contentType: event.target.value }))} className="rounded-xl border px-3 py-2">
+                {COMPOSER_CONTENT_TYPES.map((option) => <option key={option} value={option}>{option.charAt(0).toUpperCase() + option.slice(1)}</option>)}
+              </select>
             </div>
 
-            {feedError && <div className="text-red-700 bg-red-50 border border-red-200 rounded p-3">{feedError}</div>}
-            {isAuthenticated && !realtimeEnabled ? (
-              <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-3 text-sm">
-                Real-time social updates are disabled for this account. This feed will fall back to periodic refreshes.
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Media URLs</label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input type="url" value={postForm.mediaUrlInput} onChange={(event) => setPostForm((prev) => ({ ...prev, mediaUrlInput: event.target.value }))} placeholder="https://example.com/image.jpg" className="flex-1 rounded-xl border px-3 py-2" />
+                <button type="button" onClick={handleAddMediaUrl} className="rounded-xl border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50">Add URL</button>
+              </div>
+              {postForm.mediaUrls.length > 0 ? (
+                <ul className="space-y-1">
+                  {postForm.mediaUrls.map((url, index) => (
+                    <li key={`${url}-${index}`} className="flex items-center justify-between rounded-xl border bg-slate-50 px-3 py-2 text-sm">
+                      <span className="truncate pr-2">{url}</span>
+                      <button type="button" onClick={() => handleRemoveMediaUrl(index)} className="text-red-600 hover:text-red-700">Remove</button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <PrivacySelector form={postForm} circles={circles} friends={friends} onChange={handlePostFormField} onToggleCircle={handleToggleCircle} onToggleVisibleUser={handleToggleVisibleUser} onToggleExcludeUser={handleToggleExcludeUser} />
+
+            {postForm.contentType === 'poll' ? (
+              <div className="space-y-3 rounded-xl border bg-blue-50/40 p-3">
+                <h4 className="text-sm font-semibold text-gray-700">Poll Settings</h4>
+                <input type="text" value={postForm.interaction.poll.question} onChange={(event) => updateInteractionField('poll', 'question', event.target.value)} placeholder="Poll question" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                <div className="space-y-2">
+                  {postForm.interaction.poll.options.map((option, index) => (
+                    <div key={`poll-option-${index}`} className="flex gap-2">
+                      <input type="text" value={option} onChange={(event) => updateInteractionOption('poll', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border px-3 py-2 text-sm" />
+                      <button type="button" onClick={() => removeInteractionOption('poll', index)} className="px-2 text-red-600" disabled={postForm.interaction.poll.options.length <= 2}>Remove</button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => addInteractionOption('poll')} className="text-sm text-blue-700 hover:underline" disabled={postForm.interaction.poll.options.length >= INTERACTION_MAX_OPTIONS}>Add poll option</button>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={postForm.interaction.poll.allowMultiple} onChange={(event) => updateInteractionField('poll', 'allowMultiple', event.target.checked)} />Allow multiple selections</label>
+                  <input type="datetime-local" value={postForm.interaction.poll.expiresAt} onChange={(event) => updateInteractionField('poll', 'expiresAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
+                </div>
               </div>
             ) : null}
 
-            {loadingFeed ? (
-              <div className="bg-white rounded-xl shadow p-6 text-gray-600 border border-gray-100">Loading feed...</div>
-            ) : posts.length === 0 ? (
-              <div className="bg-white rounded-xl shadow p-6 text-gray-600 border border-gray-100">
-                No posts found yet.
-              </div>
-            ) : (
-              posts.map((post) => {
-                const postAuthor = post.authorId?.username || 'unknown';
-                const postAuthorId = String(post.authorId?._id || post.authorId || '');
-                const postTarget = post.targetFeedId?.username || postAuthor;
-                const hasLiked = currentUser ? post.likes.includes(currentUser._id) : false;
-                const postBusy = Boolean(actionLoadingByPost[post._id]);
-                const isBlocked = blockedUserIds.includes(postAuthorId);
-                const isMuted = mutedUserIds.includes(postAuthorId);
-                const interaction = post.interaction;
-                const interactionStatus = getInteractionStatus(interaction);
-
-                return (
-                  <article key={post._id} className="bg-white rounded-xl shadow p-5 space-y-3 border border-gray-100">
-                    <header className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          @{postAuthor} {'→'} @{postTarget}
-                        </p>
-                        <p className="text-xs text-gray-500">{formatDate(post.createdAt)}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs uppercase tracking-wide bg-gray-100 px-2 py-1 rounded">
-                          {PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}
-                        </span>
-                        <span className={`text-xs uppercase tracking-wide px-2 py-1 rounded ${
-                          post.relationshipAudience === 'secure'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-sky-100 text-sky-800'
-                        }`}>
-                          {RELATIONSHIP_AUDIENCE_LABELS[post.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
-                        </span>
-                      </div>
-                    </header>
-
-                    <div className="flex flex-wrap gap-2 text-xs text-gray-600">
-                      {Array.isArray(post.visibleToCircles) && post.visibleToCircles.length > 0 && (
-                        <span className="bg-gray-100 px-2 py-1 rounded">
-                          Circles: {post.visibleToCircles.join(', ')}
-                        </span>
-                      )}
-                      {post.locationRadius ? (
-                        <span className="bg-gray-100 px-2 py-1 rounded">Radius: {post.locationRadius} mi</span>
-                      ) : null}
-                      {post.expiresAt ? (
-                        <span className="bg-gray-100 px-2 py-1 rounded">Expires: {formatDate(post.expiresAt)}</span>
-                      ) : null}
-                    </div>
-
-                    {post.content && <p className="text-gray-800 whitespace-pre-wrap">{post.content}</p>}
-
-                    {post.mediaUrls.length > 0 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {post.mediaUrls.map((url, index) => (
-                          renderMediaItem(url, `${post._id}-media-${index}`)
-                        ))}
-                      </div>
-                    )}
-
-                    {interaction?.type === 'poll' && (
-                      <div className="border rounded-lg p-3 bg-slate-50 space-y-2">
-                        <p className="font-medium text-sm">{interaction.poll?.question}</p>
-                        <p className="text-xs text-gray-500">
-                          Poll status: <span className="font-medium">{interactionStatus}</span>
-                        </p>
-                        {(() => {
-                          const options = Array.isArray(interaction.poll?.options) ? interaction.poll.options : [];
-                          const viewerSelection = interaction.viewer?.selection || [];
-                          const hasSubmitted = Boolean(interaction.viewer?.hasSubmitted);
-                          const totalSubmissions = Number(interaction.totals?.submissions || 0);
-                          const canVote = isAuthenticated && !isGuestPreview && interactionStatus === 'active' && !hasSubmitted;
-
-                          return (
-                            <div className="space-y-2">
-                              {options.map((option, index) => {
-                                const label = typeof option === 'string' ? option : option.label;
-                                const votes = typeof option === 'string' ? null : Number(option.votes || 0);
-                                const selected = viewerSelection.includes(index);
-                                const ratio = totalSubmissions > 0 && Number.isFinite(votes)
-                                  ? Math.round((votes / Math.max(1, totalSubmissions)) * 100)
-                                  : 0;
-
-                                if (canVote) {
-                                  return (
-                                    <button
-                                      key={`${post._id}-poll-option-${index}`}
-                                      type="button"
-                                      onClick={() => handleVotePoll(post._id, index)}
-                                      disabled={postBusy}
-                                      className="w-full text-left border rounded px-3 py-2 hover:bg-white disabled:opacity-60"
-                                    >
-                                      {label}
-                                    </button>
-                                  );
-                                }
-
-                                return (
-                                  <div key={`${post._id}-poll-option-${index}`} className="border rounded px-3 py-2 bg-white">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <span>{label}</span>
-                                      <span>{Number.isFinite(votes) ? `${votes} vote${votes === 1 ? '' : 's'}` : ''}</span>
-                                    </div>
-                                    {Number.isFinite(votes) && (
-                                      <div className="mt-1 h-2 rounded bg-gray-200 overflow-hidden">
-                                        <div className="h-full bg-blue-500" style={{ width: `${ratio}%` }} />
-                                      </div>
-                                    )}
-                                    {selected && <p className="text-xs text-blue-700 mt-1">Your selection</p>}
-                                  </div>
-                                );
-                              })}
-                              <p className="text-xs text-gray-500">
-                                {totalSubmissions} submission{totalSubmissions === 1 ? '' : 's'}
-                              </p>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {interaction?.type === 'quiz' && (
-                      <div className="border rounded-lg p-3 bg-violet-50/40 space-y-2">
-                        <p className="font-medium text-sm">{interaction.quiz?.question}</p>
-                        <p className="text-xs text-gray-500">
-                          Quiz status: <span className="font-medium">{interactionStatus}</span>
-                        </p>
-                        {(() => {
-                          const options = Array.isArray(interaction.quiz?.options) ? interaction.quiz.options : [];
-                          const viewerAnswer = interaction.viewer?.answer || null;
-                          const hasSubmitted = Boolean(interaction.viewer?.hasSubmitted);
-                          const canSubmit = isAuthenticated && !isGuestPreview && interactionStatus === 'active' && !hasSubmitted;
-
-                          return (
-                            <div className="space-y-2">
-                              {options.map((option, index) => {
-                                const label = typeof option === 'string' ? option : option.label;
-                                const answerCount = typeof option === 'string' ? null : Number(option.answers || 0);
-                                const isCorrectOption = Number(interaction.quiz?.correctOptionIndex) === index;
-                                const viewerSelected = viewerAnswer?.optionIndex === index;
-
-                                return canSubmit ? (
-                                  <button
-                                    key={`${post._id}-quiz-option-${index}`}
-                                    type="button"
-                                    onClick={() => handleSubmitQuizAnswer(post._id, index)}
-                                    disabled={postBusy}
-                                    className="w-full text-left border rounded px-3 py-2 hover:bg-white disabled:opacity-60"
-                                  >
-                                    {label}
-                                  </button>
-                                ) : (
-                                  <div key={`${post._id}-quiz-option-${index}`} className="border rounded px-3 py-2 bg-white text-sm">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span>{label}</span>
-                                      {Number.isFinite(answerCount) && (
-                                        <span>{answerCount} answer{answerCount === 1 ? '' : 's'}</span>
-                                      )}
-                                    </div>
-                                    {viewerSelected && (
-                                      <p className={`text-xs mt-1 ${viewerAnswer?.isCorrect ? 'text-green-700' : 'text-red-700'}`}>
-                                        Your answer
-                                      </p>
-                                    )}
-                                    {hasSubmitted && isCorrectOption && (
-                                      <p className="text-xs text-green-700 mt-1">Correct option</p>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                              {hasSubmitted && interaction.quiz?.explanation && (
-                                <p className="text-xs text-gray-700 bg-white border rounded p-2">
-                                  {interaction.quiz.explanation}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {interaction?.type === 'countdown' && (
-                      <div className="border rounded-lg p-3 bg-emerald-50/50 space-y-2">
-                        <p className="font-medium text-sm">{interaction.countdown?.label}</p>
-                        <p className="text-xs text-gray-600">
-                          Timezone: {interaction.countdown?.timezone || 'UTC'} • Status: {interactionStatus}
-                        </p>
-                        <p className="text-lg font-semibold text-emerald-700">
-                          {formatRemainingTime(interaction.countdown?.targetAt, nowMs)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Followers: {Number(interaction.totals?.followers || 0)}
-                        </p>
-                        {interaction.countdown?.linkUrl && (
-                          <a
-                            href={interaction.countdown.linkUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-sm text-blue-700 hover:underline"
-                          >
-                            Open related link
-                          </a>
-                        )}
-                        {isAuthenticated && !isGuestPreview && (
-                          <button
-                            type="button"
-                            onClick={() => handleFollowCountdown(post._id)}
-                            disabled={postBusy || interactionStatus !== 'active' || Boolean(interaction.viewer?.isFollowing)}
-                            className="px-3 py-1.5 rounded border text-sm border-emerald-600 text-emerald-700 disabled:opacity-60"
-                          >
-                            {interaction.viewer?.isFollowing ? 'Following' : 'Follow Countdown'}
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="text-sm text-gray-600 flex items-center gap-4">
-                      <span>{post.likesCount} like{post.likesCount === 1 ? '' : 's'}</span>
-                      <span>{post.commentsCount} comment{post.commentsCount === 1 ? '' : 's'}</span>
-                    </div>
-
-                    {isAuthenticated && !isGuestPreview && postAuthorId && postAuthorId !== String(currentUser?._id) && (
-                      <div className="flex flex-wrap gap-2">
-                        <BlockButton
-                          isBlocked={isBlocked}
-                          onBlock={(reason) => handleBlockUser(postAuthorId, reason)}
-                          onUnblock={() => handleUnblockUser(postAuthorId)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleToggleMuteUser(postAuthorId)}
-                          className="px-3 py-1.5 rounded border border-gray-400 text-sm"
-                        >
-                          {isMuted ? 'Unmute User' : 'Mute User'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openReportModal('post', post._id, postAuthorId)}
-                          className="px-3 py-1.5 rounded border border-red-300 text-red-700 text-sm"
-                        >
-                          Report
-                        </button>
-                      </div>
-                    )}
-
-                    {isAuthenticated && !isGuestPreview ? (
-                      <div className="space-y-3">
-                        <button
-                          type="button"
-                          disabled={postBusy}
-                          onClick={() => handleToggleLike(post)}
-                          className={`px-3 py-1.5 rounded border text-sm ${
-                            hasLiked
-                              ? 'bg-blue-600 border-blue-600 text-white'
-                              : 'border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          {hasLiked ? 'Unlike' : 'Like'}
-                        </button>
-
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Comments</h4>
-                          {post.comments.length === 0 ? (
-                            <p className="text-sm text-gray-500">No comments yet.</p>
-                          ) : (
-                            <ul className="space-y-2">
-                              {post.comments.map((comment, index) => (
-                                <li key={comment._id || `${post._id}-comment-${index}`} className="text-sm border rounded p-2 bg-gray-50">
-                                  <p className="font-medium text-gray-700">
-                                    @{comment.username || comment.userId || 'user'}
-                                  </p>
-                                  <p className="text-gray-800 whitespace-pre-wrap">{comment.content}</p>
-                                  <p className="text-xs text-gray-500">{formatDate(comment.createdAt)}</p>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={commentInputs[post._id] || ''}
-                              onChange={(event) => handleCommentInputChange(post._id, event.target.value)}
-                              onBlur={() => emitTypingStop({ scope: 'comment', targetId: post._id })}
-                              placeholder="Add a comment..."
-                              className="flex-1 border rounded px-3 py-2 text-sm"
-                              maxLength={1000}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleAddComment(post._id)}
-                              disabled={postBusy}
-                              className="px-3 py-2 bg-gray-900 text-white rounded text-sm hover:bg-gray-800 disabled:opacity-60"
-                            >
-                              Comment
-                            </button>
-                          </div>
-
-                          <TypingIndicator labels={Object.values(commentTypingByPostId[post._id] || {})} />
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500">Sign in to like or comment on posts.</p>
-                    )}
-                  </article>
-                );
-              })
-            )}
-            </section>
-          )}
-
-          {isAuthenticated && !isGuestPreview && isSectionVisible('moderation') && (
-            <section
-              className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-3"
-              style={{ order: sectionRank.moderation ?? 5 }}
-            >
-              <h3 className="text-lg font-semibold">Moderation Transparency</h3>
-              <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
-              {myReports.length === 0 ? (
-                <p className="text-sm text-gray-500">No submitted reports yet.</p>
-              ) : (
+            {postForm.contentType === 'quiz' ? (
+              <div className="space-y-3 rounded-xl border bg-violet-50/40 p-3">
+                <h4 className="text-sm font-semibold text-gray-700">Quiz Settings</h4>
+                <input type="text" value={postForm.interaction.quiz.question} onChange={(event) => updateInteractionField('quiz', 'question', event.target.value)} placeholder="Quiz question" className="w-full rounded-xl border px-3 py-2 text-sm" />
                 <div className="space-y-2">
-                  {myReports.slice(0, 10).map((report) => (
-                    <div key={report.id} className="border rounded p-2 text-sm">
-                      <p className="font-medium text-gray-900">
-                        {report.category} • {report.targetType} • {report.status}
-                      </p>
-                      <p className="text-gray-500">{formatDate(report.createdAt)}</p>
+                  {postForm.interaction.quiz.options.map((option, index) => (
+                    <div key={`quiz-option-${index}`} className="flex gap-2">
+                      <input type="text" value={option} onChange={(event) => updateInteractionOption('quiz', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border px-3 py-2 text-sm" />
+                      <button type="button" onClick={() => removeInteractionOption('quiz', index)} className="px-2 text-red-600" disabled={postForm.interaction.quiz.options.length <= 2}>Remove</button>
                     </div>
                   ))}
+                  <button type="button" onClick={() => addInteractionOption('quiz')} className="text-sm text-blue-700 hover:underline" disabled={postForm.interaction.quiz.options.length >= INTERACTION_MAX_OPTIONS}>Add quiz option</button>
                 </div>
-              )}
-            </section>
-          )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <select value={postForm.interaction.quiz.correctOptionIndex} onChange={(event) => updateInteractionField('quiz', 'correctOptionIndex', Number(event.target.value))} className="rounded-xl border px-3 py-2 text-sm">
+                    {postForm.interaction.quiz.options.map((_, index) => <option key={`quiz-correct-${index}`} value={index}>Correct option #{index + 1}</option>)}
+                  </select>
+                  <input type="datetime-local" value={postForm.interaction.quiz.expiresAt} onChange={(event) => updateInteractionField('quiz', 'expiresAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
+                </div>
+                <textarea value={postForm.interaction.quiz.explanation} onChange={(event) => updateInteractionField('quiz', 'explanation', event.target.value)} placeholder="Explanation shown after answer (optional)" className="w-full rounded-xl border px-3 py-2 text-sm" rows={2} />
+              </div>
+            ) : null}
 
-          {isSectionVisible('gallery') && (
-            <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-4" style={{ order: sectionRank.gallery ?? 4 }}>
+            {postForm.contentType === 'countdown' ? (
+              <div className="space-y-3 rounded-xl border bg-emerald-50/40 p-3">
+                <h4 className="text-sm font-semibold text-gray-700">Countdown Settings</h4>
+                <input type="text" value={postForm.interaction.countdown.label} onChange={(event) => updateInteractionField('countdown', 'label', event.target.value)} placeholder="Countdown label" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <input type="datetime-local" value={postForm.interaction.countdown.targetAt} onChange={(event) => updateInteractionField('countdown', 'targetAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
+                  <input type="text" value={postForm.interaction.countdown.timezone} onChange={(event) => updateInteractionField('countdown', 'timezone', event.target.value)} placeholder="Timezone (e.g. UTC)" className="rounded-xl border px-3 py-2 text-sm" />
+                </div>
+                <input type="url" value={postForm.interaction.countdown.linkUrl} onChange={(event) => updateInteractionField('countdown', 'linkUrl', event.target.value)} placeholder="Optional link URL" className="w-full rounded-xl border px-3 py-2 text-sm" />
+              </div>
+            ) : null}
+
+            <button type="submit" disabled={submittingPost} className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60">{submittingPost ? 'Publishing…' : 'Publish Post'}</button>
+          </form>
+        ) : <p className="text-sm text-slate-500">Post publishing is available only in owner view.</p>;
+      case 'circles':
+        return isOwnSocialContext && !isGuestPreview ? (
+          <CircleManager circles={circles} friends={friends} onCreateCircle={handleCreateCircle} onDeleteCircle={handleDeleteCircle} onAddMember={handleAddCircleMember} onRemoveMember={handleRemoveCircleMember} />
+        ) : <p className="text-sm text-slate-500">Circles are visible only while managing your own social page.</p>;
+      case 'timeline':
+        return (
+          <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-xl font-semibold">Gallery</h3>
-              <span className="text-xs text-gray-500">{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
+              <p className="text-sm text-slate-500">{(isOwnSocialContext && !isGuestPreview) ? 'Your personalized timeline.' : 'Public feed view.'}</p>
+              <button type="button" onClick={loadFeed} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" disabled={loadingFeed}>{loadingFeed ? 'Refreshing…' : 'Refresh'}</button>
             </div>
+            {feedError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">{feedError}</div> : null}
+            {isAuthenticated && !realtimeEnabled ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Real-time social updates are disabled for this account. Periodic refresh remains active.</div> : null}
+            {loadingFeed ? <div className="rounded-xl border bg-slate-50 p-6 text-slate-500">Loading feed…</div> : posts.length === 0 ? <div className="rounded-xl border bg-slate-50 p-6 text-slate-500">No posts found yet.</div> : posts.map((post) => {
+              const postAuthor = post.authorId?.username || 'unknown';
+              const postAuthorId = String(post.authorId?._id || post.authorId || '');
+              const postTarget = post.targetFeedId?.username || postAuthor;
+              const hasLiked = currentUser ? post.likes.includes(currentUser._id) : false;
+              const postBusy = Boolean(actionLoadingByPost[post._id]);
+              const isBlocked = blockedUserIds.includes(postAuthorId);
+              const isMuted = mutedUserIds.includes(postAuthorId);
+              const interaction = post.interaction;
+              const interactionStatus = getInteractionStatus(interaction);
 
-            {!isAuthenticated && (
-              <div className="space-y-2 border rounded-lg p-3 bg-gray-50">
+              return (
+                <article key={post._id} className="space-y-3 rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+                  <header className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-gray-900">@{postAuthor} {'→'} @{postTarget}</p>
+                      <p className="text-xs text-gray-500">{formatDate(post.createdAt)}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="rounded-full bg-gray-100 px-2 py-1 text-xs uppercase tracking-wide">{PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}</span>
+                      <span className={`rounded-full px-2 py-1 text-xs uppercase tracking-wide ${post.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>{RELATIONSHIP_AUDIENCE_LABELS[post.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</span>
+                    </div>
+                  </header>
+                  <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+                    {Array.isArray(post.visibleToCircles) && post.visibleToCircles.length > 0 ? <span className="rounded-full bg-gray-100 px-2 py-1">Circles: {post.visibleToCircles.join(', ')}</span> : null}
+                    {post.locationRadius ? <span className="rounded-full bg-gray-100 px-2 py-1">Radius: {post.locationRadius} mi</span> : null}
+                    {post.expiresAt ? <span className="rounded-full bg-gray-100 px-2 py-1">Expires: {formatDate(post.expiresAt)}</span> : null}
+                  </div>
+                  {post.content ? <p className="whitespace-pre-wrap text-gray-800">{post.content}</p> : null}
+                  {post.mediaUrls.length > 0 ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{post.mediaUrls.map((url, index) => renderMediaItem(url, `${post._id}-media-${index}`))}</div> : null}
+                  {interaction?.type === 'poll' ? <div className="rounded-xl border bg-slate-50 p-3"><p className="font-medium text-sm">{interaction.poll?.question}</p><p className="text-xs text-gray-500">Poll status: <span className="font-medium">{interactionStatus}</span></p></div> : null}
+                  {interaction?.type === 'quiz' ? <div className="rounded-xl border bg-violet-50/40 p-3"><p className="font-medium text-sm">{interaction.quiz?.question}</p><p className="text-xs text-gray-500">Quiz status: <span className="font-medium">{interactionStatus}</span></p></div> : null}
+                  {interaction?.type === 'countdown' ? <div className="rounded-xl border bg-emerald-50/50 p-3"><p className="font-medium text-sm">{interaction.countdown?.label}</p><p className="text-xs text-gray-600">Timezone: {interaction.countdown?.timezone || 'UTC'} • Status: {interactionStatus}</p><p className="text-lg font-semibold text-emerald-700">{formatRemainingTime(interaction.countdown?.targetAt, nowMs)}</p></div> : null}
+                  <div className="flex items-center gap-4 text-sm text-gray-600"><span>{post.likesCount} like{post.likesCount === 1 ? '' : 's'}</span><span>{post.commentsCount} comment{post.commentsCount === 1 ? '' : 's'}</span></div>
+                  {isAuthenticated && !isGuestPreview && postAuthorId && postAuthorId !== String(currentUser?._id) ? (
+                    <div className="flex flex-wrap gap-2">
+                      <BlockButton isBlocked={isBlocked} onBlock={(reason) => handleBlockUser(postAuthorId, reason)} onUnblock={() => handleUnblockUser(postAuthorId)} />
+                      <button type="button" onClick={() => handleToggleMuteUser(postAuthorId)} className="rounded-lg border border-gray-400 px-3 py-1.5 text-sm">{isMuted ? 'Unmute User' : 'Mute User'}</button>
+                      <button type="button" onClick={() => openReportModal('post', post._id, postAuthorId)} className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700">Report</button>
+                    </div>
+                  ) : null}
+                  {isAuthenticated && !isGuestPreview ? (
+                    <div className="space-y-3">
+                      <button type="button" disabled={postBusy} onClick={() => handleToggleLike(post)} className={`rounded-lg border px-3 py-1.5 text-sm ${hasLiked ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 hover:bg-gray-50'}`}>{hasLiked ? 'Unlike' : 'Like'}</button>
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium">Comments</h4>
+                        {post.comments.length === 0 ? <p className="text-sm text-gray-500">No comments yet.</p> : (
+                          <ul className="space-y-2">
+                            {post.comments.map((comment, index) => (
+                              <li key={comment._id || `${post._id}-comment-${index}`} className="rounded-xl border bg-gray-50 p-2 text-sm">
+                                <p className="font-medium text-gray-700">@{comment.username || comment.userId || 'user'}</p>
+                                <p className="whitespace-pre-wrap text-gray-800">{comment.content}</p>
+                                <p className="text-xs text-gray-500">{formatDate(comment.createdAt)}</p>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="flex gap-2">
+                          <input type="text" value={commentInputs[post._id] || ''} onChange={(event) => handleCommentInputChange(post._id, event.target.value)} onBlur={() => emitTypingStop({ scope: 'comment', targetId: post._id })} placeholder="Add a comment..." className="flex-1 rounded-xl border px-3 py-2 text-sm" maxLength={1000} />
+                          <button type="button" onClick={() => handleAddComment(post._id)} disabled={postBusy} className="rounded-xl bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-60">Comment</button>
+                        </div>
+                        <TypingIndicator labels={Object.values(commentTypingByPostId[post._id] || {})} />
+                      </div>
+                    </div>
+                  ) : <p className="text-sm text-gray-500">Sign in to like or comment on posts.</p>}
+                </article>
+              );
+            })}
+          </div>
+        );
+      case 'moderation_status':
+        return isAuthenticated && !isGuestPreview ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
+            {myReports.length === 0 ? <p className="text-sm text-gray-500">No submitted reports yet.</p> : myReports.slice(0, 10).map((report) => (
+              <div key={report.id} className="rounded-xl border p-2 text-sm">
+                <p className="font-medium text-gray-900">{report.category} • {report.targetType} • {report.status}</p>
+                <p className="text-gray-500">{formatDate(report.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-sm text-slate-500">Moderation status is available only in owner view.</p>;
+      case 'gallery':
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-slate-500">Gallery items: {galleryItems.length}/{GALLERY_MAX_ITEMS}</p>
+            </div>
+            {!isAuthenticated ? (
+              <div className="space-y-2 rounded-xl border bg-slate-50 p-3">
                 <p className="text-sm text-gray-600">Choose a profile to browse gallery media.</p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    value={galleryTargetInput}
-                    onChange={(event) => setGalleryTargetInput(event.target.value)}
-                    placeholder="username or user ID"
-                    className="flex-1 border rounded px-3 py-2"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setGalleryTarget(galleryTargetInput.trim())}
-                    disabled={galleryBusy || galleryLoading}
-                    className="border border-gray-300 px-4 py-2 rounded hover:bg-gray-100 disabled:opacity-60"
-                  >
-                    Load Gallery
-                  </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input type="text" value={galleryTargetInput} onChange={(event) => setGalleryTargetInput(event.target.value)} placeholder="username or user ID" className="flex-1 rounded-xl border px-3 py-2" />
+                  <button type="button" onClick={() => setGalleryTarget(galleryTargetInput.trim())} disabled={galleryBusy || galleryLoading} className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-100 disabled:opacity-60">Load Gallery</button>
                 </div>
               </div>
-            )}
-
+            ) : null}
             {canManageGallery ? (
               <div className="space-y-3">
-                <p className="text-sm text-gray-600">
-                  Add images by URL or upload image files. You can remove your own gallery items any time.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="url"
-                    value={galleryUrlInput}
-                    onChange={(event) => setGalleryUrlInput(event.target.value)}
-                    placeholder="https://example.com/photo.jpg"
-                    className="flex-1 border rounded px-3 py-2"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddGalleryUrl}
-                    disabled={galleryBusy}
-                    className="border border-blue-600 text-blue-600 px-4 py-2 rounded hover:bg-blue-50"
-                  >
-                    {galleryBusy ? 'Adding...' : 'Add URL'}
-                  </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input type="url" value={galleryUrlInput} onChange={(event) => setGalleryUrlInput(event.target.value)} placeholder="https://example.com/photo.jpg" className="flex-1 rounded-xl border px-3 py-2" />
+                  <button type="button" onClick={handleAddGalleryUrl} disabled={galleryBusy} className="rounded-xl border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50">{galleryBusy ? 'Adding…' : 'Add URL'}</button>
                 </div>
-                <input
-                  type="text"
-                  value={galleryCaptionInput}
-                  onChange={(event) => setGalleryCaptionInput(event.target.value)}
-                  placeholder="Optional caption"
-                  maxLength={280}
-                  className="w-full border rounded px-3 py-2"
-                />
-                <label className="flex flex-col gap-1 text-sm text-gray-700">
-                  <span>Audience</span>
-                  <select
-                    value={galleryRelationshipAudience}
-                    onChange={(event) => setGalleryRelationshipAudience(event.target.value)}
-                    className="border rounded px-3 py-2"
-                  >
-                    <option value="social">Social</option>
-                    <option value="secure">Secure</option>
-                  </select>
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleUploadGalleryImage}
-                    disabled={galleryBusy}
-                  />
-                </label>
+                <input type="text" value={galleryCaptionInput} onChange={(event) => setGalleryCaptionInput(event.target.value)} placeholder="Optional caption" maxLength={280} className="w-full rounded-xl border px-3 py-2" />
+                <label className="flex flex-col gap-1 text-sm text-gray-700"><span>Audience</span><select value={galleryRelationshipAudience} onChange={(event) => setGalleryRelationshipAudience(event.target.value)} className="rounded-xl border px-3 py-2"><option value="social">Social</option><option value="secure">Secure</option></select></label>
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700"><input type="file" accept="image/*" onChange={handleUploadGalleryImage} disabled={galleryBusy} /></label>
               </div>
-            ) : (
-              <p className="text-sm text-gray-600">Browse gallery items and react with like/dislike.</p>
-            )}
-
-            {galleryError ? (
-              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">{galleryError}</div>
-            ) : null}
-
-            {galleryLoading ? (
-              <div className="text-sm text-gray-500 border rounded p-4 bg-gray-50">Loading gallery...</div>
-            ) : galleryItems.length === 0 ? (
-              <div className="text-sm text-gray-500 border rounded p-4 bg-gray-50">No gallery images yet.</div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            ) : <p className="text-sm text-gray-600">Browse gallery items and react with like/dislike.</p>}
+            {galleryError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{galleryError}</div> : null}
+            {galleryLoading ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">Loading gallery…</div> : galleryItems.length === 0 ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">No gallery images yet.</div> : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {galleryItems.map((image) => {
                   const viewerReaction = image.viewerReaction || null;
                   const imageBusy = Boolean(galleryActionLoadingByImage[image._id]);
                   const editState = galleryEditById[image._id] || null;
-
                   return (
-                    <article key={image._id} className="border rounded-lg overflow-hidden bg-white">
-                      <img src={image.mediaUrl} alt="Gallery item" className="w-full h-48 object-cover" />
-                      <div className="p-3 space-y-2">
-                        {image.caption ? (
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{image.caption}</p>
-                        ) : null}
-                        <p className="text-xs font-medium text-gray-500">
-                          Audience: {RELATIONSHIP_AUDIENCE_LABELS[image.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
-                        </p>
-
+                    <article key={image._id} className="overflow-hidden rounded-2xl border bg-white">
+                      <img src={image.mediaUrl} alt="Gallery item" className="h-48 w-full object-cover" />
+                      <div className="space-y-2 p-3">
+                        {image.caption ? <p className="whitespace-pre-wrap text-sm text-gray-700">{image.caption}</p> : null}
+                        <p className="text-xs font-medium text-gray-500">Audience: {RELATIONSHIP_AUDIENCE_LABELS[image.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</p>
                         <div className="flex items-center gap-2 text-sm">
-                          <button
-                            type="button"
-                            onClick={() => handleGalleryReaction(image._id, 'like')}
-                            disabled={!viewerCanReact || imageBusy}
-                            className={`px-2 py-1 rounded border ${
-                              viewerReaction === 'like'
-                                ? 'bg-green-600 border-green-600 text-white'
-                                : 'border-gray-300 hover:bg-gray-50'
-                            }`}
-                          >
-                            👍 {image.likesCount || 0}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleGalleryReaction(image._id, 'dislike')}
-                            disabled={!viewerCanReact || imageBusy}
-                            className={`px-2 py-1 rounded border ${
-                              viewerReaction === 'dislike'
-                                ? 'bg-red-600 border-red-600 text-white'
-                                : 'border-gray-300 hover:bg-gray-50'
-                            }`}
-                          >
-                            👎 {image.dislikesCount || 0}
-                          </button>
+                          <button type="button" onClick={() => handleGalleryReaction(image._id, 'like')} disabled={!viewerCanReact || imageBusy} className={`rounded-lg border px-2 py-1 ${viewerReaction === 'like' ? 'border-green-600 bg-green-600 text-white' : 'border-gray-300 hover:bg-gray-50'}`}>👍 {image.likesCount || 0}</button>
+                          <button type="button" onClick={() => handleGalleryReaction(image._id, 'dislike')} disabled={!viewerCanReact || imageBusy} className={`rounded-lg border px-2 py-1 ${viewerReaction === 'dislike' ? 'border-red-600 bg-red-600 text-white' : 'border-gray-300 hover:bg-gray-50'}`}>👎 {image.dislikesCount || 0}</button>
                         </div>
-
-                        {!viewerCanReact ? (
-                          <p className="text-xs text-gray-500">Sign in to react.</p>
-                        ) : null}
-
                         {canManageGallery ? (
                           <div className="space-y-2 border-t pt-2">
                             {editState ? (
                               <div className="space-y-2">
-                                {image.mediaType === 'url' ? (
-                                  <input
-                                    type="url"
-                                    value={editState.mediaUrl}
-                                    onChange={(event) =>
-                                      handleEditGalleryField(image._id, 'mediaUrl', event.target.value)
-                                    }
-                                    placeholder="https://example.com/photo.jpg"
-                                    className="w-full border rounded px-2 py-1 text-sm"
-                                  />
-                                ) : null}
-                                <input
-                                  type="text"
-                                  value={editState.caption}
-                                  onChange={(event) =>
-                                    handleEditGalleryField(image._id, 'caption', event.target.value)
-                                  }
-                                  placeholder="Caption"
-                                  maxLength={280}
-                                  className="w-full border rounded px-2 py-1 text-sm"
-                                />
+                                {image.mediaType === 'url' ? <input type="url" value={editState.mediaUrl} onChange={(event) => handleEditGalleryField(image._id, 'mediaUrl', event.target.value)} placeholder="https://example.com/photo.jpg" className="w-full rounded-xl border px-2 py-1 text-sm" /> : null}
+                                <input type="text" value={editState.caption} onChange={(event) => handleEditGalleryField(image._id, 'caption', event.target.value)} placeholder="Caption" maxLength={280} className="w-full rounded-xl border px-2 py-1 text-sm" />
                                 <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSaveGalleryItem(image)}
-                                    disabled={imageBusy}
-                                    className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCancelEditGalleryItem(image._id)}
-                                    disabled={imageBusy}
-                                    className="text-xs px-2 py-1 rounded border hover:bg-gray-50"
-                                  >
-                                    Cancel
-                                  </button>
+                                  <button type="button" onClick={() => handleSaveGalleryItem(image)} disabled={imageBusy} className="rounded-lg bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-60">Save</button>
+                                  <button type="button" onClick={() => handleCancelEditGalleryItem(image._id)} disabled={imageBusy} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">Cancel</button>
                                 </div>
                               </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleStartEditGalleryItem(image)}
-                                disabled={imageBusy}
-                                className="text-xs text-blue-600 hover:text-blue-700"
-                              >
-                                Edit image
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveGalleryImage(image._id)}
-                              disabled={imageBusy}
-                              className="text-xs text-red-600 hover:text-red-700 disabled:opacity-60"
-                            >
-                              Remove image
-                            </button>
+                            ) : <button type="button" onClick={() => handleStartEditGalleryItem(image)} disabled={imageBusy} className="text-xs text-blue-600 hover:text-blue-700">Edit image</button>}
+                            <button type="button" onClick={() => handleRemoveGalleryImage(image._id)} disabled={imageBusy} className="text-xs text-red-600 hover:text-red-700 disabled:opacity-60">Remove image</button>
                           </div>
                         ) : null}
                       </div>
@@ -2626,38 +2213,123 @@ const Social = () => {
                 })}
               </div>
             )}
-            </section>
-          )}
-        </section>
-
-        <aside className="xl:col-span-3 flex flex-col gap-4 xl:sticky xl:top-6">
-          {isSectionVisible('chatPanel') && isModuleVisible('chatPanel') && (
-            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.chatPanel ?? 0 }}>
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Chat Panel</h3>
-            <p className="mt-3 text-sm text-gray-700">
-              Jump into direct or room conversations without leaving the social experience.
-            </p>
-            <Link
-              to="/chat"
-              className="mt-4 inline-flex items-center justify-center w-full bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-800"
-            >
-              Open Chat
-            </Link>
-          </section>
-          )}
-
-          {isSectionVisible('communityNotes') && isModuleVisible('communityNotes') && (
-            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.communityNotes ?? 1 }}>
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Community Notes</h3>
-            <ul className="mt-3 space-y-2 text-sm text-gray-700 list-disc list-inside">
+          </div>
+        );
+      case 'chat_panel':
+        return (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-700">Jump into direct or room conversations without leaving the social experience.</p>
+            <Link to="/chat" className="inline-flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800">Open Chat</Link>
+          </div>
+        );
+      case 'top_friends':
+        return topFriends.length === 0 ? (
+          <p className="text-sm text-gray-600">Top friends are private or not set yet.</p>
+        ) : (
+          <ul className="space-y-3 text-sm text-gray-700">
+            {topFriends.slice(0, 5).map((friend, index) => (
+              <li key={friend._id || friend.username} className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">@{friend.username}</p>
+                    {friend.realName ? <p className="text-xs text-gray-500">{friend.realName}</p> : null}
+                  </div>
+                  <span className="rounded-full bg-amber-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-900">Top {index + 1}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        );
+      case 'community_notes':
+        return (
+          <div className="space-y-3 text-sm text-gray-700">
+            <ul className="list-disc space-y-2 pl-5">
               <li>Keep posts constructive and clear.</li>
               <li>Use visibility settings to control reach.</li>
               <li>Switch to chat for real-time discussion.</li>
             </ul>
-          </section>
-          )}
-        </aside>
+            {!isOwnSocialContext && sharedDesigns.length > 0 ? (
+              <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Design sharing</p>
+                <p className="mt-1 text-sm text-violet-900">This creator shared {sharedDesigns.length} design configuration{sharedDesigns.length === 1 ? '' : 's'}.</p>
+              </div>
+            ) : null}
+          </div>
+        );
+      default:
+        return <div className="text-sm text-slate-500">{SOCIAL_PANEL_LABELS[panelId] || panelId}</div>;
+    }
+  };
+
+  const renderPanel = (panel) => {
+    if (!panel) return null;
+    const className = panel.area === 'main'
+      ? `${panel.size === 'quarterTile' ? 'md:col-span-1' : panel.size === 'halfTile' ? 'md:col-span-2' : 'md:col-span-4'}`
+      : '';
+
+    return (
+      <SocialEditablePanel
+        key={panel.id}
+        panelId={panel.id}
+        title={SOCIAL_PANEL_LABELS[panel.id] || panel.id}
+        panel={panel}
+        isOwnerEditing={ownerEditingEnabled}
+        isInlineEditing={inlineEditingPanelId === panel.id}
+        onToggleInlineEdit={() => setInlineEditingPanelId((prev) => (prev === panel.id ? '' : panel.id))}
+        onPanelChange={(patch) => updatePanelPreferences(panel.id, patch)}
+        onMove={(direction) => movePanel(panel.id, direction)}
+        className={className}
+      >
+        {renderPanelBody(panel.id)}
+      </SocialEditablePanel>
+    );
+  };
+
+  return (
+    <div className={`relative space-y-6 rounded-3xl p-3 sm:p-4 ${pageThemeClass}`} style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor }}>
+      {ownerEditingEnabled ? (
+        <button
+          type="button"
+          onClick={() => setDesignStudioOpen(true)}
+          className="fixed right-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-xl hover:bg-slate-800"
+        >
+          ✎ Edit
+        </button>
+      ) : null}
+
+      <div className="space-y-6">
+        {panelsByArea.top.map(renderPanel)}
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(240px,0.95fr)_minmax(0,2fr)_minmax(240px,0.95fr)]">
+          <div className="space-y-6">{panelsByArea.sideLeft.map(renderPanel)}</div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-4">{panelsByArea.main.map(renderPanel)}</div>
+          <div className="space-y-6">{panelsByArea.sideRight.map(renderPanel)}</div>
+        </div>
       </div>
+
+      <SocialDesignStudioModal
+        isOpen={designStudioOpen}
+        onClose={() => setDesignStudioOpen(false)}
+        preferences={socialPreferences}
+        configs={socialConfigs}
+        activeConfigId={activeDesignConfigId}
+        sharedDesigns={sharedDesigns}
+        favoriteDesigns={favoriteDesigns}
+        onApplyTemplate={applyTemplate}
+        onGlobalStylesChange={updateGlobalStyles}
+        onPanelOverrideToggle={(panelId, enabled) => updatePanelPreferences(panelId, { useCustomStyles: enabled })}
+        onPanelStyleChange={(panelId, patch) => updatePanelPreferences(panelId, { useCustomStyles: true, styles: patch })}
+        onCreateConfig={saveNewConfig}
+        onUpdateConfig={saveConfigUpdate}
+        onApplyConfig={applySavedConfig}
+        onDuplicateConfig={duplicateConfig}
+        onDeleteConfig={deleteConfig}
+        onFavoriteShared={toggleFavoriteSharedDesign}
+        onCloneShared={cloneSharedDesign}
+        busy={designBusy}
+        error={designError}
+        successMessage={designSuccessMessage}
+      />
 
       <ReportModal
         isOpen={reportModalState.isOpen}

@@ -652,6 +652,7 @@ function App() {
               )}
             />
             <Route path="/pgp" element={<Navigate to="/settings?deprecated=pgp" replace />} />
+            <Route path="*" element={<Navigate to={isAuthenticated ? '/social' : '/'} replace />} />
           </Routes>
         </main>
         

@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
+const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
@@ -175,6 +176,7 @@ registerRoute('/api/notifications', () => require('./routes/notifications'));
 registerRoute('/api/discovery', () => require('./routes/discovery'));
 registerRoute('/api/calendar', () => require('./routes/calendar'));
 registerRoute('/api/resume', () => require('./routes/resume'));
+registerRoute('/api/social-page', () => require('./routes/social-page'));
 
 let newsRoutes = null;
 let mapsRoutes = null;
@@ -216,12 +218,16 @@ if (process.env.NODE_ENV !== 'test') {
   }
 }
 
-if (isProduction) {
-  const frontendBuildPath = path.join(__dirname, 'frontend', 'build');
+const frontendBuildPath = path.join(__dirname, 'frontend', 'build');
+const frontendIndexPath = path.join(frontendBuildPath, 'index.html');
+const hasFrontendBuild = fs.existsSync(frontendIndexPath);
+
+if (isProduction || hasFrontendBuild) {
   app.use(express.static(frontendBuildPath));
 
-  app.get(/^\/(?!api|health).*/, (req, res) => {
-    res.sendFile(path.join(frontendBuildPath, 'index.html'));
+  app.get(/^\/(?!api|health).*/, (req, res, next) => {
+    if (!hasFrontendBuild) return next();
+    return res.sendFile(frontendIndexPath);
   });
 } else {
   app.get('/', (req, res) => {
@@ -241,8 +247,15 @@ app.use((err, req, res, next) => {
 });
 
 // 404 handler
-app.use('*', (req, res) => {
+app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
+});
+
+app.use((req, res) => {
+  if ((isProduction || hasFrontendBuild) && req.method === 'GET') {
+    return res.sendFile(frontendIndexPath);
+  }
+  return res.status(404).json({ error: 'Route not found' });
 });
 
 // Start server

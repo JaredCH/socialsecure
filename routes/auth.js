@@ -11,7 +11,6 @@ const DeviceKey = require('../models/DeviceKey');
 const {
   SOCIAL_THEME_PRESETS,
   SOCIAL_ACCENT_TOKENS,
-  SOCIAL_SECTION_IDS,
   SOCIAL_MODULE_IDS,
   SOCIAL_PRIMARY_SECTION_IDS,
   THEME_TO_ALLOWED_ACCENTS,
@@ -1130,13 +1129,8 @@ router.put('/profile', [
         }
       }
 
-      const hiddenSections = Array.isArray(value.hiddenSections) ? value.hiddenSections : [];
-      if (hiddenSections.includes('header')) {
-        throw new Error('Header section cannot be hidden');
-      }
-
       const visiblePrimaryCount = SOCIAL_PRIMARY_SECTION_IDS
-        .filter((sectionId) => !hiddenSections.includes(sectionId))
+        .filter((sectionId) => !(normalized.value?.hiddenSections || []).includes(sectionId))
         .length;
       if (visiblePrimaryCount === 0) {
         throw new Error('At least one primary section must remain visible');

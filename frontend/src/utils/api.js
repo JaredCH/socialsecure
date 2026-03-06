@@ -400,6 +400,21 @@ export const discoveryAPI = {
     api.post('/discovery/posts/impression', { postId }),
 };
 
+export const socialPageAPI = {
+  getConfigs: () => api.get('/social-page/configs'),
+  savePreferences: (preferences, syncActiveConfig = true) =>
+    api.put('/social-page/preferences', { preferences, syncActiveConfig }),
+  createConfig: (payload) => api.post('/social-page/configs', payload),
+  updateConfig: (configId, payload) => api.patch(`/social-page/configs/${encodeURIComponent(configId)}`, payload),
+  applyConfig: (configId) => api.post(`/social-page/configs/${encodeURIComponent(configId)}/apply`),
+  duplicateConfig: (configId, payload) => api.post(`/social-page/configs/${encodeURIComponent(configId)}/duplicate`, payload),
+  deleteConfig: (configId) => api.delete(`/social-page/configs/${encodeURIComponent(configId)}`),
+  getSharedByUser: (identifier) => api.get(`/social-page/shared/by-user/${encodeURIComponent(identifier)}`),
+  favoriteShared: (configId) => api.post(`/social-page/shared/${encodeURIComponent(configId)}/favorite`),
+  unfavoriteShared: (configId) => api.delete(`/social-page/shared/${encodeURIComponent(configId)}/favorite`),
+  cloneShared: (configId, payload) => api.post(`/social-page/shared/${encodeURIComponent(configId)}/clone`, payload),
+};
+
 export const calendarAPI = {
   getMyCalendar: () => api.get('/calendar/me'),
   updateMyCalendarSettings: (data) => api.patch('/calendar/me/settings', data),

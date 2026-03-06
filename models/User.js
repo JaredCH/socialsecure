@@ -4,7 +4,7 @@ const { DEFAULT_REALTIME_PREFERENCES, normalizeRealtimePreferences } = require('
 const {
   SOCIAL_THEME_PRESETS,
   SOCIAL_ACCENT_TOKENS,
-  SOCIAL_SECTION_IDS,
+  normalizeSocialPagePreferences,
   SOCIAL_MODULE_IDS,
   buildDefaultSocialPagePreferences,
   toPublicSocialPagePreferences
@@ -92,33 +92,8 @@ const userSchema = new mongoose.Schema({
     default: 'default'
   },
   socialPagePreferences: {
-    themePreset: {
-      type: String,
-      enum: SOCIAL_THEME_PRESETS,
-      default: 'default'
-    },
-    accentColorToken: {
-      type: String,
-      enum: SOCIAL_ACCENT_TOKENS,
-      default: 'blue'
-    },
-    sectionOrder: [{
-      type: String,
-      enum: SOCIAL_SECTION_IDS
-    }],
-    hiddenSections: [{
-      type: String,
-      enum: SOCIAL_SECTION_IDS
-    }],
-    hiddenModules: [{
-      type: String,
-      enum: SOCIAL_MODULE_IDS
-    }],
-    version: {
-      type: Number,
-      default: 1,
-      min: 1
-    }
+    type: mongoose.Schema.Types.Mixed,
+    default: null
   },
   location: {
     type: {
@@ -377,9 +352,10 @@ userSchema.pre('save', async function(next) {
   if (this.isModified('passwordHash') && this.passwordHash) {
     this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
   }
-  if (!this.socialPagePreferences || typeof this.socialPagePreferences !== 'object') {
-    this.socialPagePreferences = buildDefaultSocialPagePreferences(this.profileTheme);
-  }
+  const normalizedSocialPreferences = normalizeSocialPagePreferences(this.socialPagePreferences, {
+    profileTheme: this.profileTheme || 'default'
+  });
+  this.socialPagePreferences = normalizedSocialPreferences.value || buildDefaultSocialPagePreferences(this.profileTheme);
   next();
 });
 
