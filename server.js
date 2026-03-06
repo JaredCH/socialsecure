@@ -10,16 +10,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const User = require('./models/User');
 const Friendship = require('./models/Friendship');
-const {
-  setRealtimeIo,
-  attachUserSocket,
-  detachUserSocket,
-  isUserOnline,
-  setPresence,
-  getPresence,
-  emitToUsers,
-  getMissedEvents
-} = require('./services/realtime');
+const { initializeRealtime } = require('./services/realtime');
 
 const TYPING_THROTTLE_MS = 1000;
 const SOCKET_JWT_SECRET = process.env.JWT_SECRET || '';
@@ -280,9 +271,7 @@ const io = require('socket.io')(server, {
 });
 
 const { setNotificationIo } = require('./services/notifications');
-const { initializeRealtime } = require('./services/realtime');
 setNotificationIo(io);
-setRealtimeIo(io);
 
 const getFriendIds = async (userId) => {
   const friendships = await Friendship.find({

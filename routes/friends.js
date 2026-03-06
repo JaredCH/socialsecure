@@ -11,6 +11,27 @@ const { createNotification } = require('../services/notifications');
 const { buildPresencePayload, getPresenceMapForUsers } = require('../services/realtime');
 const { RELATIONSHIP_AUDIENCE_VALUES, normalizeRelationshipAudience } = require('../utils/relationshipAudience');
 
+const VALID_FRIEND_CATEGORIES = [...RELATIONSHIP_AUDIENCE_VALUES];
+
+const getClientIp = (req) => {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || 'unknown';
+};
+
+const logFriendEvent = ({ eventType, userId, metadata = {}, req }) => {
+  console.log('[friend-event]', JSON.stringify({
+    eventType,
+    userId: userId ? String(userId) : null,
+    metadata,
+    ipAddress: getClientIp(req),
+    userAgent: req.get('user-agent') || null,
+    createdAt: new Date().toISOString()
+  }));
+};
+
 const getViewerRelationshipAudience = (friendship, viewerId) => {
   const normalizedViewerId = String(viewerId || '');
   if (String(friendship?.requester || '') === normalizedViewerId) {
@@ -35,6 +56,8 @@ const friendWriteLimiter = rateLimit({
   message: { error: 'Too many friendship updates, please slow down.' },
   keyGenerator: (req) => String(req?.user?._id || req.ip || req.socket?.remoteAddress || 'unknown')
 });
+
+const friendMutationLimiter = friendWriteLimiter;
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
