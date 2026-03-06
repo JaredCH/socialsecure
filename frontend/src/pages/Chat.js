@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { authAPI, chatAPI } from '../utils/api';
 import {
-  parseCommandArguments,
   parseSlashCommand,
-  SUPPORTED_COMMANDS,
-  UNKNOWN_COMMAND_HELP
+  runSlashCommand,
+  UNKNOWN_COMMAND_HELP,
+  SUPPORTED_COMMANDS
 } from '../utils/chatCommands';
 import {
   createWrappedRoomKeyPackage,
@@ -94,6 +94,7 @@ const Chat = () => {
   const [useMonospace, setUseMonospace] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [replyToUsername, setReplyToUsername] = useState('');
 
   const [decrypting, setDecrypting] = useState(false);
   const [decryptErrors, setDecryptErrors] = useState({});
@@ -122,39 +123,12 @@ const Chat = () => {
     });
   };
 
-  const appendLocalSystemMessage = (content) => {
-    appendMessage({
-      _id: `local:${Date.now()}:${Math.random().toString(36).slice(2)}`,
-      roomId: activeRoomId,
-      userId: {
-        _id: profile?._id || 'system',
-        username: 'system',
-        realName: 'System'
-      },
-      content,
-      messageType: 'system',
-      createdAt: new Date().toISOString(),
-      isEncrypted: false,
-      isE2EE: false
-    });
-  };
-
   const scrollToBottom = () => {
     const viewport = messageViewportRef.current;
     if (!viewport) return;
     viewport.scrollTop = viewport.scrollHeight;
     setUnreadCount(0);
     setIsAtBottom(true);
-  };
-
-  const findRoomByQuery = (query) => {
-    const normalized = String(query || '').trim().toLowerCase();
-    if (!normalized) return null;
-    return rooms.find((room) => {
-      const roomId = String(room._id).toLowerCase();
-      const label = normalizeRoomLabel(room).toLowerCase();
-      return roomId === normalized || label === normalized || label.includes(normalized);
-    }) || null;
   };
 
   const getDisplayName = (message) => {
@@ -541,119 +515,40 @@ const Chat = () => {
     }
   };
 
+  const handleCopyMessage = async (text) => {
+    const normalized = String(text || '').trim();
+    if (!normalized) return;
+    try {
+      await navigator.clipboard.writeText(normalized);
+      toast.success('Copied message');
+    } catch {
+      toast.error('Unable to copy message');
+    }
+  };
+
+  const handleReplyToUser = (username) => {
+    const normalized = String(username || '').trim();
+    if (!normalized) return;
+    setReplyToUsername(normalized);
+    setSendValue((prev) => {
+      if (prev.trim().startsWith(`@${normalized}`)) return prev;
+      if (prev.trim().length === 0) return `@${normalized} `;
+      return `@${normalized} ${prev}`;
+    });
+  };
+
   const handleSlashCommand = async ({ command, argsRaw }) => {
-    const parsed = parseCommandArguments(command, argsRaw);
-    if (!parsed.ok) {
-      toast.error(parsed.error || UNKNOWN_COMMAND_HELP);
+    const result = runSlashCommand({
+      command,
+      argsRaw,
+      username: localNickname || profile?.username || profile?.realName || 'user'
+    });
+
+    if (!result.ok) {
+      toast.error(result.error || UNKNOWN_COMMAND_HELP);
       return;
     }
-
-    switch (command) {
-      case 'join': {
-        const targetRoom = findRoomByQuery(parsed.data.roomQuery);
-        if (!targetRoom) {
-          toast.error(`Room not found: ${parsed.data.roomQuery}`);
-          return;
-        }
-        const response = await chatAPI.joinRoom(String(targetRoom._id));
-        setRooms((prev) => prev.map((room) => {
-          if (String(room._id) !== String(targetRoom._id)) return room;
-          return {
-            ...room,
-            memberCount: response.data?.room?.memberCount ?? room.memberCount
-          };
-        }));
-        if (String(activeRoomId) === String(targetRoom._id) && response.data?.systemMessage) {
-          appendMessage(response.data.systemMessage);
-        }
-        setActiveRoomId(String(targetRoom._id));
-        toast.success(`Joined ${normalizeRoomLabel(targetRoom)}`);
-        break;
-      }
-      case 'leave': {
-        if (!activeRoomId) {
-          toast.error('No active room selected.');
-          return;
-        }
-        const leavingRoomId = String(activeRoomId);
-        const response = await chatAPI.leaveRoom(leavingRoomId);
-        if (response.data?.systemMessage) {
-          appendMessage(response.data.systemMessage);
-        }
-        setRooms((prev) => prev.map((room) => {
-          if (String(room._id) !== leavingRoomId) return room;
-          return {
-            ...room,
-            memberCount: response.data?.room?.memberCount ?? room.memberCount
-          };
-        }));
-
-        const fallbackRoom = rooms.find((room) => String(room._id) !== leavingRoomId) || null;
-        setActiveRoomId(fallbackRoom ? String(fallbackRoom._id) : '');
-        toast.success('Left room.');
-        break;
-      }
-      case 'nick': {
-        const previous = localNickname || profile?.username || profile?.realName || 'user';
-        const nickname = parsed.data.nickname;
-        setLocalNickname(nickname);
-        if (profile?._id) {
-          setNickByUserId((prev) => ({ ...prev, [String(profile._id)]: nickname }));
-        }
-
-        const rendered = `${previous} is now known as ${nickname}`;
-        await sendEncryptedPayload({
-          plaintext: rendered,
-          messageType: 'command',
-          commandData: {
-            command: 'nick',
-            nickname,
-            targetUserId: String(profile?._id || ''),
-            targetUsername: profile?.username || profile?.realName || 'user',
-            processedContent: rendered
-          }
-        });
-        toast.success(`Nickname set to ${nickname}`);
-        break;
-      }
-      case 'msg': {
-        const target = parsed.data.target;
-        const message = parsed.data.message;
-        const rendered = `→ ${target}: ${message}`;
-        await sendEncryptedPayload({
-          plaintext: rendered,
-          messageType: 'command',
-          commandData: {
-            command: 'msg',
-            targetUsername: target,
-            processedContent: rendered
-          }
-        });
-        break;
-      }
-      case 'list': {
-        if (!activeRoomId) {
-          toast.error('No active room selected.');
-          return;
-        }
-        const response = await chatAPI.getRoomUsers(activeRoomId);
-        const users = Array.isArray(response.data?.users) ? response.data.users : [];
-        const names = users
-          .map((user) => {
-            const userId = String(user._id);
-            return nickByUserId[userId] || user.username || user.realName || userId;
-          })
-          .filter(Boolean);
-        const rendered = names.length > 0
-          ? `Users (${names.length}): ${names.join(', ')}`
-          : 'No users currently in this room.';
-        appendLocalSystemMessage(rendered);
-        toast.success(`Listed ${names.length} user${names.length === 1 ? '' : 's'}.`);
-        break;
-      }
-      default:
-        toast.error(`Unsupported command. Available: ${SUPPORTED_COMMANDS.map((name) => `/${name}`).join(', ')}`);
-    }
+    await sendEncryptedPayload(result.payload);
   };
 
   const handleSend = async (event) => {
@@ -667,9 +562,11 @@ const Chat = () => {
       if (parsed) {
         await handleSlashCommand(parsed);
       } else {
-        await sendEncryptedPayload({ plaintext: trimmed, messageType: 'text' });
+        const withReply = replyToUsername ? `@${replyToUsername} ${trimmed}` : trimmed;
+        await sendEncryptedPayload({ plaintext: withReply, messageType: 'text' });
       }
       setSendValue('');
+      setReplyToUsername('');
       if (isAtBottom) {
         requestAnimationFrame(() => scrollToBottom());
       }
@@ -774,6 +671,18 @@ const Chat = () => {
             </div>
           </div>
 
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => fetchMessagesPage(activeRoomId, nextCursor, false)}
+              disabled={!activeRoomId || !hasMore || messagesLoading || olderLoading}
+              className="px-3 py-2 border rounded text-sm disabled:opacity-50"
+            >
+              {olderLoading ? 'Loading...' : hasMore ? `Load Older (${MESSAGE_PAGE_SIZE.OLDER_LOAD})` : 'No More Messages'}
+            </button>
+            {decrypting ? <span className="text-xs text-gray-500 self-center">Decrypting visible messages...</span> : null}
+          </div>
+
           <div
             ref={messageViewportRef}
             onScroll={(event) => {
@@ -845,6 +754,24 @@ const Chat = () => {
                     </>
                   )}
                   <span className="ml-2 hidden group-hover:inline text-[10px] text-gray-400">{fullTs}</span>
+                  {messageType !== 'system' ? (
+                    <span className="ml-2 hidden group-hover:inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleReplyToUser(author)}
+                        className="text-[10px] text-blue-600 hover:underline"
+                      >
+                        Reply
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(bodyText)}
+                        className="text-[10px] text-blue-600 hover:underline"
+                      >
+                        Copy
+                      </button>
+                    </span>
+                  ) : null}
                 </div>
               );
             })}
@@ -862,18 +789,6 @@ const Chat = () => {
             </div>
           ) : null}
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => fetchMessagesPage(activeRoomId, nextCursor, false)}
-              disabled={!activeRoomId || !hasMore || messagesLoading || olderLoading}
-              className="px-3 py-2 border rounded text-sm disabled:opacity-50"
-            >
-              {olderLoading ? 'Loading...' : hasMore ? `Load Older (${MESSAGE_PAGE_SIZE.OLDER_LOAD})` : 'No More Messages'}
-            </button>
-            {decrypting ? <span className="text-xs text-gray-500 self-center">Decrypting visible messages...</span> : null}
-          </div>
-
           <form onSubmit={handleSend} className="flex gap-2">
             <input
               type="text"
@@ -882,7 +797,7 @@ const Chat = () => {
               disabled={!isUnlocked || !activeRoomId || sending}
               className="flex-1 border rounded p-2"
               maxLength={2000}
-              placeholder={isUnlocked ? 'Type encrypted message or /join /leave /nick /msg /list' : 'Unlock encryption to send'}
+              placeholder={isUnlocked ? `Type encrypted message or ${SUPPORTED_COMMANDS.map((name) => `/${name}`).join(' ')}` : 'Unlock encryption to send'}
             />
             <button
               type="submit"
@@ -906,8 +821,21 @@ const Chat = () => {
             </div>
           )}
 
+          {replyToUsername ? (
+            <div className="text-xs text-gray-600 -mt-1">
+              Replying to <span className="font-semibold">@{replyToUsername}</span>
+              <button
+                type="button"
+                onClick={() => setReplyToUsername('')}
+                className="ml-2 text-blue-600 hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+          ) : null}
+
           <p className="text-xs text-gray-500">
-            Slash commands: /join [room], /leave, /nick [name], /msg [user] [message], /list
+            Slash commands: {SUPPORTED_COMMANDS.map((name) => `/${name}`).join(', ')}
           </p>
         </section>
       </div>
