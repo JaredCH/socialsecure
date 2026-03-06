@@ -1,12 +1,52 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useLocation } from 'react-router-dom';
-import { authAPI, chatAPI } from '../utils/api';
+import { authAPI, chatAPI, discoveryAPI } from '../utils/api';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
 import FriendsManager from '../components/FriendsManager';
 import RecoveryKitManager from '../components/RecoveryKitManager';
 
 const PROFILE_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
+const SOCIAL_ACCENT_TOKENS = ['blue', 'violet', 'emerald', 'rose', 'amber'];
+const SOCIAL_SECTION_IDS = ['header', 'shortcuts', 'snapshot', 'guestLookup', 'composer', 'circles', 'timeline', 'gallery', 'moderation', 'chatPanel', 'communityNotes'];
+const SOCIAL_MANDATORY_SECTION_IDS = ['header'];
+const SOCIAL_PRIMARY_SECTION_IDS = ['timeline', 'gallery'];
+const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
+const SOCIAL_SECTION_LABELS = {
+  header: 'Hero Header',
+  shortcuts: 'Shortcuts',
+  snapshot: 'Social Snapshot',
+  guestLookup: 'Guest Lookup',
+  composer: 'Create Post',
+  circles: 'Circles',
+  timeline: 'Timeline',
+  gallery: 'Gallery',
+  moderation: 'Moderation Transparency',
+  chatPanel: 'Chat Panel',
+  communityNotes: 'Community Notes'
+};
+const SOCIAL_MODULE_LABELS = {
+  marketplaceShortcut: 'Marketplace Shortcut',
+  calendarShortcut: 'Calendar Shortcut',
+  settingsShortcut: 'User Settings Shortcut',
+  referShortcut: 'Refer Friend Shortcut',
+  chatPanel: 'Chat Panel',
+  communityNotes: 'Community Notes'
+};
+const THEME_TO_ALLOWED_ACCENTS = {
+  default: ['blue', 'violet', 'emerald', 'rose'],
+  light: ['blue', 'violet', 'emerald'],
+  dark: ['blue', 'violet', 'emerald', 'rose', 'amber'],
+  sunset: ['rose', 'amber', 'violet'],
+  forest: ['emerald', 'blue', 'amber']
+};
+const THEME_TO_DEFAULT_ACCENT = {
+  default: 'blue',
+  light: 'violet',
+  dark: 'emerald',
+  sunset: 'rose',
+  forest: 'emerald'
+};
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
 const MAX_PGP_PUBLIC_KEY_LENGTH = 20000;
 const PGP_PUBLIC_KEY_BEGIN = '-----BEGIN PGP PUBLIC KEY BLOCK-----';
@@ -37,6 +77,51 @@ const textToLinks = (value) => {
 const normalizePgpPublicKey = (value) => {
   if (typeof value !== 'string') return '';
   return value.replace(/\r\n/g, '\n').trim();
+};
+
+const uniqueStrings = (items) => {
+  if (!Array.isArray(items)) return [];
+  return [...new Set(items.filter((item) => typeof item === 'string').map((item) => item.trim()).filter(Boolean))];
+};
+
+const getDefaultSocialPreferences = (profileTheme = 'default') => {
+  const resolvedTheme = PROFILE_THEMES.includes(profileTheme) ? profileTheme : 'default';
+  return {
+    themePreset: resolvedTheme,
+    accentColorToken: THEME_TO_DEFAULT_ACCENT[resolvedTheme] || 'blue',
+    sectionOrder: [...SOCIAL_SECTION_IDS],
+    hiddenSections: [],
+    hiddenModules: [],
+    version: 1
+  };
+};
+
+const normalizeSocialPreferences = (input, profileTheme = 'default') => {
+  const defaults = getDefaultSocialPreferences(profileTheme);
+  const value = input && typeof input === 'object' ? input : {};
+  const themePreset = PROFILE_THEMES.includes(value.themePreset) ? value.themePreset : defaults.themePreset;
+  const allowedAccents = THEME_TO_ALLOWED_ACCENTS[themePreset] || THEME_TO_ALLOWED_ACCENTS.default;
+  const accentColorToken = allowedAccents.includes(value.accentColorToken)
+    ? value.accentColorToken
+    : (allowedAccents.includes(defaults.accentColorToken) ? defaults.accentColorToken : allowedAccents[0]);
+  const requestedOrder = uniqueStrings(value.sectionOrder).filter((id) => SOCIAL_SECTION_IDS.includes(id));
+  const sectionOrder = [...requestedOrder, ...SOCIAL_SECTION_IDS.filter((id) => !requestedOrder.includes(id))];
+  const hiddenSections = uniqueStrings(value.hiddenSections)
+    .filter((id) => SOCIAL_SECTION_IDS.includes(id))
+    .filter((id) => !SOCIAL_MANDATORY_SECTION_IDS.includes(id));
+  if (SOCIAL_PRIMARY_SECTION_IDS.every((id) => hiddenSections.includes(id))) {
+    const timelineIndex = hiddenSections.indexOf('timeline');
+    if (timelineIndex >= 0) hiddenSections.splice(timelineIndex, 1);
+  }
+  const hiddenModules = uniqueStrings(value.hiddenModules).filter((id) => SOCIAL_MODULE_IDS.includes(id));
+  return {
+    themePreset,
+    accentColorToken,
+    sectionOrder,
+    hiddenSections,
+    hiddenModules,
+    version: Number.isInteger(value.version) && value.version > 0 ? value.version : 1
+  };
 };
 
 const getPgpPublicKeyValidationError = (publicKey) => {
@@ -77,9 +162,11 @@ function UserSettings({
     avatarUrl: '',
     bannerUrl: '',
     linksText: '',
-    profileTheme: 'default'
+    profileTheme: 'default',
+    socialPagePreferences: getDefaultSocialPreferences('default')
   });
   const [saving, setSaving] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [encryptionForm, setEncryptionForm] = useState({
@@ -122,7 +209,11 @@ function UserSettings({
       avatarUrl: user.avatarUrl || '',
       bannerUrl: user.bannerUrl || '',
       linksText: linksToText(user.links),
-      profileTheme: user.profileTheme || 'default'
+      profileTheme: user.profileTheme || 'default',
+      socialPagePreferences: normalizeSocialPreferences(
+        user.socialPagePreferences,
+        user.profileTheme || 'default'
+      )
     });
     setPgpPublicKey(user.pgpPublicKey || '');
     setPgpGenerationForm((prev) => ({
@@ -156,7 +247,104 @@ function UserSettings({
   }, [profileUserId]);
 
   const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((prev) => {
+      if (name === 'profileTheme') {
+        const normalizedSocialPreferences = normalizeSocialPreferences(
+          {
+            ...prev.socialPagePreferences,
+            themePreset: value
+          },
+          value
+        );
+        return {
+          ...prev,
+          profileTheme: value,
+          socialPagePreferences: normalizedSocialPreferences
+        };
+      }
+
+      return { ...prev, [name]: value };
+    });
+  };
+
+  const trackCustomizationEvent = async (eventType, metadata = {}) => {
+    try {
+      await discoveryAPI.trackEvent(eventType, metadata);
+    } catch {
+      // best-effort telemetry
+    }
+  };
+
+  const handleTogglePreview = () => {
+    setPreviewOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        trackCustomizationEvent('social_customization_preview_opened', { source: 'settings' });
+      }
+      return next;
+    });
+  };
+
+  const updateSocialPreferences = (updater) => {
+    setForm((prev) => ({
+      ...prev,
+      socialPagePreferences: normalizeSocialPreferences(
+        typeof updater === 'function'
+          ? updater(prev.socialPagePreferences)
+          : updater,
+        prev.profileTheme
+      )
+    }));
+  };
+
+  const handleToggleSection = (sectionId) => {
+    if (SOCIAL_MANDATORY_SECTION_IDS.includes(sectionId)) return;
+    updateSocialPreferences((prev) => {
+      const isHidden = prev.hiddenSections.includes(sectionId);
+      return {
+        ...prev,
+        hiddenSections: isHidden
+          ? prev.hiddenSections.filter((id) => id !== sectionId)
+          : [...prev.hiddenSections, sectionId]
+      };
+    });
+  };
+
+  const handleMoveSection = (sectionId, direction) => {
+    updateSocialPreferences((prev) => {
+      const currentIndex = prev.sectionOrder.indexOf(sectionId);
+      if (currentIndex === -1) return prev;
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= prev.sectionOrder.length) return prev;
+      const nextOrder = [...prev.sectionOrder];
+      [nextOrder[currentIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[currentIndex]];
+      return {
+        ...prev,
+        sectionOrder: nextOrder
+      };
+    });
+  };
+
+  const handleToggleModule = (moduleId) => {
+    updateSocialPreferences((prev) => {
+      const isHidden = prev.hiddenModules.includes(moduleId);
+      return {
+        ...prev,
+        hiddenModules: isHidden
+          ? prev.hiddenModules.filter((id) => id !== moduleId)
+          : [...prev.hiddenModules, moduleId]
+      };
+    });
+  };
+
+  const handleResetSocialPreferences = () => {
+    setForm((prev) => ({
+      ...prev,
+      socialPagePreferences: getDefaultSocialPreferences(prev.profileTheme)
+    }));
+    trackCustomizationEvent('social_customization_reset', { source: 'settings' });
+    toast.success('Social page customization reset');
   };
 
   const handleSave = async (e) => {
@@ -167,12 +355,19 @@ function UserSettings({
     try {
       const payload = {
         ...form,
-        links: textToLinks(form.linksText)
+        links: textToLinks(form.linksText),
+        socialPagePreferences: normalizeSocialPreferences(form.socialPagePreferences, form.profileTheme)
       };
       delete payload.linksText;
 
       const { data } = await authAPI.updateProfile(payload);
       setUser(data.user);
+      if (Object.prototype.hasOwnProperty.call(payload, 'socialPagePreferences')) {
+        trackCustomizationEvent('social_customization_saved', {
+          source: 'settings',
+          themePreset: payload.socialPagePreferences.themePreset
+        });
+      }
       setSuccessMessage('Profile updated successfully.');
       toast.success('Profile updated');
     } catch (error) {
@@ -560,6 +755,135 @@ function UserSettings({
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="space-y-3 border rounded p-4 bg-gray-50">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-base font-semibold text-gray-800">Social Page Customization</h3>
+            <button
+              type="button"
+              onClick={handleResetSocialPreferences}
+              className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100"
+            >
+              Reset defaults
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Accent Color Token</label>
+            <select
+              value={form.socialPagePreferences?.accentColorToken || 'blue'}
+              onChange={(event) => {
+                updateSocialPreferences((prev) => ({
+                  ...prev,
+                  accentColorToken: event.target.value
+                }));
+              }}
+              className="w-full border rounded p-2"
+            >
+              {(THEME_TO_ALLOWED_ACCENTS[form.socialPagePreferences?.themePreset || form.profileTheme] || SOCIAL_ACCENT_TOKENS)
+                .map((token) => (
+                  <option key={token} value={token}>
+                    {token}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700">Section Visibility</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {SOCIAL_SECTION_IDS.map((sectionId) => {
+                const isMandatory = SOCIAL_MANDATORY_SECTION_IDS.includes(sectionId);
+                const isChecked = !(form.socialPagePreferences?.hiddenSections || []).includes(sectionId);
+                return (
+                  <label key={sectionId} className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      disabled={isMandatory}
+                      onChange={() => handleToggleSection(sectionId)}
+                    />
+                    <span>{SOCIAL_SECTION_LABELS[sectionId] || sectionId}</span>
+                    {isMandatory ? <span className="text-xs text-gray-500">(required)</span> : null}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700">Section Order</p>
+            <ul className="space-y-1">
+              {(form.socialPagePreferences?.sectionOrder || []).map((sectionId, index, arr) => (
+                <li key={sectionId} className="flex items-center justify-between border rounded bg-white px-3 py-2 text-sm">
+                  <span>{SOCIAL_SECTION_LABELS[sectionId] || sectionId}</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleMoveSection(sectionId, 'up')}
+                      disabled={index === 0}
+                      className="px-2 py-1 border rounded text-xs disabled:opacity-40"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveSection(sectionId, 'down')}
+                      disabled={index === arr.length - 1}
+                      className="px-2 py-1 border rounded text-xs disabled:opacity-40"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700">Optional Module Visibility</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {SOCIAL_MODULE_IDS.map((moduleId) => (
+                <label key={moduleId} className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={!(form.socialPagePreferences?.hiddenModules || []).includes(moduleId)}
+                    onChange={() => handleToggleModule(moduleId)}
+                  />
+                  <span>{SOCIAL_MODULE_LABELS[moduleId] || moduleId}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={handleTogglePreview}
+              className="text-sm px-3 py-1.5 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+            >
+              {previewOpen ? 'Hide Live Preview' : 'Show Live Preview'}
+            </button>
+            {previewOpen ? (
+              <div className="border rounded-lg bg-white p-3 space-y-2">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Live preview (saved layout)</p>
+                <p className="text-sm text-gray-700">
+                  Theme: <span className="font-medium">{form.socialPagePreferences?.themePreset}</span> · Accent:{' '}
+                  <span className="font-medium">{form.socialPagePreferences?.accentColorToken}</span>
+                </p>
+                <div className="space-y-1">
+                  {(form.socialPagePreferences?.sectionOrder || [])
+                    .filter((sectionId) => !(form.socialPagePreferences?.hiddenSections || []).includes(sectionId))
+                    .map((sectionId) => (
+                      <div key={`preview-${sectionId}`} className="rounded border bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                        {SOCIAL_SECTION_LABELS[sectionId] || sectionId}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

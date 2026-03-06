@@ -358,7 +358,14 @@ router.get('/posts', authenticateToken, discoveryLimiter, async (req, res) => {
 router.post('/events', authenticateToken, discoveryLimiter, async (req, res) => {
   try {
     const eventType = String(req.body?.eventType || '').trim();
-    const allowed = new Set(['profile_click', 'post_click', 'follow_click']);
+    const allowed = new Set([
+      'profile_click',
+      'post_click',
+      'follow_click',
+      'social_customization_preview_opened',
+      'social_customization_saved',
+      'social_customization_reset'
+    ]);
     if (!allowed.has(eventType)) {
       return res.status(400).json({ error: 'Invalid discovery eventType' });
     }
