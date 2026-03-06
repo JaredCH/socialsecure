@@ -288,8 +288,8 @@ async function removeMarketUploads(images = []) {
     paths.map((filePath) =>
       fs.unlink(filePath).catch((unlinkError) => {
         if (unlinkError?.code !== 'ENOENT') {
-      console.error('Failed to remove market upload:', filePath, unlinkError);
-      throw unlinkError;
+          console.error('Failed to remove market upload:', filePath, unlinkError);
+          throw unlinkError;
         }
       })
     )
