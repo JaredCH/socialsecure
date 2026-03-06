@@ -178,6 +178,7 @@ const SocialDesignStudioModal = ({
   const openPanelEditor = (panelId) => {
     setActivePanelId(panelId);
     setEditingPanelId(panelId);
+    setDragPanelId('');
     setIsPlacementMode(false);
     setHoverCell(null);
   };
@@ -227,7 +228,7 @@ const SocialDesignStudioModal = ({
               <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(260px,0.85fr)_minmax(0,1.4fr)]">
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <h4 className="text-sm font-semibold text-slate-900">Panel shape and slot</h4>
-                  <p className="mt-1 text-xs text-slate-800">Click a panel to open the editor, adjust shape, then place where it fits.</p>
+                  <p className="mt-1 text-xs text-slate-800">Click a panel to open the editor, adjust shape, click Start placement, then place where it fits.</p>
                   <div className="mt-3 space-y-2">
                     {gridLayout.placed.map((panel) => (
                       <button
@@ -285,7 +286,12 @@ const SocialDesignStudioModal = ({
                           onMouseEnter={() => setHoverCell({ row, col })}
                           onDragOver={(event) => {
                             event.preventDefault();
-                            if (dragPanelId) setHoverCell({ row, col });
+                            if (!dragPanelId) return;
+                            setHoverCell((current) => (
+                              current && current.row === row && current.col === col
+                                ? current
+                                : { row, col }
+                            ));
                           }}
                           onClick={() => {
                             if (!selectedPanel) return;
@@ -307,8 +313,11 @@ const SocialDesignStudioModal = ({
                           key={panel.id}
                           draggable
                           onDragStart={() => {
-                            openPanelEditor(panel.id);
+                            setActivePanelId(panel.id);
+                            setEditingPanelId('');
+                            setIsPlacementMode(true);
                             setDragPanelId(panel.id);
+                            setHoverCell(null);
                           }}
                           onDragEnd={() => {
                             setDragPanelId('');
@@ -486,7 +495,7 @@ const SocialDesignStudioModal = ({
                   <p className="text-sm font-semibold text-slate-900">Favorites</p>
                   <div className="mt-2 space-y-2">
                     {favoriteDesigns.map((config) => (
-                      <p key={config._id} className="text-sm text-slate-700">{config.name} • @{config.owner?.username || 'designer'}</p>
+                      <p key={config._id} className="text-sm text-slate-800">{config.name} • @{config.owner?.username || 'designer'}</p>
                     ))}
                   </div>
                 </div>
@@ -518,7 +527,6 @@ const SocialDesignStudioModal = ({
                   value={editingPanel.size}
                   onChange={(event) => {
                     updateLayoutPatch(editingPanel.id, { size: event.target.value });
-                    setIsPlacementMode(true);
                   }}
                   className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
                 >
@@ -535,7 +543,6 @@ const SocialDesignStudioModal = ({
                   value={editingPanel.height || 'fullRow'}
                   onChange={(event) => {
                     updateLayoutPatch(editingPanel.id, { height: event.target.value });
-                    setIsPlacementMode(true);
                   }}
                   className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
                 >

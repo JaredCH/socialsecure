@@ -58,8 +58,10 @@ describe('SocialDesignStudioModal layout studio', () => {
       );
     });
 
+    const guestLookupButton = getButtonContainingText('Guest Lookup');
+    expect(guestLookupButton).toBeTruthy();
     await act(async () => {
-      getButtonContainingText('Guest Lookup').click();
+      guestLookupButton.click();
     });
     expect(container.textContent).toContain('Edit panel shape');
 
@@ -72,6 +74,16 @@ describe('SocialDesignStudioModal layout studio', () => {
       widthSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
     expect(onPanelLayoutChange).toHaveBeenCalledWith('guest_lookup', expect.objectContaining({ size: 'fourCols' }));
+
+    const heightSelect = Array.from(container.querySelectorAll('label'))
+      .find((label) => label.textContent && label.textContent.includes('Height'))
+      .querySelector('select');
+    expect(heightSelect).toBeTruthy();
+    await act(async () => {
+      heightSelect.value = 'twoRows';
+      heightSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(onPanelLayoutChange).toHaveBeenCalledWith('guest_lookup', expect.objectContaining({ height: 'twoRows' }));
 
     await act(async () => {
       getButtonContainingText('Start placement').click();
