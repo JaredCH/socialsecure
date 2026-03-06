@@ -664,7 +664,7 @@ function ListingFormModal({ listing, onClose, onSaved }) {
               </div>
             )}
             {hasExistingImages && hasNewImages && (
-              <p className="text-xs text-amber-600 mb-2">uploading new images will replace the existing ones.</p>
+              <p className="text-xs text-amber-600 mb-2">Uploading new images will replace the existing ones.</p>
             )}
             {hasNewImages && (
               <ul className="mb-2 text-xs text-gray-600 space-y-1">
