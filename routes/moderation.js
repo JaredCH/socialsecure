@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const Report = require('../models/Report');
@@ -24,6 +26,15 @@ const CONTROL_PANEL_MUTE_DURATIONS = {
   '1m': 720,
   forever: null
 };
+const moderationRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many moderation requests. Please try again later.' }
+});
+
+router.use(moderationRateLimiter);
 
 const toUserSummary = (user) => ({
   _id: user?._id,
@@ -518,7 +529,7 @@ router.post('/control-panel/users/:userId/reset-password', authenticateToken, re
     }
 
     const temporaryPassword = Array.from({ length: 8 }, () => String(crypto.randomInt(0, 10))).join('');
-    user.passwordHash = temporaryPassword;
+    user.passwordHash = await bcrypt.hash(temporaryPassword, 12);
     user.mustResetPassword = true;
     user.moderationHistory.push({
       action: 'password_reset',

@@ -78,7 +78,7 @@ describe('Auth password change endpoint', () => {
       });
 
     expect(response.status).toBe(200);
-    expect(mutableUser.passwordHash).toBe('NewPass123');
+    expect(mutableUser.passwordHash).toMatch(/^\$2[aby]\$\d{2}\$/);
     expect(mutableUser.mustResetPassword).toBe(false);
     expect(mutableUser.save).toHaveBeenCalled();
     expect(response.body.user.mustResetPassword).toBe(false);

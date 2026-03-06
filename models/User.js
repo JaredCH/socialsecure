@@ -366,7 +366,8 @@ userSchema.index({ registrationStatus: 1, createdAt: -1 });
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
-  if (this.isModified('passwordHash') && this.passwordHash) {
+  const looksLikeBcryptHash = typeof this.passwordHash === 'string' && /^\$2[aby]\$\d{2}\$/.test(this.passwordHash);
+  if (this.isModified('passwordHash') && this.passwordHash && !looksLikeBcryptHash) {
     this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
   }
   const normalizedSocialPreferences = normalizeSocialPagePreferences(this.socialPagePreferences, {

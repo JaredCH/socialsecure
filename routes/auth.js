@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const Session = require('../models/Session');
@@ -27,6 +28,13 @@ const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
 const ONBOARDING_TOTAL_STEPS = 4;
 const LOCATION_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const LOCATION_CHANGE_FIELDS = ['city', 'state', 'country'];
+const passwordChangeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many password change attempts. Please try again later.' }
+});
 
 const isSafeHttpUrl = (value) => {
   try {
@@ -464,6 +472,7 @@ router.get('/me', async (req, res) => {
 });
 
 router.post('/password/change', [
+  passwordChangeLimiter,
   authenticateToken,
   body('currentPassword').notEmpty().withMessage('Current password is required'),
   body('newPassword')
@@ -496,7 +505,7 @@ router.post('/password/change', [
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
-    user.passwordHash = newPassword;
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
     user.mustResetPassword = false;
     await user.save();
 

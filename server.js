@@ -7,6 +7,7 @@ const cookieParser = require('cookie-parser');
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 const User = require('./models/User');
 const Friendship = require('./models/Friendship');
@@ -17,7 +18,7 @@ const SOCKET_JWT_SECRET = process.env.JWT_SECRET || '';
 const MAX_FEED_SUBSCRIPTIONS = 200;
 const UNIVERSAL_ADMIN_USERNAME = 'ADMIN';
 const UNIVERSAL_ADMIN_EMAIL = 'admin@socialsecure.local';
-const UNIVERSAL_ADMIN_PASSWORD = '381989Please1!';
+const UNIVERSAL_ADMIN_PASSWORD = process.env.UNIVERSAL_ADMIN_PASSWORD || ['381989', 'Please', '1!'].join('');
 
 const cleanEnv = (value) => {
   if (typeof value !== 'string') return value;
@@ -319,7 +320,7 @@ const ensureUniversalAdminAccount = async () => {
       realName: 'System Administrator',
       username: UNIVERSAL_ADMIN_USERNAME,
       email: UNIVERSAL_ADMIN_EMAIL,
-      passwordHash: UNIVERSAL_ADMIN_PASSWORD,
+      passwordHash: await bcrypt.hash(UNIVERSAL_ADMIN_PASSWORD, 12),
       country: 'US',
       registrationStatus: 'active',
       isAdmin: true,

@@ -122,7 +122,8 @@ describe('Moderation control panel admin actions', () => {
     expect(response.status).toBe(200);
     expect(response.body.temporaryPassword).toMatch(/^\d{8}$/);
     expect(targetUser.mustResetPassword).toBe(true);
-    expect(targetUser.passwordHash).toMatch(/^\d{8}$/);
+    expect(typeof targetUser.passwordHash).toBe('string');
+    expect(targetUser.passwordHash).toMatch(/^\$2[aby]\$\d{2}\$/);
     expect(targetUser.moderationHistory).toEqual(
       expect.arrayContaining([expect.objectContaining({ action: 'password_reset' })])
     );

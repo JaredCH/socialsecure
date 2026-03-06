@@ -442,7 +442,7 @@ function App() {
                   : <Home isAuthenticated={isAuthenticated} />
               }
             />
-             <Route path="/login" element={<Login onSuccess={handleAuthSuccess} />} />
+            <Route path="/login" element={<Login onSuccess={handleAuthSuccess} />} />
             <Route
               path="/register"
               element={
