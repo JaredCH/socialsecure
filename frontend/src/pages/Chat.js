@@ -8,6 +8,69 @@ const CHANNELS = [
   { key: 'profile', label: 'Profile Threads' }
 ];
 
+const CHAT_THEMES = [
+  {
+    key: 'classic',
+    label: 'Classic Light',
+    shell: 'bg-white text-gray-900',
+    panel: 'bg-white border-gray-300',
+    accent: 'bg-blue-600 text-white hover:bg-blue-700',
+    subtle: 'bg-gray-100 text-gray-700 border-gray-200',
+    messages: 'bg-gray-50 border-gray-200',
+    input: 'bg-white border-gray-300 text-gray-900'
+  },
+  {
+    key: 'midnight',
+    label: 'Midnight',
+    shell: 'bg-slate-900 text-slate-100',
+    panel: 'bg-slate-800 border-slate-700',
+    accent: 'bg-indigo-500 text-white hover:bg-indigo-600',
+    subtle: 'bg-slate-700 text-slate-100 border-slate-600',
+    messages: 'bg-slate-950 border-slate-700',
+    input: 'bg-slate-900 border-slate-600 text-slate-100'
+  },
+  {
+    key: 'ocean',
+    label: 'Ocean',
+    shell: 'bg-cyan-950 text-cyan-50',
+    panel: 'bg-cyan-900 border-cyan-700',
+    accent: 'bg-cyan-400 text-cyan-950 hover:bg-cyan-300',
+    subtle: 'bg-cyan-800 text-cyan-50 border-cyan-700',
+    messages: 'bg-cyan-950 border-cyan-700',
+    input: 'bg-cyan-900 border-cyan-600 text-cyan-50'
+  },
+  {
+    key: 'terminal',
+    label: 'Terminal',
+    shell: 'bg-zinc-950 text-lime-200',
+    panel: 'bg-zinc-900 border-lime-800',
+    accent: 'bg-lime-500 text-zinc-950 hover:bg-lime-400',
+    subtle: 'bg-zinc-800 text-lime-200 border-lime-800',
+    messages: 'bg-zinc-950 border-lime-900',
+    input: 'bg-zinc-900 border-lime-700 text-lime-200'
+  },
+  {
+    key: 'sunset',
+    label: 'Sunset',
+    shell: 'bg-orange-50 text-orange-950',
+    panel: 'bg-white border-orange-300',
+    accent: 'bg-orange-600 text-white hover:bg-orange-700',
+    subtle: 'bg-orange-100 text-orange-900 border-orange-200',
+    messages: 'bg-amber-50 border-orange-200',
+    input: 'bg-white border-orange-300 text-orange-950'
+  },
+  {
+    key: 'lavender',
+    label: 'Lavender',
+    shell: 'bg-violet-50 text-violet-950',
+    panel: 'bg-white border-violet-300',
+    accent: 'bg-violet-600 text-white hover:bg-violet-700',
+    subtle: 'bg-violet-100 text-violet-900 border-violet-200',
+    messages: 'bg-violet-50 border-violet-200',
+    input: 'bg-white border-violet-300 text-violet-950'
+  }
+];
+
 const getConversationLabel = (conversation) => {
   if (!conversation) return '';
 
@@ -48,8 +111,13 @@ function Chat() {
   const [sending, setSending] = useState(false);
 
   const [dmQuery, setDmQuery] = useState('');
+  const [dmSuggestions, setDmSuggestions] = useState([]);
   const [dmSearchLoading, setDmSearchLoading] = useState(false);
-  const [dmResults, setDmResults] = useState([]);
+
+  const [roomQuery, setRoomQuery] = useState('');
+  const [theme, setTheme] = useState(CHAT_THEMES[0].key);
+  const [roomUsers, setRoomUsers] = useState([]);
+  const [roomUsersLoading, setRoomUsersLoading] = useState(false);
 
   const conversationList = useMemo(() => {
     if (activeChannel === 'zip') {
@@ -71,6 +139,35 @@ function Chat() {
   const activeConversation = useMemo(
     () => conversationList.find((conversation) => String(conversation._id) === String(activeConversationId)) || null,
     [conversationList, activeConversationId]
+  );
+
+  const allRooms = useMemo(() => {
+    const withSearchLabel = (room, channel) => {
+      const label = getConversationLabel(room);
+      return {
+        ...room,
+        __channel: channel,
+        __label: label,
+        __labelLower: label.toLowerCase()
+      };
+    };
+    const zipRooms = [
+      ...(hubData?.zip?.current ? [withSearchLabel(hubData.zip.current, 'zip')] : []),
+      ...((hubData?.zip?.nearby || []).map((room) => withSearchLabel(room, 'zip')))
+    ];
+    const dmRooms = (hubData?.dm || []).map((room) => withSearchLabel(room, 'dm'));
+    const profileRooms = (hubData?.profile || []).map((room) => withSearchLabel(room, 'profile'));
+    return [...zipRooms, ...dmRooms, ...profileRooms];
+  }, [hubData]);
+
+  const activeTheme = useMemo(
+    () => CHAT_THEMES.find((themeOption) => themeOption.key === theme) || CHAT_THEMES[0],
+    [theme]
+  );
+
+  const resolvedZipCode = useMemo(
+    () => profile?.zipCode || hubData?.zip?.current?.zipCode || null,
+    [profile, hubData]
   );
 
   const applyDefaultConversationSelection = (channelKey, data) => {
@@ -163,6 +260,28 @@ function Chat() {
     loadMessages();
   }, [activeConversationId]);
 
+  useEffect(() => {
+    const loadRoomUsers = async () => {
+      if (!activeConversationId) {
+        setRoomUsers([]);
+        return;
+      }
+
+      setRoomUsersLoading(true);
+      try {
+        const { data } = await chatAPI.getConversationUsers(activeConversationId);
+        setRoomUsers(Array.isArray(data?.users) ? data.users : []);
+      } catch (error) {
+        setRoomUsers([]);
+        toast.error(error.response?.data?.error || 'Failed to load room users');
+      } finally {
+        setRoomUsersLoading(false);
+      }
+    };
+
+    loadRoomUsers();
+  }, [activeConversationId]);
+
   const handleSend = async (event) => {
     event.preventDefault();
     const trimmed = composerValue.trim();
@@ -187,30 +306,58 @@ function Chat() {
       await refreshHub('dm');
       setActiveChannel('dm');
       setActiveConversationId(String(data.conversation._id));
-      setDmResults([]);
+      setDmSuggestions([]);
       setDmQuery('');
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to start DM');
     }
   };
 
-  const runDmSearch = async (event) => {
-    event.preventDefault();
-    if (!dmQuery.trim() || dmQuery.trim().length < 2) {
-      setDmResults([]);
+  useEffect(() => {
+    const query = dmQuery.trim();
+    if (query.length < 2) {
+      setDmSuggestions([]);
+      setDmSearchLoading(false);
       return;
     }
 
-    setDmSearchLoading(true);
-    try {
-      const { data } = await userAPI.search(dmQuery.trim());
-      const users = Array.isArray(data?.users) ? data.users : [];
-      setDmResults(users.filter((user) => String(user._id) !== String(profile?._id)));
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to search users');
-    } finally {
-      setDmSearchLoading(false);
-    }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      setDmSearchLoading(true);
+      userAPI.search(query)
+        .then(({ data }) => {
+          if (cancelled) return;
+          const users = Array.isArray(data?.users) ? data.users : [];
+          setDmSuggestions(users.filter((user) => String(user._id) !== String(profile?._id)));
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setDmSuggestions([]);
+          toast.error(error.response?.data?.error || 'Failed to search users');
+        })
+        .finally(() => {
+          if (!cancelled) setDmSearchLoading(false);
+        });
+    }, 300);
+
+    return () => {
+      clearTimeout(handle);
+      cancelled = true;
+    };
+  }, [dmQuery, profile]);
+
+  const roomSuggestions = useMemo(() => {
+    const query = roomQuery.trim().toLowerCase();
+    if (query.length < 2) return [];
+    return allRooms
+      .filter((room) => room.__labelLower.includes(query))
+      .slice(0, 8);
+  }, [roomQuery, allRooms]);
+
+  const selectRoomSuggestion = (room) => {
+    setActiveChannel(room.__channel || 'zip');
+    setActiveConversationId(String(room._id));
+    setRoomQuery(room.__label || getConversationLabel(room));
   };
 
   if (loadingHub) {
@@ -218,118 +365,152 @@ function Chat() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 space-y-4">
-      <div>
-        <h2 className="text-2xl font-semibold">Unified Chat Hub</h2>
-        <p className="text-sm text-gray-600">
-          Zip rooms, direct messages, and profile threads in one workspace.
-        </p>
-        {profile?.zipCode ? (
-          <p className="text-xs text-gray-500 mt-1">Your default zip room: {profile.zipCode}</p>
-        ) : (
-          <p className="text-xs text-amber-700 mt-1">Add a zip code in your profile to enable default zip-room chat.</p>
-        )}
+    <div className={`rounded-lg shadow p-5 space-y-4 ${activeTheme.shell}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold">Classic Chat Lounge</h2>
+          <p className="text-sm opacity-90">
+            IRC/AIM-inspired flow: pick a channel, pick a room, then jump into the conversation.
+          </p>
+          {resolvedZipCode ? (
+            <p className="text-xs mt-1 opacity-80">Your default zip room: {resolvedZipCode}</p>
+          ) : null}
+        </div>
+        <label className="text-sm font-medium flex items-center gap-2">
+          Theme
+          <select
+            value={theme}
+            onChange={(event) => setTheme(event.target.value)}
+            className={`border rounded px-2 py-1 text-sm ${activeTheme.input}`}
+          >
+            {CHAT_THEMES.map((themeOption) => (
+              <option key={themeOption.key} value={themeOption.key}>
+                {themeOption.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <aside className="lg:col-span-3 border rounded p-3 space-y-3">
-          <h3 className="font-semibold">Channels</h3>
+        <aside className={`lg:col-span-3 border rounded p-3 space-y-3 ${activeTheme.panel}`}>
+          <h3 className="font-semibold">Channels & Actions</h3>
           <div className="space-y-2">
             {CHANNELS.map((channel) => (
               <button
                 key={channel.key}
                 type="button"
                 onClick={() => setActiveChannel(channel.key)}
-                className={`w-full text-left border rounded px-2 py-2 text-sm ${activeChannel === channel.key ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
+                className={`w-full text-left border rounded px-2 py-2 text-sm ${activeChannel === channel.key ? activeTheme.subtle : 'opacity-90'}`}
               >
                 {channel.label}
               </button>
             ))}
           </div>
 
-          {activeChannel === 'zip' ? (
-            <div className="text-xs text-gray-600 border-t pt-3">
-              Nearby zip rooms are shown only when active rooms exist.
-            </div>
-          ) : null}
-
-          {activeChannel === 'dm' ? (
-            <form onSubmit={runDmSearch} className="space-y-2 border-t pt-3">
-              <label className="text-xs font-medium text-gray-700 block">Start DM</label>
-              <input
-                value={dmQuery}
-                onChange={(event) => setDmQuery(event.target.value)}
-                className="w-full border rounded p-2 text-sm"
-                placeholder="Search users"
-              />
-              <button type="submit" className="w-full bg-blue-600 text-white rounded px-3 py-2 text-sm" disabled={dmSearchLoading}>
-                {dmSearchLoading ? 'Searching...' : 'Search'}
-              </button>
-              {dmResults.length > 0 ? (
-                <ul className="max-h-40 overflow-auto border rounded divide-y">
-                  {dmResults.map((user) => (
-                    <li key={String(user._id)} className="p-2 text-xs flex justify-between items-center gap-2">
-                      <span>@{user.username || user.realName || 'user'}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleStartDM(user._id)}
-                        className="border rounded px-2 py-1 hover:bg-gray-50"
-                      >
-                        DM
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </form>
-          ) : null}
-        </aside>
-
-        <section className="lg:col-span-4 border rounded p-3">
-          <h3 className="font-semibold mb-2">Conversations</h3>
-          {conversationList.length === 0 ? (
-            <p className="text-sm text-gray-500">No conversations in this channel yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {conversationList.map((conversation) => {
-                const selected = String(conversation._id) === String(activeConversationId);
-                return (
-                  <li key={String(conversation._id)}>
+          <div className="border-t pt-3 space-y-2">
+            <label className="text-xs font-semibold block">Find Rooms</label>
+            <input
+              value={roomQuery}
+              onChange={(event) => setRoomQuery(event.target.value)}
+              className={`w-full border rounded p-2 text-sm ${activeTheme.input}`}
+              placeholder="Search room names..."
+            />
+            {roomSuggestions.length > 0 ? (
+              <ul className={`max-h-36 overflow-auto border rounded divide-y text-xs ${activeTheme.panel}`}>
+                {roomSuggestions.map((room) => (
+                  <li key={String(room._id)}>
                     <button
                       type="button"
-                      onClick={() => setActiveConversationId(String(conversation._id))}
-                      className={`w-full text-left border rounded px-2 py-2 text-sm ${selected ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
+                      onClick={() => selectRoomSuggestion(room)}
+                      className="w-full text-left p-2 hover:opacity-80"
                     >
-                      <div className="font-medium">{getConversationLabel(conversation)}</div>
-                      {conversation.lastMessageAt ? (
-                        <div className="text-xs text-gray-500">Last active {new Date(conversation.lastMessageAt).toLocaleString()}</div>
-                      ) : null}
+                      {room.__label || getConversationLabel(room)}
                     </button>
                   </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+                ))}
+              </ul>
+            ) : null}
+          </div>
 
-        <section className="lg:col-span-5 border rounded p-3 space-y-3">
-          <h3 className="font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a conversation'}</h3>
+          <div className="border-t pt-3 space-y-2">
+            <label className="text-xs font-semibold block">Find Users (DM)</label>
+            <input
+              value={dmQuery}
+              onChange={(event) => setDmQuery(event.target.value)}
+              className={`w-full border rounded p-2 text-sm ${activeTheme.input}`}
+              placeholder="Search username or name..."
+            />
+            {dmSearchLoading ? (
+              <p className="text-xs opacity-80">Searching users...</p>
+            ) : null}
+            {dmSuggestions.length > 0 ? (
+              <ul className={`max-h-40 overflow-auto border rounded divide-y text-xs ${activeTheme.panel}`}>
+                {dmSuggestions.map((user) => (
+                  <li key={String(user._id)} className="p-2 flex justify-between items-center gap-2">
+                    <span>@{user.username || user.realName || 'user'}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleStartDM(user._id)}
+                      className={`border rounded px-2 py-1 ${activeTheme.subtle}`}
+                    >
+                      Start DM
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
+          <div className="border-t pt-3 space-y-2">
+            <p className="text-xs font-semibold">Rooms in this channel</p>
+            {conversationList.length === 0 ? (
+              <p className="text-xs opacity-80">No rooms available in this channel yet.</p>
+            ) : (
+              <ul className="space-y-2 max-h-52 overflow-auto pr-1">
+                {conversationList.map((conversation) => {
+                  const selected = String(conversation._id) === String(activeConversationId);
+                  return (
+                    <li key={String(conversation._id)}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveConversationId(String(conversation._id))}
+                        className={`w-full text-left border rounded px-2 py-2 text-sm ${selected ? activeTheme.subtle : ''}`}
+                      >
+                        <div className="font-medium">{getConversationLabel(conversation)}</div>
+                        {conversation.lastMessageAt ? (
+                          <div className="text-xs opacity-80">Last active {new Date(conversation.lastMessageAt).toLocaleString()}</div>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </aside>
+
+        <section className={`lg:col-span-6 border rounded p-3 space-y-3 ${activeTheme.panel}`}>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
+            <div className="text-xs opacity-80">Guided Flow: 1) Channel 2) Room 3) Chat</div>
+          </div>
           {messagesError ? (
             <div className="text-sm bg-red-50 border border-red-200 text-red-700 rounded p-2">{messagesError}</div>
           ) : null}
 
-          <div className="max-h-[420px] overflow-y-auto border rounded p-2 bg-gray-50 space-y-2">
+          <div className={`max-h-[460px] overflow-y-auto border rounded p-2 space-y-2 ${activeTheme.messages}`}>
             {messagesLoading ? (
-              <p className="text-sm text-gray-500">Loading messages...</p>
+              <p className="text-sm opacity-80">Loading messages...</p>
             ) : messages.length === 0 ? (
-              <p className="text-sm text-gray-500">No messages yet.</p>
+              <p className="text-sm opacity-80">No messages yet.</p>
             ) : (
               messages.map((message) => (
                 <div key={String(message._id)} className="text-sm">
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs opacity-80">
                     @{message.userId?.username || message.userId?.realName || 'user'} · {new Date(message.createdAt).toLocaleString()}
                   </div>
-                  <div className="text-gray-900 whitespace-pre-wrap">{message.content}</div>
+                  <div className="whitespace-pre-wrap">{message.content}</div>
                 </div>
               ))
             )}
@@ -338,7 +519,7 @@ function Chat() {
           <form onSubmit={handleSend} className="flex gap-2">
             <input
               type="text"
-              className="flex-1 border rounded p-2"
+              className={`flex-1 border rounded p-2 ${activeTheme.input}`}
               value={composerValue}
               onChange={(event) => setComposerValue(event.target.value)}
               maxLength={2000}
@@ -348,12 +529,36 @@ function Chat() {
             <button
               type="submit"
               disabled={!activeConversationId || !composerValue.trim() || sending}
-              className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
+              className={`rounded px-4 py-2 disabled:opacity-50 ${activeTheme.accent}`}
             >
               {sending ? 'Sending...' : 'Send'}
             </button>
           </form>
         </section>
+
+        <aside className={`lg:col-span-3 border rounded p-3 space-y-2 ${activeTheme.panel}`}>
+          <h3 className="font-semibold">Users in Room</h3>
+          {activeConversation ? (
+            <p className="text-xs opacity-80">{getConversationLabel(activeConversation)}</p>
+          ) : (
+            <p className="text-xs opacity-80">Select a room to view users.</p>
+          )}
+          <div className="border rounded max-h-[460px] overflow-auto">
+            {roomUsersLoading ? (
+              <p className="text-xs p-2 opacity-80">Loading users...</p>
+            ) : roomUsers.length === 0 ? (
+              <p className="text-xs p-2 opacity-80">No users to display.</p>
+            ) : (
+              <ul className="divide-y">
+                {roomUsers.map((user) => (
+                  <li key={String(user._id)} className="p-2 text-sm">
+                    @{user.username || user.realName || 'user'}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   );

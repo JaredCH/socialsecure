@@ -187,4 +187,39 @@ describe('Unified chat hub routes', () => {
     expect(response.body.conversation.type).toBe('profile-thread');
     expect(response.body.conversation._id).toBe('profile-thread-1');
   });
+
+  it('lists users for an accessible zip conversation', async () => {
+    const app = buildApp();
+    mockChatConversation.findById.mockResolvedValue({
+      _id: 'conv-zip',
+      type: 'zip-room',
+      title: 'Zip 02115',
+      participants: []
+    });
+    mockConversationMessage.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue([{ userId: '507f1f77bcf86cd799439022' }])
+          })
+        })
+      })
+    });
+    mockUser.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          { _id: '507f1f77bcf86cd799439022', username: 'buddy', realName: 'Buddy' }
+        ])
+      })
+    });
+
+    const response = await request(app)
+      .get('/api/chat/conversations/conv-zip/users')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.users).toEqual([
+      { _id: '507f1f77bcf86cd799439022', username: 'buddy', realName: 'Buddy' }
+    ]);
+  });
 });
