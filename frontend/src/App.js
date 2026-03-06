@@ -13,6 +13,7 @@ import News from './pages/News';
 import Maps from './pages/Maps';
 import Discovery from './pages/Discovery';
 import Calendar from './pages/Calendar';
+import ResumeBuilder from './pages/ResumeBuilder';
 import OnboardingPage from './pages/OnboardingPage';
 import PostRegistrationWelcome from './pages/PostRegistrationWelcome';
 import SecurityCenter from './pages/SecurityCenter';
@@ -375,6 +376,7 @@ function App() {
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600">Maps</Link>}
               <Link to="/calendar" className="text-gray-600 hover:text-blue-600">Calendar</Link>
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/security" className="text-gray-600 hover:text-blue-600">Security</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/resume" className="text-gray-600 hover:text-blue-600">Resume</Link>}
               {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && <Link to="/moderation" className="text-gray-600 hover:text-blue-600">Moderation</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && (
@@ -510,6 +512,18 @@ function App() {
             )} />
             <Route path="/profile" element={<Navigate to="/settings" replace />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route
+              path="/resume"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                >
+                  <ResumeBuilder />
+                </ProtectedRoute>
+              )}
+            />
             <Route
               path="/security"
               element={(
