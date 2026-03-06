@@ -5,7 +5,9 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const TopFriend = require('../models/TopFriend');
+const Presence = require('../models/Presence');
 const { createNotification } = require('../services/notifications');
+const { buildPresencePayload, getPresenceMapForUsers } = require('../services/realtime');
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -363,11 +365,23 @@ router.post('/:id/block', authenticateToken, async (req, res) => {
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const friends = await Friendship.getFriends(req.user._id);
+    const friendIds = friends.map((friend) => friend._id);
+
+    const [presenceMap, friendUsers] = await Promise.all([
+      getPresenceMapForUsers(friendIds),
+      User.find({ _id: { $in: friendIds } }).select('_id realtimePreferences').lean()
+    ]);
+
+    const friendUserMap = new Map(friendUsers.map((entry) => [String(entry._id), entry]));
+    const friendsWithPresence = friends.map((friend) => ({
+      ...friend,
+      presence: buildPresencePayload(friend._id, presenceMap.get(String(friend._id)), friendUserMap.get(String(friend._id))?.realtimePreferences)
+    }));
     
     res.json({
       success: true,
-      friends,
-      count: friends.length
+      friends: friendsWithPresence,
+      count: friendsWithPresence.length
     });
   } catch (error) {
     console.error('Error getting friends:', error);

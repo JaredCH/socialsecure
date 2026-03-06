@@ -31,6 +31,48 @@ api.interceptors.response.use(
 );
 
 // Auth API
+export const REGISTER_PASSWORD_REQUIREMENTS = [
+  {
+    id: 'minLength',
+    label: 'At least 8 characters',
+    validator: (password) => password.length >= 8
+  },
+  {
+    id: 'upperLower',
+    label: 'Includes uppercase and lowercase letters',
+    validator: (password) => /[a-z]/.test(password) && /[A-Z]/.test(password)
+  },
+  {
+    id: 'number',
+    label: 'Includes at least one number',
+    validator: (password) => /\d/.test(password)
+  }
+];
+
+const PASSWORD_STRENGTH_LABELS = ['Weak', 'Fair', 'Good', 'Strong'];
+
+export const evaluateRegisterPassword = (password = '') => {
+  const requirementChecks = REGISTER_PASSWORD_REQUIREMENTS.map((requirement) => ({
+    ...requirement,
+    met: requirement.validator(password)
+  }));
+
+  const metCount = requirementChecks.filter((requirement) => requirement.met).length;
+  let strengthScore = 0;
+  if (metCount >= 1) strengthScore = 1;
+  if (metCount >= 2) strengthScore = 2;
+  if (metCount === REGISTER_PASSWORD_REQUIREMENTS.length && password.length >= 12) {
+    strengthScore = 3;
+  }
+
+  return {
+    requirementChecks,
+    allRequirementsMet: requirementChecks.every((requirement) => requirement.met),
+    strengthScore,
+    strengthLabel: PASSWORD_STRENGTH_LABELS[strengthScore]
+  };
+};
+
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
@@ -76,6 +118,10 @@ export const feedAPI = {
   likePost: (postId) => api.post(`/feed/post/${postId}/like`),
   unlikePost: (postId) => api.delete(`/feed/post/${postId}/like`),
   addComment: (postId, content) => api.post(`/feed/post/${postId}/comment`, { content }),
+  votePoll: (postId, optionIndexes) => api.post(`/feed/post/${postId}/vote`, { optionIndexes }),
+  submitQuizAnswer: (postId, optionIndex) => api.post(`/feed/post/${postId}/quiz-answer`, { optionIndex }),
+  followCountdown: (postId) => api.post(`/feed/post/${postId}/countdown-follow`),
+  getInteraction: (postId) => api.get(`/feed/post/${postId}/interaction`),
   getTimeline: (page = 1, limit = 20) => 
     api.get(`/feed/timeline?page=${page}&limit=${limit}`),
   getPost: (postId) => api.get(`/feed/post/${postId}`),
@@ -112,6 +158,8 @@ export const galleryAPI = {
 
 // Chat API
 export const chatAPI = {
+  getNearbyRooms: (latitude, longitude, radius = 50) =>
+    api.get(`/chat/rooms/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`),
   getRoom: (roomId, page = 1, limit = 500) =>
     api.get(`/chat/rooms/${roomId}?page=${page}&limit=${limit}`),
   sendMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages`, data),
@@ -167,8 +215,14 @@ export const chatAPI = {
   leaveRoom: (roomId) => api.post(`/chat/rooms/${roomId}/leave`),
   getRoomUsers: (roomId) => api.get(`/chat/rooms/${roomId}/users`),
   syncLocationRooms: () => api.post('/chat/rooms/sync-location'),
-  getNearbyRooms: (latitude, longitude, radius = 50) =>
-    api.get(`/chat/rooms/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`),
+  getNearbyZipRooms: (zipCode) => api.get(`/chat/zip/nearby?zipCode=${encodeURIComponent(zipCode)}`),
+  getConversations: () => api.get('/chat/conversations'),
+  getConversationMessages: (conversationId, page = 1, limit = 50) =>
+    api.get(`/chat/conversations/${conversationId}/messages?page=${page}&limit=${limit}`),
+  sendConversationMessage: (conversationId, content) =>
+    api.post(`/chat/conversations/${conversationId}/messages`, { content }),
+  startDM: (targetUserId) => api.post('/chat/dm/start', { targetUserId }),
+  getProfileThread: (userId) => api.get(`/chat/profile/${encodeURIComponent(userId)}/thread`),
 };
 
 // Location API
@@ -250,6 +304,8 @@ export const universalAPI = {
   resendInvitation: (id) => api.post(`/universal/invitations/${id}/resend`),
   // Revoke invitation
   revokeInvitation: (id, reason = '') => api.post(`/universal/invitations/${id}/revoke`, { reason }),
+  // Qualify and reward invitation
+  qualifyInvitation: (id) => api.post(`/universal/invitations/${id}/qualify`),
   // Register by referral code
   registerByCode: (data) => api.post('/universal/register-by-code', data),
 };
@@ -331,6 +387,8 @@ export const discoveryAPI = {
 export const newsAPI = {
   // Get personalized news feed
   getFeed: (params = {}) => api.get('/news/feed', { params }),
+  // Get promoted news ranked by viral potential
+  getPromoted: (params = {}) => api.get('/news/promoted', { params }),
   // Get available RSS sources
   getSources: () => api.get('/news/sources'),
   // Add new RSS source

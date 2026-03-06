@@ -61,6 +61,30 @@ const articleSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  viralScore: {
+    type: Number,
+    default: 0,
+    index: true
+  },
+  viralScoreVersion: {
+    type: String,
+    default: 'v1'
+  },
+  viralSignals: {
+    freshness: { type: Number, default: 0 },
+    urgencyTerms: { type: Number, default: 0 },
+    sentimentIntensity: { type: Number, default: 0 },
+    sourceMomentum: { type: Number, default: 0 },
+    shareCueTerms: { type: Number, default: 0 }
+  },
+  isPromoted: {
+    type: Boolean,
+    default: false
+  },
+  lastScoredAt: {
+    type: Date,
+    default: null
+  },
   localityLevel: {
     type: String,
     enum: ['city', 'county', 'state', 'country', 'global'],
@@ -80,6 +104,7 @@ articleSchema.index({ topics: 1, publishedAt: -1 });
 articleSchema.index({ locations: 1, publishedAt: -1 });
 articleSchema.index({ sourceType: 1, publishedAt: -1 });
 articleSchema.index({ normalizedUrlHash: 1 });
+articleSchema.index({ isActive: 1, isPromoted: 1, viralScore: -1, publishedAt: -1 });
 
 // Pre-save hook to generate normalized URL hash
 articleSchema.pre('save', function(next) {

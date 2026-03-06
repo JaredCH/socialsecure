@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const Post = require('../models/Post');
 const User = require('../models/User');
@@ -8,11 +9,18 @@ const Friendship = require('../models/Friendship');
 const BlockList = require('../models/BlockList');
 const MuteList = require('../models/MuteList');
 const { createNotification } = require('../services/notifications');
+const { emitFeedInteraction, emitFeedPost } = require('../services/realtime');
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
 const VALID_VISIBILITY = ['public', 'friends', 'circles', 'specific_users', 'private'];
+const interactionRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: { error: 'Too many interaction requests, please slow down.' },
+  keyGenerator: (req) => String(req?.user?.userId || req.ip || req.socket?.remoteAddress || 'unknown')
+});
 
 const parseViewerCoordinates = (req) => {
   const latitude = Number.parseFloat(req.query.latitude);
@@ -72,6 +80,20 @@ const extractMentions = (content = '') => {
     usernames.add(mention.slice(1).toLowerCase());
   }
   return [...usernames];
+};
+
+const buildRealtimeAudience = async (...seedUserIds) => {
+  const normalizedSeedIds = [...new Set(seedUserIds.map((value) => String(value || '').trim()).filter(Boolean))];
+  const audience = new Set(normalizedSeedIds);
+
+  await Promise.all(normalizedSeedIds.map(async (seedUserId) => {
+    const friendIds = await getFriendIds(seedUserId);
+    for (const friendId of friendIds) {
+      audience.add(String(friendId));
+    }
+  }));
+
+  return [...audience];
 };
 
 const canViewerSeePost = (post, viewerId, friendIds, viewerCoordinates = null) => {
@@ -150,6 +172,327 @@ const sanitizeAndValidateMediaUrls = (mediaUrlsInput) => {
     mediaUrls: sanitized
   };
 };
+
+const sanitizeInteractionOptions = (optionsInput) => {
+  if (!Array.isArray(optionsInput)) {
+    return { ok: false, error: 'options must be an array' };
+  }
+
+  const options = [];
+  for (let i = 0; i < optionsInput.length; i += 1) {
+    const value = String(optionsInput[i] ?? '').trim();
+    if (!value) {
+      return { ok: false, error: `options[${i}] is required` };
+    }
+    if (value.length > INTERACTION_MAX_OPTION_LENGTH) {
+      return { ok: false, error: `options[${i}] exceeds ${INTERACTION_MAX_OPTION_LENGTH} characters` };
+    }
+    options.push(value);
+  }
+
+  if (options.length < 2) {
+    return { ok: false, error: 'at least two options are required' };
+  }
+  if (options.length > INTERACTION_MAX_OPTIONS) {
+    return { ok: false, error: `no more than ${INTERACTION_MAX_OPTIONS} options are allowed` };
+  }
+
+  return { ok: true, options };
+};
+
+const parseFutureDate = (value) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+};
+
+const sanitizeInteractionPayload = (interactionInput) => {
+  if (interactionInput === undefined || interactionInput === null) {
+    return { ok: true, interaction: null };
+  }
+  if (typeof interactionInput !== 'object' || Array.isArray(interactionInput)) {
+    return { ok: false, error: 'interaction must be an object' };
+  }
+
+  const type = String(interactionInput.type || '').trim().toLowerCase();
+  if (!VALID_INTERACTION_TYPES.includes(type)) {
+    return { ok: false, error: 'interaction type must be poll, quiz, or countdown' };
+  }
+
+  const statusInput = interactionInput.status ? String(interactionInput.status).trim().toLowerCase() : 'active';
+  if (!VALID_INTERACTION_STATUS.includes(statusInput)) {
+    return { ok: false, error: 'interaction status must be active, closed, or expired' };
+  }
+
+  if (type === 'poll') {
+    const question = String(interactionInput.question || '').trim();
+    if (!question) {
+      return { ok: false, error: 'poll question is required' };
+    }
+    if (question.length > INTERACTION_MAX_QUESTION_LENGTH) {
+      return { ok: false, error: `poll question exceeds ${INTERACTION_MAX_QUESTION_LENGTH} characters` };
+    }
+    const optionsResult = sanitizeInteractionOptions(interactionInput.options);
+    if (!optionsResult.ok) {
+      return { ok: false, error: `poll ${optionsResult.error}` };
+    }
+
+    const expiresAt = parseFutureDate(interactionInput.expiresAt);
+    if (!expiresAt || expiresAt.getTime() <= Date.now()) {
+      return { ok: false, error: 'poll expiresAt must be a future timestamp' };
+    }
+
+    return {
+      ok: true,
+      interaction: {
+        type: 'poll',
+        status: statusInput,
+        expiresAt,
+        poll: {
+          question,
+          options: optionsResult.options,
+          allowMultiple: Boolean(interactionInput.allowMultiple)
+        }
+      }
+    };
+  }
+
+  if (type === 'quiz') {
+    const question = String(interactionInput.question || '').trim();
+    if (!question) {
+      return { ok: false, error: 'quiz question is required' };
+    }
+    if (question.length > INTERACTION_MAX_QUESTION_LENGTH) {
+      return { ok: false, error: `quiz question exceeds ${INTERACTION_MAX_QUESTION_LENGTH} characters` };
+    }
+
+    const optionsResult = sanitizeInteractionOptions(interactionInput.options);
+    if (!optionsResult.ok) {
+      return { ok: false, error: `quiz ${optionsResult.error}` };
+    }
+
+    const correctOptionIndex = Number.parseInt(interactionInput.correctOptionIndex, 10);
+    if (!Number.isInteger(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex >= optionsResult.options.length) {
+      return { ok: false, error: 'quiz correctOptionIndex is out of bounds' };
+    }
+
+    const explanation = String(interactionInput.explanation || '').trim();
+    if (explanation.length > INTERACTION_MAX_EXPLANATION_LENGTH) {
+      return { ok: false, error: `quiz explanation exceeds ${INTERACTION_MAX_EXPLANATION_LENGTH} characters` };
+    }
+
+    const expiresAt = parseFutureDate(interactionInput.expiresAt);
+    if (!expiresAt || expiresAt.getTime() <= Date.now()) {
+      return { ok: false, error: 'quiz expiresAt must be a future timestamp' };
+    }
+
+    return {
+      ok: true,
+      interaction: {
+        type: 'quiz',
+        status: statusInput,
+        expiresAt,
+        quiz: {
+          question,
+          options: optionsResult.options,
+          correctOptionIndex,
+          explanation
+        }
+      }
+    };
+  }
+
+  const label = String(interactionInput.label || '').trim();
+  if (!label) {
+    return { ok: false, error: 'countdown label is required' };
+  }
+  if (label.length > INTERACTION_MAX_COUNTDOWN_LABEL_LENGTH) {
+    return { ok: false, error: `countdown label exceeds ${INTERACTION_MAX_COUNTDOWN_LABEL_LENGTH} characters` };
+  }
+
+  const timezone = String(interactionInput.timezone || '').trim();
+  if (!timezone) {
+    return { ok: false, error: 'countdown timezone is required' };
+  }
+  if (timezone.length > INTERACTION_MAX_TIMEZONE_LENGTH) {
+    return { ok: false, error: `countdown timezone exceeds ${INTERACTION_MAX_TIMEZONE_LENGTH} characters` };
+  }
+
+  const targetAt = parseFutureDate(interactionInput.targetAt);
+  if (!targetAt || targetAt.getTime() <= Date.now()) {
+    return { ok: false, error: 'countdown targetAt must be a future timestamp' };
+  }
+
+  const linkUrl = String(interactionInput.linkUrl || '').trim();
+  if (linkUrl && !HTTP_URL_REGEX.test(linkUrl)) {
+    return { ok: false, error: 'countdown linkUrl must begin with http:// or https://' };
+  }
+
+  return {
+    ok: true,
+    interaction: {
+      type: 'countdown',
+      status: statusInput,
+      countdown: {
+        label,
+        targetAt,
+        timezone,
+        linkUrl
+      }
+    }
+  };
+};
+
+const getInteractionEffectiveStatus = (interaction) => {
+  if (!interaction?.type) return null;
+  if (interaction.status === 'closed') {
+    return 'closed';
+  }
+
+  const now = Date.now();
+  if (
+    (interaction.expiresAt && new Date(interaction.expiresAt).getTime() <= now)
+    || (interaction.type === 'countdown' && interaction.countdown?.targetAt && new Date(interaction.countdown.targetAt).getTime() <= now)
+  ) {
+    return 'expired';
+  }
+
+  return interaction.status || 'active';
+};
+
+const buildInteractionState = (post, userId = null) => {
+  if (!post?.interaction?.type) return null;
+
+  const interaction = post.interaction.toObject ? post.interaction.toObject() : { ...post.interaction };
+  const responses = post.interactionResponses || {};
+  const viewerId = userId ? String(userId) : '';
+  const status = getInteractionEffectiveStatus(interaction);
+
+  if (interaction.type === 'poll') {
+    const options = Array.isArray(interaction.poll?.options) ? interaction.poll.options : [];
+    const votes = Array.isArray(responses.pollVotes) ? responses.pollVotes : [];
+    const optionVoteCounts = Array.from({ length: options.length }, () => 0);
+    let viewerSelection = [];
+
+    votes.forEach((vote) => {
+      const indexes = Array.isArray(vote.optionIndexes) ? vote.optionIndexes : [];
+      indexes.forEach((index) => {
+        if (Number.isInteger(index) && index >= 0 && index < optionVoteCounts.length) {
+          optionVoteCounts[index] += 1;
+        }
+      });
+      if (viewerId && String(vote.userId) === viewerId) {
+        viewerSelection = indexes.filter((index) => Number.isInteger(index));
+      }
+    });
+
+    return {
+      type: 'poll',
+      status,
+      expiresAt: interaction.expiresAt || null,
+      poll: {
+        question: interaction.poll?.question || '',
+        allowMultiple: Boolean(interaction.poll?.allowMultiple),
+        options: options.map((label, index) => ({
+          index,
+          label,
+          votes: optionVoteCounts[index]
+        }))
+      },
+      totals: {
+        submissions: votes.length
+      },
+      viewer: {
+        hasSubmitted: viewerSelection.length > 0,
+        selection: viewerSelection
+      }
+    };
+  }
+
+  if (interaction.type === 'quiz') {
+    const options = Array.isArray(interaction.quiz?.options) ? interaction.quiz.options : [];
+    const answers = Array.isArray(responses.quizAnswers) ? responses.quizAnswers : [];
+    const answerCounts = Array.from({ length: options.length }, () => 0);
+    let viewerAnswer = null;
+
+    answers.forEach((answer) => {
+      const index = Number(answer.optionIndex);
+      if (Number.isInteger(index) && index >= 0 && index < answerCounts.length) {
+        answerCounts[index] += 1;
+      }
+      if (viewerId && String(answer.userId) === viewerId) {
+        viewerAnswer = {
+          optionIndex: index,
+          isCorrect: Boolean(answer.isCorrect)
+        };
+      }
+    });
+
+    return {
+      type: 'quiz',
+      status,
+      expiresAt: interaction.expiresAt || null,
+      quiz: {
+        question: interaction.quiz?.question || '',
+        options: options.map((label, index) => ({
+          index,
+          label,
+          answers: answerCounts[index]
+        })),
+        correctOptionIndex: interaction.quiz?.correctOptionIndex,
+        explanation: interaction.quiz?.explanation || ''
+      },
+      totals: {
+        submissions: answers.length
+      },
+      viewer: {
+        hasSubmitted: viewerAnswer !== null,
+        answer: viewerAnswer
+      }
+    };
+  }
+
+  const followers = Array.isArray(responses.countdownFollowers) ? responses.countdownFollowers : [];
+  const isFollowing = viewerId
+    ? followers.some((entry) => String(entry.userId) === viewerId)
+    : false;
+
+  return {
+    type: 'countdown',
+    status,
+    countdown: {
+      label: interaction.countdown?.label || '',
+      targetAt: interaction.countdown?.targetAt || null,
+      timezone: interaction.countdown?.timezone || '',
+      linkUrl: interaction.countdown?.linkUrl || ''
+    },
+    totals: {
+      followers: followers.length
+    },
+    viewer: {
+      isFollowing
+    }
+  };
+};
+
+const interactionSubmissionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many interaction submissions, please try again shortly.' }
+});
+
+const interactionReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many interaction requests, please try again shortly.' }
+});
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -244,7 +587,8 @@ router.post('/post', [
   body('locationRadius').optional({ nullable: true }).isFloat({ min: 1, max: 1000 }),
   body('expiresAt').optional({ nullable: true }).isISO8601(),
   body('latitude').optional().isFloat({ min: -90, max: 90 }),
-  body('longitude').optional().isFloat({ min: -180, max: 180 })
+  body('longitude').optional().isFloat({ min: -180, max: 180 }),
+  body('interaction').optional()
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -264,7 +608,8 @@ router.post('/post', [
       expiresAt,
       latitude,
       longitude,
-      mediaUrls: mediaUrlsInput
+      mediaUrls: mediaUrlsInput,
+      interaction: interactionInput
     } = req.body;
     const authorId = String(req.user.userId || '');
     const normalizedTargetFeedId = String(targetFeedId || '');
@@ -285,6 +630,14 @@ router.post('/post', [
       return res.status(400).json({
         error: mediaUrlsValidation.error,
         field: 'mediaUrls'
+      });
+    }
+
+    const interactionValidation = sanitizeInteractionPayload(interactionInput);
+    if (!interactionValidation.ok) {
+      return res.status(400).json({
+        error: interactionValidation.error,
+        field: 'interaction'
       });
     }
     
@@ -367,7 +720,8 @@ router.post('/post', [
       excludeUsers: normalizedExcludeUsers,
       locationRadius: Number.isFinite(Number(locationRadius)) ? Number(locationRadius) : null,
       expiresAt: normalizedExpiresAt,
-      mediaUrls: mediaUrlsValidation.mediaUrls
+      mediaUrls: mediaUrlsValidation.mediaUrls,
+      interaction: interactionValidation.interaction
     };
     
     // Add location if provided
@@ -384,6 +738,12 @@ router.post('/post', [
     // Populate author and target user info
     await post.populate('authorId', 'username realName');
     await post.populate('targetFeedId', 'username realName');
+
+    const audienceUserIds = await buildRealtimeAudience(authorId, normalizedTargetFeedId);
+    emitFeedPost({
+      userIds: audienceUserIds,
+      post
+    });
     
     res.status(201).json({
       success: true,
@@ -425,7 +785,7 @@ router.delete('/post/:postId', authenticateToken, async (req, res) => {
 });
 
 // Like a post
-router.post('/post/:postId/like', authenticateToken, async (req, res) => {
+router.post('/post/:postId/like', interactionRateLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = req.user.userId;
@@ -459,6 +819,18 @@ router.post('/post/:postId/like', authenticateToken, async (req, res) => {
         }
       });
     }
+
+    const audienceUserIds = await buildRealtimeAudience(post.authorId, post.targetFeedId, userId);
+    emitFeedInteraction({
+      userIds: audienceUserIds,
+      interaction: {
+        type: 'like',
+        postId: String(post._id),
+        actorId: String(userId),
+        likesCount: post.likes.length,
+        commentsCount: post.comments.length
+      }
+    });
     
     res.json({
       success: true,
@@ -472,7 +844,7 @@ router.post('/post/:postId/like', authenticateToken, async (req, res) => {
 });
 
 // Unlike a post
-router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
+router.delete('/post/:postId/like', interactionRateLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = req.user.userId;
@@ -483,11 +855,23 @@ router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
     }
     
     await post.removeLike(userId);
+
+    const audienceUserIds = await buildRealtimeAudience(post.authorId, post.targetFeedId, userId);
+    emitFeedInteraction({
+      userIds: audienceUserIds,
+      interaction: {
+        type: 'unlike',
+        postId: String(post._id),
+        actorId: String(userId),
+        likesCount: post.likes.length,
+        commentsCount: post.comments.length
+      }
+    });
     
     res.json({
       success: true,
       message: 'Post unliked',
-      likesCount: post.likes.length
+      likesCount
     });
   } catch (error) {
     console.error('Error unliking post:', error);
@@ -497,6 +881,7 @@ router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
 
 // Add comment to post
 router.post('/post/:postId/comment', [
+  interactionRateLimiter,
   authenticateToken,
   body('content').trim().notEmpty().withMessage('Comment content is required').isLength({ max: 1000 }).withMessage('Comment too long')
 ], async (req, res) => {
@@ -565,6 +950,25 @@ router.post('/post/:postId/comment', [
         });
       }
     }
+
+    const audienceUserIds = await buildRealtimeAudience(post.authorId, post.targetFeedId, userId);
+    emitFeedInteraction({
+      userIds: audienceUserIds,
+      interaction: {
+        type: 'comment',
+        postId: String(post._id),
+        actorId: String(userId),
+        likesCount: post.likes.length,
+        commentsCount: post.comments.length,
+        comment: {
+          _id: newComment?._id,
+          userId: String(newComment?.userId || userId),
+          username: actor?.username || actor?.realName || 'user',
+          content: newComment?.content || content,
+          createdAt: newComment?.createdAt || new Date().toISOString()
+        }
+      }
+    });
     
     res.status(201).json({
       success: true,
@@ -575,6 +979,221 @@ router.post('/post/:postId/comment', [
   } catch (error) {
     console.error('Error adding comment:', error);
     res.status(500).json({ error: 'Failed to add comment', details: error.message });
+  }
+});
+
+router.post('/post/:postId/vote', interactionSubmissionLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = String(req.user.userId);
+    const post = await Post.findById(postId).select('+interactionResponses');
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    const friendIds = await getFriendIds(userId);
+    if (!canViewerSeePost(post, userId, friendIds, null)) {
+      return res.status(403).json({ error: 'Cannot vote on this post' });
+    }
+
+    if (post.interaction?.type !== 'poll') {
+      return res.status(400).json({ error: 'This post does not contain a poll interaction' });
+    }
+
+    const effectiveStatus = getInteractionEffectiveStatus(post.interaction);
+    if (effectiveStatus !== 'active') {
+      post.interaction.status = effectiveStatus;
+      await post.save();
+      return res.status(409).json({ error: 'Poll interaction is no longer accepting votes' });
+    }
+
+    const pollOptions = Array.isArray(post.interaction.poll?.options) ? post.interaction.poll.options : [];
+    const rawOptionIndexes = Array.isArray(req.body.optionIndexes)
+      ? req.body.optionIndexes
+      : [req.body.optionIndex];
+    const optionIndexes = [...new Set(
+      rawOptionIndexes
+        .map((value) => Number.parseInt(value, 10))
+        .filter((index) => Number.isInteger(index))
+    )];
+
+    if (optionIndexes.length === 0) {
+      return res.status(400).json({ error: 'At least one option index is required' });
+    }
+
+    if (!post.interaction.poll?.allowMultiple && optionIndexes.length > 1) {
+      return res.status(400).json({ error: 'Poll does not allow selecting multiple options' });
+    }
+
+    if (optionIndexes.some((index) => index < 0 || index >= pollOptions.length)) {
+      return res.status(400).json({ error: 'One or more option indexes are invalid' });
+    }
+
+    post.interactionResponses = post.interactionResponses || { pollVotes: [], quizAnswers: [], countdownFollowers: [] };
+    const pollVotes = Array.isArray(post.interactionResponses.pollVotes) ? post.interactionResponses.pollVotes : [];
+    if (pollVotes.some((entry) => String(entry.userId) === userId)) {
+      return res.status(409).json({ error: 'You have already voted on this poll' });
+    }
+
+    pollVotes.push({
+      userId,
+      optionIndexes,
+      createdAt: new Date()
+    });
+    post.interactionResponses.pollVotes = pollVotes;
+    await post.save();
+
+    return res.json({
+      success: true,
+      interaction: buildInteractionState(post, userId)
+    });
+  } catch (error) {
+    console.error('Error submitting poll vote:', error);
+    return res.status(500).json({ error: 'Failed to submit poll vote', details: error.message });
+  }
+});
+
+router.post('/post/:postId/quiz-answer', interactionSubmissionLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = String(req.user.userId);
+    const post = await Post.findById(postId).select('+interactionResponses');
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    const friendIds = await getFriendIds(userId);
+    if (!canViewerSeePost(post, userId, friendIds, null)) {
+      return res.status(403).json({ error: 'Cannot answer this quiz' });
+    }
+
+    if (post.interaction?.type !== 'quiz') {
+      return res.status(400).json({ error: 'This post does not contain a quiz interaction' });
+    }
+
+    const effectiveStatus = getInteractionEffectiveStatus(post.interaction);
+    if (effectiveStatus !== 'active') {
+      post.interaction.status = effectiveStatus;
+      await post.save();
+      return res.status(409).json({ error: 'Quiz interaction is no longer accepting answers' });
+    }
+
+    const quizOptions = Array.isArray(post.interaction.quiz?.options) ? post.interaction.quiz.options : [];
+    const optionIndex = Number.parseInt(req.body.optionIndex, 10);
+    if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= quizOptions.length) {
+      return res.status(400).json({ error: 'Invalid quiz option index' });
+    }
+
+    post.interactionResponses = post.interactionResponses || { pollVotes: [], quizAnswers: [], countdownFollowers: [] };
+    const quizAnswers = Array.isArray(post.interactionResponses.quizAnswers) ? post.interactionResponses.quizAnswers : [];
+    if (quizAnswers.some((entry) => String(entry.userId) === userId)) {
+      return res.status(409).json({ error: 'Quiz answer already submitted and locked' });
+    }
+
+    const isCorrect = optionIndex === Number(post.interaction.quiz?.correctOptionIndex);
+    quizAnswers.push({
+      userId,
+      optionIndex,
+      isCorrect,
+      createdAt: new Date()
+    });
+    post.interactionResponses.quizAnswers = quizAnswers;
+    await post.save();
+
+    return res.json({
+      success: true,
+      interaction: buildInteractionState(post, userId),
+      result: {
+        isCorrect,
+        explanation: post.interaction.quiz?.explanation || ''
+      }
+    });
+  } catch (error) {
+    console.error('Error submitting quiz answer:', error);
+    return res.status(500).json({ error: 'Failed to submit quiz answer', details: error.message });
+  }
+});
+
+router.post('/post/:postId/countdown-follow', interactionSubmissionLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = String(req.user.userId);
+    const post = await Post.findById(postId).select('+interactionResponses');
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    const friendIds = await getFriendIds(userId);
+    if (!canViewerSeePost(post, userId, friendIds, null)) {
+      return res.status(403).json({ error: 'Cannot follow this countdown' });
+    }
+
+    if (post.interaction?.type !== 'countdown') {
+      return res.status(400).json({ error: 'This post does not contain a countdown interaction' });
+    }
+
+    const effectiveStatus = getInteractionEffectiveStatus(post.interaction);
+    if (effectiveStatus !== 'active') {
+      post.interaction.status = effectiveStatus;
+      await post.save();
+      return res.status(409).json({ error: 'Countdown interaction is no longer active' });
+    }
+
+    post.interactionResponses = post.interactionResponses || { pollVotes: [], quizAnswers: [], countdownFollowers: [] };
+    const followers = Array.isArray(post.interactionResponses.countdownFollowers)
+      ? post.interactionResponses.countdownFollowers
+      : [];
+
+    if (!followers.some((entry) => String(entry.userId) === userId)) {
+      followers.push({
+        userId,
+        createdAt: new Date()
+      });
+      post.interactionResponses.countdownFollowers = followers;
+      await post.save();
+    }
+
+    return res.json({
+      success: true,
+      interaction: buildInteractionState(post, userId)
+    });
+  } catch (error) {
+    console.error('Error following countdown:', error);
+    return res.status(500).json({ error: 'Failed to follow countdown', details: error.message });
+  }
+});
+
+router.get('/post/:postId/interaction', interactionReadLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = String(req.user.userId);
+    const post = await Post.findById(postId).select('+interactionResponses');
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    const friendIds = await getFriendIds(userId);
+    if (!canViewerSeePost(post, userId, friendIds, null)) {
+      return res.status(403).json({ error: 'Cannot view this interaction' });
+    }
+
+    if (!post.interaction?.type) {
+      return res.status(404).json({ error: 'No interaction found for this post' });
+    }
+
+    const effectiveStatus = getInteractionEffectiveStatus(post.interaction);
+    if (effectiveStatus !== post.interaction.status) {
+      post.interaction.status = effectiveStatus;
+      await post.save();
+    }
+
+    return res.json({
+      success: true,
+      interaction: buildInteractionState(post, userId)
+    });
+  } catch (error) {
+    console.error('Error fetching interaction state:', error);
+    return res.status(500).json({ error: 'Failed to fetch interaction state', details: error.message });
   }
 });
 
