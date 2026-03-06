@@ -14,6 +14,7 @@ import News from './pages/News';
 import Maps from './pages/Maps';
 import Discovery from './pages/Discovery';
 import OnboardingPage from './pages/OnboardingPage';
+import PostRegistrationWelcome from './pages/PostRegistrationWelcome';
 import SecurityCenter from './pages/SecurityCenter';
 import ModerationDashboard from './pages/ModerationDashboard';
 import NotificationCenter from './components/NotificationCenter';
@@ -44,6 +45,8 @@ const ProtectedRoute = ({
 };
 
 function App() {
+  const WELCOME_PENDING_KEY = 'postRegistrationWelcomePending';
+  const WELCOME_PROFILE_KEY = 'postRegistrationWelcomeProfile';
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [checkingEncryptionStatus, setCheckingEncryptionStatus] = useState(false);
@@ -65,6 +68,17 @@ function App() {
   });
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [incomingNotification, setIncomingNotification] = useState(null);
+  const [welcomeConfirmationPending, setWelcomeConfirmationPending] = useState(
+    () => sessionStorage.getItem(WELCOME_PENDING_KEY) === 'true'
+  );
+  const [welcomeProfile, setWelcomeProfile] = useState(() => {
+    try {
+      const rawProfile = sessionStorage.getItem(WELCOME_PROFILE_KEY);
+      return rawProfile ? JSON.parse(rawProfile) : null;
+    } catch {
+      return null;
+    }
+  });
   const notificationSocketRef = useRef(null);
 
   const isAuthenticated = useMemo(() => Boolean(localStorage.getItem('token') && user), [user]);
@@ -261,7 +275,11 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    sessionStorage.removeItem(WELCOME_PENDING_KEY);
+    sessionStorage.removeItem(WELCOME_PROFILE_KEY);
     setUser(null);
+    setWelcomeConfirmationPending(false);
+    setWelcomeProfile(null);
     setOnboardingStatus({
       status: 'completed',
       currentStep: 4,
@@ -279,6 +297,24 @@ function App() {
     });
     setUnreadNotificationCount(0);
     setIncomingNotification(null);
+  };
+
+  const handleRegistrationWelcomeRequired = (registeredUser) => {
+    const profile = {
+      realName: registeredUser?.realName || '',
+      username: registeredUser?.username || ''
+    };
+    sessionStorage.setItem(WELCOME_PENDING_KEY, 'true');
+    sessionStorage.setItem(WELCOME_PROFILE_KEY, JSON.stringify(profile));
+    setWelcomeProfile(profile);
+    setWelcomeConfirmationPending(true);
+  };
+
+  const handleWelcomeConfirmed = () => {
+    sessionStorage.removeItem(WELCOME_PENDING_KEY);
+    sessionStorage.removeItem(WELCOME_PROFILE_KEY);
+    setWelcomeConfirmationPending(false);
+    setWelcomeProfile(null);
   };
 
   const handleOnboardingCompleted = async () => {
@@ -358,7 +394,9 @@ function App() {
               path="/"
               element={
                 isAuthenticated
-                  ? onboardingRequired
+                  ? welcomeConfirmationPending
+                    ? <Navigate to="/welcome" replace />
+                    : onboardingRequired
                     ? <Navigate to="/onboarding" replace />
                     : encryptionPasswordRequired
                       ? <Navigate to="/settings" replace />
@@ -367,7 +405,36 @@ function App() {
               }
             />
             <Route path="/login" element={<Login onSuccess={handleAuthSuccess} />} />
-            <Route path="/register" element={<Register onSuccess={handleAuthSuccess} />} />
+            <Route
+              path="/register"
+              element={
+                <Register
+                  onSuccess={handleAuthSuccess}
+                  onWelcomeRequired={handleRegistrationWelcomeRequired}
+                />
+              }
+            />
+            <Route
+              path="/welcome"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  allowWhenOnboardingRequired
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                  allowWhenEncryptionRequired
+                >
+                  {welcomeConfirmationPending ? (
+                    <PostRegistrationWelcome
+                      user={welcomeProfile || user}
+                      onConfirm={handleWelcomeConfirmed}
+                    />
+                  ) : (
+                    <Navigate to={encryptionPasswordRequired ? '/settings' : '/'} replace />
+                  )}
+                </ProtectedRoute>
+              )}
+            />
             <Route
               path="/onboarding"
               element={(
@@ -400,13 +467,17 @@ function App() {
                 encryptionPasswordRequired={encryptionPasswordRequired}
                 allowWhenEncryptionRequired
               >
-                <UserSettings
-                  user={user}
-                  setUser={setUser}
-                  encryptionPasswordStatus={encryptionPasswordStatus}
-                  refreshEncryptionPasswordStatus={refreshEncryptionPasswordStatus}
-                  encryptionPasswordRequired={encryptionPasswordRequired}
-                />
+                {welcomeConfirmationPending ? (
+                  <Navigate to="/welcome" replace />
+                ) : (
+                  <UserSettings
+                    user={user}
+                    setUser={setUser}
+                    encryptionPasswordStatus={encryptionPasswordStatus}
+                    refreshEncryptionPasswordStatus={refreshEncryptionPasswordStatus}
+                    encryptionPasswordRequired={encryptionPasswordRequired}
+                  />
+                )}
               </ProtectedRoute>
             )} />
             <Route path="/profile" element={<Navigate to="/settings" replace />} />
