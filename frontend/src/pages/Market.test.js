@@ -105,4 +105,13 @@ describe('Market listing creation affordance', () => {
     expect(container.textContent).toContain('Pickup / Delivery Details is required');
     expect(marketAPI.createListing).not.toHaveBeenCalled();
   });
+
+  it('shows an image upload field for listings', async () => {
+    await renderMarket();
+    await clickByText('Add a Listing');
+
+    const modal = Array.from(container.querySelectorAll('.fixed.inset-0')).pop();
+    const fileInput = modal.querySelector('input[type="file"]');
+    expect(fileInput).not.toBeNull();
+  });
 });

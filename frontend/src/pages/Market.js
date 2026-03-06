@@ -73,6 +73,8 @@ const ALL_CATEGORY_MAP = CATEGORIES.reduce((acc, cat) => {
 }, {});
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY'];
+const MAX_LISTING_IMAGES = 6;
+const MAX_LISTING_IMAGE_BYTES = 3 * 1024 * 1024;
 const CONDITION_OPTIONS = [
   { value: '', label: 'Select condition' },
   { value: 'new', label: 'New' },
@@ -178,7 +180,8 @@ const emptyListingForm = {
   currency: 'USD',
   externalLink: '',
   additionalDetails: {},
-  images: '',
+  images: [],
+  imageFiles: [],
   city: '',
   state: '',
   country: '',
@@ -403,7 +406,8 @@ function ListingFormModal({ listing, onClose, onSaved }) {
         currency: listing.currency || 'USD',
         externalLink: listing.externalLink || '',
         additionalDetails: normalizeAdditionalDetails(listing.additionalDetails),
-        images: (listing.images || []).join('\n'),
+        images: listing.images || [],
+        imageFiles: [],
         city: listing.city || '',
         state: listing.state || '',
         country: listing.country || '',
@@ -441,10 +445,7 @@ function ListingFormModal({ listing, onClose, onSaved }) {
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setSaving(true);
     try {
-      const images = form.images
-        .split('\n')
-        .map(u => u.trim())
-        .filter(u => /^https?:\/\/.+/.test(u));
+      const hasImageUploads = form.imageFiles && form.imageFiles.length > 0;
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
@@ -453,7 +454,6 @@ function ListingFormModal({ listing, onClose, onSaved }) {
         price: parseFloat(form.price),
         currency: form.currency,
         additionalDetails: normalizeAdditionalDetails(form.additionalDetails),
-        images,
         city: form.city.trim() || undefined,
         state: form.state.trim() || undefined,
         country: form.country.trim() || undefined,
@@ -461,11 +461,27 @@ function ListingFormModal({ listing, onClose, onSaved }) {
         longitude: form.longitude ? parseFloat(form.longitude) : undefined,
       };
       if (form.externalLink.trim()) payload.externalLink = form.externalLink.trim();
+      const shouldIncludeImages = !hasImageUploads && Array.isArray(form.images) && form.images.length > 0;
+      if (shouldIncludeImages) payload.images = form.images;
       let res;
-      if (isEdit) {
-        res = await marketAPI.updateListing(listing._id, payload);
+      if (hasImageUploads) {
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value == null) return;
+          if (key === 'additionalDetails' || key === 'images') {
+            formData.append(key, JSON.stringify(value));
+          } else {
+            formData.append(key, String(value));
+          }
+        });
+        form.imageFiles.forEach(file => formData.append('images', file));
+        res = isEdit
+          ? await marketAPI.updateListing(listing._id, formData)
+          : await marketAPI.createListing(formData);
       } else {
-        res = await marketAPI.createListing(payload);
+        res = isEdit
+          ? await marketAPI.updateListing(listing._id, payload)
+          : await marketAPI.createListing(payload);
       }
       toast.success(isEdit ? 'Listing updated!' : 'Listing created!');
       onSaved(res.data.listing);
@@ -484,6 +500,31 @@ function ListingFormModal({ listing, onClose, onSaved }) {
       () => toast.error('Could not get location')
     );
   };
+
+  const handleImageSelection = (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length > MAX_LISTING_IMAGES) {
+      toast.error(`Please select up to ${MAX_LISTING_IMAGES} images.`);
+      event.target.value = '';
+      setForm(f => ({ ...f, imageFiles: [] }));
+      return;
+    }
+    const oversized = files.find(file => file.size > MAX_LISTING_IMAGE_BYTES);
+    if (oversized) {
+      toast.error(`${oversized.name} exceeds the 3MB limit.`);
+      event.target.value = '';
+      setForm(f => ({ ...f, imageFiles: [] }));
+      return;
+    }
+    setForm(f => ({ ...f, imageFiles: files }));
+  };
+
+  const clearImageSelection = () => {
+    setForm(f => ({ ...f, imageFiles: [] }));
+  };
+
+  const hasExistingImages = Array.isArray(form.images) && form.images.length > 0;
+  const hasNewImages = Array.isArray(form.imageFiles) && form.imageFiles.length > 0;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -618,14 +659,42 @@ function ListingFormModal({ listing, onClose, onSaved }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Image URLs (one per line)</label>
-            <textarea
-              value={form.images}
-              onChange={e => setForm(f => ({ ...f, images: e.target.value }))}
-              rows={3}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Listing Images (optional)</label>
+            {hasExistingImages && (
+              <div className="flex gap-2 overflow-x-auto mb-2">
+                {form.images.map((img, index) => (
+                  <img
+                    key={img}
+                    src={img}
+                    alt={`${form.title || 'Listing'} image ${index + 1}`}
+                    className="h-20 w-28 rounded object-cover flex-shrink-0 border border-gray-200"
+                  />
+                ))}
+              </div>
+            )}
+            {hasExistingImages && hasNewImages && (
+              <p className="text-xs text-amber-600 mb-2">Uploading new images will replace the existing ones.</p>
+            )}
+            {hasNewImages && (
+              <ul className="mb-2 text-xs text-gray-600 space-y-1">
+                {form.imageFiles.map(file => (
+                  <li key={file.name}>{file.name}</li>
+                ))}
+              </ul>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageSelection}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="https://example.com/image1.jpg"
             />
+            {hasNewImages && (
+              <button type="button" onClick={clearImageSelection} className="text-xs text-blue-600 hover:underline mt-2">
+                Clear selected images
+              </button>
+            )}
+            <p className="text-xs text-gray-500 mt-2">PNG, JPG, GIF, WebP, or BMP up to 3MB each. Up to {MAX_LISTING_IMAGES} images.</p>
           </div>
 
           <div>
