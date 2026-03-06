@@ -104,8 +104,9 @@ describe('SocialDesignStudioModal layout studio', () => {
       'guest_lookup',
       expect.objectContaining({
         gridPlacement: { row: 18, col: 0 },
-        order: 1800
+        order: 0
       })
     );
   });
+
 });
