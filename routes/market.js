@@ -96,6 +96,8 @@ const CATEGORY_PARENT_MAP = MARKET_CATEGORIES.reduce((acc, category) => {
 }, {});
 
 const MARKET_CONDITIONS = ['new', 'like_new', 'good', 'fair', 'poor', 'not_applicable'];
+const MAX_DETAIL_KEY_LENGTH = 40;
+const MAX_DETAIL_VALUE_LENGTH = 500;
 
 const sanitizeAdditionalDetails = (details) => {
   if (!details || typeof details !== 'object' || Array.isArray(details)) {
@@ -103,13 +105,13 @@ const sanitizeAdditionalDetails = (details) => {
   }
 
   return Object.entries(details).reduce((acc, [key, value]) => {
-    const normalizedKey = String(key).trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
+    const normalizedKey = String(key).trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, MAX_DETAIL_KEY_LENGTH);
     if (!normalizedKey) return acc;
 
     const normalizedValue = typeof value === 'string' ? value.trim() : String(value || '').trim();
     if (!normalizedValue) return acc;
 
-    acc[normalizedKey] = normalizedValue.slice(0, 500);
+    acc[normalizedKey] = normalizedValue.slice(0, MAX_DETAIL_VALUE_LENGTH);
     return acc;
   }, {});
 };

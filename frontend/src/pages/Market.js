@@ -74,6 +74,7 @@ const ALL_CATEGORY_MAP = CATEGORIES.reduce((acc, cat) => {
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY'];
 const CONDITION_OPTIONS = [
+  { value: '', label: 'Select condition' },
   { value: 'new', label: 'New' },
   { value: 'like_new', label: 'Like New' },
   { value: 'good', label: 'Good' },
@@ -172,7 +173,7 @@ const emptyListingForm = {
   title: '',
   description: '',
   category: '',
-  condition: 'not_applicable',
+  condition: '',
   price: '',
   currency: 'USD',
   externalLink: '',
@@ -397,7 +398,7 @@ function ListingFormModal({ listing, onClose, onSaved }) {
         title: listing.title || '',
         description: listing.description || '',
         category: listing.category || '',
-        condition: listing.condition || 'not_applicable',
+        condition: listing.condition || '',
         price: listing.price != null ? String(listing.price) : '',
         currency: listing.currency || 'USD',
         externalLink: listing.externalLink || '',
