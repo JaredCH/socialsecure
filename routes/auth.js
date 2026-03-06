@@ -8,8 +8,17 @@ const User = require('../models/User');
 const Session = require('../models/Session');
 const SecurityEvent = require('../models/SecurityEvent');
 const DeviceKey = require('../models/DeviceKey');
+const {
+  SOCIAL_THEME_PRESETS,
+  SOCIAL_ACCENT_TOKENS,
+  SOCIAL_SECTION_IDS,
+  SOCIAL_MODULE_IDS,
+  SOCIAL_PRIMARY_SECTION_IDS,
+  THEME_TO_ALLOWED_ACCENTS,
+  normalizeSocialPagePreferences
+} = require('../utils/socialPagePreferences');
 
-const PROFILE_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
+const PROFILE_THEMES = [...SOCIAL_THEME_PRESETS];
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
 const MAX_PGP_PUBLIC_KEY_LENGTH = 20000;
 const PGP_PUBLIC_KEY_BEGIN = '-----BEGIN PGP PUBLIC KEY BLOCK-----';
@@ -1074,7 +1083,55 @@ router.put('/profile', [
     .withMessage('Profile theme must be a string')
     .trim()
     .isIn(PROFILE_THEMES)
-    .withMessage(`Profile theme must be one of: ${PROFILE_THEMES.join(', ')}`)
+    .withMessage(`Profile theme must be one of: ${PROFILE_THEMES.join(', ')}`),
+  body('socialPagePreferences')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('socialPagePreferences must be an object');
+      }
+
+      const normalized = normalizeSocialPagePreferences(value, { strict: true });
+      if (normalized.error) {
+        throw new Error(normalized.error);
+      }
+
+      const requestedTheme = typeof value.themePreset === 'string' ? value.themePreset.trim() : '';
+      if (requestedTheme && !SOCIAL_THEME_PRESETS.includes(requestedTheme)) {
+        throw new Error(`Theme preset must be one of: ${SOCIAL_THEME_PRESETS.join(', ')}`);
+      }
+
+      const requestedAccent = typeof value.accentColorToken === 'string' ? value.accentColorToken.trim() : '';
+      if (requestedAccent && !SOCIAL_ACCENT_TOKENS.includes(requestedAccent)) {
+        throw new Error(`Accent color token must be one of: ${SOCIAL_ACCENT_TOKENS.join(', ')}`);
+      }
+
+      if (requestedTheme && requestedAccent) {
+        const allowedAccents = THEME_TO_ALLOWED_ACCENTS[requestedTheme] || [];
+        if (!allowedAccents.includes(requestedAccent)) {
+          throw new Error(`Accent "${requestedAccent}" is not allowed for theme "${requestedTheme}"`);
+        }
+      }
+
+      const hiddenSections = Array.isArray(value.hiddenSections) ? value.hiddenSections : [];
+      if (hiddenSections.includes('header')) {
+        throw new Error('Header section cannot be hidden');
+      }
+
+      const visiblePrimaryCount = SOCIAL_PRIMARY_SECTION_IDS
+        .filter((sectionId) => !hiddenSections.includes(sectionId))
+        .length;
+      if (visiblePrimaryCount === 0) {
+        throw new Error('At least one primary section must remain visible');
+      }
+
+      const hiddenModules = Array.isArray(value.hiddenModules) ? value.hiddenModules : [];
+      if (hiddenModules.length > SOCIAL_MODULE_IDS.length) {
+        throw new Error('Too many hidden modules');
+      }
+
+      return true;
+    })
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -1095,7 +1152,7 @@ router.put('/profile', [
     }
 
     // Update allowed fields
-    const { realName, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme } = req.body;
+    const { realName, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme, socialPagePreferences } = req.body;
     if (realName) user.realName = realName;
     if (city) user.city = city;
     if (state) user.state = state;
@@ -1115,6 +1172,26 @@ router.put('/profile', [
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'profileTheme')) {
       user.profileTheme = profileTheme || 'default';
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'socialPagePreferences')) {
+      const normalizedSocialPreferences = normalizeSocialPagePreferences(socialPagePreferences, {
+        profileTheme: user.profileTheme || 'default',
+        strict: true
+      });
+      if (normalizedSocialPreferences.error || !normalizedSocialPreferences.value) {
+        return res.status(400).json({ error: normalizedSocialPreferences.error || 'Invalid social page preferences' });
+      }
+      user.socialPagePreferences = normalizedSocialPreferences.value;
+
+      await logSecurityEvent({
+        userId: user._id,
+        eventType: 'social_customization_saved',
+        req,
+        metadata: {
+          themePreset: normalizedSocialPreferences.value.themePreset,
+          accentColorToken: normalizedSocialPreferences.value.accentColorToken
+        }
+      });
     }
     
     user.updatedAt = new Date();

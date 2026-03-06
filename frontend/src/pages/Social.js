@@ -40,6 +40,66 @@ const PRIVACY_BADGE_LABELS = {
   private: 'Private'
 };
 
+const SOCIAL_SECTION_IDS = ['header', 'shortcuts', 'snapshot', 'guestLookup', 'composer', 'circles', 'timeline', 'gallery', 'moderation', 'chatPanel', 'communityNotes'];
+const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
+const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest'];
+const THEME_TO_DEFAULT_ACCENT = {
+  default: 'blue',
+  light: 'violet',
+  dark: 'emerald',
+  sunset: 'rose',
+  forest: 'emerald'
+};
+const THEME_TO_ALLOWED_ACCENTS = {
+  default: ['blue', 'violet', 'emerald', 'rose'],
+  light: ['blue', 'violet', 'emerald'],
+  dark: ['blue', 'violet', 'emerald', 'rose', 'amber'],
+  sunset: ['rose', 'amber', 'violet'],
+  forest: ['emerald', 'blue', 'amber']
+};
+const THEME_ACCENT_TO_HEADER_CLASS = {
+  blue: 'from-blue-700 via-indigo-700 to-violet-700',
+  violet: 'from-violet-700 via-fuchsia-700 to-purple-700',
+  emerald: 'from-emerald-700 via-teal-700 to-cyan-700',
+  rose: 'from-rose-700 via-pink-700 to-orange-600',
+  amber: 'from-amber-700 via-orange-700 to-red-700'
+};
+const THEME_TO_PAGE_CLASS = {
+  default: 'bg-slate-50 text-gray-900',
+  light: 'bg-white text-gray-900',
+  dark: 'bg-slate-900 text-slate-100',
+  sunset: 'bg-orange-50 text-gray-900',
+  forest: 'bg-emerald-50 text-gray-900'
+};
+
+const uniqueStrings = (items) => {
+  if (!Array.isArray(items)) return [];
+  return [...new Set(items.filter((item) => typeof item === 'string').map((item) => item.trim()).filter(Boolean))];
+};
+
+const normalizeSocialPreferences = (input, profileTheme = 'default') => {
+  const themePreset = SOCIAL_THEME_PRESETS.includes(input?.themePreset)
+    ? input.themePreset
+    : (SOCIAL_THEME_PRESETS.includes(profileTheme) ? profileTheme : 'default');
+  const allowedAccents = THEME_TO_ALLOWED_ACCENTS[themePreset] || THEME_TO_ALLOWED_ACCENTS.default;
+  const accentColorToken = allowedAccents.includes(input?.accentColorToken)
+    ? input.accentColorToken
+    : (allowedAccents.includes(THEME_TO_DEFAULT_ACCENT[themePreset]) ? THEME_TO_DEFAULT_ACCENT[themePreset] : allowedAccents[0]);
+
+  const requestedOrder = uniqueStrings(input?.sectionOrder).filter((id) => SOCIAL_SECTION_IDS.includes(id));
+  const sectionOrder = [...requestedOrder, ...SOCIAL_SECTION_IDS.filter((id) => !requestedOrder.includes(id))];
+  const hiddenSections = uniqueStrings(input?.hiddenSections).filter((id) => SOCIAL_SECTION_IDS.includes(id) && id !== 'header');
+  const hiddenModules = uniqueStrings(input?.hiddenModules).filter((id) => SOCIAL_MODULE_IDS.includes(id));
+
+  return {
+    themePreset,
+    accentColorToken,
+    sectionOrder,
+    hiddenSections,
+    hiddenModules
+  };
+};
+
 const isRenderableMediaUrl = (value) => {
   if (typeof value !== 'string') return false;
   const trimmed = value.trim();
@@ -286,6 +346,26 @@ const Social = () => {
       && normalizedRequestedProfileIdentifier !== normalizedCurrentUsername
   );
   const isOwnSocialContext = isAuthenticated && !isViewingAnotherProfile;
+  const activeProfile = isAuthenticated && !isViewingAnotherProfile
+    ? currentUser
+    : guestProfile;
+  const socialPreferences = useMemo(
+    () => normalizeSocialPreferences(activeProfile?.socialPagePreferences, activeProfile?.profileTheme),
+    [activeProfile?.socialPagePreferences, activeProfile?.profileTheme]
+  );
+  const sectionRank = useMemo(() => (
+    socialPreferences.sectionOrder.reduce((acc, sectionId, index) => ({ ...acc, [sectionId]: index }), {})
+  ), [socialPreferences.sectionOrder]);
+  const isSectionVisible = useCallback(
+    (sectionId) => !socialPreferences.hiddenSections.includes(sectionId),
+    [socialPreferences.hiddenSections]
+  );
+  const isModuleVisible = useCallback(
+    (moduleId) => !socialPreferences.hiddenModules.includes(moduleId),
+    [socialPreferences.hiddenModules]
+  );
+  const headerGradientClass = THEME_ACCENT_TO_HEADER_CLASS[socialPreferences.accentColorToken] || THEME_ACCENT_TO_HEADER_CLASS.blue;
+  const pageThemeClass = THEME_TO_PAGE_CLASS[socialPreferences.themePreset] || THEME_TO_PAGE_CLASS.default;
 
   const galleryOwnerIdentifier = useMemo(() => {
     // Profile context (/social?user=...) uses target user gallery
@@ -1463,20 +1543,47 @@ const Social = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <ProfileHeaderSection
-        sectionId={SOCIAL_SECTION_IDS.profile_header}
-        profile={activeProfile}
-        isAuthenticated={isAuthenticated}
-        isGuestPreview={isGuestPreview}
-        isOwnSocialContext={isOwnSocialContext}
-        isViewingAnotherProfile={isViewingAnotherProfile}
-        requestedProfileIdentifier={requestedProfileIdentifier}
-        postsCount={posts.length}
-        onEnterGuestPreview={() => handleGuestPreviewToggle(true)}
-        onExitGuestPreview={() => handleGuestPreviewToggle(false)}
-        onSectionClick={handleSectionClick}
-      />
+    <div className={`space-y-6 rounded-xl p-3 sm:p-4 ${pageThemeClass}`}>
+      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${headerGradientClass} p-5 text-white shadow-lg ring-1 ring-white/20 sm:p-6 md:p-8`}>
+        <div className="max-w-3xl space-y-2 sm:space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100/95">
+            Community Hub
+          </p>
+          <h2 className="text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
+            Social
+          </h2>
+          <p className="text-sm leading-relaxed text-white/95 sm:text-base">
+            {isViewingAnotherProfile
+              ? `Viewing public profile for @${requestedProfileIdentifier}. Gallery and posts are read-only in this view.`
+              : isAuthenticated && isGuestPreview
+              ? 'Guest preview mode: interaction controls are hidden. This is how your page appears to visitors.'
+              : isAuthenticated
+                ? 'Share updates, browse your timeline, and connect with your community.'
+                : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
+          </p>
+          {isOwnSocialContext && (
+            <div className="pt-1">
+              {isGuestPreview ? (
+                <button
+                  type="button"
+                  onClick={() => setIsGuestPreview(false)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30"
+                >
+                  ← Exit Guest Preview
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsGuestPreview(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/30"
+                >
+                  👁 View as Guest
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       <GuestPreviewNotice
         sectionId={SOCIAL_SECTION_IDS.guest_preview_notice}
@@ -1485,24 +1592,76 @@ const Social = () => {
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        <SocialLeftRail
-          sectionId={SOCIAL_SECTION_IDS.left_profile_rail}
-          currentUser={currentUser}
-          guestProfile={guestProfile}
-          isAuthenticated={isAuthenticated}
-          postsCount={posts.length}
-          friendsCount={friends.length}
-          onSectionClick={handleSectionClick}
-        />
+        <aside className="xl:col-span-3 flex flex-col gap-4 xl:sticky xl:top-6">
+          {isSectionVisible('shortcuts') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.shortcuts ?? 0 }}>
+            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Shortcuts</h3>
+            <ul className="mt-3 space-y-2 text-sm">
+              <li>
+                <Link to="/social" className="block px-3 py-2 rounded-lg bg-blue-50 text-blue-700 font-medium">
+                  Social Stream
+                </Link>
+              </li>
+              {isModuleVisible('marketplaceShortcut') && (
+                <li>
+                  <Link to="/market" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                    Marketplace
+                  </Link>
+                </li>
+              )}
+              {isModuleVisible('calendarShortcut') && (
+                <li>
+                  <Link to="/calendar" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                    Calendar
+                  </Link>
+                </li>
+              )}
+              {isModuleVisible('settingsShortcut') && (
+                <li>
+                  <Link to="/settings" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                    User Settings
+                  </Link>
+                </li>
+              )}
+              {isModuleVisible('referShortcut') && (
+                <li>
+                  <Link to="/refer" className="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700">
+                    Refer Friend
+                  </Link>
+                </li>
+              )}
+            </ul>
+          </section>
+          )}
 
-        <section className="xl:col-span-6 space-y-6">
-          {!isAuthenticated && (
-            <div
-              id={SOCIAL_SECTION_IDS.guest_lookup}
-              data-social-section={SOCIAL_SECTION_IDS.guest_lookup}
-              className="bg-white rounded-xl shadow p-6 space-y-3 border border-gray-100"
-              onClick={() => handleSectionClick(SOCIAL_SECTION_IDS.guest_lookup)}
-            >
+          {isSectionVisible('snapshot') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.snapshot ?? 1 }}>
+            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Social Snapshot</h3>
+            <div className="mt-3 space-y-3 text-sm text-gray-700">
+              <p>
+                Active profile:{' '}
+                <span className="font-medium">
+                  {currentUser?.username ? `@${currentUser.username}` : 'Guest'}
+                </span>
+              </p>
+              <p>
+                Loaded posts:{' '}
+                <span className="font-medium">{posts.length}</span>
+              </p>
+              {!isAuthenticated && guestProfile?.username && (
+                <p>
+                  Viewing public profile:{' '}
+                  <span className="font-medium">@{guestProfile.username}</span>
+                </p>
+              )}
+            </div>
+          </section>
+          )}
+        </aside>
+
+        <section className="xl:col-span-6 flex flex-col gap-6">
+          {!isAuthenticated && isSectionVisible('guestLookup') && (
+            <div className="bg-white rounded-xl shadow p-6 space-y-3 border border-gray-100" style={{ order: sectionRank.guestLookup ?? 0 }}>
               <h3 className="text-lg font-medium">Guest Public Feed</h3>
               <p className="text-sm text-gray-600">Enter a username or user ID to load a public feed.</p>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -1538,14 +1697,8 @@ const Social = () => {
             </div>
           )}
 
-          {isOwnSocialContext && !isGuestPreview && (
-            <form
-              id={SOCIAL_SECTION_IDS.composer}
-              data-social-section={SOCIAL_SECTION_IDS.composer}
-              onClick={() => handleSectionClick(SOCIAL_SECTION_IDS.composer)}
-              onSubmit={handleSubmitPost}
-              className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100"
-            >
+          {isOwnSocialContext && !isGuestPreview && isSectionVisible('composer') && (
+            <form onSubmit={handleSubmitPost} className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100" style={{ order: sectionRank.composer ?? 1 }}>
               <h3 className="text-lg font-medium">Create Post</h3>
 
               <textarea
@@ -1797,8 +1950,8 @@ const Social = () => {
             </form>
           )}
 
-          {isOwnSocialContext && !isGuestPreview && (
-            <section id={SOCIAL_SECTION_IDS.circles} data-social-section={SOCIAL_SECTION_IDS.circles}>
+          {isOwnSocialContext && !isGuestPreview && isSectionVisible('circles') && (
+            <div style={{ order: sectionRank.circles ?? 2 }}>
               <CircleManager
                 circles={circles}
                 friends={friends}
@@ -1807,15 +1960,11 @@ const Social = () => {
                 onAddMember={handleAddCircleMember}
                 onRemoveMember={handleRemoveCircleMember}
               />
-            </section>
+            </div>
           )}
 
-          <section
-            id={SOCIAL_SECTION_IDS.timeline}
-            data-social-section={SOCIAL_SECTION_IDS.timeline}
-            className="space-y-4"
-            onClick={() => handleSectionClick(SOCIAL_SECTION_IDS.timeline)}
-          >
+          {isSectionVisible('timeline') && (
+            <section className="space-y-4" style={{ order: sectionRank.timeline ?? 3 }}>
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-semibold">{(isOwnSocialContext && !isGuestPreview) ? 'Timeline' : 'Public Timeline'}</h3>
               <button
@@ -2076,31 +2225,6 @@ const Social = () => {
                       </div>
                     )}
 
-          {isAuthenticated && !isGuestPreview && (
-            <section
-              id={SOCIAL_SECTION_IDS.moderation_status}
-              data-social-section={SOCIAL_SECTION_IDS.moderation_status}
-              className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-3"
-            >
-              <h3 className="text-lg font-semibold">Moderation Transparency</h3>
-              <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
-              {myReports.length === 0 ? (
-                <p className="text-sm text-gray-500">No submitted reports yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {myReports.slice(0, 10).map((report) => (
-                    <div key={report.id} className="border rounded p-2 text-sm">
-                      <p className="font-medium text-gray-900">
-                        {report.category} • {report.targetType} • {report.status}
-                      </p>
-                      <p className="text-gray-500">{formatDate(report.createdAt)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
                     {isAuthenticated && !isGuestPreview ? (
                       <div className="space-y-3">
                         <button
@@ -2164,14 +2288,35 @@ const Social = () => {
                 );
               })
             )}
-          </section>
+            </section>
+          )}
 
-          <section
-            id={SOCIAL_SECTION_IDS.gallery}
-            data-social-section={SOCIAL_SECTION_IDS.gallery}
-            className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-4"
-            onClick={() => handleSectionClick(SOCIAL_SECTION_IDS.gallery)}
-          >
+          {isAuthenticated && !isGuestPreview && isSectionVisible('moderation') && (
+            <section
+              className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-3"
+              style={{ order: sectionRank.moderation ?? 5 }}
+            >
+              <h3 className="text-lg font-semibold">Moderation Transparency</h3>
+              <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
+              {myReports.length === 0 ? (
+                <p className="text-sm text-gray-500">No submitted reports yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {myReports.slice(0, 10).map((report) => (
+                    <div key={report.id} className="border rounded p-2 text-sm">
+                      <p className="font-medium text-gray-900">
+                        {report.category} • {report.targetType} • {report.status}
+                      </p>
+                      <p className="text-gray-500">{formatDate(report.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {isSectionVisible('gallery') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100 space-y-4" style={{ order: sectionRank.gallery ?? 4 }}>
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-xl font-semibold">Gallery</h3>
               <span className="text-xs text-gray-500">{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
@@ -2368,14 +2513,37 @@ const Social = () => {
                 })}
               </div>
             )}
-          </section>
+            </section>
+          )}
         </section>
 
-        <SocialRightRail
-          sectionId={SOCIAL_SECTION_IDS.right_rail}
-          topFriends={topFriends}
-          onSectionClick={handleSectionClick}
-        />
+        <aside className="xl:col-span-3 flex flex-col gap-4 xl:sticky xl:top-6">
+          {isSectionVisible('chatPanel') && isModuleVisible('chatPanel') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.chatPanel ?? 0 }}>
+            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Chat Panel</h3>
+            <p className="mt-3 text-sm text-gray-700">
+              Jump into direct or room conversations without leaving the social experience.
+            </p>
+            <Link
+              to="/chat"
+              className="mt-4 inline-flex items-center justify-center w-full bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-800"
+            >
+              Open Chat
+            </Link>
+          </section>
+          )}
+
+          {isSectionVisible('communityNotes') && isModuleVisible('communityNotes') && (
+            <section className="bg-white rounded-xl shadow p-5 border border-gray-100" style={{ order: sectionRank.communityNotes ?? 1 }}>
+            <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Community Notes</h3>
+            <ul className="mt-3 space-y-2 text-sm text-gray-700 list-disc list-inside">
+              <li>Keep posts constructive and clear.</li>
+              <li>Use visibility settings to control reach.</li>
+              <li>Switch to chat for real-time discussion.</li>
+            </ul>
+          </section>
+          )}
+        </aside>
       </div>
 
       <ReportModal
