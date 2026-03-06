@@ -93,6 +93,13 @@ const newsPreferencesSchema = new mongoose.Schema({
   
   // Followed keywords
   followedKeywords: [followedKeywordSchema],
+
+  // Default feed scope preference
+  defaultScope: {
+    type: String,
+    enum: ['local', 'regional', 'national', 'global'],
+    default: 'global'
+  },
   
   // Local prioritization settings
   localPriorityEnabled: {

@@ -27,6 +27,156 @@ const parser = new Parser({
 const DEFAULT_PROMOTED_ITEMS = Math.max(1, parseInt(process.env.NEWS_PROMOTED_MAX_ITEMS || '10', 10) || 10);
 const FEED_PROMOTED_MAX_ITEMS = 20;
 const PROMOTED_ENDPOINT_MAX_ITEMS = 50;
+const NEWS_SCOPE_VALUES = ['local', 'regional', 'national', 'global'];
+
+const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase();
+
+const hasLocationContext = (location = {}) => Boolean(location?.city || location?.state || location?.country);
+
+const getPrimaryLocation = (preferences) => {
+  if (!preferences?.locations?.length) return null;
+  return preferences.locations.find((loc) => loc.isPrimary) || preferences.locations[0] || null;
+};
+
+const getUserLocationFallback = (user) => {
+  if (!user) return null;
+  const fallback = {
+    city: user.city || null,
+    state: user.state || null,
+    country: user.country || null
+  };
+  return hasLocationContext(fallback) ? fallback : null;
+};
+
+const resolveLocationContext = ({ preferences, user }) => {
+  const primary = getPrimaryLocation(preferences);
+  if (hasLocationContext(primary)) {
+    return { ...primary.toObject?.() || primary, source: 'preferences' };
+  }
+
+  const fallback = getUserLocationFallback(user);
+  if (fallback) {
+    return { ...fallback, source: 'profile' };
+  }
+
+  return { city: null, state: null, country: null, source: 'none' };
+};
+
+const resolveDefaultScope = ({ preferences, locationContext }) => {
+  if (NEWS_SCOPE_VALUES.includes(preferences?.defaultScope)) {
+    return preferences.defaultScope;
+  }
+  return hasLocationContext(locationContext) ? 'local' : 'global';
+};
+
+const getFallbackScopeOrder = (scope) => {
+  switch (scope) {
+    case 'local':
+      return ['local', 'regional', 'national', 'global'];
+    case 'regional':
+      return ['regional', 'national', 'global'];
+    case 'national':
+      return ['national', 'global'];
+    default:
+      return ['global'];
+  }
+};
+
+const scopeCanUseContext = (scope, locationContext) => {
+  if (scope === 'local') return Boolean(locationContext?.city);
+  if (scope === 'regional') return Boolean(locationContext?.state);
+  if (scope === 'national') return Boolean(locationContext?.country);
+  return true;
+};
+
+const resolveActiveScope = ({ requestedScope, locationContext }) => {
+  const chain = getFallbackScopeOrder(requestedScope);
+  const activeScope = chain.find((scope) => scopeCanUseContext(scope, locationContext)) || 'global';
+  return {
+    activeScope,
+    fallbackApplied: activeScope !== requestedScope
+  };
+};
+
+const scoreRecency = (publishedAt, freshnessScore = 0) => {
+  const publishedTimestamp = new Date(publishedAt || 0).getTime();
+  const hoursSincePublished = publishedTimestamp ? Math.max(0, (Date.now() - publishedTimestamp) / (1000 * 60 * 60)) : 9999;
+  const recencyScore = 1 / (1 + (hoursSincePublished / 12));
+  const freshness = Number.isFinite(freshnessScore) ? freshnessScore : 0;
+  return recencyScore + freshness;
+};
+
+const articleMentionsLocationToken = (articleLocationToken, userToken) => {
+  if (!articleLocationToken || !userToken) return false;
+  return articleLocationToken.includes(userToken) || userToken.includes(articleLocationToken);
+};
+
+const articleMatchesLocation = (article, locationContext) => {
+  const articleLocations = Array.isArray(article.locations) ? article.locations.map(normalizeLocationToken) : [];
+  const city = normalizeLocationToken(locationContext?.city);
+  const state = normalizeLocationToken(locationContext?.state);
+  const country = normalizeLocationToken(locationContext?.country);
+
+  const hasCity = city && articleLocations.some((token) => articleMentionsLocationToken(token, city));
+  const hasState = state && articleLocations.some((token) => articleMentionsLocationToken(token, state));
+  const hasCountry = country && articleLocations.some((token) => articleMentionsLocationToken(token, country));
+
+  return {
+    city: Boolean(hasCity),
+    state: Boolean(hasState),
+    country: Boolean(hasCountry)
+  };
+};
+
+const getScopeTier = (scope, locationMatches) => {
+  if (scope === 'local') {
+    if (locationMatches.city) return 0;
+    if (locationMatches.state) return 1;
+    if (locationMatches.country) return 2;
+    return 3;
+  }
+  if (scope === 'regional') {
+    if (locationMatches.state) return 0;
+    if (locationMatches.country) return 1;
+    return 2;
+  }
+  if (scope === 'national') {
+    if (locationMatches.country) return 0;
+    return 1;
+  }
+  return 0;
+};
+
+const scoreLocalityLevel = (scope, localityLevel) => {
+  const level = normalizeLocationToken(localityLevel);
+  if (scope === 'local') {
+    if (level === 'city') return 0.3;
+    if (level === 'state') return 0.2;
+    if (level === 'country') return 0.1;
+    return 0;
+  }
+  if (scope === 'regional') {
+    if (level === 'state') return 0.25;
+    if (level === 'country') return 0.1;
+    return 0;
+  }
+  if (scope === 'national') {
+    return level === 'country' ? 0.2 : 0;
+  }
+  return 0;
+};
+
+const logNewsScopeEvent = ({ userId, eventType, metadata = {}, req }) => {
+  const payload = {
+    eventType,
+    userId,
+    metadata,
+    ipAddress: req.ip,
+    userAgent: req.get('user-agent') || null,
+    createdAt: new Date().toISOString()
+  };
+  console.log('[news-event]', JSON.stringify(payload));
+};
 
 // ============================================
 // SOURCE ADAPTERS
@@ -381,12 +531,37 @@ router.get('/feed', authenticateToken, async (req, res) => {
       limit = 20,
       sourceType,
       topic,
-      location
+      location,
+      scope
     } = req.query;
-    
-    // Get user's news preferences
-    let preferences = await NewsPreferences.findOne({ user: req.user.userId });
-    
+
+    const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+    const parsedLimit = Math.max(parseInt(limit, 10) || 20, 1);
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const [preferences, user] = await Promise.all([
+      NewsPreferences.findOne({ user: req.user.userId }),
+      User.findById(req.user.userId).select('city state country')
+    ]);
+
+    const locationContext = resolveLocationContext({ preferences, user });
+    const defaultScope = resolveDefaultScope({ preferences, locationContext });
+    const requestedScope = NEWS_SCOPE_VALUES.includes(scope) ? scope : defaultScope;
+    const { activeScope, fallbackApplied } = resolveActiveScope({ requestedScope, locationContext });
+
+    if (NEWS_SCOPE_VALUES.includes(scope)) {
+      logNewsScopeEvent({
+        userId: req.user.userId,
+        eventType: 'news_scope_changed',
+        metadata: {
+          requestedScope,
+          activeScope,
+          fallbackApplied
+        },
+        req
+      });
+    }
+
     // Extract followed keywords for personalization
     const followedKeywords = preferences?.followedKeywords?.map(k => k.keyword) || [];
     
@@ -422,101 +597,77 @@ router.get('/feed', authenticateToken, async (req, res) => {
     
     // Filter out hidden categories if user has preferences
     if (preferences?.hiddenCategories?.length > 0) {
-      query.topics = {
-        $nin: preferences.hiddenCategories.map(c => c.toLowerCase())
-      };
+      const hiddenCategories = preferences.hiddenCategories.map(c => c.toLowerCase());
+      if (query.topics) {
+        const existingTopicFilter = query.topics;
+        delete query.topics;
+        query.$and = query.$and || [];
+        query.$and.push({ topics: existingTopicFilter });
+        query.$and.push({ topics: { $nin: hiddenCategories } });
+      } else if (query.$or) {
+        const existingOrFilter = query.$or;
+        delete query.$or;
+        query.$and = query.$and || [];
+        query.$and.push({ $or: existingOrFilter });
+        query.$and.push({ topics: { $nin: hiddenCategories } });
+      } else {
+        query.topics = { $nin: hiddenCategories };
+      }
     }
-    
-    // Calculate skip
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    // Fetch articles with sorting (recency first, then by freshness score)
+
+    // Fetch scope-aware candidate set (larger for location scopes to support deterministic fallback fill)
+    const candidateMultiplier = activeScope === 'global' ? 2 : 4;
+    const candidateLimit = Math.min(200, parsedLimit * candidateMultiplier);
     let articles = await Article.find(query)
       .sort({ publishedAt: -1, freshnessScore: -1 })
       .skip(skip)
-      .limit(parseInt(limit) * 2) // Fetch more to account for re-ranking
+      .limit(candidateLimit)
       .lean();
     
-    // If user has preferences, apply personalization
-    if (preferences) {
-      // Apply local prioritization if enabled
-      if (preferences.localPriorityEnabled && preferences.locations?.length > 0) {
-        const priorityOrder = { city: 1, county: 2, state: 3, country: 4, global: 5 };
-        
-        // Get user's location locality levels
-        const userLocalityLevels = preferences.locations.map(loc => {
-          if (loc.city) return 'city';
-          if (loc.county) return 'county';
-          if (loc.state) return 'state';
-          return 'country';
-        });
-        
-        // Re-sort to prioritize local content
-        articles = articles.sort((a, b) => {
-          const aLevel = priorityOrder[a.localityLevel] || 5;
-          const bLevel = priorityOrder[b.localityLevel] || 5;
-          
-          // Both are local - keep original order
-          if (userLocalityLevels.includes(a.localityLevel) && userLocalityLevels.includes(b.localityLevel)) {
-            return 0;
-          }
-          
-          // Prioritize local content
-          if (userLocalityLevels.includes(a.localityLevel)) return -1;
-          if (userLocalityLevels.includes(b.localityLevel)) return 1;
-          
-          return 0;
-        });
-      }
-      
-      // Apply source filtering based on preferences
-      if (preferences.rssSources?.length > 0) {
-        const enabledSources = preferences.rssSources.filter(s => s.enabled).map(s => s.sourceId);
-        articles = articles.filter(a => enabledSources.includes(a.source) || a.sourceType !== 'rss');
-      }
+    // Apply source filtering based on preferences
+    if (preferences?.rssSources?.length > 0) {
+      const enabledSources = new Set(
+        preferences.rssSources
+          .filter(s => s.enabled)
+          .map(s => normalizeLocationToken(s.sourceId))
+      );
+      articles = articles.filter((article) => {
+        if (article.sourceType !== 'rss') return true;
+        const sourceIdMatch = normalizeLocationToken(article.sourceId);
+        const sourceNameMatch = normalizeLocationToken(article.source);
+        return enabledSources.has(sourceIdMatch) || enabledSources.has(sourceNameMatch);
+      });
     }
     
-    // PRIORITY: Apply followed keywords boosting and add visual indicators
-    if (followedKeywords.length > 0) {
-      articles = articles.map(article => {
-        const articleText = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
-        
-        // Check if article matches any followed keyword
-        const matchedKeywords = followedKeywords.filter(keyword =>
-          articleText.includes(keyword.toLowerCase())
-        );
-        
-        // Add matched keywords and boost score if matches found
-        if (matchedKeywords.length > 0) {
-          return {
-            ...article,
-            matchedKeywords,
-            isFollowingMatch: true, // Visual indicator for frontend
-            _boostScore: matchedKeywords.length // Used for sorting
-          };
-        }
-        
-        return {
-          ...article,
-          matchedKeywords: [],
-          isFollowingMatch: false,
-          _boostScore: 0
-        };
-      });
-      
-      // Re-sort to prioritize articles matching followed keywords
-      articles.sort((a, b) => {
-        // First priority: followed keyword matches (higher boost score = higher priority)
-        if (a._boostScore !== b._boostScore) {
-          return b._boostScore - a._boostScore;
-        }
-        // Second priority: recency
-        return new Date(b.publishedAt) - new Date(a.publishedAt);
-      });
-    }
+    articles = articles.map((article) => {
+      const articleText = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
+      const matchedKeywords = followedKeywords.filter((keyword) => articleText.includes(keyword.toLowerCase()));
+      const locationMatches = articleMatchesLocation(article, locationContext);
+      const scopeTier = getScopeTier(activeScope, locationMatches);
+      const recencyScore = scoreRecency(article.publishedAt, article.freshnessScore);
+      const localityLevelScore = scoreLocalityLevel(activeScope, article.localityLevel);
+
+      return {
+        ...article,
+        matchedKeywords,
+        isFollowingMatch: matchedKeywords.length > 0,
+        _boostScore: matchedKeywords.length,
+        _scopeTier: scopeTier,
+        _rankingScore: (matchedKeywords.length * 100) + ((4 - scopeTier) * 10) + recencyScore + localityLevelScore
+      };
+    });
+
+    articles.sort((a, b) => {
+      if (a._scopeTier !== b._scopeTier) return a._scopeTier - b._scopeTier;
+      if (a._boostScore !== b._boostScore) return b._boostScore - a._boostScore;
+      if (a._rankingScore !== b._rankingScore) return b._rankingScore - a._rankingScore;
+      const publishedDiff = new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime();
+      if (publishedDiff !== 0) return publishedDiff;
+      return String(a._id).localeCompare(String(b._id));
+    });
     
     // Limit to requested number after re-ranking
-    articles = articles.slice(0, parseInt(limit));
+    articles = articles.slice(0, parsedLimit);
     
     // Get total count
     const total = await Article.countDocuments(query);
@@ -535,16 +686,45 @@ router.get('/feed', authenticateToken, async (req, res) => {
         viralSignalsSummary: summarizeSignals(article.viralSignals)
       })),
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: parsedPage,
+        limit: parsedLimit,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / parsedLimit)
       },
       personalization: {
         followedKeywords,
-        hasKeywordMatches: articles.some(a => a.isFollowingMatch)
+        hasKeywordMatches: articles.some(a => a.isFollowingMatch),
+        requestedScope,
+        activeScope,
+        fallbackApplied,
+        locationContext: {
+          source: locationContext.source,
+          hasCity: Boolean(locationContext.city),
+          hasState: Boolean(locationContext.state),
+          hasCountry: Boolean(locationContext.country),
+          levelsUsed: activeScope === 'local'
+            ? ['city', 'state', 'country']
+            : activeScope === 'regional'
+              ? ['state', 'country']
+              : activeScope === 'national'
+                ? ['country']
+                : []
+        }
       }
     });
+
+    if (fallbackApplied) {
+      logNewsScopeEvent({
+        userId: req.user.userId,
+        eventType: 'news_scope_fallback_applied',
+        metadata: {
+          requestedScope,
+          activeScope,
+          articleCount: articles.length
+        },
+        req
+      });
+    }
   } catch (error) {
     console.error('Error fetching news feed:', error);
     res.status(500).json({ error: 'Failed to fetch news feed' });
@@ -610,21 +790,58 @@ router.get('/sources', authenticateToken, async (req, res) => {
  */
 router.get('/preferences', authenticateToken, async (req, res) => {
   try {
+    const user = await User.findById(req.user.userId).select('city state country');
+    const userFallbackLocation = getUserLocationFallback(user);
     let preferences = await NewsPreferences.findOne({ user: req.user.userId })
       .populate('rssSources.sourceId');
     
     // Create default preferences if none exist
     if (!preferences) {
+      const seededLocations = userFallbackLocation
+        ? [{
+            city: userFallbackLocation.city,
+            state: userFallbackLocation.state,
+            country: userFallbackLocation.country,
+            isPrimary: true
+          }]
+        : [];
       preferences = await NewsPreferences.create({
         user: req.user.userId,
         rssSources: [],
         googleNewsTopics: ['technology', 'science'],
         googleNewsEnabled: true,
         gdletEnabled: true,
-        locations: [],
+        locations: seededLocations,
         followedKeywords: [],
-        localPriorityEnabled: true
+        localPriorityEnabled: true,
+        defaultScope: seededLocations.length > 0 ? 'local' : 'global'
       });
+    } else if ((!NEWS_SCOPE_VALUES.includes(preferences.defaultScope) || !preferences.locations?.length) && userFallbackLocation) {
+      const updatePayload = {};
+      if (!preferences.locations?.length) {
+        updatePayload.locations = [{
+          city: userFallbackLocation.city,
+          state: userFallbackLocation.state,
+          country: userFallbackLocation.country,
+          isPrimary: true
+        }];
+      }
+      if (!NEWS_SCOPE_VALUES.includes(preferences.defaultScope)) {
+        updatePayload.defaultScope = hasLocationContext(userFallbackLocation) ? 'local' : 'global';
+      }
+      if (Object.keys(updatePayload).length > 0) {
+        preferences = await NewsPreferences.findOneAndUpdate(
+          { user: req.user.userId },
+          { $set: updatePayload },
+          { new: true }
+        ).populate('rssSources.sourceId');
+      }
+    } else if (!NEWS_SCOPE_VALUES.includes(preferences.defaultScope)) {
+      preferences = await NewsPreferences.findOneAndUpdate(
+        { user: req.user.userId },
+        { $set: { defaultScope: preferences.locations?.length ? 'local' : 'global' } },
+        { new: true }
+      ).populate('rssSources.sourceId');
     }
     
     res.json({ preferences });
@@ -648,7 +865,8 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       gdletEnabled,
       locations,
       followedKeywords,
-      localPriorityEnabled
+      localPriorityEnabled,
+      defaultScope
     } = req.body;
     
     const updateData = {};
@@ -660,6 +878,12 @@ router.put('/preferences', authenticateToken, async (req, res) => {
     if (gdletEnabled !== undefined) updateData.gdletEnabled = gdletEnabled;
     if (locations !== undefined) updateData.locations = locations;
     if (followedKeywords !== undefined) updateData.followedKeywords = followedKeywords;
+    if (defaultScope !== undefined && NEWS_SCOPE_VALUES.includes(defaultScope)) {
+      updateData.defaultScope = defaultScope;
+    } else if (localPriorityEnabled !== undefined && defaultScope === undefined) {
+      // Backwards compatible mapping from legacy toggle to scope preference
+      updateData.defaultScope = localPriorityEnabled ? 'local' : 'global';
+    }
     if (localPriorityEnabled !== undefined) updateData.localPriorityEnabled = localPriorityEnabled;
     
     const preferences = await NewsPreferences.findOneAndUpdate(
@@ -667,6 +891,18 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       { $set: updateData },
       { new: true, upsert: true }
     );
+
+    if (updateData.defaultScope) {
+      logNewsScopeEvent({
+        userId: req.user.userId,
+        eventType: 'news_default_scope_updated',
+        metadata: {
+          requestedScope: defaultScope || null,
+          activeScope: updateData.defaultScope
+        },
+        req
+      });
+    }
     
     res.json({ preferences });
   } catch (error) {
