@@ -154,8 +154,8 @@ export const galleryAPI = {
 
 // Chat API
 export const chatAPI = {
-  getNearbyRooms: (longitude, latitude, maxDistance = 50) => 
-    api.get(`/chat/rooms/nearby?longitude=${longitude}&latitude=${latitude}&maxDistance=${maxDistance}`),
+  getNearbyRooms: (latitude, longitude, radius = 50) =>
+    api.get(`/chat/rooms/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`),
   getRoom: (roomId, page = 1, limit = 500) =>
     api.get(`/chat/rooms/${roomId}?page=${page}&limit=${limit}`),
   sendMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages`, data),
@@ -189,8 +189,14 @@ export const chatAPI = {
   leaveRoom: (roomId) => api.post(`/chat/rooms/${roomId}/leave`),
   getRoomUsers: (roomId) => api.get(`/chat/rooms/${roomId}/users`),
   syncLocationRooms: () => api.post('/chat/rooms/sync-location'),
-  getNearbyRooms: (latitude, longitude, radius = 50) =>
-    api.get(`/chat/rooms/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`),
+  getNearbyZipRooms: (zipCode) => api.get(`/chat/zip/nearby?zipCode=${encodeURIComponent(zipCode)}`),
+  getConversations: () => api.get('/chat/conversations'),
+  getConversationMessages: (conversationId, page = 1, limit = 50) =>
+    api.get(`/chat/conversations/${conversationId}/messages?page=${page}&limit=${limit}`),
+  sendConversationMessage: (conversationId, content) =>
+    api.post(`/chat/conversations/${conversationId}/messages`, { content }),
+  startDM: (targetUserId) => api.post('/chat/dm/start', { targetUserId }),
+  getProfileThread: (userId) => api.get(`/chat/profile/${encodeURIComponent(userId)}/thread`),
 };
 
 // Location API
@@ -272,6 +278,8 @@ export const universalAPI = {
   resendInvitation: (id) => api.post(`/universal/invitations/${id}/resend`),
   // Revoke invitation
   revokeInvitation: (id, reason = '') => api.post(`/universal/invitations/${id}/revoke`, { reason }),
+  // Qualify and reward invitation
+  qualifyInvitation: (id) => api.post(`/universal/invitations/${id}/qualify`),
   // Register by referral code
   registerByCode: (data) => api.post('/universal/register-by-code', data),
 };

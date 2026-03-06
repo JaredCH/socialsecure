@@ -3,7 +3,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { authAPI, evaluateRegisterPassword } from '../utils/api';
 
-function Register({ onSuccess }) {
+function Register({ onSuccess, onWelcomeRequired }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = useMemo(() => searchParams.get('token'), [searchParams]);
@@ -13,9 +13,8 @@ function Register({ onSuccess }) {
     username: '',
     email: '',
     password: '',
-    city: '',
-    state: '',
-    country: '',
+    county: '',
+    zipCode: '',
     referralCode: token || ''
   });
   const [submitting, setSubmitting] = useState(false);
@@ -35,9 +34,17 @@ function Register({ onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const county = form.county.trim();
+    const zipCode = form.zipCode.trim().toUpperCase().replace(/\s+/g, '');
 
-    if (!passwordEvaluation.allRequirementsMet) {
-      toast.error('Please satisfy all password requirements before creating your account');
+    if (!county || county.length > 100) {
+      toast.error('County is required and must be 100 characters or fewer');
+      return;
+    }
+
+    const zipPattern = /^(?:\d{5}(?:-\d{4})?|[A-Z]\d[A-Z]\d[A-Z]\d)$/;
+    if (!zipPattern.test(zipCode)) {
+      toast.error('Zip Code must be a valid US ZIP (12345 or 12345-6789) or postal format');
       return;
     }
 
@@ -45,16 +52,20 @@ function Register({ onSuccess }) {
 
     try {
       const payload = {
-        ...form,
+        realName: form.realName,
         username: form.username.trim().toLowerCase(),
         email: form.email.trim().toLowerCase(),
+        password: form.password,
+        county,
+        zipCode,
         referralCode: form.referralCode || undefined
       };
 
       const { data } = await authAPI.register(payload);
       onSuccess(data);
+      onWelcomeRequired?.(data.user || null);
       toast.success('Registration successful');
-      navigate('/');
+      navigate('/welcome');
     } catch (error) {
       const apiError = error.response?.data;
       const nextFieldErrors = (apiError?.errors || []).reduce((acc, currentError) => {
@@ -161,10 +172,33 @@ function Register({ onSuccess }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input name="city" value={form.city} onChange={handleChange} className="border rounded p-2" placeholder="City" />
-          <input name="state" value={form.state} onChange={handleChange} className="border rounded p-2" placeholder="State" />
-          <input name="country" value={form.country} onChange={handleChange} className="border rounded p-2" placeholder="Country" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">County</label>
+            <input
+              name="county"
+              value={form.county}
+              onChange={handleChange}
+              className="border rounded p-2 w-full"
+              placeholder="County"
+              maxLength={100}
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">Enter your county for local room matching.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Zip Code</label>
+            <input
+              name="zipCode"
+              value={form.zipCode}
+              onChange={handleChange}
+              className="border rounded p-2 w-full"
+              placeholder="12345 or A1A 1A1"
+              maxLength={10}
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">Used as the primary location key for chat matching.</p>
+          </div>
         </div>
 
         <div>
