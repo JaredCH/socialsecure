@@ -179,6 +179,7 @@ const Social = () => {
   const [circles, setCircles] = useState([]);
   const [friends, setFriends] = useState([]);
   const [commentInputs, setCommentInputs] = useState({});
+  const [typingByPost, setTypingByPost] = useState({});
   const [actionLoadingByPost, setActionLoadingByPost] = useState({});
   const [galleryItems, setGalleryItems] = useState([]);
   const [galleryTargetInput, setGalleryTargetInput] = useState(initialGuestUser);

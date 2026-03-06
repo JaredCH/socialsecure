@@ -20,7 +20,8 @@ const defaultPreferences = {
   follows: { inApp: true, email: false, push: false },
   messages: { inApp: true, email: false, push: false },
   system: { inApp: true, email: true, push: false },
-  securityAlerts: { inApp: true, email: true, push: false }
+  securityAlerts: { inApp: true, email: true, push: false },
+  realtime: { enabled: true, typingIndicators: true, presence: true }
 };
 
 const defaultRealtimePreferences = {

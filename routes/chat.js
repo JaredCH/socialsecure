@@ -585,7 +585,7 @@ router.post('/rooms/:roomId/messages', [
     res.status(201).json({
       success: true,
       message: 'Message sent successfully',
-      message: message.toPublicMessage(),
+      message: publicMessage,
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining
@@ -741,7 +741,7 @@ router.post('/rooms/:roomId/messages/e2ee', [
     return res.status(201).json({
       success: true,
       message: 'E2EE message envelope accepted',
-      messageData: message.toPublicMessage(),
+      messageData: publicMessage,
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining

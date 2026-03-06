@@ -225,7 +225,18 @@ router.put('/preferences', [
       follows: mergePreference('follows'),
       messages: mergePreference('messages'),
       system: mergePreference('system'),
-      securityAlerts: mergePreference('securityAlerts')
+      securityAlerts: mergePreference('securityAlerts'),
+      realtime: {
+        enabled: typeof input?.realtime?.enabled === 'boolean'
+          ? input.realtime.enabled
+          : Boolean(existing?.realtime?.enabled ?? true),
+        typingIndicators: typeof input?.realtime?.typingIndicators === 'boolean'
+          ? input.realtime.typingIndicators
+          : Boolean(existing?.realtime?.typingIndicators ?? true),
+        presence: typeof input?.realtime?.presence === 'boolean'
+          ? input.realtime.presence
+          : Boolean(existing?.realtime?.presence ?? true)
+      }
     };
 
     const updatedRealtimePreferences = normalizeRealtimePreferences(req.body?.realtime || req.user.realtimePreferences);

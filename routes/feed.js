@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const Post = require('../models/Post');
 const User = require('../models/User');
@@ -14,6 +15,12 @@ const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
 const VALID_VISIBILITY = ['public', 'friends', 'circles', 'specific_users', 'private'];
+const interactionRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: { error: 'Too many interaction requests, please slow down.' },
+  keyGenerator: (req) => String(req?.user?.userId || req.ip || req.socket?.remoteAddress || 'unknown')
+});
 
 const parseViewerCoordinates = (req) => {
   const latitude = Number.parseFloat(req.query.latitude);
@@ -446,7 +453,7 @@ router.delete('/post/:postId', authenticateToken, async (req, res) => {
 });
 
 // Like a post
-router.post('/post/:postId/like', authenticateToken, async (req, res) => {
+router.post('/post/:postId/like', interactionRateLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = req.user.userId;
@@ -505,7 +512,7 @@ router.post('/post/:postId/like', authenticateToken, async (req, res) => {
 });
 
 // Unlike a post
-router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
+router.delete('/post/:postId/like', interactionRateLimiter, authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = req.user.userId;
@@ -532,7 +539,7 @@ router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       message: 'Post unliked',
-      likesCount: post.likes.length
+      likesCount
     });
   } catch (error) {
     console.error('Error unliking post:', error);
@@ -542,6 +549,7 @@ router.delete('/post/:postId/like', authenticateToken, async (req, res) => {
 
 // Add comment to post
 router.post('/post/:postId/comment', [
+  interactionRateLimiter,
   authenticateToken,
   body('content').trim().notEmpty().withMessage('Comment content is required').isLength({ max: 1000 }).withMessage('Comment too long')
 ], async (req, res) => {

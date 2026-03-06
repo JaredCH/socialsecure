@@ -616,6 +616,12 @@ const Chat = () => {
     messageCountRef.current = messages.length;
   }, [messages, isAtBottom]);
 
+  useEffect(() => () => {
+    if (typingStopTimerRef.current) {
+      clearTimeout(typingStopTimerRef.current);
+    }
+  }, []);
+
   const sendEncryptedPayload = async ({ plaintext, messageType = 'text', commandData = null }) => {
     await loadKeyPackages(activeRoomId, session);
     const { keyVersion, keyBytes } = await ensureRoomKey(activeRoomId, session);
