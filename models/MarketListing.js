@@ -25,6 +25,16 @@ const marketListingSchema = new mongoose.Schema({
     trim: true,
     index: true
   },
+  condition: {
+    type: String,
+    enum: ['new', 'like_new', 'good', 'fair', 'poor', 'not_applicable'],
+    default: 'not_applicable'
+  },
+  additionalDetails: {
+    type: Map,
+    of: String,
+    default: {}
+  },
   price: {
     type: Number,
     required: true,
