@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import QRCode from 'qrcode';
 import { authAPI, evaluateRegisterPassword } from '../utils/api';
 import { unlockOrCreateVault } from '../utils/e2ee';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
@@ -61,6 +62,22 @@ const randomSeedWord = () => {
 
 const generateSeedPhrase = () => Array.from({ length: 12 }, randomSeedWord).join(' ');
 
+export const resolveInitialStep = (currentStep) => {
+  const parsedStep = Number.isInteger(currentStep) ? currentStep : 1;
+  return Math.max(Math.min(parsedStep, TOTAL_STEPS), 1);
+};
+
+export const createRecoveryPhraseQrCodeDataUrl = async (phrase) => {
+  const normalizedPhrase = typeof phrase === 'string' ? phrase.trim() : '';
+  if (!normalizedPhrase) return '';
+
+  return QRCode.toDataURL(normalizedPhrase, {
+    width: 150,
+    margin: 1,
+    errorCorrectionLevel: 'M'
+  });
+};
+
 function OnboardingWizard({
   user,
   onboarding,
@@ -74,6 +91,7 @@ function OnboardingWizard({
   const [byoPgpPublicKey, setByoPgpPublicKey] = useState('');
   const [generatedPrivateKey, setGeneratedPrivateKey] = useState('');
   const [seedPhrase, setSeedPhrase] = useState('');
+  const [seedPhraseQrDataUrl, setSeedPhraseQrDataUrl] = useState('');
   const [securityPreferences, setSecurityPreferences] = useState(
     onboarding?.securityPreferences || {
       loginNotifications: true,
@@ -83,18 +101,38 @@ function OnboardingWizard({
   );
 
   const initialStep = useMemo(() => {
-    const currentStep = Number.isInteger(onboarding?.currentStep) ? onboarding.currentStep : 1;
-    if (!user?.hasEncryptionPassword) {
-      return 1;
-    }
-    return Math.max(Math.min(currentStep, TOTAL_STEPS), 1);
-  }, [onboarding?.currentStep, user?.hasEncryptionPassword]);
+    return resolveInitialStep(onboarding?.currentStep);
+  }, [onboarding?.currentStep]);
 
   const [step, setStep] = useState(initialStep);
 
   useEffect(() => {
     setStep(initialStep);
   }, [initialStep]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!seedPhrase) {
+      setSeedPhraseQrDataUrl('');
+    } else {
+      createRecoveryPhraseQrCodeDataUrl(seedPhrase)
+        .then((qrDataUrl) => {
+          if (!cancelled) {
+            setSeedPhraseQrDataUrl(qrDataUrl);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSeedPhraseQrDataUrl('');
+          }
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [seedPhrase]);
 
   const passwordEvaluation = useMemo(
     () => evaluateRegisterPassword(encryptionPassword),
@@ -425,12 +463,16 @@ function OnboardingWizard({
               </div>
 
               <div className="border rounded p-4 inline-block bg-white">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(seedPhrase)}`}
-                  alt="Recovery phrase QR code"
-                  width={150}
-                  height={150}
-                />
+                {seedPhraseQrDataUrl ? (
+                  <img
+                    src={seedPhraseQrDataUrl}
+                    alt="Recovery phrase QR code"
+                    width={150}
+                    height={150}
+                  />
+                ) : (
+                  <p className="text-sm text-gray-600">Generating QR code...</p>
+                )}
               </div>
 
               <button
