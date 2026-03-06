@@ -32,7 +32,6 @@ const handleNavScrollKeyDown = (event) => {
   event.preventDefault();
   const delta = event.key === 'ArrowRight' ? NAV_SCROLL_STEP_PIXELS : -NAV_SCROLL_STEP_PIXELS;
   const target = event.currentTarget;
-  if (!target) return;
   if (typeof target.scrollBy === 'function') {
     target.scrollBy({ left: delta, behavior: 'smooth' });
     return;
