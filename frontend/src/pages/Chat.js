@@ -89,6 +89,15 @@ function Chat() {
   const [messagesError, setMessagesError] = useState('');
   const [composerValue, setComposerValue] = useState('');
   const [sending, setSending] = useState(false);
+  const [voiceState, setVoiceState] = useState('idle');
+  const [voiceBlob, setVoiceBlob] = useState(null);
+  const [voiceDurationMs, setVoiceDurationMs] = useState(0);
+  const [voiceWaveform, setVoiceWaveform] = useState([]);
+  const [voiceMimeType, setVoiceMimeType] = useState('');
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState('');
+  const [voiceError, setVoiceError] = useState('');
+  const [recordingStartedAt, setRecordingStartedAt] = useState(null);
+  const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
   const [nickByUserId, setNickByUserId] = useState({});
   const [localNickname, setLocalNickname] = useState('');
   const [useMonospace, setUseMonospace] = useState(false);
@@ -756,9 +765,17 @@ function Chat() {
                   ) : (
                     <>
                       <span className="font-semibold" style={{ color: stringToColor(author) }}>&lt;{author}&gt;</span>
-                      <span className={`ml-1 whitespace-pre-wrap ${decryptError ? 'text-red-600' : (messageType === 'command' ? 'text-indigo-700' : 'text-gray-900')}`}>
-                        {bodyText || '[Non-E2EE message]'}
-                      </span>
+                      {isAudioMessage ? (
+                        <span className="ml-2 inline-flex flex-col gap-1 align-middle">
+                          <span className="text-xs text-gray-600">🎤 Voice note ({formatDuration(audioMeta.durationMs)})</span>
+                          <WaveformBars bins={audioMeta.waveformBins || []} />
+                          <audio controls preload="none" className="h-8" src={audioMeta.url} />
+                        </span>
+                      ) : (
+                        <span className={`ml-1 whitespace-pre-wrap ${decryptError ? 'text-red-600' : (messageType === 'command' ? 'text-indigo-700' : 'text-gray-900')}`}>
+                          {bodyText || '[Non-E2EE message]'}
+                        </span>
+                      )}
                     </>
                   )}
                   <span className="ml-2 hidden group-hover:inline text-[10px] text-gray-400">{fullTs}</span>
@@ -810,6 +827,15 @@ function Chat() {
               maxLength={2000}
               placeholder={isUnlocked ? `Type encrypted message or ${SUPPORTED_COMMANDS.map((name) => `/${name}`).join(' ')}` : 'Unlock encryption to send'}
             />
+            <button
+              type="button"
+              onClick={startVoiceRecording}
+              disabled={!isUnlocked || !activeRoomId || sending || voiceState === 'recording' || voiceState === 'uploading'}
+              className="px-3 py-2 border rounded disabled:opacity-50"
+              title="Record voice note"
+            >
+              🎤
+            </button>
             <button
               type="submit"
               disabled={!activeConversationId || !composerValue.trim() || sending}

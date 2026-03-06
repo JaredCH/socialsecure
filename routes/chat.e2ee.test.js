@@ -16,6 +16,14 @@ const createSelectLean = (value) => ({
     lean: jest.fn().mockResolvedValue(value)
   })
 });
+const createLean = (value) => ({
+  lean: jest.fn().mockResolvedValue(value)
+});
+
+const createUserDoc = (value) => ({
+  ...value,
+  select: jest.fn().mockResolvedValue(value)
+});
 
 const createQueryResult = (value) => ({
   select: jest.fn().mockResolvedValue(value),
@@ -331,5 +339,57 @@ describe('Chat E2EE boundary hardening', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.success).toBe(true);
+  });
+
+  it('rejects invalid audio metadata for voice-note messages', async () => {
+    const app = buildApp();
+    mockChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', members: ['user-1'], incrementMessageCount: jest.fn(), addMember: jest.fn() });
+    mockUser.findById.mockReturnValue(createUserDoc({ _id: 'user-1', city: 'City', location: { coordinates: [0, 0] }, onboardingStatus: 'completed' }));
+    mockChatMessage.checkRateLimit = jest.fn().mockResolvedValue({ allowed: true, remaining: 1 });
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages')
+      .set('Authorization', 'Bearer token')
+      .send({
+        mediaType: 'audio',
+        audio: {
+          storageKey: 'bad-key',
+          url: '/api/chat/media/bad-key',
+          durationMs: 5000,
+          waveformBins: [0.1, 0.2],
+          mimeType: 'audio/webm',
+          sizeBytes: 1000
+        }
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/audio\.storageKey/);
+  });
+
+  it('blocks media retrieval for non-room-members', async () => {
+    const app = buildApp();
+    mockChatMessage.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          roomId: 'room-1',
+          audio: {
+            storageKey: '11111111-1111-1111-1111-111111111111.webm',
+            mimeType: 'audio/webm'
+          }
+        })
+      })
+    });
+    mockChatRoom.findById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: 'room-1', members: ['user-2'] })
+      })
+    });
+
+    const response = await request(app)
+      .get('/api/chat/media/11111111-1111-1111-1111-111111111111.webm')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toMatch(/Not authorized/);
   });
 });
