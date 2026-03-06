@@ -23,20 +23,21 @@ import ResumePublic from './pages/ResumePublic';
 import { authAPI, notificationAPI } from './utils/api';
 import { initRealtime, disconnectRealtime } from './utils/realtime';
 
-const NAV_SCROLL_STEP_PX = 160;
+const NAV_SCROLL_STEP_PIXELS = 160;
 const handleNavScrollKeyDown = (event) => {
   if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
     return;
   }
 
   event.preventDefault();
-  const delta = event.key === 'ArrowRight' ? NAV_SCROLL_STEP_PX : -NAV_SCROLL_STEP_PX;
+  const delta = event.key === 'ArrowRight' ? NAV_SCROLL_STEP_PIXELS : -NAV_SCROLL_STEP_PIXELS;
   const target = event.currentTarget;
-  if (typeof target?.scrollBy === 'function') {
+  if (!target) return;
+  if (typeof target.scrollBy === 'function') {
     target.scrollBy({ left: delta, behavior: 'smooth' });
-  } else if (target) {
-    target.scrollLeft += delta;
+    return;
   }
+  target.scrollLeft += delta;
 };
 
 const ProtectedRoute = ({
