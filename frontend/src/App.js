@@ -24,14 +24,32 @@ import { authAPI, notificationAPI } from './utils/api';
 import { initRealtime, disconnectRealtime } from './utils/realtime';
 
 const NAV_SCROLL_STEP_PIXELS = 160;
+const scrollNavTo = (target, left) => {
+  if (typeof target.scrollTo === 'function') {
+    target.scrollTo({ left, behavior: 'smooth' });
+    return;
+  }
+  target.scrollLeft = left;
+};
 const handleNavScrollKeyDown = (event) => {
+  const target = event.currentTarget;
+  if (event.key === 'Home') {
+    event.preventDefault();
+    scrollNavTo(target, 0);
+    return;
+  }
+  if (event.key === 'End') {
+    event.preventDefault();
+    const maxScrollLeft = Math.max(0, target.scrollWidth - target.clientWidth);
+    scrollNavTo(target, maxScrollLeft);
+    return;
+  }
   if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
     return;
   }
 
   event.preventDefault();
   const delta = event.key === 'ArrowRight' ? NAV_SCROLL_STEP_PIXELS : -NAV_SCROLL_STEP_PIXELS;
-  const target = event.currentTarget;
   if (typeof target.scrollBy === 'function') {
     target.scrollBy({ left: delta, behavior: 'smooth' });
     return;
@@ -397,6 +415,8 @@ function App() {
               className="flex flex-nowrap items-center gap-3 overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
               tabIndex={0}
               aria-label="Primary navigation links"
+              role="navigation"
+              aria-describedby="nav-scroll-hint"
               onKeyDown={handleNavScrollKeyDown}
             >
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Home</Link>}
@@ -430,6 +450,10 @@ function App() {
                 </>
               )}
             </div>
+            <span id="nav-scroll-hint" className="sr-only">
+              Navigation links scroll horizontally. Use Left/Right arrow keys to scroll and Home/End to jump to the
+              start or end.
+            </span>
           </div>
         </nav>
 
