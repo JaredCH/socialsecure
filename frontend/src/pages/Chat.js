@@ -427,8 +427,6 @@ const Chat = () => {
     } catch (error) {
       console.warn('Failed to lock on server:', error);
     }
-    setSession(null);
-    setPlaintextById({});
     setDecryptErrors({});
     plaintextCacheRef.current.clear();
   };

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
@@ -109,6 +110,20 @@ const isSafeHex = (value, minLength, maxLength) => isSafeString(value, maxLength
 
 const parseMessageLimit = (rawLimit) => Math.min(Math.max(parseInt(rawLimit, 10) || DEFAULT_MESSAGE_LIMIT, 1), MAX_MESSAGE_LIMIT);
 const parseDiscoveryLimit = (rawLimit) => Math.min(Math.max(parseInt(rawLimit, 10) || DEFAULT_DISCOVERY_LIMIT, 1), MAX_DISCOVERY_LIMIT);
+const chatKeyGenerator = (req) => req.ip || req.socket?.remoteAddress || 'unknown';
+const buildRouteLimiter = (max, message) => rateLimit({
+  windowMs: 60 * 1000,
+  max,
+  message,
+  keyGenerator: chatKeyGenerator,
+  validate: {
+    xForwardedForHeader: false
+  }
+});
+const discoveryLimiter = buildRouteLimiter(90, 'Too many room discovery requests. Please slow down.');
+const allRoomsLimiter = buildRouteLimiter(20, 'Too many full room list requests. Please try again soon.');
+const roomReadLimiter = buildRouteLimiter(120, 'Too many room requests. Please slow down.');
+const roomWriteLimiter = buildRouteLimiter(60, 'Too many chat messages. Please slow down.');
 
 const encodeMessageCursor = (createdAt, id) => Buffer.from(`${new Date(createdAt).toISOString()}|${String(id)}`).toString('base64url');
 
@@ -360,7 +375,7 @@ const validateRoomKeyPackagePayload = (payload) => {
 };
 
 // Discover event rooms with optional search/filters.
-router.get('/rooms/discover', authenticateToken, async (req, res) => {
+router.get('/rooms/discover', discoveryLimiter, authenticateToken, async (req, res) => {
   try {
     await reconcileEventRooms();
 
@@ -431,7 +446,7 @@ router.get('/rooms/discover', authenticateToken, async (req, res) => {
 });
 
 // Upcoming event rooms based on schedule start datetime.
-router.get('/rooms/events/upcoming', authenticateToken, async (req, res) => {
+router.get('/rooms/events/upcoming', discoveryLimiter, authenticateToken, async (req, res) => {
   try {
     await reconcileEventRooms();
     const now = new Date();
@@ -482,7 +497,7 @@ router.get('/rooms/events/upcoming', authenticateToken, async (req, res) => {
 });
 
 // All chat rooms endpoint must be explicitly requested by the user.
-router.get('/rooms/all', authenticateToken, async (req, res) => {
+router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = parseDiscoveryLimit(req.query.limit);
@@ -515,7 +530,7 @@ router.get('/rooms/all', authenticateToken, async (req, res) => {
 });
 
 // Get room details and messages
-router.get('/rooms/:roomId', authenticateToken, async (req, res) => {
+router.get('/rooms/:roomId', roomReadLimiter, authenticateToken, async (req, res) => {
   try {
     const { roomId } = req.params;
     const page = parseInt(req.query.page, 10) || 1;
@@ -594,6 +609,7 @@ router.get('/rooms/:roomId', authenticateToken, async (req, res) => {
 // Send message to chat room with rate limiting
 router.post('/rooms/:roomId/messages', [
   authenticateToken,
+  roomWriteLimiter,
   body('content').optional().trim().isLength({ max: 2000 }).withMessage('Message too long'),
   body('encryptedContent').optional().trim(),
   body('messageType').optional().isIn(MESSAGE_TYPES).withMessage('Invalid message type'),
@@ -679,8 +695,8 @@ router.post('/rooms/:roomId/messages', [
       messageData.location = user.location;
     }
     
-    const message = new ChatMessage(messageData);
-    await message.save();
+    const savedMessage = new ChatMessage(messageData);
+    await savedMessage.save();
     
     // Update room message count and last activity
     await room.incrementMessageCount();
@@ -689,18 +705,18 @@ router.post('/rooms/:roomId/messages', [
     await room.addMember(userId);
     
     // Populate user info for response
-    await message.populate('userId', 'username realName');
+    await savedMessage.populate('userId', 'username realName');
 
     const senderLabel = user.username || user.realName || 'Someone';
-    await notifyRoomMembers({ room, senderId: userId, senderLabel, message });
+    await notifyRoomMembers({ room, senderId: userId, senderLabel, message: savedMessage });
     
     // Broadcast message via WebSocket (handled in server.js)
     // The WebSocket server will handle real-time broadcasting
     
     res.status(201).json({
       success: true,
-      message: 'Message sent successfully',
-      message: message.toPublicMessage(),
+      statusMessage: 'Message sent successfully',
+      message: savedMessage.toPublicMessage(),
       rateLimit: {
         allowed: true,
         remaining: rateLimitCheck.remaining
@@ -715,6 +731,7 @@ router.post('/rooms/:roomId/messages', [
 // Send E2EE message envelope only (no plaintext accepted)
 router.post('/rooms/:roomId/messages/e2ee', [
   authenticateToken,
+  roomWriteLimiter,
   body('content').not().exists().withMessage('Plaintext content is not allowed on E2EE endpoint'),
   body('encryptedContent').not().exists().withMessage('Legacy encryptedContent is not allowed on E2EE endpoint'),
   body('messageType').optional().isIn(MESSAGE_TYPES).withMessage('Invalid messageType'),
@@ -1251,6 +1268,7 @@ router.get('/rooms/:roomId/messages', authenticateToken, async (req, res) => {
 // Migrate a legacy message to E2EE envelope format (idempotent)
 router.post('/rooms/:roomId/messages/:messageId/migrate-e2ee', [
   authenticateToken,
+  roomWriteLimiter,
   body('content').not().exists().withMessage('Plaintext content is not allowed on migration endpoint'),
   body('encryptedContent').not().exists().withMessage('Legacy encryptedContent is not allowed on migration endpoint'),
   body('e2ee').custom((value) => {

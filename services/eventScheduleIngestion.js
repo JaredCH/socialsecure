@@ -8,6 +8,7 @@ const parser = new Parser({
     'User-Agent': 'SocialSecure-EventIngestion/1.0'
   }
 });
+const DEFAULT_LIVE_SPORT_DURATION_MS = 3 * 60 * 60 * 1000;
 
 const DEFAULT_SOURCES = [
   {
@@ -147,7 +148,6 @@ const fetchTvMaze = async (source) => {
 
 const fetchRssSports = async (source) => {
   const feed = await parser.parseURL(source.url);
-  const now = Date.now();
   return (feed.items || [])
     .slice(0, 100)
     .map((item, index) => {
@@ -164,7 +164,7 @@ const fetchRssSports = async (source) => {
         season: null,
         episode: null,
         startAt: startAt.toISOString(),
-        endAt: new Date(Math.max(now, startAt.getTime()) + (3 * 60 * 60 * 1000)).toISOString(),
+        endAt: new Date(startAt.getTime() + DEFAULT_LIVE_SPORT_DURATION_MS).toISOString(),
         sourceRef: `${source.key}:${String(sourceRefRaw).slice(0, 240)}`,
         sourceUpdatedAt: new Date(),
         sourceKey: source.key,

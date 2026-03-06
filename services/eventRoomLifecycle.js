@@ -34,8 +34,8 @@ const reconcileEventRooms = async ({ now = new Date() } = {}) => {
 
   const events = await EventSchedule.find({
     startAt: {
-      $gte: new Date(now.getTime() - (WINDOW_BEFORE_DAYS * DAY_MS) - DAY_MS),
-      $lte: new Date(now.getTime() + (WINDOW_AFTER_DAYS * DAY_MS) + DAY_MS)
+      $gte: new Date(now.getTime() - (WINDOW_BEFORE_DAYS * DAY_MS)),
+      $lte: new Date(now.getTime() + (WINDOW_AFTER_DAYS * DAY_MS))
     }
   }).lean();
 
@@ -46,7 +46,7 @@ const reconcileEventRooms = async ({ now = new Date() } = {}) => {
     const shouldDiscover = isInWindow && event.status !== 'canceled';
     const stableKey = buildRoomStableKey(event);
 
-    const existing = await ChatRoom.findOne({ stableKey }).select('_id').lean();
+    const existing = await ChatRoom.findOne({ stableKey }).select('_id archivedAt').lean();
     const baseUpdate = {
       name: buildEventRoomName(event),
       type: 'event',
@@ -54,7 +54,7 @@ const reconcileEventRooms = async ({ now = new Date() } = {}) => {
       stableKey,
       autoLifecycle: true,
       discoverable: shouldDiscover,
-      archivedAt: shouldDiscover ? null : now,
+      archivedAt: shouldDiscover ? null : (existing?.archivedAt || now),
       visibilityWindow: {
         startAt: visibilityStart,
         endAt: visibilityEnd
