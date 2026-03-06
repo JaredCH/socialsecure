@@ -236,8 +236,6 @@ const SocialDesignStudioModal = ({
   }, [previewPanels]);
   const selectedPanel = activePanelId ? previewPanels.find((panel) => panel.id === activePanelId) : null;
 
-  if (!isOpen) return null;
-
   const handleDuplicate = (configId, fallbackName) => {
     const name = (duplicateNames[configId] || '').trim() || `${fallbackName} Copy`;
     onDuplicateConfig(configId, name);
@@ -372,6 +370,8 @@ const SocialDesignStudioModal = ({
       document.removeEventListener('pointerup', handlePointerUp);
     };
   }, [pointerAction, previewPanels, layoutDraftById]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">

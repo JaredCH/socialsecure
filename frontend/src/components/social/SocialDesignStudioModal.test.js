@@ -131,4 +131,42 @@ describe('SocialDesignStudioModal layout studio', () => {
     expect(timelinePreview.style.top).toBe('calc(0% + 4px)');
   });
 
+  it('renders safely when toggling from closed to open', async () => {
+    const baseProps = {
+      onClose: jest.fn(),
+      preferences: {},
+      configs: [],
+      activeConfigId: '',
+      sharedDesigns: [],
+      favoriteDesigns: [],
+      onApplyTemplate: jest.fn(),
+      onGlobalStylesChange: jest.fn(),
+      onPanelOverrideToggle: jest.fn(),
+      onPanelStyleChange: jest.fn(),
+      onPanelLayoutChange: jest.fn(),
+      onCreateConfig: jest.fn(),
+      onUpdateConfig: jest.fn(),
+      onApplyConfig: jest.fn(),
+      onDuplicateConfig: jest.fn(),
+      onDeleteConfig: jest.fn(),
+      onFavoriteShared: jest.fn(),
+      onCloneShared: jest.fn(),
+      busy: false,
+      error: '',
+      successMessage: ''
+    };
+
+    await act(async () => {
+      root.render(<SocialDesignStudioModal {...baseProps} isOpen={false} />);
+    });
+
+    expect(container.textContent).toBe('');
+
+    await act(async () => {
+      root.render(<SocialDesignStudioModal {...baseProps} isOpen />);
+    });
+
+    expect(container.textContent).toContain('Social Page Customization');
+  });
+
 });
