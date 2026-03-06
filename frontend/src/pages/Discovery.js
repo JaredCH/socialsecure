@@ -166,12 +166,14 @@ const Discovery = () => {
   const [usersHasMore, setUsersHasMore] = useState(false);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState('');
+  const [usersLoaded, setUsersLoaded] = useState(false);
 
   const [posts, setPosts] = useState([]);
   const [postsPage, setPostsPage] = useState(1);
   const [postsHasMore, setPostsHasMore] = useState(false);
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsError, setPostsError] = useState('');
+  const [postsLoaded, setPostsLoaded] = useState(false);
 
   const [viewerCoords, setViewerCoords] = useState(null);
 
@@ -187,6 +189,7 @@ const Discovery = () => {
   const loadUsers = useCallback(async (page) => {
     setUsersLoading(true);
     setUsersError('');
+    setUsersLoaded(true);
     try {
       const { data } = await discoveryAPI.getUsers('', page, 20);
       if (page === 1) {
@@ -206,6 +209,7 @@ const Discovery = () => {
   const loadPosts = useCallback(async (page) => {
     setPostsLoading(true);
     setPostsError('');
+    setPostsLoaded(true);
     try {
       const lat = viewerCoords?.latitude ?? null;
       const lon = viewerCoords?.longitude ?? null;
@@ -226,16 +230,16 @@ const Discovery = () => {
 
   // Load initial data when tab changes
   useEffect(() => {
-    if (activeTab === 'people' && users.length === 0 && !usersLoading) {
+    if (activeTab === 'people' && !usersLoaded && !usersLoading) {
       loadUsers(1);
     }
-  }, [activeTab, loadUsers, users.length, usersLoading]);
+  }, [activeTab, loadUsers, usersLoaded, usersLoading]);
 
   useEffect(() => {
-    if (activeTab === 'posts' && posts.length === 0 && !postsLoading) {
+    if (activeTab === 'posts' && !postsLoaded && !postsLoading) {
       loadPosts(1);
     }
-  }, [activeTab, loadPosts, posts.length, postsLoading]);
+  }, [activeTab, loadPosts, postsLoaded, postsLoading]);
 
   const handleSendFriendRequest = async (userId) => {
     await friendsAPI.sendRequest(userId);
