@@ -71,6 +71,7 @@ describe('SocialDesignStudioModal layout studio', () => {
       topLeftCell.click();
     });
     expect(container.textContent).toContain('Now select the bottom-right corner');
+    expect(container.querySelectorAll('.pointer-events-none').length).toBeGreaterThan(0);
 
     const bottomRightCell = container.querySelector('[aria-label="Grid cell row 20 col 8"]');
     expect(bottomRightCell).toBeTruthy();

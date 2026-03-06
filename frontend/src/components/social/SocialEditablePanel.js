@@ -62,7 +62,8 @@ const SocialEditablePanel = ({
   headerActions,
   children,
   className = '',
-  contentClassName = ''
+  contentClassName = '',
+  style = {}
 }) => {
   const resolvedStyles = panel?.resolvedStyles || panel?.styles || {};
   const headerTextColor = getHeaderTextColor(resolvedStyles.headerColor);
@@ -73,6 +74,7 @@ const SocialEditablePanel = ({
     <section
       className={`overflow-hidden rounded-2xl border border-slate-200 shadow-sm transition-all ${className}`}
       style={{
+        ...style,
         backgroundColor: resolvedStyles.panelColor,
         color: resolvedStyles.fontColor,
         fontFamily: resolvedStyles.fontFamily,
