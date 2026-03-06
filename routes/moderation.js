@@ -14,6 +14,8 @@ const ChatMessage = require('../models/ChatMessage');
 const ConversationMessage = require('../models/ConversationMessage');
 const ChatRoom = require('../models/ChatRoom');
 const ChatConversation = require('../models/ChatConversation');
+const Article = require('../models/Article');
+const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 
 const REPORT_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const REPORT_LIMIT_MAX = 5;
@@ -75,6 +77,9 @@ const requireAdmin = (req, res, next) => {
   }
   return next();
 };
+
+const normalizeSortDirection = (value) => (String(value || '').toLowerCase() === 'asc' ? 1 : -1);
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 router.post('/report', [
   authenticateToken,
@@ -518,6 +523,173 @@ router.get('/control-panel/details', authenticateToken, requireAdmin, async (req
   } catch (error) {
     console.error('Control panel details error:', error);
     return res.status(500).json({ error: 'Failed to load control panel details' });
+  }
+});
+
+router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+    const skip = (page - 1) * limit;
+    const source = String(req.query.source || '').trim();
+    const tag = String(req.query.tag || '').trim().toLowerCase();
+    const zipCode = String(req.query.zipCode || '').trim().toUpperCase();
+    const region = String(req.query.region || '').trim().toLowerCase();
+    const processingStatus = String(req.query.processingStatus || '').trim().toLowerCase();
+    const search = String(req.query.search || '').trim();
+    const fromDate = req.query.from ? new Date(req.query.from) : null;
+    const toDate = req.query.to ? new Date(req.query.to) : null;
+    const sortBy = ['createdAt', 'scrapedAt', 'resolvedScope', 'processingStatus'].includes(req.query.sortBy)
+      ? req.query.sortBy
+      : 'createdAt';
+    const sortDir = normalizeSortDirection(req.query.sortDir);
+
+    const query = {};
+    if (source) {
+      query['source.name'] = new RegExp(escapeRegex(source), 'i');
+    }
+    if (tag) {
+      query.tags = tag;
+    }
+    if (zipCode) {
+      query['normalized.assignedZipCode'] = zipCode;
+    }
+    if (region) {
+      query.resolvedScope = region;
+    }
+    if (processingStatus) {
+      query.processingStatus = processingStatus;
+    }
+    if (fromDate || toDate) {
+      query.scrapedAt = {};
+      if (fromDate && !Number.isNaN(fromDate.getTime())) query.scrapedAt.$gte = fromDate;
+      if (toDate && !Number.isNaN(toDate.getTime())) query.scrapedAt.$lte = toDate;
+      if (Object.keys(query.scrapedAt).length === 0) delete query.scrapedAt;
+    }
+    if (search) {
+      query.$or = [
+        { 'normalized.title': new RegExp(escapeRegex(search), 'i') },
+        { 'normalized.url': new RegExp(escapeRegex(search), 'i') },
+        { 'source.sourceId': new RegExp(escapeRegex(search), 'i') }
+      ];
+    }
+
+    const [records, total] = await Promise.all([
+      NewsIngestionRecord.find(query)
+        .sort({ [sortBy]: sortDir, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      NewsIngestionRecord.countDocuments(query)
+    ]);
+
+    return res.json({
+      records: records.map((record) => ({
+        _id: record._id,
+        ingestionRunId: record.ingestionRunId,
+        source: record.source,
+        scrapedAt: record.scrapedAt,
+        normalized: {
+          title: record.normalized?.title || '',
+          topics: record.normalized?.topics || [],
+          assignedZipCode: record.normalized?.assignedZipCode || null,
+          locations: record.normalized?.locations || [],
+          localityLevel: record.normalized?.localityLevel || 'global'
+        },
+        resolvedScope: record.resolvedScope || 'global',
+        dedupe: record.dedupe,
+        persistence: record.persistence,
+        processingStatus: record.processingStatus,
+        tags: record.tags || [],
+        eventCount: Array.isArray(record.events) ? record.events.length : 0,
+        createdAt: record.createdAt
+      })),
+      pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
+    });
+  } catch (error) {
+    console.error('Control panel news ingestion list error:', error);
+    return res.status(500).json({ error: 'Failed to load news ingestion records' });
+  }
+});
+
+router.get('/control-panel/news-ingestion/:recordId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const record = await NewsIngestionRecord.findById(req.params.recordId).lean();
+    if (!record) {
+      return res.status(404).json({ error: 'News ingestion record not found' });
+    }
+    const persistedArticle = record.persistence?.articleId
+      ? await Article.findById(record.persistence.articleId).select('_id title source publishedAt').lean()
+      : null;
+    return res.json({
+      record: {
+        ...record,
+        persistedArticle
+      }
+    });
+  } catch (error) {
+    console.error('Control panel news ingestion detail error:', error);
+    return res.status(500).json({ error: 'Failed to load news ingestion record details' });
+  }
+});
+
+router.get('/control-panel/news-ingestion/:recordId/timeline', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const record = await NewsIngestionRecord.findById(req.params.recordId)
+      .select('_id ingestionRunId dedupe persistence processingStatus events createdAt updatedAt')
+      .lean();
+    if (!record) {
+      return res.status(404).json({ error: 'News ingestion record not found' });
+    }
+    const timeline = (record.events || [])
+      .map((event) => ({
+        timestamp: event.timestamp,
+        severity: event.severity,
+        eventType: event.eventType,
+        message: event.message,
+        metadata: event.metadata || {}
+      }))
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return res.json({
+      recordId: record._id,
+      ingestionRunId: record.ingestionRunId,
+      processingStatus: record.processingStatus,
+      dedupe: record.dedupe,
+      persistence: record.persistence,
+      timeline
+    });
+  } catch (error) {
+    console.error('Control panel news ingestion timeline error:', error);
+    return res.status(500).json({ error: 'Failed to load news ingestion timeline' });
+  }
+});
+
+router.get('/control-panel/news-ingestion/:recordId/logs', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const severity = String(req.query.severity || '').trim().toLowerCase();
+    const record = await NewsIngestionRecord.findById(req.params.recordId)
+      .select('_id events')
+      .lean();
+    if (!record) {
+      return res.status(404).json({ error: 'News ingestion record not found' });
+    }
+    const logs = (record.events || [])
+      .filter((event) => (!severity ? true : event.severity === severity))
+      .map((event) => ({
+        timestamp: event.timestamp,
+        severity: event.severity,
+        eventType: event.eventType,
+        message: event.message,
+        metadata: event.metadata || {}
+      }))
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return res.json({
+      recordId: record._id,
+      logs
+    });
+  } catch (error) {
+    console.error('Control panel news ingestion logs error:', error);
+    return res.status(500).json({ error: 'Failed to load news ingestion logs' });
   }
 });
 

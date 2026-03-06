@@ -71,7 +71,9 @@ describe('News scope routing', () => {
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'user-1' }));
     Article.countDocuments.mockResolvedValue(2);
     Article.findDuplicate.mockResolvedValue(null);
+    mockGeocode.mockReset();
     mockGeocode.mockResolvedValue([]);
+    newsRoutes.internals.geocodeContextCache.clear();
   });
 
   it('defaults to local scope when profile location exists and no explicit preference is stored', async () => {
@@ -597,6 +599,101 @@ describe('News scope routing', () => {
     expect(response.body.personalization.activeScope).toBe('regional');
     expect(response.body.articles.length).toBeGreaterThanOrEqual(1);
     expect(response.body.articles[0]._id).toBe('state-name-1');
+  });
+
+  it('uses city geocoding enrichment to keep regional scope active when state is missing', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'regional-city-1',
+        title: 'Central Texas infrastructure update',
+        description: '',
+        source: 'Regional Wire',
+        sourceType: 'rss',
+        sourceId: 'regional-wire',
+        topics: ['politics'],
+        locations: ['Texas', 'US'],
+        localityLevel: 'state',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'regional',
+      locations: [{ city: 'San Marcos', country: 'US', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'San Marcos', county: null, state: null, country: 'US', zipCode: null }) });
+    mockGeocode.mockResolvedValue([{
+      city: 'San Marcos',
+      county: 'Hays County',
+      state: 'Texas',
+      stateCode: 'TX',
+      country: 'United States',
+      countryCode: 'US'
+    }]);
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=regional')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.activeScope).toBe('regional');
+    expect(response.body.personalization.fallbackApplied).toBe(false);
+    expect(response.body.personalization.locationContext.hasState).toBe(true);
+  });
+
+  it('reuses stale geocode cache on upstream failure to avoid unnecessary national fallback', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'regional-cache-1',
+        title: 'Texas emergency update',
+        description: '',
+        source: 'State Wire',
+        sourceType: 'rss',
+        sourceId: 'state-wire',
+        topics: ['politics'],
+        locations: ['Texas', 'USA'],
+        localityLevel: 'state',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'regional',
+      locations: [{ country: 'US', zipCode: '78666', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: 'US', zipCode: '78666' }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    mockGeocode.mockResolvedValueOnce([{
+      city: 'San Marcos',
+      county: 'Hays County',
+      state: 'Texas',
+      stateCode: 'TX',
+      country: 'United States',
+      countryCode: 'US'
+    }]);
+
+    const firstResponse = await request(app)
+      .get('/api/news/feed?scope=regional')
+      .set('Authorization', 'Bearer token');
+    expect(firstResponse.status).toBe(200);
+    expect(firstResponse.body.personalization.activeScope).toBe('regional');
+
+    mockGeocode.mockRejectedValueOnce(new Error('upstream unavailable'));
+    const secondResponse = await request(app)
+      .get('/api/news/feed?scope=regional')
+      .set('Authorization', 'Bearer token');
+
+    expect(secondResponse.status).toBe(200);
+    expect(secondResponse.body.personalization.activeScope).toBe('regional');
+    expect(secondResponse.body.personalization.fallbackApplied).toBe(false);
   });
 
   it('treats nearby zip prefixes as local proximity matches', async () => {

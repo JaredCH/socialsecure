@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const Article = require('../models/Article');
 const RssSource = require('../models/RssSource');
 const NewsPreferences = require('../models/NewsPreferences');
+const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 const User = require('../models/User');
 const {
   calculateViralScore,
@@ -48,6 +49,8 @@ const KEYWORD_MATCH_WEIGHT = 100;
 const SCOPE_TIER_WEIGHT = 10;
 const MAX_SCOPE_TIERS = 4;
 const MAX_FEED_CANDIDATES = 400;
+const LOCATION_GEOCODE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const MAX_LOCATION_QUERY_HINTS = 30;
 const newsGeocoder = NodeGeocoder({
   provider: 'openstreetmap',
   httpAdapter: 'https',
@@ -114,6 +117,7 @@ const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase
 const normalizeTopicToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 const normalizeUsZipCode = (value) => normalizeZipCode(value).split('-')[0];
+const geocodeContextCache = new Map();
 
 const toUniqueNonEmptyStrings = (values = []) => [...new Set(values
   .map((value) => String(value || '').trim())
@@ -243,6 +247,16 @@ const CANADA_POSTAL_REGEX = /^[A-Z]\d[A-Z]\d[A-Z]\d$/;
 
 const isZipLikeToken = (token) => ZIP_CODE_REGEX.test(token) || CANADA_POSTAL_REGEX.test(token);
 
+const normalizeLocationFieldValue = (field, value) => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+  if (field === 'zipCode') {
+    const normalizedZip = normalizeZipCode(trimmed);
+    return isZipLikeToken(normalizedZip) ? normalizedZip : null;
+  }
+  return trimmed;
+};
+
 const extractZipTokens = (values = []) => toUniqueNonEmptyStrings(values
   .map((value) => normalizeZipCode(value))
   .filter((token) => token && isZipLikeToken(token)));
@@ -350,29 +364,57 @@ const collectLocationValues = ({ preferences, user, field }) => {
   const preferenceValues = Array.isArray(preferences?.locations)
     ? preferences.locations.map((location) => location?.[field])
     : [];
-  return toUniqueNonEmptyStrings([...preferenceValues, user?.[field]]);
+  return toUniqueNonEmptyStrings(
+    [...preferenceValues, user?.[field]]
+      .map((value) => normalizeLocationFieldValue(field, value))
+      .filter(Boolean)
+  );
 };
 
 const getUserLocationFallback = (user) => {
   if (!user) return null;
   const fallback = {
-    city: user.city || null,
-    county: user.county || null,
-    state: user.state || null,
-    country: user.country || null,
-    zipCode: user.zipCode || null
+    city: normalizeLocationFieldValue('city', user.city),
+    county: normalizeLocationFieldValue('county', user.county),
+    state: normalizeLocationFieldValue('state', user.state),
+    country: normalizeLocationFieldValue('country', user.country),
+    zipCode: normalizeLocationFieldValue('zipCode', user.zipCode)
   };
   return hasLocationContext(fallback) ? fallback : null;
 };
 
-const geocodeFromZipContext = async ({ zipCodeValues = [], countryValues = [] }) => {
-  const zipCandidates = toUniqueNonEmptyStrings(zipCodeValues.map(normalizeZipCode));
+const geocodeLocationQuery = async (query) => {
+  const normalizedQuery = String(query || '').trim();
+  if (!normalizedQuery) return null;
+
+  const now = Date.now();
+  const cached = geocodeContextCache.get(normalizedQuery);
+  if (cached && (now - cached.timestamp) < LOCATION_GEOCODE_CACHE_TTL_MS) {
+    return { result: cached.result, cacheStatus: 'fresh' };
+  }
+
+  try {
+    const results = await newsGeocoder.geocode(normalizedQuery);
+    const first = Array.isArray(results) && results.length > 0 ? results[0] : null;
+    geocodeContextCache.set(normalizedQuery, { result: first, timestamp: now });
+    return { result: first, cacheStatus: cached ? 'refresh' : 'miss' };
+  } catch (error) {
+    if (cached?.result) {
+      return { result: cached.result, cacheStatus: 'stale_error_reuse', error };
+    }
+    throw error;
+  }
+};
+
+const geocodeFromLocationContext = async ({ zipCodeValues = [], cityValues = [], countyValues = [], stateValues = [], countryValues = [] }) => {
+  const zipCandidates = extractZipTokens(zipCodeValues);
+  const cityCandidates = toUniqueNonEmptyStrings(cityValues);
+  const countyCandidates = toUniqueNonEmptyStrings(countyValues);
+  const stateCandidates = toUniqueNonEmptyStrings(stateValues);
   const countryCandidates = toUniqueNonEmptyStrings(countryValues);
-  if (!zipCandidates.length) return null;
 
   const queryHints = [];
   for (const zipCode of zipCandidates) {
-    if (!zipCode) continue;
     if (countryCandidates.length > 0) {
       for (const country of countryCandidates) {
         queryHints.push(`${zipCode}, ${country}`);
@@ -380,16 +422,43 @@ const geocodeFromZipContext = async ({ zipCodeValues = [], countryValues = [] })
     }
     queryHints.push(zipCode);
   }
+  for (const city of cityCandidates) {
+    for (const state of stateCandidates) {
+      queryHints.push(`${city}, ${state}`);
+    }
+    for (const country of countryCandidates) {
+      queryHints.push(`${city}, ${country}`);
+    }
+    queryHints.push(city);
+  }
+  for (const county of countyCandidates) {
+    for (const state of stateCandidates) {
+      queryHints.push(`${county}, ${state}`);
+    }
+    for (const country of countryCandidates) {
+      queryHints.push(`${county}, ${country}`);
+    }
+    queryHints.push(county);
+  }
+
+  if (!queryHints.length) return null;
+  const boundedQueryHints = queryHints.slice(0, MAX_LOCATION_QUERY_HINTS);
 
   const attemptedQueries = new Set();
-  for (const query of queryHints) {
+  for (const query of boundedQueryHints) {
     const normalizedQuery = String(query || '').trim();
     if (!normalizedQuery || attemptedQueries.has(normalizedQuery)) continue;
     attemptedQueries.add(normalizedQuery);
     try {
-      const results = await newsGeocoder.geocode(normalizedQuery);
-      if (Array.isArray(results) && results.length > 0) {
-        return results[0];
+      const geocodeResult = await geocodeLocationQuery(normalizedQuery);
+      if (geocodeResult?.result) {
+        return {
+          ...geocodeResult.result,
+          _newsGeocodeMeta: {
+            query: normalizedQuery,
+            cacheStatus: geocodeResult.cacheStatus
+          }
+        };
       }
     } catch (error) {
       console.warn('News zip geocode lookup failed:', normalizedQuery, error.message);
@@ -400,9 +469,9 @@ const geocodeFromZipContext = async ({ zipCodeValues = [], countryValues = [] })
   return null;
 };
 
-const shouldEnrichWithZipGeocode = (context) => (
-  context.zipCodeValues.length > 0
-  && (!context.cityValues.length || !context.countyValues.length || !context.stateValues.length)
+const shouldEnrichLocationContext = (context) => (
+  (context.zipCodeValues.length > 0 || context.cityValues.length > 0 || context.countyValues.length > 0)
+  && (!context.stateValues.length || !context.countryValues.length || !context.cityValues.length)
 );
 
 const applyZipGeocodeToLocationContext = (context, zipGeocode) => {
@@ -436,11 +505,11 @@ const resolveLocationContext = async ({ preferences, user }) => {
   if (hasLocationContext(primary)) {
     const primaryLocation = primary.toObject?.() || primary;
     const context = {
-      city: primaryLocation.city || fallback?.city || null,
-      county: primaryLocation.county || fallback?.county || null,
-      state: primaryLocation.state || fallback?.state || null,
-      country: primaryLocation.country || fallback?.country || null,
-      zipCode: primaryLocation.zipCode || fallback?.zipCode || null,
+      city: normalizeLocationFieldValue('city', primaryLocation.city) || fallback?.city || null,
+      county: normalizeLocationFieldValue('county', primaryLocation.county) || fallback?.county || null,
+      state: normalizeLocationFieldValue('state', primaryLocation.state) || fallback?.state || null,
+      country: normalizeLocationFieldValue('country', primaryLocation.country) || fallback?.country || null,
+      zipCode: normalizeLocationFieldValue('zipCode', primaryLocation.zipCode) || fallback?.zipCode || null,
       cityValues,
       countyValues,
       stateValues,
@@ -448,13 +517,20 @@ const resolveLocationContext = async ({ preferences, user }) => {
       zipCodeValues,
       source: 'preferences'
     };
-    if (shouldEnrichWithZipGeocode(context)) {
-      const zipGeocode = await geocodeFromZipContext({
+    if (shouldEnrichLocationContext(context)) {
+      const zipGeocode = await geocodeFromLocationContext({
         zipCodeValues: context.zipCodeValues,
+        cityValues: context.cityValues,
+        countyValues: context.countyValues,
+        stateValues: context.stateValues,
         countryValues: context.countryValues
       });
       if (zipGeocode) {
-        return applyZipGeocodeToLocationContext(context, zipGeocode);
+        const nextContext = applyZipGeocodeToLocationContext(context, zipGeocode);
+        if (zipGeocode?._newsGeocodeMeta?.cacheStatus === 'stale_error_reuse') {
+          nextContext.source = `${nextContext.source}+cached`;
+        }
+        return nextContext;
       }
     }
     return context;
@@ -469,13 +545,20 @@ const resolveLocationContext = async ({ preferences, user }) => {
       zipCodeValues,
       source: 'profile'
     };
-    if (shouldEnrichWithZipGeocode(context)) {
-      const zipGeocode = await geocodeFromZipContext({
+    if (shouldEnrichLocationContext(context)) {
+      const zipGeocode = await geocodeFromLocationContext({
         zipCodeValues: context.zipCodeValues,
+        cityValues: context.cityValues,
+        countyValues: context.countyValues,
+        stateValues: context.stateValues,
         countryValues: context.countryValues
       });
       if (zipGeocode) {
-        return applyZipGeocodeToLocationContext(context, zipGeocode);
+        const nextContext = applyZipGeocodeToLocationContext(context, zipGeocode);
+        if (zipGeocode?._newsGeocodeMeta?.cacheStatus === 'stale_error_reuse') {
+          nextContext.source = `${nextContext.source}+cached`;
+        }
+        return nextContext;
       }
     }
     return context;
@@ -529,6 +612,19 @@ const resolveActiveScope = ({ requestedScope, locationContext }) => {
   return {
     activeScope,
     fallbackApplied: activeScope !== requestedScope
+  };
+};
+
+const summarizeLocationContextForTelemetry = (locationContext = {}) => {
+  const zipValues = extractZipTokens(locationContext.zipCodeValues || [locationContext.zipCode]);
+  return {
+    source: locationContext.source || 'none',
+    cityCount: Array.isArray(locationContext.cityValues) ? locationContext.cityValues.length : 0,
+    countyCount: Array.isArray(locationContext.countyValues) ? locationContext.countyValues.length : 0,
+    stateCount: Array.isArray(locationContext.stateValues) ? locationContext.stateValues.length : 0,
+    countryCount: Array.isArray(locationContext.countryValues) ? locationContext.countryValues.length : 0,
+    zipCount: zipValues.length,
+    hasAnyLocation: hasLocationContext(locationContext)
   };
 };
 
@@ -685,7 +781,8 @@ async function fetchRssSource(source) {
         sourceType: 'rss',
         localityLevel,
         language: item.isoLanguage || feed.language || 'en',
-        providerId
+        providerId,
+        scrapeTimestamp: new Date()
       };
     }));
   } catch (error) {
@@ -742,7 +839,8 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
         assignedZipCode,
         sourceType,
         localityLevel,
-        language: 'en'
+        language: 'en',
+        scrapeTimestamp: new Date()
       };
     }));
   } catch (error) {
@@ -781,7 +879,8 @@ async function fetchYoutubeSource(channelUrl) {
         assignedZipCode: null,
         sourceType: 'youtube',
         localityLevel: 'global',
-        language: 'en'
+        language: 'en',
+        scrapeTimestamp: new Date()
       };
     });
   } catch (error) {
@@ -813,7 +912,8 @@ async function fetchPodcastSource(feedUrl) {
         assignedZipCode: null,
         sourceType: 'podcast',
         localityLevel: 'global',
-        language: feed.language || 'en'
+        language: feed.language || 'en',
+        scrapeTimestamp: new Date()
       };
     });
   } catch (error) {
@@ -845,11 +945,77 @@ function extractImageFromContent(content) {
 /**
  * Process and deduplicate articles
  */
-async function processArticles(articles) {
+const mapLocalityLevelToScope = (localityLevel) => {
+  const normalized = normalizeLocationToken(localityLevel);
+  if (normalized === 'city' || normalized === 'county') return 'local';
+  if (normalized === 'state') return 'regional';
+  if (normalized === 'country') return 'national';
+  return 'global';
+};
+
+const buildIngestionEvents = ({ outcome, duplicateReason = '', errorMessage = '' }) => {
+  const baseEvents = [{
+    severity: 'info',
+    eventType: 'record_received',
+    message: 'Record received for processing',
+    metadata: {}
+  }];
+  if (outcome === 'updated') {
+    baseEvents.push({
+      severity: 'info',
+      eventType: 'dedupe_update',
+      message: duplicateReason || 'Existing article updated with fresher payload',
+      metadata: {}
+    });
+  } else if (outcome === 'duplicate') {
+    baseEvents.push({
+      severity: 'warn',
+      eventType: 'dedupe_skip',
+      message: duplicateReason || 'Duplicate article skipped',
+      metadata: {}
+    });
+  } else if (outcome === 'inserted') {
+    baseEvents.push({
+      severity: 'info',
+      eventType: 'insert',
+      message: 'Article inserted',
+      metadata: {}
+    });
+  } else if (outcome === 'error') {
+    baseEvents.push({
+      severity: 'error',
+      eventType: 'error',
+      message: errorMessage || 'Article processing failed',
+      metadata: {}
+    });
+  }
+  return baseEvents.map((event) => ({ ...event, timestamp: new Date() }));
+};
+
+const buildNormalizedUrlHash = (url) => {
+  if (!url) return null;
+  return crypto.createHash('sha256').update(String(url).toLowerCase().trim()).digest('hex').substring(0, 16);
+};
+
+const persistNewsIngestionRecord = async (payload) => {
+  if (mongoose.connection?.readyState !== 1) {
+    return null;
+  }
+  try {
+    return await NewsIngestionRecord.create(payload);
+  } catch (error) {
+    console.warn('Unable to persist NewsIngestionRecord:', error.message);
+    return null;
+  }
+};
+
+async function processArticles(articles, options = {}) {
+  const ingestionRunId = options.ingestionRunId || uuidv4();
   const results = {
     inserted: 0,
     updated: 0,
-    duplicates: 0
+    duplicates: 0,
+    ingestionRunId
   };
   
   const scoredArticles = [];
@@ -861,7 +1027,7 @@ async function processArticles(articles) {
   for (const article of articles) {
     try {
       const normalizedUrlHash = article.url
-        ? crypto.createHash('sha256').update(String(article.url).toLowerCase().trim()).digest('hex').substring(0, 16)
+        ? buildNormalizedUrlHash(article.url)
         : null;
       const sourceMomentum = getArticleMomentumSignal(article, momentumMap);
       const scoring = calculateViralScore(article, { sourceMomentum });
@@ -906,8 +1072,84 @@ async function processArticles(articles) {
           });
           results.updated++;
           scoredArticles.push(scoredArticle);
+          await persistNewsIngestionRecord({
+            ingestionRunId,
+            source: {
+              name: scoredArticle.source || '',
+              sourceType: scoredArticle.sourceType || '',
+              sourceId: scoredArticle.sourceId || '',
+              providerId: scoredArticle.providerId || '',
+              url: scoredArticle.url || ''
+            },
+            scrapedAt: article.scrapeTimestamp || new Date(),
+            normalized: {
+              title: scoredArticle.title || '',
+              description: scoredArticle.description || '',
+              url: scoredArticle.url || '',
+              imageUrl: scoredArticle.imageUrl || null,
+              publishedAt: scoredArticle.publishedAt || null,
+              topics: scoredArticle.topics || [],
+              locations: scoredArticle.locations || [],
+              assignedZipCode: scoredArticle.assignedZipCode || null,
+              localityLevel: scoredArticle.localityLevel || 'global',
+              language: scoredArticle.language || 'en',
+              normalizedUrlHash: scoredArticle.normalizedUrlHash || null
+            },
+            resolvedScope: mapLocalityLevelToScope(scoredArticle.localityLevel),
+            dedupe: {
+              outcome: 'updated',
+              existingArticleId: existing._id,
+              reason: 'incoming_newer_than_existing'
+            },
+            persistence: {
+              articleId: existing._id,
+              operation: 'update',
+              persistedAt: new Date()
+            },
+            processingStatus: 'processed',
+            tags: scoredArticle.topics || [],
+            events: buildIngestionEvents({ outcome: 'updated', duplicateReason: 'incoming_newer_than_existing' })
+          });
         } else {
           results.duplicates++;
+          await persistNewsIngestionRecord({
+            ingestionRunId,
+            source: {
+              name: scoredArticle.source || '',
+              sourceType: scoredArticle.sourceType || '',
+              sourceId: scoredArticle.sourceId || '',
+              providerId: scoredArticle.providerId || '',
+              url: scoredArticle.url || ''
+            },
+            scrapedAt: article.scrapeTimestamp || new Date(),
+            normalized: {
+              title: scoredArticle.title || '',
+              description: scoredArticle.description || '',
+              url: scoredArticle.url || '',
+              imageUrl: scoredArticle.imageUrl || null,
+              publishedAt: scoredArticle.publishedAt || null,
+              topics: scoredArticle.topics || [],
+              locations: scoredArticle.locations || [],
+              assignedZipCode: scoredArticle.assignedZipCode || null,
+              localityLevel: scoredArticle.localityLevel || 'global',
+              language: scoredArticle.language || 'en',
+              normalizedUrlHash: scoredArticle.normalizedUrlHash || null
+            },
+            resolvedScope: mapLocalityLevelToScope(scoredArticle.localityLevel),
+            dedupe: {
+              outcome: 'duplicate',
+              existingArticleId: existing._id,
+              reason: 'incoming_not_newer'
+            },
+            persistence: {
+              articleId: existing._id,
+              operation: 'skip',
+              persistedAt: new Date()
+            },
+            processingStatus: 'processed',
+            tags: scoredArticle.topics || [],
+            events: buildIngestionEvents({ outcome: 'duplicate', duplicateReason: 'incoming_not_newer' })
+          });
         }
         continue;
       }
@@ -917,12 +1159,92 @@ async function processArticles(articles) {
       await newArticle.save();
       results.inserted++;
       scoredArticles.push(scoredArticle);
+      await persistNewsIngestionRecord({
+        ingestionRunId,
+        source: {
+          name: scoredArticle.source || '',
+          sourceType: scoredArticle.sourceType || '',
+          sourceId: scoredArticle.sourceId || '',
+          providerId: scoredArticle.providerId || '',
+          url: scoredArticle.url || ''
+        },
+        scrapedAt: article.scrapeTimestamp || new Date(),
+        normalized: {
+          title: scoredArticle.title || '',
+          description: scoredArticle.description || '',
+          url: scoredArticle.url || '',
+          imageUrl: scoredArticle.imageUrl || null,
+          publishedAt: scoredArticle.publishedAt || null,
+          topics: scoredArticle.topics || [],
+          locations: scoredArticle.locations || [],
+          assignedZipCode: scoredArticle.assignedZipCode || null,
+          localityLevel: scoredArticle.localityLevel || 'global',
+          language: scoredArticle.language || 'en',
+          normalizedUrlHash: scoredArticle.normalizedUrlHash || null
+        },
+        resolvedScope: mapLocalityLevelToScope(scoredArticle.localityLevel),
+        dedupe: {
+          outcome: 'inserted',
+          existingArticleId: null,
+          reason: 'new_article'
+        },
+        persistence: {
+          articleId: newArticle._id,
+          operation: 'insert',
+          persistedAt: new Date()
+        },
+        processingStatus: 'processed',
+        tags: scoredArticle.topics || [],
+        events: buildIngestionEvents({ outcome: 'inserted' })
+      });
     } catch (error) {
       if (error.code === 11000) {
         results.duplicates++;
       } else {
         console.error('Error processing article:', error.message);
       }
+      await persistNewsIngestionRecord({
+        ingestionRunId,
+        source: {
+          name: article?.source || '',
+          sourceType: article?.sourceType || '',
+          sourceId: article?.sourceId || '',
+          providerId: article?.providerId || '',
+          url: article?.url || ''
+        },
+        scrapedAt: article?.scrapeTimestamp || new Date(),
+        normalized: {
+          title: article?.title || '',
+          description: article?.description || '',
+          url: article?.url || '',
+          imageUrl: article?.imageUrl || null,
+          publishedAt: article?.publishedAt || null,
+          topics: article?.topics || [],
+          locations: article?.locations || [],
+          assignedZipCode: article?.assignedZipCode || null,
+          localityLevel: article?.localityLevel || 'global',
+          language: article?.language || 'en',
+          normalizedUrlHash: article?.url
+            ? buildNormalizedUrlHash(article.url)
+            : null
+        },
+        resolvedScope: mapLocalityLevelToScope(article?.localityLevel),
+        dedupe: {
+          outcome: 'error',
+          existingArticleId: null,
+          reason: error?.code === 11000 ? 'duplicate_key' : 'processing_error'
+        },
+        persistence: {
+          articleId: null,
+          operation: 'error',
+          persistedAt: new Date(),
+          errorCode: error?.code ? String(error.code) : null,
+          errorMessage: error?.message || 'Unknown processing error'
+        },
+        processingStatus: 'failed',
+        tags: article?.topics || [],
+        events: buildIngestionEvents({ outcome: 'error', errorMessage: error?.message || 'Unknown processing error' })
+      });
     }
   }
   
@@ -947,6 +1269,7 @@ async function processArticles(articles) {
 async function ingestAllSources() {
   console.log('Starting news ingestion...');
   const startTime = Date.now();
+  const ingestionRunId = uuidv4();
   
   let allArticles = [];
   
@@ -983,7 +1306,7 @@ async function ingestAllSources() {
   }
   
   // 3. Process all articles (deduplication)
-  const results = await processArticles(allArticles);
+  const results = await processArticles(allArticles, { ingestionRunId });
   
   console.log(`Ingestion complete: ${results.inserted} inserted, ${results.updated} updated, ${results.duplicates} duplicates in ${Date.now() - startTime}ms`);
   return results;
@@ -1044,6 +1367,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
     let activeScope = contextResolvedScope;
     let fallbackApplied = contextFallbackApplied;
     let fallbackReason = contextFallbackApplied ? 'context_unavailable' : null;
+    const locationTelemetry = summarizeLocationContextForTelemetry(locationContext);
 
     if (NEWS_SCOPE_VALUES.includes(scope)) {
       logNewsScopeEvent({
@@ -1058,6 +1382,19 @@ router.get('/feed', authenticateToken, async (req, res) => {
         req
       });
     }
+    logNewsScopeEvent({
+      userId: req.user.userId,
+      eventType: 'news_scope_resolution',
+      metadata: {
+        requestedScope,
+        activeScope,
+        defaultScope,
+        fallbackApplied,
+        fallbackReason,
+        locationContext: locationTelemetry
+      },
+      req
+    });
 
     // Extract followed keywords for personalization
     const followedKeywords = preferences?.followedKeywords?.map(k => k.keyword) || [];
@@ -1194,6 +1531,19 @@ router.get('/feed', authenticateToken, async (req, res) => {
     }
 
     articles = scopeFilteredArticles;
+    logNewsScopeEvent({
+      userId: req.user.userId,
+      eventType: 'news_scope_finalized',
+      metadata: {
+        requestedScope,
+        activeScope,
+        defaultScope,
+        fallbackApplied,
+        fallbackReason,
+        candidateCount: scopedCandidates.length
+      },
+      req
+    });
     
     const total = articles.length;
     const startIndex = Math.max(0, skip);
@@ -1225,6 +1575,10 @@ router.get('/feed', authenticateToken, async (req, res) => {
         activeScope,
         fallbackApplied,
         fallbackReason,
+        scopeDecision: {
+          reason: fallbackReason || 'direct_match',
+          locationContext: locationTelemetry
+        },
         locationContext: {
           source: locationContext.source,
           hasZipCode: Boolean(locationContext.zipCode),
@@ -1718,7 +2072,10 @@ router.delete('/sources/:sourceId', authenticateToken, async (req, res) => {
  */
 router.post('/ingest', authenticateToken, async (req, res) => {
   try {
-    // Check if user is admin (you might want to add role checking)
+    const requester = await User.findById(req.user.userId).select('_id isAdmin');
+    if (!requester?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     const results = await ingestAllSources();
     
     res.json({ 
@@ -1897,6 +2254,8 @@ module.exports = {
     getItemPublishedAt,
     articleMatchesLocation,
     resolveAssignedZipCode,
-    inferLocationTokensFromText
+    inferLocationTokensFromText,
+    resolveLocationContext,
+    geocodeContextCache
   }
 };
