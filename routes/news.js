@@ -1183,6 +1183,13 @@ async function fetchGovernmentSource(source) {
  * Fetches geolocated articles from GDELT's free document API.
  * Returns articles with location tags derived from GDELT's geolocation metadata.
  */
+const parseGdeltDate = (seendate) => {
+  if (!seendate) return new Date();
+  const iso = seendate.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/, '$1-$2-$3T$4:$5:$6Z');
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
 async function fetchGdeltSource(query, options = {}) {
   try {
     const encodedQuery = encodeURIComponent(query);
@@ -1230,7 +1237,7 @@ async function fetchGdeltSource(query, options = {}) {
         sourceId: item.url || item.title,
         url: item.url,
         imageUrl: item.socialimage || null,
-        publishedAt: item.seendate ? new Date(item.seendate.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/, '$1-$2-$3T$4:$5:$6Z')) : new Date(),
+        publishedAt: parseGdeltDate(item.seendate),
         topics: toUniqueNonEmptyStrings([query.toLowerCase(), ...(item.domain ? [item.domain] : [])]),
         locations: locationTokens,
         assignedZipCode,
