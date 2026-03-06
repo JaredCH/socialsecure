@@ -397,7 +397,7 @@ function Chat() {
       </div>
 
       <div className="grid flex-1 min-h-0 grid-cols-1 gap-0 lg:grid-cols-12">
-        <aside className={`lg:col-span-3 min-h-0 border-b p-3 space-y-3 overflow-hidden lg:border-b-0 lg:border-r ${activeTheme.panel}`}>
+        <aside className={`lg:col-span-3 min-h-0 border-b p-3 space-y-3 overflow-y-auto lg:border-b-0 lg:border-r ${activeTheme.panel}`}>
           <h3 className="font-semibold">Channels & Actions</h3>
           <div className="space-y-2">
             {CHANNELS.map((channel) => (
@@ -547,7 +547,7 @@ function Chat() {
           ) : (
             <p className="text-xs opacity-80">Select a room to view users.</p>
           )}
-          <div className="border rounded overflow-hidden flex-1 min-h-0">
+          <div className="border rounded overflow-auto flex-1 min-h-0">
             {roomUsersLoading ? (
               <p className="text-xs p-2 opacity-80">Loading users...</p>
             ) : roomUsers.length === 0 ? (

@@ -209,6 +209,6 @@ describe('Chat zip room indicator', () => {
 
     const sidebars = container.querySelectorAll('aside');
     expect(sidebars.length).toBeGreaterThanOrEqual(2);
-    expect(sidebars[0].className).toContain('overflow-hidden');
+    expect(sidebars[0].className).toContain('overflow-y-auto');
   });
 });
