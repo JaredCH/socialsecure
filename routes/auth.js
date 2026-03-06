@@ -303,7 +303,7 @@ router.post('/register', [
       zipCode,
       referralCode
     } = req.body;
-    const normalizedCounty = typeof county === 'string' ? county.trim() : '';
+    const normalizedCounty = county?.trim();
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
