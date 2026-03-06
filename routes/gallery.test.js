@@ -173,6 +173,85 @@ describe('Gallery routes', () => {
     );
   });
 
+  it('creates gallery image when URL payload uses url alias', async () => {
+    const app = buildApp();
+    jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
+    mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
+    mockGalleryImage.countDocuments.mockResolvedValue(0);
+
+    const createdDoc = {
+      _id: 'img-url-alias',
+      ownerId: 'owner-1',
+      mediaUrl: 'https://example.com/photo.jpg',
+      mediaType: 'url',
+      caption: '',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      getReactionCounts: jest.fn().mockReturnValue({ likesCount: 0, dislikesCount: 0 }),
+      getViewerReaction: jest.fn().mockReturnValue(null)
+    };
+    mockGalleryImage.create.mockResolvedValue(createdDoc);
+
+    const response = await request(app)
+      .post('/api/gallery/owner-1')
+      .set('Authorization', 'Bearer token')
+      .send({ url: 'https://example.com/photo.jpg' });
+
+    expect(response.status).toBe(201);
+    expect(mockGalleryImage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mediaUrl: 'https://example.com/photo.jpg'
+      })
+    );
+  });
+
+  it('rejects create for blocked host URL', async () => {
+    const app = buildApp();
+    jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
+    mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
+    mockGalleryImage.countDocuments.mockResolvedValue(0);
+
+    const response = await request(app)
+      .post('/api/gallery/owner-1')
+      .set('Authorization', 'Bearer token')
+      .send({ mediaUrl: 'https://localhost/photo.jpg' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/host is blocked/i);
+  });
+
+  it('normalizes gallery URL by removing fragment before persistence', async () => {
+    const app = buildApp();
+    jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
+    mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
+    mockGalleryImage.countDocuments.mockResolvedValue(0);
+
+    const createdDoc = {
+      _id: 'img-normalized',
+      ownerId: 'owner-1',
+      mediaUrl: 'https://example.com/photo.jpg',
+      mediaType: 'url',
+      caption: '',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      getReactionCounts: jest.fn().mockReturnValue({ likesCount: 0, dislikesCount: 0 }),
+      getViewerReaction: jest.fn().mockReturnValue(null)
+    };
+    mockGalleryImage.create.mockResolvedValue(createdDoc);
+
+    const response = await request(app)
+      .post('/api/gallery/owner-1')
+      .set('Authorization', 'Bearer token')
+      .send({ mediaUrl: 'https://example.com/photo.jpg#section' });
+
+    expect(response.status).toBe(201);
+    expect(mockGalleryImage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mediaUrl: 'https://example.com/photo.jpg'
+      })
+    );
+  });
+
   it('rejects delete when requester is not owner', async () => {
     const app = buildApp();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'viewer-1' }));
@@ -215,4 +294,3 @@ describe('Gallery routes', () => {
     expect(imageDoc.applyReaction).toHaveBeenCalledWith('viewer-1', 'like');
   });
 });
-
