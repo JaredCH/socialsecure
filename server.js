@@ -80,7 +80,17 @@ const registerRoute = (mountPath, loader) => {
 app.set('trust proxy', normalizedTrustProxyHops);
 
 // Security middleware
-app.use(helmet());
+const cspDirectives = helmet.contentSecurityPolicy.getDefaultDirectives();
+const openStreetMapTileSources = ['https://*.tile.openstreetmap.org'];
+cspDirectives['img-src'] = [
+  ...new Set([...(cspDirectives['img-src'] || []), ...openStreetMapTileSources])
+];
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: cspDirectives
+  }
+}));
 app.use(cors({
   origin: corsOrigin,
   credentials: true
