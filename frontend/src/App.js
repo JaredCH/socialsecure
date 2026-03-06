@@ -367,6 +367,22 @@ function App() {
     return <div className="min-h-screen grid place-items-center">Loading...</div>;
   }
 
+  const navScrollStep = 160;
+  const handleNavScrollKeyDown = (event) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
+      return;
+    }
+
+    event.preventDefault();
+    const delta = event.key === 'ArrowRight' ? navScrollStep : -navScrollStep;
+    const target = event.currentTarget;
+    if (typeof target?.scrollBy === 'function') {
+      target.scrollBy({ left: delta, behavior: 'smooth' });
+    } else if (target) {
+      target.scrollLeft += delta;
+    }
+  };
+
   const navLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700';
   const navEmphasisLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50';
   const navDangerButtonClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50';
@@ -377,7 +393,12 @@ function App() {
         <nav className="bg-white shadow-md p-4">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
-            <div className="flex flex-nowrap items-center gap-3 overflow-x-auto">
+            <div
+              className="flex flex-nowrap items-center gap-3 overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              tabIndex={0}
+              aria-label="Primary navigation links"
+              onKeyDown={handleNavScrollKeyDown}
+            >
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Home</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Social</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Discover</Link>}
