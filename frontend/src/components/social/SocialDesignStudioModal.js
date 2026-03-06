@@ -169,8 +169,8 @@ const SocialDesignStudioModal = ({
     if (!panel) return;
     onPanelLayoutChange(panelId, {
       ...patch,
-      order: Number.isFinite(Number(patch.gridPlacement?.row))
-        ? (Number(patch.gridPlacement.row) * 100 + Number(patch.gridPlacement.col || 0))
+      order: Number.isFinite(Number(patch.order))
+        ? Number(patch.order)
         : panel.order
     });
   };
