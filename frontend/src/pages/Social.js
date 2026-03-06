@@ -1860,25 +1860,18 @@ const Social = () => {
     switch (panelId) {
       case 'profile_header':
         return (
-          <div className={`rounded-2xl bg-gradient-to-r ${headerGradientClass} p-6 text-white shadow-lg`}>
-            <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100/95">Community Hub</p>
-              <h2 className="text-3xl font-semibold tracking-tight">Social</h2>
-              <p className={`${getFontSizeClass(socialPreferences.globalStyles.fontSizes?.regular)} text-white/90`}>
-                {isViewingAnotherProfile
-                  ? `Viewing public profile for @${requestedProfileIdentifier}. Design sharing actions are safe and never copy content.`
-                  : isAuthenticated && isGuestPreview
-                    ? 'Guest preview mode is active. Editing controls are hidden until you exit preview.'
-                    : isAuthenticated
-                      ? 'Customize your live social page directly here with native panel editing, saved appearances, and shareable layouts.'
-                      : 'Guest mode: browse public social pages, then sign in to personalize your own experience.'}
-              </p>
+          <div className={`rounded-2xl bg-gradient-to-r ${headerGradientClass} p-4 text-white shadow-sm`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">Social</h2>
+                {isViewingAnotherProfile ? <p className={`${getFontSizeClass(socialPreferences.globalStyles.fontSizes?.small)} text-white/90`}>Viewing @${requestedProfileIdentifier}</p> : null}
+              </div>
               {isOwnSocialContext ? (
-                <div className="flex flex-wrap gap-3 pt-1">
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
-                    className="rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/25"
+                    className="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25"
                   >
                     {isGuestPreview ? 'Exit guest preview' : 'View as guest'}
                   </button>
@@ -1886,9 +1879,9 @@ const Social = () => {
                     <button
                       type="button"
                       onClick={() => setDesignStudioOpen(true)}
-                      className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+                      className="rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
                     >
-                      Open design studio
+                      Design studio
                     </button>
                   ) : null}
                 </div>
@@ -2263,9 +2256,34 @@ const Social = () => {
 
   const renderPanel = (panel) => {
     if (!panel) return null;
+    const normalizedSize = panel.size === 'quarterTile'
+      ? 'halfCol'
+      : panel.size === 'halfTile'
+        ? 'oneCol'
+        : panel.size === 'fullTile'
+          ? 'twoCols'
+          : panel.size;
+    const rowSpan = panel.height === 'halfRow'
+      ? 'md:[grid-row:span_1/span_1]'
+      : panel.height === 'twoRows'
+        ? 'md:[grid-row:span_4/span_4]'
+        : panel.height === 'threeRows'
+          ? 'md:[grid-row:span_6/span_6]'
+          : panel.height === 'fourRows'
+            ? 'md:[grid-row:span_8/span_8]'
+            : 'md:[grid-row:span_2/span_2]';
+    const sideHeightClass = panel.height === 'halfRow'
+      ? 'min-h-[7rem]'
+      : panel.height === 'twoRows'
+        ? 'min-h-[16rem]'
+        : panel.height === 'fourRows'
+          ? 'min-h-[30rem]'
+          : 'min-h-[11rem]';
     const className = panel.area === 'main'
-      ? `${panel.size === 'quarterTile' ? 'md:col-span-1' : panel.size === 'halfTile' ? 'md:col-span-2' : 'md:col-span-4'}`
-      : '';
+      ? `${normalizedSize === 'halfCol' ? 'md:col-span-1' : normalizedSize === 'oneCol' ? 'md:col-span-2' : normalizedSize === 'twoCols' ? 'md:col-span-4' : normalizedSize === 'threeCols' ? 'md:col-span-6' : 'md:col-span-8'} ${rowSpan}`
+      : panel.area === 'sideLeft' || panel.area === 'sideRight'
+        ? sideHeightClass
+        : '';
 
     return (
       <SocialEditablePanel
@@ -2286,7 +2304,10 @@ const Social = () => {
   };
 
   return (
-    <div className={`relative space-y-6 rounded-3xl p-3 sm:p-4 ${pageThemeClass}`} style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor }}>
+    <div
+      className={`relative left-1/2 right-1/2 min-h-[calc(100vh-9rem)] w-screen -translate-x-1/2 space-y-6 px-3 py-4 sm:px-4 ${pageThemeClass}`}
+      style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor }}
+    >
       {ownerEditingEnabled ? (
         <button
           type="button"
@@ -2302,7 +2323,7 @@ const Social = () => {
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(240px,0.95fr)_minmax(0,2fr)_minmax(240px,0.95fr)]">
           <div className="space-y-6">{panelsByArea.sideLeft.map(renderPanel)}</div>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-4">{panelsByArea.main.map(renderPanel)}</div>
+          <div className="grid grid-cols-1 gap-6 md:auto-rows-[5.5rem] md:grid-cols-8">{panelsByArea.main.map(renderPanel)}</div>
           <div className="space-y-6">{panelsByArea.sideRight.map(renderPanel)}</div>
         </div>
       </div>
@@ -2319,6 +2340,7 @@ const Social = () => {
         onGlobalStylesChange={updateGlobalStyles}
         onPanelOverrideToggle={(panelId, enabled) => updatePanelPreferences(panelId, { useCustomStyles: enabled })}
         onPanelStyleChange={(panelId, patch) => updatePanelPreferences(panelId, { useCustomStyles: true, styles: patch })}
+        onPanelLayoutChange={(panelId, patch) => updatePanelPreferences(panelId, patch)}
         onCreateConfig={saveNewConfig}
         onUpdateConfig={saveConfigUpdate}
         onApplyConfig={applySavedConfig}
