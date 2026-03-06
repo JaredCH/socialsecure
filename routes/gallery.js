@@ -105,7 +105,7 @@ const validateImageUrl = (urlString) => {
   if (!ALLOWED_EXTENSIONS.has(ext)) {
     return {
       ok: false,
-      error: `Image URL extension must be one of: ${Array.from(ALLOWED_EXTENSIONS).join(', ')}`
+      error: `Image URL must end with an allowed image extension (${Array.from(ALLOWED_EXTENSIONS).join(', ')})`
     };
   }
 
@@ -455,4 +455,3 @@ router.use((error, req, res, next) => {
 });
 
 module.exports = router;
-

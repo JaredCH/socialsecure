@@ -1,0 +1,88 @@
+name: Close Duplicate Issues
+
+on:
+  push:
+    branches:
+      - copilot/remove-duplicate-issues
+  workflow_dispatch:
+
+jobs:
+  close-duplicates:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Close duplicate issues
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = 'JaredCH';
+            const repo = 'socialsecure';
+
+            // Map of duplicate issue -> original issue
+            const duplicates = {
+              43: 38,
+              44: 39,
+              45: 40,
+              46: 41,
+              47: 42,
+            };
+
+            for (const [dupNum, origNum] of Object.entries(duplicates)) {
+              const issueNumber = parseInt(dupNum);
+              const originalNumber = parseInt(origNum);
+
+              console.log(`Processing #${issueNumber} (duplicate of #${originalNumber})`);
+
+              // Check current state
+              const { data: issue } = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number: issueNumber,
+              });
+
+              if (issue.state === 'closed') {
+                console.log(`#${issueNumber} is already closed, skipping.`);
+                continue;
+              }
+
+              // Add a comment marking it as duplicate
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: `Duplicate of #${originalNumber}`,
+              });
+
+              // Add the duplicate label (create it if needed)
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: 'duplicate' });
+              } catch (e) {
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: 'duplicate',
+                  color: 'cfd3d7',
+                  description: 'This issue or pull request already exists',
+                });
+              }
+
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                labels: ['duplicate'],
+              });
+
+              // Close the issue
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                state: 'closed',
+                state_reason: 'not_planned',
+              });
+
+              console.log(`Closed #${issueNumber} as duplicate of #${originalNumber}`);
+            }
