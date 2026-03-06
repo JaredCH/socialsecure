@@ -28,6 +28,9 @@ const DEFAULT_PROMOTED_ITEMS = Math.max(1, parseInt(process.env.NEWS_PROMOTED_MA
 const FEED_PROMOTED_MAX_ITEMS = 20;
 const PROMOTED_ENDPOINT_MAX_ITEMS = 50;
 const NEWS_SCOPE_VALUES = ['local', 'regional', 'national', 'global'];
+const KEYWORD_MATCH_WEIGHT = 100;
+const SCOPE_TIER_WEIGHT = 10;
+const MAX_SCOPE_TIERS = 4;
 
 const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase();
 
@@ -653,7 +656,11 @@ router.get('/feed', authenticateToken, async (req, res) => {
         isFollowingMatch: matchedKeywords.length > 0,
         _boostScore: matchedKeywords.length,
         _scopeTier: scopeTier,
-        _rankingScore: (matchedKeywords.length * 100) + ((4 - scopeTier) * 10) + recencyScore + localityLevelScore
+        _rankingScore:
+          (matchedKeywords.length * KEYWORD_MATCH_WEIGHT) +
+          ((MAX_SCOPE_TIERS - scopeTier) * SCOPE_TIER_WEIGHT) +
+          recencyScore +
+          localityLevelScore
       };
     });
 
@@ -881,7 +888,8 @@ router.put('/preferences', authenticateToken, async (req, res) => {
     if (defaultScope !== undefined && NEWS_SCOPE_VALUES.includes(defaultScope)) {
       updateData.defaultScope = defaultScope;
     } else if (localPriorityEnabled !== undefined && defaultScope === undefined) {
-      // Backwards compatible mapping from legacy toggle to scope preference
+      // Backwards compatible mapping from legacy toggle to scope preference.
+      // Remove this mapping after all clients send defaultScope explicitly.
       updateData.defaultScope = localPriorityEnabled ? 'local' : 'global';
     }
     if (localPriorityEnabled !== undefined) updateData.localPriorityEnabled = localPriorityEnabled;
