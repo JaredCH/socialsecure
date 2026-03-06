@@ -271,9 +271,8 @@ router.post('/register', [
     .matches(/^[A-Z]{2}$/)
     .withMessage('Please select a country from the list'),
   body('county')
+    .optional({ checkFalsy: true })
     .trim()
-    .notEmpty()
-    .withMessage('County is required')
     .isLength({ max: 100 })
     .withMessage('County must be at most 100 characters'),
   body('zipCode')
@@ -304,6 +303,7 @@ router.post('/register', [
       zipCode,
       referralCode
     } = req.body;
+    const normalizedCounty = county?.trim();
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
@@ -324,7 +324,7 @@ router.post('/register', [
       email,
       passwordHash: password, // Will be hashed by pre-save middleware
       country: countryCode,
-      county,
+      county: normalizedCounty || undefined,
       zipCode: normalizeZipCode(zipCode),
       registrationStatus: 'active',
       referralCode: referralCode || require('crypto').randomBytes(4).toString('hex')
