@@ -57,6 +57,7 @@ const getWeights = () => {
     shareCueTerms: envNumber('NEWS_VIRAL_WEIGHT_SHARE_CUES', DEFAULT_WEIGHTS.shareCueTerms)
   };
 
+  // Normalize to keep scoring stable when env overrides don't add up to 1.0.
   const total = Object.values(weights).reduce((sum, value) => sum + Math.max(0, value), 0) || 1;
   return Object.fromEntries(
     Object.entries(weights).map(([key, value]) => [key, Math.max(0, value) / total])

@@ -24,6 +24,10 @@ const parser = new Parser({
   }
 });
 
+const DEFAULT_PROMOTED_ITEMS = Math.max(1, parseInt(process.env.NEWS_PROMOTED_MAX_ITEMS || '10', 10) || 10);
+const FEED_PROMOTED_MAX_ITEMS = 20;
+const PROMOTED_ENDPOINT_MAX_ITEMS = 50;
+
 // ============================================
 // SOURCE ADAPTERS
 // ============================================
@@ -517,7 +521,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
     // Get total count
     const total = await Article.countDocuments(query);
 
-    const promotedLimit = Math.max(1, Math.min(parseInt(process.env.NEWS_PROMOTED_MAX_ITEMS || '5', 10), 20));
+    const promotedLimit = Math.min(DEFAULT_PROMOTED_ITEMS, FEED_PROMOTED_MAX_ITEMS);
     const promotedArticles = await Article.find({ isActive: true, isPromoted: true })
       .sort({ viralScore: -1, publishedAt: -1 })
       .limit(promotedLimit)
@@ -553,8 +557,8 @@ router.get('/feed', authenticateToken, async (req, res) => {
  */
 router.get('/promoted', authenticateToken, async (req, res) => {
   try {
-    const requestedLimit = parseInt(req.query.limit || process.env.NEWS_PROMOTED_MAX_ITEMS || '10', 10);
-    const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) ? requestedLimit : 10, 50));
+    const requestedLimit = parseInt(req.query.limit || String(DEFAULT_PROMOTED_ITEMS), 10);
+    const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) ? requestedLimit : DEFAULT_PROMOTED_ITEMS, PROMOTED_ENDPOINT_MAX_ITEMS));
     const topic = req.query.topic ? String(req.query.topic).toLowerCase() : null;
 
     const query = {
@@ -945,11 +949,15 @@ router.post('/promoted/rescore', authenticateToken, async (req, res) => {
     const momentumMap = createMomentumMap(recentArticles, new Date());
     const bulkOps = [];
     const rescoredValues = [];
+    let promotedCount = 0;
 
     for (const article of recentArticles) {
       const sourceMomentum = getArticleMomentumSignal(article, momentumMap);
       const scoring = calculateViralScore(article, { sourceMomentum });
       rescoredValues.push(scoring.score);
+      if (scoring.isPromoted) {
+        promotedCount += 1;
+      }
       bulkOps.push({
         updateOne: {
           filter: { _id: article._id },
@@ -973,7 +981,7 @@ router.post('/promoted/rescore', authenticateToken, async (req, res) => {
         min: Math.min(...rescoredValues),
         max: Math.max(...rescoredValues),
         avg: Number((rescoredValues.reduce((sum, score) => sum + score, 0) / rescoredValues.length).toFixed(2)),
-        promotedCount: bulkOps.length ? bulkOps.filter((_, index) => rescoredValues[index] >= (parseInt(process.env.NEWS_VIRAL_PROMOTED_THRESHOLD || '65', 10))).length : 0
+        promotedCount
       };
       console.log('[news-viral-rescore-distribution]', JSON.stringify(scoreDistribution));
     }
