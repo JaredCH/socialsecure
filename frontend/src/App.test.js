@@ -114,7 +114,7 @@ describe('App navbar features dropdown', () => {
     const dropdownPanel = container.querySelector('#features-menu-panel');
     expect(dropdownPanel).not.toBeNull();
     expect(dropdownPanel.className).toContain('top-full');
-    expect(featuresMenu.parentElement.className).toContain('overflow-y-visible');
+    expect(featuresMenu.parentElement.className).toContain('overflow-visible');
 
     expect(featuresMenu.textContent).toContain('Features');
     expect(featuresMenu.textContent).toContain('Discover');
