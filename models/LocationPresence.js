@@ -132,7 +132,6 @@ function encodeGeohash(lat, lng, precision) {
     }
     hash += base32[ch];
     ch = 0;
-    bit = 0;
   }
   
   return hash;

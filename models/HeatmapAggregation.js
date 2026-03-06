@@ -81,17 +81,20 @@ heatmapAggregationSchema.statics.recomputeRegion = async function(bounds, precis
   // Get all active presences in bounds
   const presencePipeline = [
     {
-      $geoMatch: {
+      $match: {
+        isActive: true,
         location: {
-          $geometry: {
-            type: 'Polygon',
-            coordinates: [[
-              [bounds.west, bounds.south],
-              [bounds.east, bounds.south],
-              [bounds.east, bounds.north],
-              [bounds.west, bounds.north],
-              [bounds.west, bounds.south]
-            ]]
+          $geoWithin: {
+            $geometry: {
+              type: 'Polygon',
+              coordinates: [[
+                [bounds.west, bounds.south],
+                [bounds.east, bounds.south],
+                [bounds.east, bounds.north],
+                [bounds.west, bounds.north],
+                [bounds.west, bounds.south]
+              ]]
+            }
           }
         }
       }
@@ -112,17 +115,20 @@ heatmapAggregationSchema.statics.recomputeRegion = async function(bounds, precis
   // Get spotlight counts per cell
   const spotlightPipeline = [
     {
-      $geoMatch: {
+      $match: {
+        isActive: true,
         location: {
-          $geometry: {
-            type: 'Polygon',
-            coordinates: [[
-              [bounds.west, bounds.south],
-              [bounds.east, bounds.south],
-              [bounds.east, bounds.north],
-              [bounds.west, bounds.north],
-              [bounds.west, bounds.south]
-            ]]
+          $geoWithin: {
+            $geometry: {
+              type: 'Polygon',
+              coordinates: [[
+                [bounds.west, bounds.south],
+                [bounds.east, bounds.south],
+                [bounds.east, bounds.north],
+                [bounds.west, bounds.north],
+                [bounds.west, bounds.south]
+              ]]
+            }
           }
         }
       }
