@@ -45,6 +45,9 @@ const normalizeLinks = (links) => {
     .filter(Boolean);
 };
 
+const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+const isValidZipCode = (zipCode) => /^(?:\d{5}(?:-\d{4})?|[A-Z]\d[A-Z]\d[A-Z]\d)$/.test(zipCode);
+
 const normalizePgpPublicKey = (value) => {
   if (typeof value !== 'string') return '';
   return value.replace(/\r\n/g, '\n').trim();
@@ -252,9 +255,22 @@ router.post('/register', [
     .withMessage('Password must be at least 8 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
-  body('city').optional().trim(),
-  body('state').optional().trim(),
-  body('country').optional().trim(),
+  body('county')
+    .trim()
+    .notEmpty()
+    .withMessage('County is required')
+    .isLength({ max: 100 })
+    .withMessage('County must be at most 100 characters'),
+  body('zipCode')
+    .trim()
+    .notEmpty()
+    .withMessage('Zip Code is required')
+    .custom((value) => {
+      if (!isValidZipCode(normalizeZipCode(value))) {
+        throw new Error('Zip Code must be a valid US ZIP (12345 or 12345-6789) or postal format');
+      }
+      return true;
+    }),
   body('referralCode').optional().trim()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -263,7 +279,7 @@ router.post('/register', [
   }
 
   try {
-    const { realName, username, email, password, city, state, country, referralCode } = req.body;
+    const { realName, username, email, password, county, zipCode, referralCode } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
@@ -283,9 +299,8 @@ router.post('/register', [
       username,
       email,
       passwordHash: password, // Will be hashed by pre-save middleware
-      city,
-      state,
-      country,
+      county,
+      zipCode: normalizeZipCode(zipCode),
       registrationStatus: 'active',
       referralCode: referralCode || require('crypto').randomBytes(4).toString('hex')
     });

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, query, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const NodeGeocoder = require('node-geocoder');
 const User = require('../models/User');
 const ChatRoom = require('../models/ChatRoom');
@@ -11,6 +12,15 @@ const geocoder = NodeGeocoder({
   provider: 'openstreetmap',
   httpAdapter: 'https',
   formatter: null
+});
+
+const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+const zipLookupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many zip lookup requests. Please try again later.' }
 });
 
 // Middleware to verify JWT token
@@ -305,22 +315,23 @@ router.post('/distance', [
 });
 
 // Get user's primary city and nearby cities based on zip code
-router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
+router.get('/zip/:zipCode', zipLookupLimiter, authenticateToken, async (req, res) => {
   try {
-    const { zipCode } = req.params;
+    const normalizedZipCode = normalizeZipCode(req.params.zipCode);
     
-    if (!zipCode || zipCode.length < 5) {
+    if (!normalizedZipCode || normalizedZipCode.length < 5) {
       return res.status(400).json({ error: 'Valid zip code required' });
     }
 
     // Try to resolve zip code to location
     let locationData = null;
     try {
-      const results = await geocoder.geocode(`${zipCode}, United States`);
+      const results = await geocoder.geocode(`${normalizedZipCode}, United States`);
       if (results && results.length > 0) {
         const result = results[0];
         locationData = {
-          zipCode: zipCode,
+          zipCode: normalizedZipCode,
+          county: result.county || undefined,
           city: result.city,
           state: result.state,
           country: result.country,
@@ -329,7 +340,7 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
         };
       }
     } catch (geoError) {
-      console.warn('Geocoding failed for zip:', zipCode, geoError.message);
+      console.warn('Geocoding failed for zip:', normalizedZipCode, geoError.message);
     }
 
     if (!locationData) {
@@ -337,17 +348,27 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
     }
 
     // Find or create primary city room
+    const primaryRoomCriteria = [{ city: locationData.city, state: locationData.state }];
+    if (locationData.zipCode) {
+      primaryRoomCriteria.unshift({ zipCode: locationData.zipCode });
+    }
+
     let primaryRoom = await ChatRoom.findOne({
-      city: locationData.city,
-      state: locationData.state,
+      type: 'city',
+      $or: primaryRoomCriteria,
       isActive: true
     });
 
     // Find nearby cities (within 50 miles)
+    const nearbyLocationCriteria = [{ city: locationData.city, state: locationData.state }];
+    if (locationData.zipCode) {
+      nearbyLocationCriteria.push({ zipCode: locationData.zipCode });
+    }
+
     const nearbyCities = await ChatRoom.find({
       isActive: true,
       $or: [
-        { city: locationData.city, state: locationData.state },
+        ...nearbyLocationCriteria,
         {
           location: {
             $near: {
@@ -384,7 +405,7 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
       }));
 
     // Update user's location
-    await User.findByIdAndUpdate(req.user.userId, {
+    const locationUpdate = {
       zipCode: locationData.zipCode,
       city: locationData.city,
       state: locationData.state,
@@ -393,7 +414,12 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
         type: 'Point',
         coordinates: [locationData.longitude, locationData.latitude]
       }
-    });
+    };
+    if (locationData.county) {
+      locationUpdate.county = locationData.county;
+    }
+
+    await User.findByIdAndUpdate(req.user.userId, locationUpdate);
 
     res.json({
       success: true,
