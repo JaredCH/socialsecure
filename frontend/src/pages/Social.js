@@ -19,6 +19,8 @@ import {
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
+const COMPOSER_CONTENT_TYPES = ['standard', 'poll', 'quiz', 'countdown'];
+const INTERACTION_MAX_OPTIONS = 6;
 const GALLERY_MAX_ITEMS = 24;
 const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 const FEED_POLL_INTERVAL_MS = 30000;
@@ -106,6 +108,38 @@ const formatDate = (value) => {
   return date.toLocaleString();
 };
 
+const getInteractionStatus = (interaction) => {
+  if (!interaction?.type) return null;
+  if (interaction.status === 'closed') return 'closed';
+
+  const now = Date.now();
+  if (interaction.expiresAt && new Date(interaction.expiresAt).getTime() <= now) {
+    return 'expired';
+  }
+  if (
+    interaction.type === 'countdown'
+    && interaction.countdown?.targetAt
+    && new Date(interaction.countdown.targetAt).getTime() <= now
+  ) {
+    return 'expired';
+  }
+  return interaction.status || 'active';
+};
+
+const formatRemainingTime = (targetAt, nowMs) => {
+  const target = new Date(targetAt).getTime();
+  if (!Number.isFinite(target)) return 'Unknown';
+  const diffMs = Math.max(0, target - nowMs);
+  if (diffMs === 0) return 'Expired';
+
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+};
+
 const normalizePost = (post) => {
   const normalizedLikes = Array.isArray(post.likes)
     ? post.likes.map((like) => (typeof like === 'string' ? like : String(like?._id || like)))
@@ -138,6 +172,12 @@ const normalizePost = (post) => {
         ? post.commentsCount
         : normalizedComments.length,
     mediaUrls: normalizeMediaUrls(post.mediaUrls),
+    interaction: post.interaction
+      ? {
+        ...post.interaction,
+        status: getInteractionStatus(post.interaction),
+      }
+      : null,
   };
 };
 
@@ -175,6 +215,28 @@ const Social = () => {
     excludeUsers: [],
     locationRadius: '',
     expirationPreset: 'none',
+    contentType: 'standard',
+    interaction: {
+      poll: {
+        question: '',
+        options: ['', ''],
+        allowMultiple: false,
+        expiresAt: '',
+      },
+      quiz: {
+        question: '',
+        options: ['', ''],
+        correctOptionIndex: 0,
+        explanation: '',
+        expiresAt: '',
+      },
+      countdown: {
+        label: '',
+        targetAt: '',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        linkUrl: '',
+      },
+    },
   });
   const [circles, setCircles] = useState([]);
   const [friends, setFriends] = useState([]);
@@ -306,6 +368,31 @@ const Social = () => {
     });
   };
 
+  const hydrateInteractionsForPosts = useCallback(async (normalizedPosts) => {
+    const interactivePosts = normalizedPosts.filter((post) => post.interaction?.type);
+    if (interactivePosts.length === 0) {
+      return normalizedPosts;
+    }
+
+    const interactionResults = await Promise.all(
+      interactivePosts.map(async (post) => {
+        try {
+          const response = await feedAPI.getInteraction(post._id);
+          return { postId: post._id, interaction: response.data?.interaction || null };
+        } catch {
+          return { postId: post._id, interaction: post.interaction };
+        }
+      })
+    );
+
+    const byPostId = new Map(interactionResults.map((entry) => [entry.postId, entry.interaction]));
+    return normalizedPosts.map((post) => (
+      byPostId.has(post._id)
+        ? { ...post, interaction: byPostId.get(post._id) }
+        : post
+    ));
+  }, []);
+
   const loadAuthenticatedFeed = useCallback(async () => {
     const profileResponse = await authAPI.getProfile();
     const user = profileResponse.data?.user;
@@ -332,9 +419,11 @@ const Social = () => {
     const timelinePosts = Array.isArray(timelineResponse.data?.posts)
       ? timelineResponse.data.posts
       : [];
-    setPosts(timelinePosts.map(normalizePost));
+    const normalizedPosts = timelinePosts.map(normalizePost);
+    const hydratedPosts = await hydrateInteractionsForPosts(normalizedPosts);
+    setPosts(hydratedPosts);
     setGuestProfile(null);
-  }, []);
+  }, [hydrateInteractionsForPosts]);
 
   const loadGuestFeed = useCallback(async () => {
     if (!guestUser.trim()) {
@@ -387,6 +476,13 @@ const Social = () => {
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     loadGallery();
@@ -598,6 +694,74 @@ const Social = () => {
     }));
   };
 
+  const updateInteractionField = (type, field, value) => {
+    setPostForm((prev) => ({
+      ...prev,
+      interaction: {
+        ...prev.interaction,
+        [type]: {
+          ...prev.interaction[type],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const updateInteractionOption = (type, index, value) => {
+    setPostForm((prev) => {
+      const existingOptions = prev.interaction[type].options || [];
+      const nextOptions = existingOptions.map((entry, i) => (i === index ? value : entry));
+      return {
+        ...prev,
+        interaction: {
+          ...prev.interaction,
+          [type]: {
+            ...prev.interaction[type],
+            options: nextOptions,
+          },
+        },
+      };
+    });
+  };
+
+  const addInteractionOption = (type) => {
+    setPostForm((prev) => {
+      const existingOptions = prev.interaction[type].options || [];
+      if (existingOptions.length >= INTERACTION_MAX_OPTIONS) {
+        return prev;
+      }
+      return {
+        ...prev,
+        interaction: {
+          ...prev.interaction,
+          [type]: {
+            ...prev.interaction[type],
+            options: [...existingOptions, ''],
+          },
+        },
+      };
+    });
+  };
+
+  const removeInteractionOption = (type, index) => {
+    setPostForm((prev) => {
+      const existingOptions = prev.interaction[type].options || [];
+      if (existingOptions.length <= 2) {
+        return prev;
+      }
+      return {
+        ...prev,
+        interaction: {
+          ...prev.interaction,
+          [type]: {
+            ...prev.interaction[type],
+            options: existingOptions.filter((_, i) => i !== index),
+          },
+        },
+      };
+    });
+  };
+
   const handlePostFormField = (field, value) => {
     setPostForm((prev) => ({ ...prev, [field]: value }));
   };
@@ -758,9 +922,86 @@ const Social = () => {
     if (!currentUser?._id) return;
 
     const content = postForm.content.trim();
-    if (!content && postForm.mediaUrls.length === 0) {
+    const contentType = postForm.contentType;
+    const hasStandardContent = content || postForm.mediaUrls.length > 0;
+    let interactionPayload = null;
+
+    if (contentType === 'standard' && !hasStandardContent) {
       setFeedError('Add post content or at least one media URL before publishing.');
       return;
+    }
+
+    if (contentType === 'poll') {
+      const poll = postForm.interaction.poll;
+      const options = (poll.options || []).map((option) => option.trim()).filter(Boolean);
+      if (!poll.question.trim()) {
+        setFeedError('Poll question is required.');
+        return;
+      }
+      if (options.length < 2) {
+        setFeedError('Poll needs at least two options.');
+        return;
+      }
+      if (!poll.expiresAt) {
+        setFeedError('Poll expiration is required.');
+        return;
+      }
+      interactionPayload = {
+        type: 'poll',
+        question: poll.question.trim(),
+        options,
+        allowMultiple: Boolean(poll.allowMultiple),
+        expiresAt: poll.expiresAt,
+      };
+    } else if (contentType === 'quiz') {
+      const quiz = postForm.interaction.quiz;
+      const options = (quiz.options || []).map((option) => option.trim()).filter(Boolean);
+      const correctOptionIndex = Number(quiz.correctOptionIndex);
+      if (!quiz.question.trim()) {
+        setFeedError('Quiz question is required.');
+        return;
+      }
+      if (options.length < 2) {
+        setFeedError('Quiz needs at least two options.');
+        return;
+      }
+      if (!Number.isInteger(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex >= options.length) {
+        setFeedError('Quiz correct option must match an existing option.');
+        return;
+      }
+      if (!quiz.expiresAt) {
+        setFeedError('Quiz expiration is required.');
+        return;
+      }
+      interactionPayload = {
+        type: 'quiz',
+        question: quiz.question.trim(),
+        options,
+        correctOptionIndex,
+        explanation: quiz.explanation.trim(),
+        expiresAt: quiz.expiresAt,
+      };
+    } else if (contentType === 'countdown') {
+      const countdown = postForm.interaction.countdown;
+      if (!countdown.label.trim()) {
+        setFeedError('Countdown label is required.');
+        return;
+      }
+      if (!countdown.targetAt) {
+        setFeedError('Countdown target time is required.');
+        return;
+      }
+      if (!countdown.timezone.trim()) {
+        setFeedError('Countdown timezone is required.');
+        return;
+      }
+      interactionPayload = {
+        type: 'countdown',
+        label: countdown.label.trim(),
+        targetAt: countdown.targetAt,
+        timezone: countdown.timezone.trim(),
+        linkUrl: countdown.linkUrl.trim(),
+      };
     }
 
     setSubmittingPost(true);
@@ -785,11 +1026,24 @@ const Social = () => {
         locationRadius: postForm.locationRadius ? Number(postForm.locationRadius) : null,
         expiresAt,
         targetFeedId: currentUser._id,
+        interaction: interactionPayload,
       });
 
       const created = response.data?.post ? normalizePost(response.data.post) : null;
       if (created) {
-        setPosts((prev) => [created, ...prev]);
+        let createdPost = created;
+        if (created.interaction?.type) {
+          try {
+            const interactionResponse = await feedAPI.getInteraction(created._id);
+            createdPost = {
+              ...created,
+              interaction: interactionResponse.data?.interaction || created.interaction,
+            };
+          } catch {
+            createdPost = created;
+          }
+        }
+        setPosts((prev) => [createdPost, ...prev]);
       } else {
         await loadAuthenticatedFeed();
       }
@@ -804,6 +1058,28 @@ const Social = () => {
         excludeUsers: [],
         locationRadius: '',
         expirationPreset: 'none',
+        contentType: 'standard',
+        interaction: {
+          poll: {
+            question: '',
+            options: ['', ''],
+            allowMultiple: false,
+            expiresAt: '',
+          },
+          quiz: {
+            question: '',
+            options: ['', ''],
+            correctOptionIndex: 0,
+            explanation: '',
+            expiresAt: '',
+          },
+          countdown: {
+            label: '',
+            targetAt: '',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+            linkUrl: '',
+          },
+        },
       });
     } catch (error) {
       setFeedError(error.response?.data?.error || 'Failed to publish post.');
@@ -888,6 +1164,64 @@ const Social = () => {
       }
     } catch (error) {
       setFeedError(error.response?.data?.error || 'Failed to add comment.');
+    } finally {
+      setPostActionLoading(postId, false);
+    }
+  };
+
+  const applyInteractionState = (postId, interactionState) => {
+    if (!interactionState) return;
+    setPosts((prev) =>
+      prev.map((item) => (item._id === postId ? { ...item, interaction: interactionState } : item))
+    );
+  };
+
+  const handleVotePoll = async (postId, optionIndex) => {
+    if (!currentUser?._id || isGuestPreview) return;
+    setPostActionLoading(postId, true);
+    try {
+      const response = await feedAPI.votePoll(postId, [optionIndex]);
+      applyInteractionState(postId, response.data?.interaction || null);
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to submit poll vote.');
+      if (error.response?.status === 409) {
+        const interactionResponse = await feedAPI.getInteraction(postId);
+        applyInteractionState(postId, interactionResponse.data?.interaction || null);
+      }
+    } finally {
+      setPostActionLoading(postId, false);
+    }
+  };
+
+  const handleSubmitQuizAnswer = async (postId, optionIndex) => {
+    if (!currentUser?._id || isGuestPreview) return;
+    setPostActionLoading(postId, true);
+    try {
+      const response = await feedAPI.submitQuizAnswer(postId, optionIndex);
+      applyInteractionState(postId, response.data?.interaction || null);
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to submit quiz answer.');
+      if (error.response?.status === 409) {
+        const interactionResponse = await feedAPI.getInteraction(postId);
+        applyInteractionState(postId, interactionResponse.data?.interaction || null);
+      }
+    } finally {
+      setPostActionLoading(postId, false);
+    }
+  };
+
+  const handleFollowCountdown = async (postId) => {
+    if (!currentUser?._id || isGuestPreview) return;
+    setPostActionLoading(postId, true);
+    try {
+      const response = await feedAPI.followCountdown(postId);
+      applyInteractionState(postId, response.data?.interaction || null);
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to follow countdown.');
+      if (error.response?.status === 409) {
+        const interactionResponse = await feedAPI.getInteraction(postId);
+        applyInteractionState(postId, interactionResponse.data?.interaction || null);
+      }
     } finally {
       setPostActionLoading(postId, false);
     }
@@ -1235,6 +1569,21 @@ const Social = () => {
                 maxLength={5000}
               />
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Post Type</label>
+                <select
+                  value={postForm.contentType}
+                  onChange={(event) => setPostForm((prev) => ({ ...prev, contentType: event.target.value }))}
+                  className="border rounded px-3 py-2"
+                >
+                  {COMPOSER_CONTENT_TYPES.map((option) => (
+                    <option key={option} value={option}>
+                      {option.charAt(0).toUpperCase() + option.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">Media URLs</label>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -1286,6 +1635,170 @@ const Social = () => {
                 onToggleVisibleUser={handleToggleVisibleUser}
                 onToggleExcludeUser={handleToggleExcludeUser}
               />
+
+              {postForm.contentType === 'poll' && (
+                <div className="border rounded p-3 space-y-3 bg-blue-50/40">
+                  <h4 className="text-sm font-semibold text-gray-700">Poll Settings</h4>
+                  <input
+                    type="text"
+                    value={postForm.interaction.poll.question}
+                    onChange={(event) => updateInteractionField('poll', 'question', event.target.value)}
+                    placeholder="Poll question"
+                    className="w-full border rounded px-3 py-2 text-sm"
+                  />
+                  <div className="space-y-2">
+                    {postForm.interaction.poll.options.map((option, index) => (
+                      <div key={`poll-option-${index}`} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={option}
+                          onChange={(event) => updateInteractionOption('poll', index, event.target.value)}
+                          placeholder={`Option ${index + 1}`}
+                          className="flex-1 border rounded px-3 py-2 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeInteractionOption('poll', index)}
+                          className="px-2 text-red-600"
+                          disabled={postForm.interaction.poll.options.length <= 2}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => addInteractionOption('poll')}
+                      className="text-sm text-blue-700 hover:underline"
+                      disabled={postForm.interaction.poll.options.length >= INTERACTION_MAX_OPTIONS}
+                    >
+                      Add poll option
+                    </button>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={postForm.interaction.poll.allowMultiple}
+                        onChange={(event) => updateInteractionField('poll', 'allowMultiple', event.target.checked)}
+                      />
+                      Allow multiple selections
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={postForm.interaction.poll.expiresAt}
+                      onChange={(event) => updateInteractionField('poll', 'expiresAt', event.target.value)}
+                      className="border rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {postForm.contentType === 'quiz' && (
+                <div className="border rounded p-3 space-y-3 bg-violet-50/40">
+                  <h4 className="text-sm font-semibold text-gray-700">Quiz Settings</h4>
+                  <input
+                    type="text"
+                    value={postForm.interaction.quiz.question}
+                    onChange={(event) => updateInteractionField('quiz', 'question', event.target.value)}
+                    placeholder="Quiz question"
+                    className="w-full border rounded px-3 py-2 text-sm"
+                  />
+                  <div className="space-y-2">
+                    {postForm.interaction.quiz.options.map((option, index) => (
+                      <div key={`quiz-option-${index}`} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={option}
+                          onChange={(event) => updateInteractionOption('quiz', index, event.target.value)}
+                          placeholder={`Option ${index + 1}`}
+                          className="flex-1 border rounded px-3 py-2 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeInteractionOption('quiz', index)}
+                          className="px-2 text-red-600"
+                          disabled={postForm.interaction.quiz.options.length <= 2}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => addInteractionOption('quiz')}
+                      className="text-sm text-blue-700 hover:underline"
+                      disabled={postForm.interaction.quiz.options.length >= INTERACTION_MAX_OPTIONS}
+                    >
+                      Add quiz option
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <select
+                      value={postForm.interaction.quiz.correctOptionIndex}
+                      onChange={(event) => updateInteractionField('quiz', 'correctOptionIndex', Number(event.target.value))}
+                      className="border rounded px-3 py-2 text-sm"
+                    >
+                      {postForm.interaction.quiz.options.map((_, index) => (
+                        <option key={`quiz-correct-${index}`} value={index}>
+                          Correct option #{index + 1}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="datetime-local"
+                      value={postForm.interaction.quiz.expiresAt}
+                      onChange={(event) => updateInteractionField('quiz', 'expiresAt', event.target.value)}
+                      className="border rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <textarea
+                    value={postForm.interaction.quiz.explanation}
+                    onChange={(event) => updateInteractionField('quiz', 'explanation', event.target.value)}
+                    placeholder="Explanation shown after answer (optional)"
+                    className="w-full border rounded px-3 py-2 text-sm"
+                    rows={2}
+                  />
+                </div>
+              )}
+
+              {postForm.contentType === 'countdown' && (
+                <div className="border rounded p-3 space-y-3 bg-emerald-50/40">
+                  <h4 className="text-sm font-semibold text-gray-700">Countdown Settings</h4>
+                  <input
+                    type="text"
+                    value={postForm.interaction.countdown.label}
+                    onChange={(event) => updateInteractionField('countdown', 'label', event.target.value)}
+                    placeholder="Countdown label"
+                    className="w-full border rounded px-3 py-2 text-sm"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      type="datetime-local"
+                      value={postForm.interaction.countdown.targetAt}
+                      onChange={(event) => updateInteractionField('countdown', 'targetAt', event.target.value)}
+                      className="border rounded px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={postForm.interaction.countdown.timezone}
+                      onChange={(event) => updateInteractionField('countdown', 'timezone', event.target.value)}
+                      placeholder="Timezone (e.g. UTC)"
+                      className="border rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Default timezone is from your browser. Update it if needed (examples: UTC, America/New_York, Europe/London).
+                  </p>
+                  <input
+                    type="url"
+                    value={postForm.interaction.countdown.linkUrl}
+                    onChange={(event) => updateInteractionField('countdown', 'linkUrl', event.target.value)}
+                    placeholder="Optional link URL"
+                    className="w-full border rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
 
               <button
                 type="submit"
@@ -1343,6 +1856,8 @@ const Social = () => {
                 const postBusy = Boolean(actionLoadingByPost[post._id]);
                 const isBlocked = blockedUserIds.includes(postAuthorId);
                 const isMuted = mutedUserIds.includes(postAuthorId);
+                const interaction = post.interaction;
+                const interactionStatus = getInteractionStatus(interaction);
 
                 return (
                   <article key={post._id} className="bg-white rounded-xl shadow p-5 space-y-3 border border-gray-100">
@@ -1379,6 +1894,162 @@ const Social = () => {
                         {post.mediaUrls.map((url, index) => (
                           renderMediaItem(url, `${post._id}-media-${index}`)
                         ))}
+                      </div>
+                    )}
+
+                    {interaction?.type === 'poll' && (
+                      <div className="border rounded-lg p-3 bg-slate-50 space-y-2">
+                        <p className="font-medium text-sm">{interaction.poll?.question}</p>
+                        <p className="text-xs text-gray-500">
+                          Poll status: <span className="font-medium">{interactionStatus}</span>
+                        </p>
+                        {(() => {
+                          const options = Array.isArray(interaction.poll?.options) ? interaction.poll.options : [];
+                          const viewerSelection = interaction.viewer?.selection || [];
+                          const hasSubmitted = Boolean(interaction.viewer?.hasSubmitted);
+                          const totalSubmissions = Number(interaction.totals?.submissions || 0);
+                          const canVote = isAuthenticated && !isGuestPreview && interactionStatus === 'active' && !hasSubmitted;
+
+                          return (
+                            <div className="space-y-2">
+                              {options.map((option, index) => {
+                                const label = typeof option === 'string' ? option : option.label;
+                                const votes = typeof option === 'string' ? null : Number(option.votes || 0);
+                                const selected = viewerSelection.includes(index);
+                                const ratio = totalSubmissions > 0 && Number.isFinite(votes)
+                                  ? Math.round((votes / Math.max(1, totalSubmissions)) * 100)
+                                  : 0;
+
+                                if (canVote) {
+                                  return (
+                                    <button
+                                      key={`${post._id}-poll-option-${index}`}
+                                      type="button"
+                                      onClick={() => handleVotePoll(post._id, index)}
+                                      disabled={postBusy}
+                                      className="w-full text-left border rounded px-3 py-2 hover:bg-white disabled:opacity-60"
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                }
+
+                                return (
+                                  <div key={`${post._id}-poll-option-${index}`} className="border rounded px-3 py-2 bg-white">
+                                    <div className="flex items-center justify-between text-sm">
+                                      <span>{label}</span>
+                                      <span>{Number.isFinite(votes) ? `${votes} vote${votes === 1 ? '' : 's'}` : ''}</span>
+                                    </div>
+                                    {Number.isFinite(votes) && (
+                                      <div className="mt-1 h-2 rounded bg-gray-200 overflow-hidden">
+                                        <div className="h-full bg-blue-500" style={{ width: `${ratio}%` }} />
+                                      </div>
+                                    )}
+                                    {selected && <p className="text-xs text-blue-700 mt-1">Your selection</p>}
+                                  </div>
+                                );
+                              })}
+                              <p className="text-xs text-gray-500">
+                                {totalSubmissions} submission{totalSubmissions === 1 ? '' : 's'}
+                              </p>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {interaction?.type === 'quiz' && (
+                      <div className="border rounded-lg p-3 bg-violet-50/40 space-y-2">
+                        <p className="font-medium text-sm">{interaction.quiz?.question}</p>
+                        <p className="text-xs text-gray-500">
+                          Quiz status: <span className="font-medium">{interactionStatus}</span>
+                        </p>
+                        {(() => {
+                          const options = Array.isArray(interaction.quiz?.options) ? interaction.quiz.options : [];
+                          const viewerAnswer = interaction.viewer?.answer || null;
+                          const hasSubmitted = Boolean(interaction.viewer?.hasSubmitted);
+                          const canSubmit = isAuthenticated && !isGuestPreview && interactionStatus === 'active' && !hasSubmitted;
+
+                          return (
+                            <div className="space-y-2">
+                              {options.map((option, index) => {
+                                const label = typeof option === 'string' ? option : option.label;
+                                const answerCount = typeof option === 'string' ? null : Number(option.answers || 0);
+                                const isCorrectOption = Number(interaction.quiz?.correctOptionIndex) === index;
+                                const viewerSelected = viewerAnswer?.optionIndex === index;
+
+                                return canSubmit ? (
+                                  <button
+                                    key={`${post._id}-quiz-option-${index}`}
+                                    type="button"
+                                    onClick={() => handleSubmitQuizAnswer(post._id, index)}
+                                    disabled={postBusy}
+                                    className="w-full text-left border rounded px-3 py-2 hover:bg-white disabled:opacity-60"
+                                  >
+                                    {label}
+                                  </button>
+                                ) : (
+                                  <div key={`${post._id}-quiz-option-${index}`} className="border rounded px-3 py-2 bg-white text-sm">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span>{label}</span>
+                                      {Number.isFinite(answerCount) && (
+                                        <span>{answerCount} answer{answerCount === 1 ? '' : 's'}</span>
+                                      )}
+                                    </div>
+                                    {viewerSelected && (
+                                      <p className={`text-xs mt-1 ${viewerAnswer?.isCorrect ? 'text-green-700' : 'text-red-700'}`}>
+                                        Your answer
+                                      </p>
+                                    )}
+                                    {hasSubmitted && isCorrectOption && (
+                                      <p className="text-xs text-green-700 mt-1">Correct option</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              {hasSubmitted && interaction.quiz?.explanation && (
+                                <p className="text-xs text-gray-700 bg-white border rounded p-2">
+                                  {interaction.quiz.explanation}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {interaction?.type === 'countdown' && (
+                      <div className="border rounded-lg p-3 bg-emerald-50/50 space-y-2">
+                        <p className="font-medium text-sm">{interaction.countdown?.label}</p>
+                        <p className="text-xs text-gray-600">
+                          Timezone: {interaction.countdown?.timezone || 'UTC'} • Status: {interactionStatus}
+                        </p>
+                        <p className="text-lg font-semibold text-emerald-700">
+                          {formatRemainingTime(interaction.countdown?.targetAt, nowMs)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Followers: {Number(interaction.totals?.followers || 0)}
+                        </p>
+                        {interaction.countdown?.linkUrl && (
+                          <a
+                            href={interaction.countdown.linkUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm text-blue-700 hover:underline"
+                          >
+                            Open related link
+                          </a>
+                        )}
+                        {isAuthenticated && !isGuestPreview && (
+                          <button
+                            type="button"
+                            onClick={() => handleFollowCountdown(post._id)}
+                            disabled={postBusy || interactionStatus !== 'active' || Boolean(interaction.viewer?.isFollowing)}
+                            className="px-3 py-1.5 rounded border text-sm border-emerald-600 text-emerald-700 disabled:opacity-60"
+                          >
+                            {interaction.viewer?.isFollowing ? 'Following' : 'Follow Countdown'}
+                          </button>
+                        )}
                       </div>
                     )}
 

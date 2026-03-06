@@ -118,6 +118,10 @@ export const feedAPI = {
   likePost: (postId) => api.post(`/feed/post/${postId}/like`),
   unlikePost: (postId) => api.delete(`/feed/post/${postId}/like`),
   addComment: (postId, content) => api.post(`/feed/post/${postId}/comment`, { content }),
+  votePoll: (postId, optionIndexes) => api.post(`/feed/post/${postId}/vote`, { optionIndexes }),
+  submitQuizAnswer: (postId, optionIndex) => api.post(`/feed/post/${postId}/quiz-answer`, { optionIndex }),
+  followCountdown: (postId) => api.post(`/feed/post/${postId}/countdown-follow`),
+  getInteraction: (postId) => api.get(`/feed/post/${postId}/interaction`),
   getTimeline: (page = 1, limit = 20) => 
     api.get(`/feed/timeline?page=${page}&limit=${limit}`),
   getPost: (postId) => api.get(`/feed/post/${postId}`),
