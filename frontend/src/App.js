@@ -431,7 +431,7 @@ function App() {
         <nav className="bg-white shadow-md border-b border-gray-200 p-4">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
-            <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible">
+            <div className="flex flex-wrap items-center gap-3 overflow-visible">
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Home</Link>}
               {canUseProtectedFeatures && <Link to="/social" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Social</Link>}
               {canUseProtectedFeatures && <Link to="/chat" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Chat</Link>}
