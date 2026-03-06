@@ -25,6 +25,7 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/bmp'
 ]);
 const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
+const BLOCKED_HOSTNAMES = new Set(['localhost']);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -84,6 +85,22 @@ const extractExtensionFromUrl = (urlString) => {
   } catch {
     return '';
   }
+};
+
+const isPrivateOrLocalIp = (hostname) => {
+  if (!hostname) return false;
+  const normalized = String(hostname).toLowerCase();
+  if (normalized === '::1') return true;
+  if (/^127\./.test(normalized)) return true;
+  if (/^10\./.test(normalized)) return true;
+  if (/^192\.168\./.test(normalized)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(normalized)) return true;
+  return false;
+};
+
+const getRequestedMediaUrl = (body = {}) => {
+  if (!body || typeof body !== 'object') return '';
+  return body.mediaUrl ?? body.imageUrl ?? body.url ?? '';
 };
 
 const validateImageUrl = (urlString) => {
@@ -272,7 +289,7 @@ router.post(
         mediaType = 'upload';
         storageFileName = fileName;
       } else {
-        const validation = validateImageUrl(req.body.mediaUrl);
+        const validation = validateImageUrl(getRequestedMediaUrl(req.body));
         if (!validation.ok) {
           return res.status(400).json({ error: validation.error });
         }

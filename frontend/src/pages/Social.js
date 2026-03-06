@@ -206,8 +206,28 @@ const Social = () => {
 
   const realtimeEnabled = currentUser?.realtimePreferences?.enabled !== false;
 
+  const requestedProfileIdentifier = guestUser.trim();
+  const normalizedRequestedProfileIdentifier = requestedProfileIdentifier.toLowerCase();
+  const normalizedCurrentUserId = String(currentUser?._id || '').trim().toLowerCase();
+  const normalizedCurrentUsername = String(currentUser?.username || '').trim().toLowerCase();
+  const isViewingAnotherProfile = Boolean(
+    isAuthenticated
+      && normalizedRequestedProfileIdentifier
+      && normalizedRequestedProfileIdentifier !== normalizedCurrentUserId
+      && normalizedRequestedProfileIdentifier !== normalizedCurrentUsername
+  );
+  const isOwnSocialContext = isAuthenticated && !isViewingAnotherProfile;
+
   const galleryOwnerIdentifier = useMemo(() => {
-    // Authenticated users always see their own gallery on /social
+    // Profile context (/social?user=...) uses target user gallery
+    if (isViewingAnotherProfile) {
+      if (guestProfile?._id) {
+        return String(guestProfile._id);
+      }
+      return requestedProfileIdentifier;
+    }
+
+    // Authenticated users on own /social always see only their own gallery
     if (isAuthenticated && currentUser?._id) {
       return String(currentUser._id);
     }
@@ -221,13 +241,18 @@ const Social = () => {
       return String(guestProfile._id);
     }
 
-    return guestUser.trim();
-  }, [isAuthenticated, currentUser?._id, galleryTarget, guestProfile?._id, guestUser]);
+    return requestedProfileIdentifier;
+  }, [
+    isViewingAnotherProfile,
+    guestProfile?._id,
+    requestedProfileIdentifier,
+    isAuthenticated,
+    currentUser?._id,
+    galleryTarget
+  ]);
 
   const viewerCanReact = isAuthenticated && !isGuestPreview && Boolean(currentUser?._id);
   const normalizedGalleryOwnerIdentifier = String(galleryOwnerIdentifier || '').trim().toLowerCase();
-  const normalizedCurrentUserId = String(currentUser?._id || '').trim().toLowerCase();
-  const normalizedCurrentUsername = String(currentUser?.username || '').trim().toLowerCase();
 
   const canManageGallery =
     viewerCanReact
@@ -344,14 +369,20 @@ const Social = () => {
 
     setIsAuthenticated(true);
     try {
-      await loadAuthenticatedFeed();
+      if (isViewingAnotherProfile) {
+        await loadGuestFeed();
+      } else {
+        await loadAuthenticatedFeed();
+      }
     } catch (error) {
-      setFeedError(error.response?.data?.error || 'Failed to load timeline.');
+      setFeedError(error.response?.data?.error || (isViewingAnotherProfile
+        ? 'Failed to load public feed.'
+        : 'Failed to load timeline.'));
       setPosts([]);
     } finally {
       setLoadingFeed(false);
     }
-  }, [loadAuthenticatedFeed, loadGuestFeed]);
+  }, [loadAuthenticatedFeed, loadGuestFeed, isViewingAnotherProfile]);
 
   useEffect(() => {
     loadFeed();
@@ -1065,13 +1096,15 @@ const Social = () => {
             Social
           </h2>
           <p className="text-sm leading-relaxed text-white/95 sm:text-base">
-            {isAuthenticated && isGuestPreview
+            {isViewingAnotherProfile
+              ? `Viewing public profile for @${requestedProfileIdentifier}. Gallery and posts are read-only in this view.`
+              : isAuthenticated && isGuestPreview
               ? 'Guest preview mode: interaction controls are hidden. This is how your page appears to visitors.'
               : isAuthenticated
                 ? 'Share updates, browse your timeline, and connect with your community.'
                 : 'Guest mode: view public posts only. Sign in to create posts and interact.'}
           </p>
-          {isAuthenticated && (
+          {isOwnSocialContext && (
             <div className="pt-1">
               {isGuestPreview ? (
                 <button
@@ -1190,7 +1223,7 @@ const Social = () => {
             </div>
           )}
 
-          {isAuthenticated && !isGuestPreview && (
+          {isOwnSocialContext && !isGuestPreview && (
             <form onSubmit={handleSubmitPost} className="bg-white rounded-xl shadow p-6 space-y-4 border border-gray-100">
               <h3 className="text-lg font-medium">Create Post</h3>
 
@@ -1264,7 +1297,7 @@ const Social = () => {
             </form>
           )}
 
-          {isAuthenticated && !isGuestPreview && (
+          {isOwnSocialContext && !isGuestPreview && (
             <CircleManager
               circles={circles}
               friends={friends}
@@ -1277,7 +1310,7 @@ const Social = () => {
 
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold">{(isAuthenticated && !isGuestPreview) ? 'Timeline' : 'Public Timeline'}</h3>
+              <h3 className="text-xl font-semibold">{(isOwnSocialContext && !isGuestPreview) ? 'Timeline' : 'Public Timeline'}</h3>
               <button
                 type="button"
                 onClick={loadFeed}
