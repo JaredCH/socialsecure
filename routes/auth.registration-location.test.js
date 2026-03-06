@@ -105,7 +105,7 @@ describe('Auth registration location fields', () => {
     expect(mockUserModel).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid country code', async () => {
+  it('rejects invalid country selection', async () => {
     const app = buildApp();
 
     const response = await request(app)
@@ -123,7 +123,7 @@ describe('Auth registration location fields', () => {
     expect(response.status).toBe(400);
     expect(response.body.errors).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ msg: expect.stringMatching(/country code/i) })
+        expect.objectContaining({ msg: expect.stringMatching(/country.*list/i) })
       ])
     );
     expect(mockUserModel).not.toHaveBeenCalled();

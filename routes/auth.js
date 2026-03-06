@@ -268,9 +268,9 @@ router.post('/register', [
     .trim()
     .customSanitizer((value) => String(value || '').toUpperCase())
     .notEmpty()
-    .withMessage('Country code is required')
+    .withMessage('Country is required')
     .matches(/^[A-Z]{2}$/)
-    .withMessage('Country code must be a valid 2-letter uppercase code'),
+    .withMessage('Please select a country from the list'),
   body('county')
     .trim()
     .notEmpty()
