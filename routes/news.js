@@ -854,6 +854,9 @@ async function processArticles(articles) {
   
   const scoredArticles = [];
   const momentumMap = createMomentumMap(articles, new Date());
+  const findExistingArticle = Article.findDuplicate
+    ? (url, sourceId, normalizedUrlHash) => Article.findDuplicate(url, sourceId)
+    : (url, sourceId, normalizedUrlHash) => Article.findOne({ normalizedUrlHash });
 
   for (const article of articles) {
     try {
@@ -873,15 +876,18 @@ async function processArticles(articles) {
       };
 
       // Check for duplicate by URL hash
-      const existing = await Article.findDuplicate
-        ? await Article.findDuplicate(scoredArticle.url, scoredArticle.sourceId)
-        : await Article.findOne({ normalizedUrlHash: scoredArticle.normalizedUrlHash });
+      const existing = await findExistingArticle(
+        scoredArticle.url,
+        scoredArticle.sourceId,
+        scoredArticle.normalizedUrlHash
+      );
       
       if (existing) {
         // Update if newer
         const incomingPublishedAt = scoredArticle.publishedAt ? new Date(scoredArticle.publishedAt) : null;
         const existingPublishedAt = existing.publishedAt ? new Date(existing.publishedAt) : null;
         if (incomingPublishedAt && (!existingPublishedAt || incomingPublishedAt > existingPublishedAt)) {
+          const mergedLocations = [...new Set([...(existing.locations || []), ...(scoredArticle.locations || [])])];
           await Article.findByIdAndUpdate(existing._id, {
             $set: {
               title: scoredArticle.title,
@@ -889,9 +895,7 @@ async function processArticles(articles) {
               imageUrl: scoredArticle.imageUrl,
               publishedAt: scoredArticle.publishedAt,
               topics: [...new Set([...(existing.topics || []), ...(scoredArticle.topics || [])])],
-              locations: scoredArticle.locations
-                ? [...new Set([...(existing.locations || []), ...scoredArticle.locations])]
-                : (existing.locations || []),
+              locations: mergedLocations,
               assignedZipCode: scoredArticle.assignedZipCode || existing.assignedZipCode || null,
               viralScore: scoredArticle.viralScore,
               viralScoreVersion: scoredArticle.viralScoreVersion,
