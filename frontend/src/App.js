@@ -29,6 +29,8 @@ const ProtectedRoute = ({
   allowWhenOnboardingRequired = false,
   encryptionPasswordRequired = false,
   allowWhenEncryptionRequired = false,
+  passwordResetRequired = false,
+  allowWhenPasswordResetRequired = false,
   children
 }) => {
   if (!isAuthenticated) {
@@ -41,6 +43,10 @@ const ProtectedRoute = ({
 
   if (encryptionPasswordRequired && !allowWhenEncryptionRequired) {
     return <Navigate to="/onboarding" replace />;
+  }
+
+  if (passwordResetRequired && !allowWhenPasswordResetRequired) {
+    return <Navigate to="/settings#account" replace />;
   }
 
   return children;
@@ -86,6 +92,7 @@ function App() {
   const isAuthenticated = useMemo(() => Boolean(localStorage.getItem('token') && user), [user]);
   const onboardingRequired = isAuthenticated && onboardingStatus.status !== 'completed';
   const encryptionPasswordRequired = isAuthenticated && !encryptionPasswordStatus.hasEncryptionPassword;
+  const passwordResetRequired = isAuthenticated && !!user?.mustResetPassword;
 
   const refreshEncryptionPasswordStatus = async () => {
     if (!localStorage.getItem('token')) {
@@ -368,17 +375,17 @@ function App() {
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
             <div className="space-x-4">
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600">Home</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600">Social</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600">Discover</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600">Chat</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600">Market</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600">Maps</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600">Social</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600">Discover</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/chat" className="text-gray-600 hover:text-blue-600">Chat</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/market" className="text-gray-600 hover:text-blue-600">Market</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600">Maps</Link>}
               <Link to="/calendar" className="text-gray-600 hover:text-blue-600">Calendar</Link>
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/resume" className="text-gray-600 hover:text-blue-600">Resume</Link>}
-              {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && <Link to="/moderation" className="text-gray-600 hover:text-blue-600">Moderation</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && (
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/resume" className="text-gray-600 hover:text-blue-600">Resume</Link>}
+              {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/control-panel" className="text-gray-600 hover:text-blue-600">Control Panel</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}
+              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && (
                 <NotificationCenter
                   unreadCount={unreadNotificationCount}
                   onUnreadCountChange={setUnreadNotificationCount}
@@ -429,11 +436,13 @@ function App() {
                     ? <Navigate to="/onboarding" replace />
                     : encryptionPasswordRequired
                       ? <Navigate to="/onboarding" replace />
-                      : <Home isAuthenticated={isAuthenticated} />
+                      : passwordResetRequired
+                        ? <Navigate to="/settings#account" replace />
+                        : <Home isAuthenticated={isAuthenticated} />
                   : <Home isAuthenticated={isAuthenticated} />
               }
             />
-            <Route path="/login" element={<Login onSuccess={handleAuthSuccess} />} />
+             <Route path="/login" element={<Login onSuccess={handleAuthSuccess} />} />
             <Route
               path="/register"
               element={
@@ -452,6 +461,8 @@ function App() {
                   allowWhenOnboardingRequired
                   encryptionPasswordRequired={encryptionPasswordRequired}
                   allowWhenEncryptionRequired
+                  passwordResetRequired={passwordResetRequired}
+                  allowWhenPasswordResetRequired
                 >
                   {welcomeConfirmationPending ? (
                     <PostRegistrationWelcome
@@ -473,6 +484,8 @@ function App() {
                   allowWhenOnboardingRequired
                   encryptionPasswordRequired={false}
                   allowWhenEncryptionRequired
+                  passwordResetRequired={passwordResetRequired}
+                  allowWhenPasswordResetRequired
                 >
                   {onboardingRequired || encryptionPasswordRequired ? (
                     <OnboardingPage
@@ -495,6 +508,8 @@ function App() {
                 allowWhenOnboardingRequired
                 encryptionPasswordRequired={encryptionPasswordRequired}
                 allowWhenEncryptionRequired
+                passwordResetRequired={passwordResetRequired}
+                allowWhenPasswordResetRequired
               >
                 {welcomeConfirmationPending ? (
                   <Navigate to="/welcome" replace />
@@ -519,6 +534,7 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
                 >
                   <ResumeBuilder />
                 </ProtectedRoute>
@@ -533,13 +549,15 @@ function App() {
                   allowWhenOnboardingRequired={false}
                   encryptionPasswordRequired={encryptionPasswordRequired}
                   allowWhenEncryptionRequired={false}
+                  passwordResetRequired={passwordResetRequired}
+                  allowWhenPasswordResetRequired={false}
                 >
                   <Navigate to="/settings#security" replace />
                 </ProtectedRoute>
               )}
             />
             <Route
-              path="/moderation"
+              path="/control-panel"
               element={(
                 <ProtectedRoute
                   isAuthenticated={isAuthenticated}
@@ -547,11 +565,14 @@ function App() {
                   allowWhenOnboardingRequired={false}
                   encryptionPasswordRequired={encryptionPasswordRequired}
                   allowWhenEncryptionRequired={false}
+                  passwordResetRequired={passwordResetRequired}
+                  allowWhenPasswordResetRequired={false}
                 >
                   {user?.isAdmin ? <ModerationDashboard /> : <Navigate to="/social" replace />}
                 </ProtectedRoute>
               )}
             />
+            <Route path="/moderation" element={<Navigate to="/control-panel" replace />} />
             <Route
               path="/discover"
               element={(
@@ -559,6 +580,7 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
                 >
                   <Discovery />
                 </ProtectedRoute>
@@ -571,6 +593,7 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
                 >
                   <Social />
                 </ProtectedRoute>
@@ -583,6 +606,7 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
                 >
                   <NotificationSettings />
                 </ProtectedRoute>
@@ -596,6 +620,7 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
                 >
                   <Chat />
                 </ProtectedRoute>
@@ -608,6 +633,7 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
                 >
                   <Market />
                 </ProtectedRoute>
@@ -620,6 +646,7 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
                 >
                   <News />
                 </ProtectedRoute>
@@ -632,6 +659,7 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
                 >
                   <Maps />
                 </ProtectedRoute>
@@ -644,13 +672,14 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
                   encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
                 >
                   <ReferFriend />
                 </ProtectedRoute>
               )}
             />
             <Route path="/pgp" element={<Navigate to="/settings?deprecated=pgp" replace />} />
-            <Route path="*" element={<Navigate to={isAuthenticated ? '/social' : '/'} replace />} />
+            <Route path="*" element={<Navigate to={isAuthenticated ? (passwordResetRequired ? '/settings#account' : '/social') : '/'} replace />} />
           </Routes>
         </main>
         

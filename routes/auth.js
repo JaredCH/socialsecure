@@ -365,6 +365,7 @@ router.post('/register', [
       message: 'Registration successful',
       user: user.toPublicProfile(),
       token,
+      requiresPasswordReset: !!user.mustResetPassword,
       expiresIn: 86400 // 24 hours in seconds
     });
   } catch (error) {
@@ -438,6 +439,7 @@ router.post('/login', [
       message: 'Login successful',
       user: user.toPublicProfile(),
       token,
+      requiresPasswordReset: !!user.mustResetPassword,
       expiresIn: 86400
     });
   } catch (error) {
@@ -458,6 +460,61 @@ router.get('/me', async (req, res) => {
   } catch (error) {
     console.error('Auth error:', error);
     res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+router.post('/password/change', [
+  authenticateToken,
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+  body('confirmPassword')
+    .notEmpty()
+    .withMessage('Password confirmation is required')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'Password confirmation does not match' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isPasswordValid = await user.comparePassword(currentPassword);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    user.passwordHash = newPassword;
+    user.mustResetPassword = false;
+    await user.save();
+
+    await logSecurityEvent({
+      userId: user._id,
+      eventType: 'password_change',
+      req,
+      severity: 'info'
+    });
+
+    return res.json({
+      success: true,
+      message: 'Password changed successfully',
+      user: user.toPublicProfile()
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({ error: 'Failed to change password' });
   }
 });
 

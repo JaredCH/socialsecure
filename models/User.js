@@ -235,7 +235,7 @@ const userSchema = new mongoose.Schema({
   moderationHistory: [{
     action: {
       type: String,
-      enum: ['warning', 'suspension', 'ban']
+      enum: ['warning', 'suspension', 'ban', 'mute', 'unmute', 'infraction_added', 'infraction_removed', 'password_reset']
     },
     reason: {
       type: String,
@@ -262,6 +262,19 @@ const userSchema = new mongoose.Schema({
   isAdmin: {
     type: Boolean,
     default: false
+  },
+  mustResetPassword: {
+    type: Boolean,
+    default: false
+  },
+  mutedUntil: {
+    type: Date,
+    default: null
+  },
+  muteReason: {
+    type: String,
+    trim: true,
+    default: ''
   },
   notificationPreferences: {
     likes: {
@@ -415,6 +428,9 @@ userSchema.methods.toPublicProfile = function() {
     hasEncryptionPassword,
     isAdmin: !!this.isAdmin,
     moderationStatus: this.moderationStatus || 'active',
+    mustResetPassword: !!this.mustResetPassword,
+    mutedUntil: this.mutedUntil || null,
+    muteReason: this.muteReason || '',
     unreadNotificationCount: this.unreadNotificationCount || 0,
     notificationPreferences: this.notificationPreferences || {
       likes: { inApp: true, email: false, push: false },
