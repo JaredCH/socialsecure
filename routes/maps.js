@@ -305,9 +305,11 @@ router.get('/spotlight/nearby', optionalAuth, async (req, res) => {
     const requestedStates = Array.isArray(state)
       ? state
       : typeof state === 'string' ? state.split(',').map((part) => part.trim()).filter(Boolean) : [];
-    const resolvedStates = requestedStates.length > 0
-      ? requestedStates.filter((candidate) => publicStates.includes(candidate))
-      : publicStates;
+    const requestedPublicStates = requestedStates.filter((candidate) => publicStates.includes(candidate));
+    let resolvedStates = publicStates;
+    if (requestedStates.length > 0 && requestedPublicStates.length > 0) {
+      resolvedStates = requestedPublicStates;
+    }
     
     const spotlights = await Spotlight.getByLocation(
       parsedLat,

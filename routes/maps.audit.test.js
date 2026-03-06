@@ -105,7 +105,7 @@ describe('Maps route audit fixes', () => {
       0,
       0,
       5000,
-      expect.objectContaining({ state: [] })
+      expect.objectContaining({ state: ['trending', 'public_glow'] })
     );
   });
 
