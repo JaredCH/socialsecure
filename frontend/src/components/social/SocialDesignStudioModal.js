@@ -59,6 +59,8 @@ const panelWithPlacement = (panel = {}, row = 0, col = 0) => ({
   }
 });
 
+const formatConceptCoordinate = (unit) => `${Math.floor(unit / 2) + 1}${unit % 2 === 1 ? '.5' : ''}`;
+
 const buildPanelLayoutMap = (normalized) => {
   const placed = [];
   const occupied = Array.from({ length: GRID_ROWS }, () => Array.from({ length: GRID_COLUMNS }, () => null));
@@ -224,11 +226,11 @@ const SocialDesignStudioModal = ({
                         key={panel.id}
                         type="button"
                         onClick={() => setActivePanelId(panel.id)}
-                        className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${activePanelId === panel.id ? 'border-blue-400 bg-blue-50 text-blue-900' : 'border-slate-200 text-slate-800 hover:bg-slate-50'}`}
+                          className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${activePanelId === panel.id ? 'border-blue-400 bg-blue-50 text-blue-900' : 'border-slate-200 text-slate-800 hover:bg-slate-50'}`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-semibold">{SOCIAL_PANEL_LABELS[panel.id] || panel.id}</span>
-                          <span className="text-xs text-slate-700">r{Math.floor(panel.gridPlacement.row / 2) + 1} c{Math.floor(panel.gridPlacement.col / 2) + 1}</span>
+                          <span className="text-xs text-slate-700">r{formatConceptCoordinate(panel.gridPlacement.row)} c{formatConceptCoordinate(panel.gridPlacement.col)}</span>
                         </div>
                       </button>
                     ))}
@@ -284,7 +286,7 @@ const SocialDesignStudioModal = ({
                 >
                   <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-700">
                     <span>Grid preview</span>
-                    <span>Columns 1-6 • Rows 1-10</span>
+                    <span>6x10 conceptual grid (12x20 internal slots)</span>
                   </div>
                   <div className="relative grid gap-0.5 rounded-lg bg-slate-200/70 p-1" style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${GRID_ROWS}, minmax(0, 20px))` }}>
                     {Array.from({ length: GRID_ROWS * GRID_COLUMNS }).map((_, index) => {
@@ -343,11 +345,11 @@ const SocialDesignStudioModal = ({
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
                     <div className="rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-700">
                       <p className="font-semibold text-slate-900">Side columns</p>
-                      <p>Columns 1 and 6 accept side panels only.</p>
+                      <p>Conceptual columns 1 and 6 are side-panel only lanes.</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-700">
                       <p className="font-semibold text-slate-900">Main columns</p>
-                      <p>Columns 2-5 accept width ½ to 4 columns.</p>
+                      <p>Conceptual columns 2-5 allow widths from ½ to 4 columns.</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-700">
                       <p className="font-semibold text-slate-900">Rows</p>
