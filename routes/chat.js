@@ -264,6 +264,12 @@ const formatConversationSummary = (conversation, usersById, currentUserId) => {
   return base;
 };
 
+const resolveLeanDoc = async (query) => (
+  typeof query?.lean === 'function'
+    ? query.lean()
+    : query
+);
+
 const isValidMessageType = (messageType) => MESSAGE_TYPES.includes(messageType);
 
 const normalizeMessageType = (messageType) => (isValidMessageType(messageType) ? messageType : 'text');
@@ -2186,10 +2192,7 @@ router.get('/conversations/:conversationId/messages', unifiedChatLimiter, authen
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
     const skip = (page - 1) * limit;
 
-    const conversationQuery = ChatConversation.findById(conversationId);
-    const conversation = typeof conversationQuery?.lean === 'function'
-      ? await conversationQuery.lean()
-      : await conversationQuery;
+    const conversation = await resolveLeanDoc(ChatConversation.findById(conversationId));
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
@@ -2232,10 +2235,7 @@ router.get('/conversations/:conversationId/users', unifiedChatLimiter, authentic
     const { conversationId } = req.params;
     const userId = req.user.userId;
 
-    const conversationQuery = ChatConversation.findById(conversationId);
-    const conversation = typeof conversationQuery?.lean === 'function'
-      ? await conversationQuery.lean()
-      : await conversationQuery;
+    const conversation = await resolveLeanDoc(ChatConversation.findById(conversationId));
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
@@ -2253,7 +2253,7 @@ router.get('/conversations/:conversationId/users', unifiedChatLimiter, authentic
     if (conversation.type === 'zip-room') {
       const recentMessages = await ConversationMessage.find({ conversationId })
         .sort({ createdAt: -1 })
-        .limit(500)
+        .limit(200)
         .select('userId')
         .lean();
       recentMessages.forEach((message) => {

@@ -26,6 +26,9 @@ describe('Chat zip room indicator', () => {
   let root;
 
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  // React 18 controlled inputs in this test style require invoking the native setter
+  // so React sees a real input event and updates state from DOM interactions.
   const setInputValue = (input, value) => {
     const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
     valueSetter.call(input, value);
@@ -164,6 +167,11 @@ describe('Chat zip room indicator', () => {
     await act(async () => {
       setInputValue(userInput, 'bu');
       await flush();
+    });
+    expect(userAPI.search).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await wait(350);
     });
     expect(userAPI.search).toHaveBeenCalledWith('bu');
     expect(container.textContent).toContain('@buddy');

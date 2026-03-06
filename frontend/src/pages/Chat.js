@@ -142,12 +142,21 @@ function Chat() {
   );
 
   const allRooms = useMemo(() => {
+    const withSearchLabel = (room, channel) => {
+      const label = getConversationLabel(room);
+      return {
+        ...room,
+        __channel: channel,
+        __label: label,
+        __labelLower: label.toLowerCase()
+      };
+    };
     const zipRooms = [
-      ...(hubData?.zip?.current ? [{ ...hubData.zip.current, __channel: 'zip' }] : []),
-      ...((hubData?.zip?.nearby || []).map((room) => ({ ...room, __channel: 'zip' })))
+      ...(hubData?.zip?.current ? [withSearchLabel(hubData.zip.current, 'zip')] : []),
+      ...((hubData?.zip?.nearby || []).map((room) => withSearchLabel(room, 'zip')))
     ];
-    const dmRooms = (hubData?.dm || []).map((room) => ({ ...room, __channel: 'dm' }));
-    const profileRooms = (hubData?.profile || []).map((room) => ({ ...room, __channel: 'profile' }));
+    const dmRooms = (hubData?.dm || []).map((room) => withSearchLabel(room, 'dm'));
+    const profileRooms = (hubData?.profile || []).map((room) => withSearchLabel(room, 'profile'));
     return [...zipRooms, ...dmRooms, ...profileRooms];
   }, [hubData]);
 
@@ -313,24 +322,26 @@ function Chat() {
     }
 
     let cancelled = false;
-    setDmSearchLoading(true);
-
-    userAPI.search(query)
-      .then(({ data }) => {
-        if (cancelled) return;
-        const users = Array.isArray(data?.users) ? data.users : [];
-        setDmSuggestions(users.filter((user) => String(user._id) !== String(profile?._id)));
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setDmSuggestions([]);
-        toast.error(error.response?.data?.error || 'Failed to search users');
-      })
-      .finally(() => {
-        if (!cancelled) setDmSearchLoading(false);
-      });
+    const handle = setTimeout(() => {
+      setDmSearchLoading(true);
+      userAPI.search(query)
+        .then(({ data }) => {
+          if (cancelled) return;
+          const users = Array.isArray(data?.users) ? data.users : [];
+          setDmSuggestions(users.filter((user) => String(user._id) !== String(profile?._id)));
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setDmSuggestions([]);
+          toast.error(error.response?.data?.error || 'Failed to search users');
+        })
+        .finally(() => {
+          if (!cancelled) setDmSearchLoading(false);
+        });
+    }, 300);
 
     return () => {
+      clearTimeout(handle);
       cancelled = true;
     };
   }, [dmQuery, profile]);
@@ -339,14 +350,14 @@ function Chat() {
     const query = roomQuery.trim().toLowerCase();
     if (query.length < 2) return [];
     return allRooms
-      .filter((room) => getConversationLabel(room).toLowerCase().includes(query))
+      .filter((room) => room.__labelLower.includes(query))
       .slice(0, 8);
   }, [roomQuery, allRooms]);
 
   const selectRoomSuggestion = (room) => {
     setActiveChannel(room.__channel || 'zip');
     setActiveConversationId(String(room._id));
-    setRoomQuery(getConversationLabel(room));
+    setRoomQuery(room.__label || getConversationLabel(room));
   };
 
   if (loadingHub) {
@@ -414,7 +425,7 @@ function Chat() {
                       onClick={() => selectRoomSuggestion(room)}
                       className="w-full text-left p-2 hover:opacity-80"
                     >
-                      {getConversationLabel(room)}
+                      {room.__label || getConversationLabel(room)}
                     </button>
                   </li>
                 ))}
