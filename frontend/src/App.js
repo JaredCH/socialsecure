@@ -23,6 +23,22 @@ import ResumePublic from './pages/ResumePublic';
 import { authAPI, notificationAPI } from './utils/api';
 import { initRealtime, disconnectRealtime } from './utils/realtime';
 
+const NAV_SCROLL_STEP_PX = 160;
+const handleNavScrollKeyDown = (event) => {
+  if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
+    return;
+  }
+
+  event.preventDefault();
+  const delta = event.key === 'ArrowRight' ? NAV_SCROLL_STEP_PX : -NAV_SCROLL_STEP_PX;
+  const target = event.currentTarget;
+  if (typeof target?.scrollBy === 'function') {
+    target.scrollBy({ left: delta, behavior: 'smooth' });
+  } else if (target) {
+    target.scrollLeft += delta;
+  }
+};
+
 const ProtectedRoute = ({
   isAuthenticated,
   onboardingRequired = false,
@@ -366,22 +382,6 @@ function App() {
   if (checkingAuth || (isAuthenticated && (checkingEncryptionStatus || checkingOnboardingStatus))) {
     return <div className="min-h-screen grid place-items-center">Loading...</div>;
   }
-
-  const NAV_SCROLL_STEP_PX = 160;
-  const handleNavScrollKeyDown = (event) => {
-    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
-      return;
-    }
-
-    event.preventDefault();
-    const delta = event.key === 'ArrowRight' ? NAV_SCROLL_STEP_PX : -NAV_SCROLL_STEP_PX;
-    const target = event.currentTarget;
-    if (typeof target?.scrollBy === 'function') {
-      target.scrollBy({ left: delta, behavior: 'smooth' });
-    } else if (target) {
-      target.scrollLeft += delta;
-    }
-  };
 
   const navLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700';
   const navEmphasisLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50';
