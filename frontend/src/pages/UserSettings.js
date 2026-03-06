@@ -1,53 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useLocation } from 'react-router-dom';
-import { authAPI, chatAPI, discoveryAPI } from '../utils/api';
+import { authAPI, chatAPI } from '../utils/api';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
 import FriendsManager from '../components/FriendsManager';
 import RecoveryKitManager from '../components/RecoveryKitManager';
 import SecurityScore from '../components/SecurityScore';
 
-const PROFILE_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
-const SOCIAL_ACCENT_TOKENS = ['blue', 'violet', 'emerald', 'rose', 'amber'];
-const SOCIAL_SECTION_IDS = ['header', 'shortcuts', 'snapshot', 'guestLookup', 'composer', 'circles', 'timeline', 'gallery', 'moderation', 'chatPanel', 'communityNotes'];
-const SOCIAL_MANDATORY_SECTION_IDS = ['header'];
-const SOCIAL_PRIMARY_SECTION_IDS = ['timeline', 'gallery'];
-const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
-const SOCIAL_SECTION_LABELS = {
-  header: 'Hero Header',
-  shortcuts: 'Shortcuts',
-  snapshot: 'Social Snapshot',
-  guestLookup: 'Guest Lookup',
-  composer: 'Create Post',
-  circles: 'Circles',
-  timeline: 'Timeline',
-  gallery: 'Gallery',
-  moderation: 'Moderation Transparency',
-  chatPanel: 'Chat Panel',
-  communityNotes: 'Community Notes'
-};
-const SOCIAL_MODULE_LABELS = {
-  marketplaceShortcut: 'Marketplace Shortcut',
-  calendarShortcut: 'Calendar Shortcut',
-  settingsShortcut: 'User Settings Shortcut',
-  referShortcut: 'Refer Friend Shortcut',
-  chatPanel: 'Chat Panel',
-  communityNotes: 'Community Notes'
-};
-const THEME_TO_ALLOWED_ACCENTS = {
-  default: ['blue', 'violet', 'emerald', 'rose'],
-  light: ['blue', 'violet', 'emerald'],
-  dark: ['blue', 'violet', 'emerald', 'rose', 'amber'],
-  sunset: ['rose', 'amber', 'violet'],
-  forest: ['emerald', 'blue', 'amber']
-};
-const THEME_TO_DEFAULT_ACCENT = {
-  default: 'blue',
-  light: 'violet',
-  dark: 'emerald',
-  sunset: 'rose',
-  forest: 'emerald'
-};
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
 const MAX_PGP_PUBLIC_KEY_LENGTH = 20000;
 const PGP_PUBLIC_KEY_BEGIN = '-----BEGIN PGP PUBLIC KEY BLOCK-----';
@@ -89,52 +48,6 @@ const textToLinks = (value) => {
 const normalizePgpPublicKey = (value) => {
   if (typeof value !== 'string') return '';
   return value.replace(/\r\n/g, '\n').trim();
-};
-
-const uniqueStrings = (items) => {
-  if (!Array.isArray(items)) return [];
-  return [...new Set(items.filter((item) => typeof item === 'string').map((item) => item.trim()).filter(Boolean))];
-};
-
-const getDefaultSocialPreferences = (profileTheme = 'default') => {
-  const resolvedTheme = PROFILE_THEMES.includes(profileTheme) ? profileTheme : 'default';
-  return {
-    themePreset: resolvedTheme,
-    accentColorToken: THEME_TO_DEFAULT_ACCENT[resolvedTheme] || 'blue',
-    sectionOrder: [...SOCIAL_SECTION_IDS],
-    hiddenSections: [],
-    hiddenModules: [],
-    version: 1
-  };
-};
-
-const normalizeSocialPreferences = (input, profileTheme = 'default') => {
-  const defaults = getDefaultSocialPreferences(profileTheme);
-  const value = input && typeof input === 'object' ? input : {};
-  const themePreset = PROFILE_THEMES.includes(value.themePreset) ? value.themePreset : defaults.themePreset;
-  const allowedAccents = THEME_TO_ALLOWED_ACCENTS[themePreset] || THEME_TO_ALLOWED_ACCENTS.default;
-  const accentColorToken = allowedAccents.includes(value.accentColorToken)
-    ? value.accentColorToken
-    : (allowedAccents.includes(defaults.accentColorToken) ? defaults.accentColorToken : allowedAccents[0]);
-  const requestedOrder = uniqueStrings(value.sectionOrder).filter((id) => SOCIAL_SECTION_IDS.includes(id));
-  const sectionOrder = [...requestedOrder, ...SOCIAL_SECTION_IDS.filter((id) => !requestedOrder.includes(id))];
-  const hiddenSections = uniqueStrings(value.hiddenSections)
-    .filter((id) => SOCIAL_SECTION_IDS.includes(id))
-    .filter((id) => !SOCIAL_MANDATORY_SECTION_IDS.includes(id));
-  if (SOCIAL_PRIMARY_SECTION_IDS.every((id) => hiddenSections.includes(id))) {
-    const restoreSectionId = SOCIAL_PRIMARY_SECTION_IDS[0];
-    const restoreIndex = hiddenSections.indexOf(restoreSectionId);
-    if (restoreIndex >= 0) hiddenSections.splice(restoreIndex, 1);
-  }
-  const hiddenModules = uniqueStrings(value.hiddenModules).filter((id) => SOCIAL_MODULE_IDS.includes(id));
-  return {
-    themePreset,
-    accentColorToken,
-    sectionOrder,
-    hiddenSections,
-    hiddenModules,
-    version: Number.isInteger(value.version) && value.version > 0 ? value.version : 1
-  };
 };
 
 const getPgpPublicKeyValidationError = (publicKey) => {
@@ -191,12 +104,9 @@ function UserSettings({
     bio: '',
     avatarUrl: '',
     bannerUrl: '',
-    linksText: '',
-    profileTheme: 'default',
-    socialPagePreferences: getDefaultSocialPreferences('default')
+    linksText: ''
   });
   const [saving, setSaving] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [encryptionForm, setEncryptionForm] = useState({
@@ -245,12 +155,7 @@ function UserSettings({
       bio: user.bio || '',
       avatarUrl: user.avatarUrl || '',
       bannerUrl: user.bannerUrl || '',
-      linksText: linksToText(user.links),
-      profileTheme: user.profileTheme || 'default',
-      socialPagePreferences: normalizeSocialPreferences(
-        user.socialPagePreferences,
-        user.profileTheme || 'default'
-      )
+      linksText: linksToText(user.links)
     });
     setPgpPublicKey(user.pgpPublicKey || '');
     setPgpGenerationForm((prev) => ({
@@ -289,105 +194,7 @@ function UserSettings({
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => {
-      if (name === 'profileTheme') {
-        const normalizedSocialPreferences = normalizeSocialPreferences(
-          {
-            ...prev.socialPagePreferences,
-            themePreset: value
-          },
-          value
-        );
-        return {
-          ...prev,
-          profileTheme: value,
-          socialPagePreferences: normalizedSocialPreferences
-        };
-      }
-
-      return { ...prev, [name]: value };
-    });
-  };
-
-  const trackCustomizationEvent = async (eventType, metadata = {}) => {
-    try {
-      await discoveryAPI.trackEvent(eventType, metadata);
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('Failed to track customization event', eventType, error?.message || error);
-      }
-    }
-  };
-
-  const handleTogglePreview = () => {
-    setPreviewOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        trackCustomizationEvent('social_customization_preview_opened', { source: 'settings' });
-      }
-      return next;
-    });
-  };
-
-  const updateSocialPreferences = (updater) => {
-    setForm((prev) => ({
-      ...prev,
-      socialPagePreferences: normalizeSocialPreferences(
-        typeof updater === 'function'
-          ? updater(prev.socialPagePreferences)
-          : updater,
-        prev.profileTheme
-      )
-    }));
-  };
-
-  const handleToggleSection = (sectionId) => {
-    if (SOCIAL_MANDATORY_SECTION_IDS.includes(sectionId)) return;
-    updateSocialPreferences((prev) => {
-      const isHidden = prev.hiddenSections.includes(sectionId);
-      return {
-        ...prev,
-        hiddenSections: isHidden
-          ? prev.hiddenSections.filter((id) => id !== sectionId)
-          : [...prev.hiddenSections, sectionId]
-      };
-    });
-  };
-
-  const handleMoveSection = (sectionId, direction) => {
-    updateSocialPreferences((prev) => {
-      const currentIndex = prev.sectionOrder.indexOf(sectionId);
-      if (currentIndex === -1) return prev;
-      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-      if (targetIndex < 0 || targetIndex >= prev.sectionOrder.length) return prev;
-      const nextOrder = [...prev.sectionOrder];
-      [nextOrder[currentIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[currentIndex]];
-      return {
-        ...prev,
-        sectionOrder: nextOrder
-      };
-    });
-  };
-
-  const handleToggleModule = (moduleId) => {
-    updateSocialPreferences((prev) => {
-      const isHidden = prev.hiddenModules.includes(moduleId);
-      return {
-        ...prev,
-        hiddenModules: isHidden
-          ? prev.hiddenModules.filter((id) => id !== moduleId)
-          : [...prev.hiddenModules, moduleId]
-      };
-    });
-  };
-
-  const handleResetSocialPreferences = () => {
-    setForm((prev) => ({
-      ...prev,
-      socialPagePreferences: getDefaultSocialPreferences(prev.profileTheme)
-    }));
-    trackCustomizationEvent('social_customization_reset', { source: 'settings' });
-    toast.success('Social page customization reset');
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSave = async (e) => {
@@ -398,19 +205,12 @@ function UserSettings({
     try {
       const payload = {
         ...form,
-        links: textToLinks(form.linksText),
-        socialPagePreferences: normalizeSocialPreferences(form.socialPagePreferences, form.profileTheme)
+        links: textToLinks(form.linksText)
       };
       delete payload.linksText;
 
       const { data } = await authAPI.updateProfile(payload);
       setUser(data.user);
-      if (Object.prototype.hasOwnProperty.call(payload, 'socialPagePreferences')) {
-        trackCustomizationEvent('social_customization_saved', {
-          source: 'settings',
-          themePreset: payload.socialPagePreferences.themePreset
-        });
-      }
       setSuccessMessage('Profile updated successfully.');
       toast.success('Profile updated');
     } catch (error) {
@@ -1002,183 +802,23 @@ function UserSettings({
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={handleTogglePreview}
-                    className="text-sm px-3 py-1.5 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
-                  >
-                    {previewOpen ? 'Hide Live Preview' : 'Show Live Preview'}
-                  </button>
-                  {previewOpen ? (
-                    <div className="border rounded-lg bg-white p-3 space-y-2">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Live preview (saved layout)</p>
-                      <p className="text-sm text-gray-700">
-                        Theme: <span className="font-medium">{form.socialPagePreferences?.themePreset}</span> · Accent:{' '}
-                        <span className="font-medium">{form.socialPagePreferences?.accentColorToken}</span>
-                      </p>
-                      <div className="space-y-1">
-                        {(form.socialPagePreferences?.sectionOrder || [])
-                          .filter((sectionId) => !(form.socialPagePreferences?.hiddenSections || []).includes(sectionId))
-                          .map((sectionId) => (
-                            <div key={`preview-${sectionId}`} className="rounded border bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                              {SOCIAL_SECTION_LABELS[sectionId] || sectionId}
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                  <input name="city" value={form.city} onChange={handleChange} className="w-full border rounded p-2" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                  <input name="state" value={form.state} onChange={handleChange} className="w-full border rounded p-2" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-                  <input name="country" value={form.country} onChange={handleChange} className="w-full border rounded p-2" />
-                </div>
-              </div>
-
-              <button type="submit" disabled={saving} className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50">
-                {saving ? 'Saving...' : 'Save Profile'}
-              </button>
-            </section>
-          </form>
-
-          <section id="settings-section-security" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-gray-800">Security center</h3>
-              <button
-                type="button"
-                onClick={loadSecurityData}
-                className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50"
-                disabled={securityLoading}
-              >
-                {securityLoading ? 'Refreshing...' : 'Refresh security data'}
-              </button>
-            </div>
-
-            <SecurityScore score={securityData?.securityScore} breakdown={securityData?.scoreBreakdown} />
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <p className="text-gray-500 text-sm">Active Sessions</p>
-                <p className="text-2xl font-semibold text-gray-900">{securityData?.activeSessions || 0}</p>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <p className="text-gray-500 text-sm">Active Device Keys</p>
-                <p className="text-2xl font-semibold text-gray-900">{activeDeviceKeys.length}</p>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <p className="text-gray-500 text-sm">Recovery Kit Status</p>
-                <p className="text-lg font-semibold text-gray-900">
-                  {securityData?.daysSinceBackup === null || securityData?.daysSinceBackup === undefined
-                    ? 'No backup yet'
-                    : `${securityData.daysSinceBackup} days ago`}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="font-semibold text-gray-800">Sessions</h4>
-                <button
-                  type="button"
-                  onClick={revokeAllOthers}
-                  className="px-3 py-1.5 rounded bg-red-600 text-white text-sm hover:bg-red-700"
-                >
-                  Revoke All Other Sessions
-                </button>
-              </div>
-              {sessions.map((session) => (
-                <div key={session.id} className="border rounded p-3 bg-white flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {session.deviceInfo?.browser || 'Unknown'} on {session.deviceInfo?.os || 'Unknown'}
-                      {session.isCurrent ? ' (Current Session)' : ''}
-                    </p>
-                    <p className="text-sm text-gray-500">IP: {session.ipAddress || 'unknown'}</p>
-                    <p className="text-sm text-gray-500">Last activity: {new Date(session.lastActivity).toLocaleString()}</p>
-                  </div>
-                  {!session.isCurrent ? (
-                    <button
-                      type="button"
-                      onClick={() => revokeSession(session.id)}
-                      className="px-3 py-2 rounded bg-red-100 text-red-700 hover:bg-red-200"
-                    >
-                      Revoke
-                    </button>
-                  ) : null}
-                </div>
-              ))}
-              {sessions.length === 0 ? <p className="text-sm text-gray-500">No active sessions found.</p> : null}
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-              <h4 className="font-semibold text-gray-800">Device keys</h4>
-              {devices.map((device) => (
-                <div key={device.id} className="border rounded p-3 bg-white flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-gray-900">{device.deviceId}</p>
-                    <p className="text-sm text-gray-500">Key version: {device.keyVersion}</p>
-                    <p className="text-sm text-gray-500">Status: {device.isRevoked ? 'Revoked' : 'Active'}</p>
-                  </div>
-                  {!device.isRevoked ? (
-                    <button
-                      type="button"
-                      onClick={() => revokeDevice(device.deviceId)}
-                      className="px-3 py-2 rounded bg-red-100 text-red-700 hover:bg-red-200"
-                    >
-                      Revoke
-                    </button>
-                  ) : null}
-                </div>
-              ))}
-              {devices.length === 0 ? <p className="text-sm text-gray-500">No device keys registered yet.</p> : null}
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-              <h4 className="font-semibold text-gray-800">Recent security events</h4>
-              <div className="max-h-64 overflow-y-auto space-y-2">
-                {events.map((event) => (
-                  <div key={event.id} className="border rounded p-3 bg-white">
-                    <p className="font-medium text-gray-900">{formatSecurityEventType(event.eventType)}</p>
-                    <p className="text-sm text-gray-500">{new Date(event.createdAt).toLocaleString()}</p>
-                    <p className="text-xs text-gray-500">IP: {event.metadata?.ip || 'unknown'}</p>
-                  </div>
-                ))}
-              </div>
-              {events.length === 0 ? <p className="text-sm text-gray-500">No security events yet.</p> : null}
-              <div className="text-sm text-gray-500">
-                <p>Login notifications: {securityData?.securityPreferences?.loginNotifications ? 'Enabled' : 'Disabled'}</p>
-                <p>Session timeout: {securityData?.securityPreferences?.sessionTimeout || 60} minutes</p>
-                <p>
-                  Require password for sensitive actions: {securityData?.securityPreferences?.requirePasswordForSensitive ? 'Yes' : 'No'}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section id="settings-section-pgp" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <form onSubmit={handleSavePgpPublicKey} className="space-y-3">
-              <h3 className="text-lg font-semibold text-gray-800">Public PGP Key</h3>
-              <div className="text-sm text-red-800 bg-red-50 border border-red-200 rounded p-3" role="alert">
-                <span className="font-semibold">Security warning:</span> never paste or upload your private key here.
-                Only your <span className="font-semibold">public key</span> is accepted and stored.
-              </div>
-
-              <div className="space-y-3 border rounded p-3 bg-gray-50">
-                <h4 className="font-semibold text-gray-800">Generate key pair locally (optional)</h4>
-                <p className="text-xs text-gray-600">
-                  This happens in your browser. Your private key is never sent to the server.
-                </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="md:col-span-3 text-xs text-gray-500">
+            Location can only be changed once every 7 days.
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+            <input name="city" value={form.city} onChange={handleChange} className="w-full border rounded p-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+            <input name="state" value={form.state} onChange={handleChange} className="w-full border rounded p-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+            <input name="country" value={form.country} onChange={handleChange} className="w-full border rounded p-2" />
+          </div>
+        </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input

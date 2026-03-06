@@ -20,6 +20,10 @@ const STATE_ICONS = {
 };
 const GEOLOCATION_OPTIONS_TIMEOUT_MS = 8000;
 const GEOLOCATION_OPTIONS_MAX_AGE_MS = 300000;
+const createFallbackResponse = (data) => ({ data });
+
+export const withDataFallback = (request, fallbackData) =>
+  request.catch(() => createFallbackResponse(fallbackData));
 
 export const resolveLeafletModule = (leafletModule) => {
   const resolvedModule = leafletModule?.default && typeof leafletModule.default.map === 'function'
@@ -96,14 +100,6 @@ function Maps() {
 
         leafletRef.current = L;
 
-        // Fix Leaflet marker icons
-        delete L.Icon.Default.prototype._getIconUrl;
-        L.Icon.Default.mergeOptions({
-          iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-          iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-        });
-
         const createMap = (center, zoom) => {
           if (!mapRef.current || cancelled) return;
 
@@ -178,11 +174,21 @@ function Maps() {
       // Fetch map data
       const mapEndpoint = viewMode === 'local' ? 'getLocalMap' : 'getCommunityMap';
       const [mapRes, friendsRes, heatmapRes] = await Promise.all([
-        mapsAPI[mapEndpoint]({ lat, lng, radius: viewMode === 'local' ? 50000 : 200000 }),
-        layers.friends ? mapsAPI.getFriendsLocations().catch(() => ({ data: { friends: [] } })) : Promise.resolve({ data: { friends: [] } }),
-        layers.heatmap ? mapsAPI.getHeatmap({
-          north: lat + 1, south: lat - 1, east: lng + 1, west: lng - 1
-        }).catch(() => ({ data: { heatmap: [] } })) : Promise.resolve({ data: { heatmap: [] } })
+        withDataFallback(
+          mapsAPI[mapEndpoint]({ lat, lng, radius: viewMode === 'local' ? 50000 : 200000 }),
+          { spotlights: [] }
+        ),
+        layers.friends
+          ? withDataFallback(mapsAPI.getFriendsLocations(), { friends: [] })
+          : Promise.resolve(createFallbackResponse({ friends: [] })),
+        layers.heatmap
+          ? withDataFallback(
+            mapsAPI.getHeatmap({
+              north: lat + 1, south: lat - 1, east: lng + 1, west: lng - 1
+            }),
+            { heatmap: [] }
+          )
+          : Promise.resolve(createFallbackResponse({ heatmap: [] }))
       ]);
       
       setSpotlights(mapRes.data.spotlights || []);

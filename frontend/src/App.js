@@ -375,7 +375,6 @@ function App() {
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/news" className="text-gray-600 hover:text-blue-600">News</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/maps" className="text-gray-600 hover:text-blue-600">Maps</Link>}
               <Link to="/calendar" className="text-gray-600 hover:text-blue-600">Calendar</Link>
-              {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/settings#security" className="text-gray-600 hover:text-blue-600">Security</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/resume" className="text-gray-600 hover:text-blue-600">Resume</Link>}
               {isAuthenticated && user?.isAdmin && !encryptionPasswordRequired && !onboardingRequired && <Link to="/moderation" className="text-gray-600 hover:text-blue-600">Moderation</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && <Link to="/refer" className="text-gray-600 hover:text-blue-600">Refer Friend</Link>}

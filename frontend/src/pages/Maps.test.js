@@ -1,6 +1,6 @@
 jest.mock('../utils/api', () => ({ mapsAPI: {} }));
 
-import { resolveLeafletModule } from './Maps';
+import { resolveLeafletModule, withDataFallback } from './Maps';
 
 describe('resolveLeafletModule', () => {
   it('uses default export when it contains Leaflet map API', () => {
@@ -24,5 +24,21 @@ describe('resolveLeafletModule', () => {
 
   it('throws when no valid map API exists on either export shape', () => {
     expect(() => resolveLeafletModule({ default: {} })).toThrow('Leaflet map API is unavailable');
+  });
+});
+
+describe('withDataFallback', () => {
+  it('returns request response when request succeeds', async () => {
+    const response = { data: { spotlights: [{ _id: '1' }] } };
+
+    await expect(withDataFallback(Promise.resolve(response), { spotlights: [] }))
+      .resolves
+      .toBe(response);
+  });
+
+  it('returns fallback response when request fails', async () => {
+    await expect(withDataFallback(Promise.reject(new Error('boom')), { spotlights: [] }))
+      .resolves
+      .toEqual({ data: { spotlights: [] } });
   });
 });

@@ -10,7 +10,8 @@ const mockUser = {
 };
 
 const mockFriendship = {
-  findFriendship: jest.fn()
+  findFriendship: jest.fn(),
+  findOne: jest.fn()
 };
 
 const mockCalendar = {
@@ -59,6 +60,11 @@ const mockEventsQuery = (events) => {
 describe('Calendar routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFriendship.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null)
+      })
+    });
   });
 
   it('creates default calendar on first GET /me', async () => {
@@ -148,6 +154,88 @@ describe('Calendar routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.events).toHaveLength(1);
     expect(response.body.owner.username).toBe('alice');
+  });
+
+  it('filters secure events for non-secure viewers', async () => {
+    const app = buildApp();
+    mockAuth('friend-1');
+
+    mockUser.findOne.mockReturnValue({
+      select: jest.fn().mockResolvedValue({ _id: '507f191e810c19729de860eb', username: 'alice', realName: 'Alice' })
+    });
+    mockCalendar.findOne.mockResolvedValue({
+      _id: '507f191e810c19729de860ea',
+      ownerId: '507f191e810c19729de860eb',
+      guestVisibility: 'friends_readonly'
+    });
+    mockFriendship.findFriendship.mockResolvedValue({ status: 'accepted' });
+    mockFriendship.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null)
+      })
+    });
+
+    mockEventsQuery([]);
+    mockCalendarEvent.countDocuments.mockResolvedValue(0);
+
+    const response = await request(app)
+      .get('/api/calendar/user/alice/events')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(mockCalendarEvent.find).toHaveBeenCalledWith(expect.objectContaining({
+      $or: [
+        { relationshipAudience: 'social' },
+        { relationshipAudience: { $exists: false } },
+        { relationshipAudience: null }
+      ]
+    }));
+  });
+
+  it('includes invite and audience fields in event create response', async () => {
+    const app = buildApp();
+    mockAuth('owner-1');
+
+    mockCalendar.findOne.mockResolvedValue({ _id: 'cal-1', ownerId: 'owner-1' });
+    mockCalendarEvent.create.mockResolvedValue({
+      _id: 'evt-1',
+      title: 'Planning',
+      description: '',
+      startAt: new Date('2026-03-10T10:00:00.000Z'),
+      endAt: new Date('2026-03-10T11:00:00.000Z'),
+      allDay: false,
+      location: '',
+      color: '',
+      recurrence: 'none',
+      reminderMinutes: null,
+      invitees: ['friend-one', 'friend-two'],
+      announceToFeed: true,
+      announceTarget: 'post',
+      relationshipAudience: 'secure',
+      createdAt: new Date('2026-03-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-01T10:00:00.000Z')
+    });
+
+    const response = await request(app)
+      .post('/api/calendar/me/events')
+      .set('Authorization', 'Bearer token')
+      .send({
+        title: 'Planning',
+        startAt: '2026-03-10T10:00:00.000Z',
+        endAt: '2026-03-10T11:00:00.000Z',
+        invitees: ['friend-one', 'friend-two'],
+        announceToFeed: true,
+        announceTarget: 'post',
+        relationshipAudience: 'secure'
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.event).toMatchObject({
+      invitees: ['friend-one', 'friend-two'],
+      announceToFeed: true,
+      announceTarget: 'post',
+      relationshipAudience: 'secure'
+    });
   });
 
   it('returns 404 when deleting non-existent owner event', async () => {
