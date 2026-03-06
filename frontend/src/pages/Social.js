@@ -266,6 +266,7 @@ const Social = () => {
   const [isGuestPreview, setIsGuestPreview] = useState(false);
   const [guestUser, setGuestUser] = useState(initialGuestUser);
   const [guestProfile, setGuestProfile] = useState(null);
+  const [ownerResumeMeta, setOwnerResumeMeta] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [feedError, setFeedError] = useState('');
@@ -497,9 +498,13 @@ const Social = () => {
   }, []);
 
   const loadAuthenticatedFeed = useCallback(async () => {
-    const profileResponse = await authAPI.getProfile();
+    const [profileResponse, resumeMetaResponse] = await Promise.all([
+      authAPI.getProfile(),
+      resumeAPI.getMyResume().catch(() => null)
+    ]);
     const user = profileResponse.data?.user;
     setCurrentUser(user || null);
+    setOwnerResumeMeta(resumeMetaResponse?.data?.resume || null);
 
     const [circlesResponse, friendsResponse] = await Promise.all([
       circlesAPI.getCircles().catch(() => ({ data: { circles: [] } })),
@@ -532,6 +537,7 @@ const Social = () => {
     if (!guestUser.trim()) {
       setPosts([]);
       setGuestProfile(null);
+      setOwnerResumeMeta(null);
       setFeedError('Enter a username or user ID in Guest mode to view a public feed.');
       return;
     }
@@ -540,7 +546,35 @@ const Social = () => {
     const publicPosts = Array.isArray(response.data?.posts) ? response.data.posts : [];
     setPosts(publicPosts.map(normalizePost));
     setGuestProfile(response.data?.user || null);
+    setOwnerResumeMeta(null);
   }, [guestUser]);
+
+  const visibleResumeInfo = useMemo(() => {
+    if (isOwnSocialContext && currentUser?.username && ownerResumeMeta?.hasResume) {
+      return {
+        username: currentUser.username,
+        resumeUrl: ownerResumeMeta.resumeUrl || `/resume/${encodeURIComponent(currentUser.username)}`,
+        resumeHeadline: ownerResumeMeta.resumeHeadline || null,
+        canManage: true
+      };
+    }
+
+    if (guestProfile?.hasPublicResume && guestProfile?.username && guestProfile?.resumeUrl) {
+      return {
+        username: guestProfile.username,
+        resumeUrl: guestProfile.resumeUrl,
+        resumeHeadline: guestProfile.resumeHeadline || null,
+        canManage: false
+      };
+    }
+
+    return null;
+  }, [isOwnSocialContext, currentUser?.username, ownerResumeMeta, guestProfile]);
+
+  const handleResumeProfileLinkClick = useCallback((resumeUsername) => {
+    if (!resumeUsername) return;
+    resumeAPI.trackProfileLinkClick(resumeUsername, 'social_page').catch(() => {});
+  }, []);
 
   const loadFeed = useCallback(async () => {
     setLoadingFeed(true);
@@ -1654,6 +1688,29 @@ const Social = () => {
                   <span className="font-medium">@{guestProfile.username}</span>
                 </p>
               )}
+              {visibleResumeInfo && (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                  <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Resume</p>
+                  {visibleResumeInfo.resumeHeadline && (
+                    <p className="mt-1 text-sm text-blue-900">{visibleResumeInfo.resumeHeadline}</p>
+                  )}
+                  <Link
+                    to={visibleResumeInfo.resumeUrl}
+                    onClick={() => handleResumeProfileLinkClick(visibleResumeInfo.username)}
+                    className="mt-1 inline-flex text-sm font-medium text-blue-700 hover:text-blue-800"
+                  >
+                    View hosted resume
+                  </Link>
+                  {visibleResumeInfo.canManage && (
+                    <Link
+                      to="/settings"
+                      className="ml-3 inline-flex text-sm font-medium text-slate-700 hover:text-slate-900"
+                    >
+                      Manage
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
           </section>
           )}
@@ -1692,6 +1749,15 @@ const Social = () => {
                   >
                     View calendar
                   </Link>
+                  {guestProfile?.hasPublicResume && guestProfile?.resumeUrl && (
+                    <Link
+                      to={guestProfile.resumeUrl}
+                      onClick={() => handleResumeProfileLinkClick(guestProfile.username)}
+                      className="ml-3 inline-flex text-blue-600 hover:text-blue-700"
+                    >
+                      View hosted resume
+                    </Link>
+                  )}
                 </div>
               )}
             </div>

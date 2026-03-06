@@ -134,6 +134,15 @@ export const feedAPI = {
   getPost: (postId) => api.get(`/feed/post/${postId}`),
 };
 
+export const resumeAPI = {
+  getPublicResume: (username) =>
+    api.get(`/public/users/${encodeURIComponent(username)}/resume`),
+  getMyResume: () => api.get('/resume/me'),
+  saveMyResume: (data) => api.put('/resume/me', data),
+  trackProfileLinkClick: (username, source = 'social_profile') =>
+    api.post(`/public/users/${encodeURIComponent(username)}/resume/link-click`, { source }),
+};
+
 // Gallery API
 export const galleryAPI = {
   getGallery: (ownerIdOrUsername, page = 1, limit = 20) =>
