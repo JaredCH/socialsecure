@@ -20,7 +20,8 @@ const mockFriendship = {
 const mockTopFriend = {
   updateOne: jest.fn(),
   updateOrder: jest.fn(),
-  getOrCreate: jest.fn()
+  getOrCreate: jest.fn(),
+  findOne: jest.fn()
 };
 
 jest.mock('../models/User', () => mockUser);
@@ -56,6 +57,11 @@ describe('Friends category and top5 routes', () => {
     mockUser.updateOne.mockResolvedValue({ modifiedCount: 1 });
     mockTopFriend.updateOne.mockResolvedValue({ modifiedCount: 1 });
     mockTopFriend.getOrCreate.mockResolvedValue({ friends: [] });
+    mockTopFriend.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ friends: [] })
+      })
+    });
   });
 
   it('updates requester-owned friendship category', async () => {

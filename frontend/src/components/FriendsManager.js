@@ -4,6 +4,8 @@ import toast from 'react-hot-toast';
 import PresenceIndicator from './PresenceIndicator';
 import { getRealtimeSocket, onFriendPresence } from '../utils/realtime';
 
+const TOP_FRIENDS_LIMIT = 5;
+
 function FriendsManager({ currentUser, onUserUpdate }) {
   const [friends, setFriends] = useState([]);
   const [incomingRequests, setIncomingRequests] = useState([]);
@@ -180,8 +182,8 @@ function FriendsManager({ currentUser, onUserUpdate }) {
   };
 
   const addToTopFriends = (friend) => {
-    if (topFriends.length >= 5) {
-      toast.error('Maximum 5 top friends allowed');
+    if (topFriends.length >= TOP_FRIENDS_LIMIT) {
+      toast.error(`Maximum ${TOP_FRIENDS_LIMIT} top friends allowed`);
       return;
     }
     if (topFriends.some(f => f._id === friend._id)) {
@@ -348,7 +350,7 @@ function FriendsManager({ currentUser, onUserUpdate }) {
       {/* Top Friends */}
       {activeTab === 'top' && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500 mb-2">Drag to reorder or remove from top friends (max 5)</p>
+          <p className="text-sm text-gray-500 mb-2">Drag to reorder or remove from top friends (max {TOP_FRIENDS_LIMIT})</p>
           {topFriends.length === 0 ? (
             <p className="text-gray-500">No top friends set</p>
           ) : (

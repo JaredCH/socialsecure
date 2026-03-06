@@ -39,9 +39,9 @@ topFriendSchema.statics.getOrCreate = async function(userId) {
   if (!topFriend) {
     topFriend = await this.create({ user: userId, friends: [], maxFriends: TOP_FRIENDS_LIMIT });
   } else {
-    const currentMax = Number.isFinite(topFriend.maxFriends) ? topFriend.maxFriends : TOP_FRIENDS_LIMIT;
+    const existingMax = Number.isFinite(topFriend.maxFriends) ? topFriend.maxFriends : TOP_FRIENDS_LIMIT;
     const normalizedFriends = topFriend.friends.slice(0, TOP_FRIENDS_LIMIT);
-    if (currentMax !== TOP_FRIENDS_LIMIT || normalizedFriends.length !== topFriend.friends.length) {
+    if (existingMax !== TOP_FRIENDS_LIMIT || normalizedFriends.length !== topFriend.friends.length) {
       topFriend.maxFriends = TOP_FRIENDS_LIMIT;
       topFriend.friends = normalizedFriends;
       await topFriend.save();

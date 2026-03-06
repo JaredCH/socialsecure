@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const TopFriend = require('../models/TopFriend');
@@ -10,6 +11,13 @@ const { createNotification } = require('../services/notifications');
 const { buildPresencePayload, getPresenceMapForUsers } = require('../services/realtime');
 const VALID_FRIEND_CATEGORIES = ['social', 'secure'];
 const TOP_FRIENDS_LIMIT = 5;
+const friendMutationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many friend updates, please try again shortly.' }
+});
 
 const logFriendEvent = ({ eventType, userId, metadata = {}, req }) => {
   console.log('[friend-event]', JSON.stringify({
@@ -270,7 +278,7 @@ router.post('/:id/decline', authenticateToken, async (req, res) => {
 });
 
 // DELETE /api/friends/:id - Remove/unfriend or cancel request
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', friendMutationLimiter, authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -344,7 +352,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 });
 
 // POST /api/friends/:id/block - Block a user
-router.post('/:id/block', authenticateToken, async (req, res) => {
+router.post('/:id/block', friendMutationLimiter, authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -418,19 +426,19 @@ router.post('/:id/block', authenticateToken, async (req, res) => {
 });
 
 // PUT /api/friends/:id/category - Update viewer-owned friend category
-router.put('/:id/category', authenticateToken, async (req, res) => {
+router.put('/:id/category', friendMutationLimiter, authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id: friendshipId } = req.params;
     const { category } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(friendshipId)) {
       return res.status(400).json({ error: 'Invalid friendship ID' });
     }
     if (!VALID_FRIEND_CATEGORIES.includes(category)) {
       return res.status(400).json({ error: 'Category must be social or secure' });
     }
 
-    const friendship = await Friendship.findById(id);
+    const friendship = await Friendship.findById(friendshipId);
     if (!friendship) {
       return res.status(404).json({ error: 'Friendship not found' });
     }
@@ -616,7 +624,7 @@ router.get('/top/:userIdOrUsername', authenticateToken, async (req, res) => {
 });
 
 // PUT /api/friends/top - Update top friends order
-router.put('/top', authenticateToken, async (req, res) => {
+router.put('/top', friendMutationLimiter, authenticateToken, async (req, res) => {
   try {
     const { friendIds } = req.body;
     
@@ -624,8 +632,8 @@ router.put('/top', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'friendIds must be an array' });
     }
     
-    const existingTopFriend = await TopFriend.getOrCreate(req.user._id);
-    const previousCount = existingTopFriend.friends.length;
+    const existingTopFriend = await TopFriend.findOne({ user: req.user._id }).select('friends').lean();
+    const previousCount = Array.isArray(existingTopFriend?.friends) ? existingTopFriend.friends.length : 0;
     const topFriend = await TopFriend.updateOrder(req.user._id, friendIds);
     
     await topFriend.populate('friends', 'username realName avatarUrl city state country');
