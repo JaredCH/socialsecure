@@ -10,15 +10,15 @@ Audit confidence labels in this issue use the following semantics. Confirmed mea
 
 | Area | Evidence |
 |---|---|
-| Frontend map page entry | `/home/runner/work/socialsecure/socialsecure/frontend/src/pages/Maps.js:64-650` |
-| Frontend map route and nav | `/home/runner/work/socialsecure/socialsecure/frontend/src/App.js:398-399`, `/home/runner/work/socialsecure/socialsecure/frontend/src/App.js:671-680` |
-| Frontend maps API client | `/home/runner/work/socialsecure/socialsecure/frontend/src/utils/api.js:485-509` |
-| Backend maps router and jobs | `/home/runner/work/socialsecure/socialsecure/routes/maps.js:1-569` |
-| Presence model | `/home/runner/work/socialsecure/socialsecure/models/LocationPresence.js:1-270` |
-| Spotlight model | `/home/runner/work/socialsecure/socialsecure/models/Spotlight.js:1-304` |
-| Heatmap aggregation model | `/home/runner/work/socialsecure/socialsecure/models/HeatmapAggregation.js:1-266` |
-| Home-page product intent signals | `/home/runner/work/socialsecure/socialsecure/frontend/src/pages/Home.js:7-10`, `/home/runner/work/socialsecure/socialsecure/frontend/src/pages/Home.js:49-52`, `/home/runner/work/socialsecure/socialsecure/frontend/src/pages/Home.js:95-96`, `/home/runner/work/socialsecure/socialsecure/frontend/src/pages/Home.js:140-141` |
-| Available maps tests | `/home/runner/work/socialsecure/socialsecure/frontend/src/pages/Maps.test.js:1-74` |
+| Frontend map page entry | `frontend/src/pages/Maps.js:64-650` |
+| Frontend map route and nav | `frontend/src/App.js:398-399`, `frontend/src/App.js:671-680` |
+| Frontend maps API client | `frontend/src/utils/api.js:485-509` |
+| Backend maps router and jobs | `routes/maps.js:1-569` |
+| Presence model | `models/LocationPresence.js:1-270` |
+| Spotlight model | `models/Spotlight.js:1-304` |
+| Heatmap aggregation model | `models/HeatmapAggregation.js:1-266` |
+| Home-page product intent signals | `frontend/src/pages/Home.js:7-10`, `frontend/src/pages/Home.js:49-52`, `frontend/src/pages/Home.js:95-96`, `frontend/src/pages/Home.js:140-141` |
+| Available maps tests | `frontend/src/pages/Maps.test.js:1-74` |
 
 ## Implementation-versus-plan findings by domain
 
@@ -101,7 +101,7 @@ Discoverability should be made explicit by introducing ranked retrieval inputs t
 
 The public heatmap path must operate only on obfuscated presence events and must not consume precise friend-location records directly. At ingest, every location update should fork into two channels. Channel A stores precise coordinates for authorized friend-sharing only. Channel B computes mandatory heatmap participation artifacts via spatial and temporal obfuscation before any durable write to heatmap event storage.
 
-Spatial obfuscation should apply randomized jitter bounded within a 1000-foot radius around the true coordinate. The jitter distribution should be cryptographically strong and unbiased by direction. Temporal obfuscation should delay events by a base 30 minutes plus randomized offset in the range of minus 10 minutes to plus 10 minutes, with per-event randomness generated server-side. Aggregation workers should consume only delayed, jittered events and aggregate by fixed geocells with minimum-k suppression before tile publication.
+Spatial obfuscation should apply randomized jitter bounded within a 1000-foot radius around the true coordinate. The jitter distribution should be cryptographically strong and unbiased by direction. Temporal obfuscation should delay events with a uniform random distribution in the closed range of 20 to 40 minutes, equivalent to a base 30-minute delay plus a per-event offset of minus 10 to plus 10 minutes generated server-side. Aggregation workers should consume only delayed, jittered events and aggregate by fixed geocells with minimum-k suppression before tile publication.
 
 Rendering should use subtle overlay intensity with progressively deeper red as density increases. Density normalization should be quantile-based per viewport to avoid exposing absolute raw counts at low density while retaining visual utility.
 
@@ -155,7 +155,7 @@ The hard requirement that users cannot opt out of heatmap participation should b
 
 | Phase | Objective | Core implementation | Dependencies | Acceptance criteria | Success metrics | Rollout and rollback |
 |---|---|---|---|---|---|---|
-| Phase 0 | Privacy and security foundation | Introduce dual-channel location architecture contracts, schema additions for precise channel and obfuscated channel, request validation hardening, replay nonce enforcement, and structured audit logging | Security review, data model migration approval | API contracts merged, replay checks enabled in staging, redaction tests passing, audit logs emitted without coordinates | 100% location writes carry request IDs and nonce; 0 precise coordinates in logs in staging scans | Roll out behind `maps_privacy_v2` flag; rollback by disabling new write path and falling back to existing presence writes |
+| Phase 0 | Privacy and security foundation | Introduce dual-channel location architecture contracts, schema additions for precise channel and obfuscated channel, request validation hardening, replay nonce enforcement, and structured audit logging with call-site redaction guards that block coordinate fields by design | Security review, data model migration approval | API contracts merged, replay checks enabled in staging, redaction tests passing, audit logs emitted without coordinates | 100% location writes carry request IDs and nonce; structured logger rejects coordinate fields at write time; 0 precise coordinates in redaction verification scans | Roll out behind `maps_privacy_v2` flag; rollback by disabling new write path and falling back to existing presence writes |
 | Phase 1 | Fix current correctness gaps and leakage risks | Correct presence update contract, numeric validation for 0 coordinates, enforce `friends_only` visibility constraints, and implement backend tests for maps routes/models | Phase 0 contracts | Presence writes persist valid coordinates; unauthorized callers cannot read `friends_only`; route/model tests pass | Reduced maps API error rate; privacy regression suite green | Canary release by percentage of users; rollback via feature flag reverting new auth filter path |
 | Phase 2 | Spotlight authoring and maintenance acceleration | Add draft/publish lifecycle schemas and APIs, moderation queue endpoints, validation rules, operator ownership tooling, and discoverability event hooks | Phase 1 stable APIs, moderation UX signoff | Draft to publish lifecycle working end-to-end, moderation actions audited, ownership dashboards operational | Time-to-publish reduced, moderation turnaround SLA achieved, spotlight stale-content rate reduced | Start with internal moderators, then limited cohort; rollback by freezing publish transitions and preserving existing spotlights |
 | Phase 3 | Obfuscated heatmap pipeline launch | Implement jitter plus delayed ingestion worker, aggregation with minimum-k suppression, subtle red overlay rendering, and anti-scrape controls | Phase 0 and Phase 1 complete, worker deployment capacity | Heatmap tiles are generated only from obfuscated delayed events; no precise fields in tile stores; UI overlay renders progressive red intensity | Heatmap freshness SLO met, privacy leakage tests pass, scrape-attempt detection rate increases | Progressive region rollout under `maps_heatmap_v2`; rollback to previous heatmap endpoint while preserving write-ahead queue |
