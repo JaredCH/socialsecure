@@ -1,8 +1,15 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-const SocialLeftRail = ({ sectionId, currentUser, guestProfile, isAuthenticated, postsCount, friendsCount, onSectionClick }) => (
-  <aside id={sectionId} data-social-section={sectionId} className="xl:col-span-3 space-y-4 xl:sticky xl:top-6">
+const SocialLeftRail = ({ sectionId, currentUser, guestProfile, isAuthenticated, postsCount, friendsCount, onSectionClick }) => {
+  const activeProfileLabel = currentUser?.username
+    ? `@${currentUser.username}`
+    : guestProfile?.username
+      ? `@${guestProfile.username}`
+      : 'Guest';
+
+  return (
+    <aside id={sectionId} data-social-section={sectionId} className="xl:col-span-3 space-y-4 xl:sticky xl:top-6">
     <section className="bg-white rounded-xl shadow p-5 border border-gray-100" onClick={() => onSectionClick('shortcuts')}>
       <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Shortcuts</h3>
       <ul className="mt-3 space-y-2 text-sm">
@@ -17,7 +24,7 @@ const SocialLeftRail = ({ sectionId, currentUser, guestProfile, isAuthenticated,
     <section className="bg-white rounded-xl shadow p-5 border border-gray-100" onClick={() => onSectionClick('snapshot')}>
       <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Social Snapshot</h3>
       <div className="mt-3 space-y-3 text-sm text-gray-700">
-        <p>Active profile: <span className="font-medium">{currentUser?.username ? `@${currentUser.username}` : guestProfile?.username ? `@${guestProfile.username}` : 'Guest'}</span></p>
+        <p>Active profile: <span className="font-medium">{activeProfileLabel}</span></p>
         <p>Loaded posts: <span className="font-medium">{postsCount}</span></p>
         <p>Friends: <span className="font-medium">{friendsCount}</span></p>
         {!isAuthenticated && guestProfile?.username && (
@@ -25,7 +32,8 @@ const SocialLeftRail = ({ sectionId, currentUser, guestProfile, isAuthenticated,
         )}
       </div>
     </section>
-  </aside>
-);
+    </aside>
+  );
+};
 
 export default SocialLeftRail;

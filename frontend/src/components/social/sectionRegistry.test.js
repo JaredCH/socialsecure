@@ -8,13 +8,18 @@ describe('social section registry', () => {
       'profile_header',
       'guest_preview_notice',
       'left_profile_rail',
+      'shortcuts',
+      'snapshot',
       'guest_lookup',
       'composer',
       'circles',
       'timeline',
       'moderation_status',
       'gallery',
-      'right_rail'
+      'right_rail',
+      'chat_panel',
+      'top_friends',
+      'community_notes'
     ]);
 
     ids.forEach((id) => {
