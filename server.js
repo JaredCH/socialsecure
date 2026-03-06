@@ -88,7 +88,8 @@ const openStreetMapTileSources = [
 ];
 cspDirectives['img-src'] = [
   ...(cspDirectives['img-src'] || []),
-  ...openStreetMapTileSources
+  ...openStreetMapTileSources,
+  'https:'
 ];
 
 app.use(helmet({
