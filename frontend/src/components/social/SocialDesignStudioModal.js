@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   FONT_SIZE_LABELS,
-  SOCIAL_HEIGHT_LABELS,
   SOCIAL_DESIGN_TEMPLATES,
   SOCIAL_FONT_FAMILIES,
   SOCIAL_FONT_SIZE_TOKENS,
@@ -19,6 +18,26 @@ const Field = ({ label, children }) => (
 
 const GRID_COLUMNS = 12;
 const GRID_ROWS = 20;
+const SIZE_BY_WIDTH_UNITS = {
+  1: 'halfCol',
+  2: 'oneCol',
+  4: 'twoCols',
+  6: 'threeCols',
+  8: 'fourCols'
+};
+const MAIN_HEIGHT_BY_UNITS = {
+  1: 'halfRow',
+  2: 'fullRow',
+  4: 'twoRows',
+  6: 'threeRows',
+  8: 'fourRows'
+};
+const SIDE_HEIGHT_BY_UNITS = {
+  1: 'halfRow',
+  2: 'fullRow',
+  4: 'twoRows',
+  8: 'fourRows'
+};
 
 const getPanelWidthUnits = (panel = {}) => {
   if (panel.area === 'sideLeft' || panel.area === 'sideRight') return 2;
@@ -148,14 +167,13 @@ const SocialDesignStudioModal = ({
   const [newConfigName, setNewConfigName] = useState('');
   const [duplicateNames, setDuplicateNames] = useState({});
   const [activePanelId, setActivePanelId] = useState('');
-  const [editingPanelId, setEditingPanelId] = useState('');
   const [dragPanelId, setDragPanelId] = useState('');
   const [hoverCell, setHoverCell] = useState(null);
   const [isPlacementMode, setIsPlacementMode] = useState(false);
+  const [selectionStart, setSelectionStart] = useState(null);
   const normalized = useMemo(() => normalizeSocialPreferences(preferences), [preferences]);
   const gridLayout = useMemo(() => buildPanelLayoutMap(normalized), [normalized]);
   const selectedPanel = activePanelId ? gridLayout.placed.find((panel) => panel.id === activePanelId) : null;
-  const editingPanel = editingPanelId ? gridLayout.placed.find((panel) => panel.id === editingPanelId) : null;
 
   if (!isOpen) return null;
 
@@ -177,10 +195,10 @@ const SocialDesignStudioModal = ({
 
   const openPanelEditor = (panelId) => {
     setActivePanelId(panelId);
-    setEditingPanelId(panelId);
     setDragPanelId('');
-    setIsPlacementMode(false);
+    setIsPlacementMode(true);
     setHoverCell(null);
+    setSelectionStart(null);
   };
 
   const getPlacementFootprint = (panel, row, col) => {
@@ -203,6 +221,40 @@ const SocialDesignStudioModal = ({
     return { valid, cells };
   };
 
+  const getSelectionPatch = (panel, topLeft, bottomRight) => {
+    if (!panel || !topLeft || !bottomRight) return { valid: false, cells: [] };
+    if (bottomRight.row < topLeft.row || bottomRight.col < topLeft.col) {
+      return { valid: false, cells: [] };
+    }
+
+    const widthUnits = (bottomRight.col - topLeft.col) + 1;
+    const heightUnits = (bottomRight.row - topLeft.row) + 1;
+    const isSidePanel = panel.area === 'sideLeft' || panel.area === 'sideRight';
+    const size = isSidePanel
+      ? panel.size
+      : SIZE_BY_WIDTH_UNITS[widthUnits];
+    const height = isSidePanel
+      ? SIDE_HEIGHT_BY_UNITS[heightUnits]
+      : MAIN_HEIGHT_BY_UNITS[heightUnits];
+    const candidate = {
+      ...panel,
+      size: size || panel.size,
+      height: height || panel.height
+    };
+
+    if (!size || !height) return { valid: false, cells: [] };
+    const footprint = getPlacementFootprint(candidate, topLeft.row, topLeft.col);
+    if (!footprint.valid) return footprint;
+    return {
+      ...footprint,
+      patch: {
+        size,
+        height,
+        gridPlacement: { row: topLeft.row, col: topLeft.col }
+      }
+    };
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-7xl overflow-hidden rounded-[2rem] border border-white/10 bg-white shadow-2xl">
@@ -221,14 +273,14 @@ const SocialDesignStudioModal = ({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">Layout studio</h3>
-                  <p className="text-sm text-slate-800">Click a panel to edit shape, then hover and place it on the 6-column by 10-row grid. Green = valid placement, red = blocked.</p>
+                  <p className="text-sm text-slate-800">Click a panel, then select a top-left and bottom-right corner on the 6x10 conceptual grid to set size and placement. Green = valid placement, red = blocked.</p>
                 </div>
                 {busy ? <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Saving…</span> : null}
               </div>
               <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(260px,0.85fr)_minmax(0,1.4fr)]">
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <h4 className="text-sm font-semibold text-slate-900">Panel shape and slot</h4>
-                  <p className="mt-1 text-xs text-slate-800">Click a panel to open the editor, adjust shape, click Start placement, then place where it fits.</p>
+                  <p className="mt-1 text-xs text-slate-800">Click a panel, choose a top-left grid corner, then choose a bottom-right corner to set the panel size and placement. Green highlights are valid.</p>
                   <div className="mt-3 space-y-2">
                     {gridLayout.placed.map((panel) => (
                       <button
@@ -245,8 +297,10 @@ const SocialDesignStudioModal = ({
                     ))}
                   </div>
                   <p className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900">
-                    {selectedPanel && isPlacementMode
-                      ? `Now hover over the grid and click a green position to place ${SOCIAL_PANEL_LABELS[selectedPanel.id] || selectedPanel.id}.`
+                    {selectedPanel && isPlacementMode && !selectionStart
+                      ? `Selected ${SOCIAL_PANEL_LABELS[selectedPanel.id] || selectedPanel.id}. Select its top-left corner on the grid.`
+                      : selectedPanel && isPlacementMode && selectionStart
+                        ? `Top-left is set at row ${selectionStart.row + 1}, col ${selectionStart.col + 1}. Now select the bottom-right corner.`
                       : 'Pick a panel to begin editing and placement.'}
                   </p>
                 </div>
@@ -275,7 +329,11 @@ const SocialDesignStudioModal = ({
                       const col = index % GRID_COLUMNS;
                       const row = Math.floor(index / GRID_COLUMNS);
                       const panel = dragPanelId ? gridLayout.placed.find((item) => item.id === dragPanelId) : selectedPanel;
-                      const footprint = panel && hoverCell ? getPlacementFootprint(panel, hoverCell.row, hoverCell.col) : null;
+                      const footprint = panel && selectionStart && hoverCell
+                        ? getSelectionPatch(panel, selectionStart, hoverCell)
+                        : panel && hoverCell && !selectionStart
+                          ? getPlacementFootprint(panel, hoverCell.row, hoverCell.col)
+                          : null;
                       const key = `${col}:${row}`;
                       const inHoverFootprint = Boolean(footprint?.cells.includes(key));
                       return (
@@ -295,9 +353,15 @@ const SocialDesignStudioModal = ({
                           }}
                           onClick={() => {
                             if (!selectedPanel) return;
-                            const result = getPlacementFootprint(selectedPanel, row, col);
-                            if (!result.valid) return;
-                            updateLayoutPatch(selectedPanel.id, { gridPlacement: { row, col } });
+                            if (!selectionStart) {
+                              setSelectionStart({ row, col });
+                              setHoverCell({ row, col });
+                              return;
+                            }
+                            const result = getSelectionPatch(selectedPanel, selectionStart, { row, col });
+                            if (!result.valid || !result.patch) return;
+                            updateLayoutPatch(selectedPanel.id, result.patch);
+                            setSelectionStart(null);
                             setIsPlacementMode(false);
                             setHoverCell(null);
                           }}
@@ -314,10 +378,10 @@ const SocialDesignStudioModal = ({
                           draggable
                           onDragStart={() => {
                             setActivePanelId(panel.id);
-                            setEditingPanelId('');
                             setIsPlacementMode(true);
                             setDragPanelId(panel.id);
                             setHoverCell(null);
+                            setSelectionStart(null);
                           }}
                           onDragEnd={() => {
                             setDragPanelId('');
@@ -510,66 +574,6 @@ const SocialDesignStudioModal = ({
           </div>
         </div>
       </div>
-      {editingPanel ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h4 className="text-lg font-semibold text-slate-900">Edit panel shape</h4>
-                <p className="text-sm text-slate-800">{SOCIAL_PANEL_LABELS[editingPanel.id] || editingPanel.id}</p>
-              </div>
-              <button type="button" onClick={() => setEditingPanelId('')} className="rounded-lg border border-slate-200 px-3 py-1 text-sm font-medium text-slate-800 hover:bg-slate-50">Close</button>
-            </div>
-            <p className="mt-3 text-sm text-slate-800">Adjust width and height, then click “Start placement” to hover the grid and place this panel anywhere it fits.</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <Field label="Width">
-                <select
-                  value={editingPanel.size}
-                  onChange={(event) => {
-                    updateLayoutPatch(editingPanel.id, { size: event.target.value });
-                  }}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                >
-                  {(editingPanel.area === 'sideLeft' || editingPanel.area === 'sideRight'
-                    ? ['sidePanelHalfHeight', 'sidePanelFull']
-                    : ['halfCol', 'oneCol', 'twoCols', 'threeCols', 'fourCols']
-                  ).map((value) => (
-                    <option key={value} value={value}>{value === 'sidePanelHalfHeight' ? 'Side panel (compact)' : value === 'sidePanelFull' ? 'Side panel (full)' : value}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Height">
-                <select
-                  value={editingPanel.height || 'fullRow'}
-                  onChange={(event) => {
-                    updateLayoutPatch(editingPanel.id, { height: event.target.value });
-                  }}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                >
-                  {(editingPanel.area === 'sideLeft' || editingPanel.area === 'sideRight'
-                    ? ['halfRow', 'fullRow', 'twoRows', 'fourRows']
-                    : ['halfRow', 'fullRow', 'twoRows', 'threeRows', 'fourRows']
-                  ).map((value) => (
-                    <option key={value} value={value}>{SOCIAL_HEIGHT_LABELS[value]}</option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPlacementMode(true);
-                  setEditingPanelId('');
-                }}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                Start placement
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 };

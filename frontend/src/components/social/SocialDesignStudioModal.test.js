@@ -26,7 +26,7 @@ describe('SocialDesignStudioModal layout studio', () => {
     root = null;
   });
 
-  it('guides panel editing through popup and allows placement on a valid grouped footprint', async () => {
+  it('lets users define panel size and placement by selecting top-left and bottom-right corners', async () => {
     const onPanelLayoutChange = jest.fn();
 
     await act(async () => {
@@ -63,46 +63,30 @@ describe('SocialDesignStudioModal layout studio', () => {
     await act(async () => {
       guestLookupButton.click();
     });
-    expect(container.textContent).toContain('Edit panel shape');
+    expect(container.textContent).toContain('Select its top-left corner on the grid');
 
-    const widthSelect = Array.from(container.querySelectorAll('label'))
-      .find((label) => label.textContent && label.textContent.includes('Width'))
-      .querySelector('select');
-    expect(widthSelect).toBeTruthy();
+    const topLeftCell = container.querySelector('[aria-label="Grid cell row 19 col 1"]');
+    expect(topLeftCell).toBeTruthy();
     await act(async () => {
-      widthSelect.value = 'fourCols';
-      widthSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      topLeftCell.click();
     });
-    expect(onPanelLayoutChange).toHaveBeenCalledWith('guest_lookup', expect.objectContaining({ size: 'fourCols' }));
+    expect(container.textContent).toContain('Now select the bottom-right corner');
 
-    const heightSelect = Array.from(container.querySelectorAll('label'))
-      .find((label) => label.textContent && label.textContent.includes('Height'))
-      .querySelector('select');
-    expect(heightSelect).toBeTruthy();
+    const bottomRightCell = container.querySelector('[aria-label="Grid cell row 20 col 8"]');
+    expect(bottomRightCell).toBeTruthy();
     await act(async () => {
-      heightSelect.value = 'twoRows';
-      heightSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    expect(onPanelLayoutChange).toHaveBeenCalledWith('guest_lookup', expect.objectContaining({ height: 'twoRows' }));
-
-    await act(async () => {
-      getButtonContainingText('Start placement').click();
-    });
-    expect(container.textContent).not.toContain('Edit panel shape');
-
-    const targetCell = container.querySelector('[aria-label="Grid cell row 19 col 1"]');
-    expect(targetCell).toBeTruthy();
-    await act(async () => {
-      targetCell.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      bottomRightCell.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     });
     expect(container.querySelectorAll('.bg-emerald-400').length).toBeGreaterThan(1);
 
     await act(async () => {
-      targetCell.click();
+      bottomRightCell.click();
     });
     expect(onPanelLayoutChange).toHaveBeenCalledWith(
-      'guest_lookup',
+        'guest_lookup',
       expect.objectContaining({
+        size: 'fourCols',
+        height: 'fullRow',
         gridPlacement: { row: 18, col: 0 },
         order: 0
       })
