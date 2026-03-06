@@ -17,7 +17,7 @@ describe('services/universalAdmin', () => {
     jest.clearAllMocks();
   });
 
-  it('creates the universal admin with an encryption password hash', async () => {
+  it('creates the universal admin account with hashed encryption password', async () => {
     mockUser.findOne.mockResolvedValue(null);
     bcrypt.hash
       .mockResolvedValueOnce('hashed-admin-password')
@@ -44,7 +44,7 @@ describe('services/universalAdmin', () => {
     expect(result.encryptionPasswordUpdated).toBe(true);
   });
 
-  it('adds an encryption password when the admin exists without one', async () => {
+  it('sets encryption password hash when existing admin account lacks one', async () => {
     const adminUser = {
       isAdmin: true,
       registrationStatus: 'active',
