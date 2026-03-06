@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useLocation } from 'react-router-dom';
 import { authAPI, chatAPI } from '../utils/api';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
 import FriendsManager from '../components/FriendsManager';
 import RecoveryKitManager from '../components/RecoveryKitManager';
+import SecurityScore from '../components/SecurityScore';
 
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
 const MAX_PGP_PUBLIC_KEY_LENGTH = 20000;
@@ -12,6 +13,17 @@ const PGP_PUBLIC_KEY_BEGIN = '-----BEGIN PGP PUBLIC KEY BLOCK-----';
 const PGP_PUBLIC_KEY_END = '-----END PGP PUBLIC KEY BLOCK-----';
 const PGP_PRIVATE_KEY_BEGIN = '-----BEGIN PGP PRIVATE KEY BLOCK-----';
 const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
+const SETTINGS_SECTIONS = [
+  { id: 'account', label: 'Account' },
+  { id: 'profile', label: 'Profile' },
+  { id: 'social', label: 'Social layout' },
+  { id: 'encryption', label: 'Encryption' },
+  { id: 'security', label: 'Security center' },
+  { id: 'pgp', label: 'PGP tools' },
+  { id: 'messages', label: 'Profile thread' },
+  { id: 'friends', label: 'Friends' },
+  { id: 'recovery', label: 'Recovery kit' }
+];
 
 const linksToText = (links) => {
   if (!Array.isArray(links)) return '';
@@ -56,6 +68,23 @@ const getPgpPublicKeyValidationError = (publicKey) => {
   }
 
   return null;
+};
+
+export const getSettingsSectionFromHash = (hash) => {
+  const normalized = String(hash || '').replace(/^#/, '');
+  if (SETTINGS_SECTIONS.some((section) => section.id === normalized)) {
+    return normalized;
+  }
+  return SETTINGS_SECTIONS[0]?.id || 'account';
+};
+
+export const formatSecurityEventType = (eventType) => {
+  const normalized = String(eventType || '').trim();
+  if (!normalized) return 'Unknown event';
+  return normalized
+    .split('_')
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1).toLowerCase())
+    .join(' ');
 };
 
 function UserSettings({
@@ -105,9 +134,16 @@ function UserSettings({
   const [profileThreadLoading, setProfileThreadLoading] = useState(false);
   const [profileThreadInput, setProfileThreadInput] = useState('');
   const [profileThreadSending, setProfileThreadSending] = useState(false);
+  const [activeSection, setActiveSection] = useState(getSettingsSectionFromHash(location.hash));
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const [securityData, setSecurityData] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [events, setEvents] = useState([]);
 
   const hasEncryptionPassword = !!encryptionPasswordStatus?.hasEncryptionPassword;
   const profileUserId = user?._id || null;
+  const activeDeviceKeys = useMemo(() => devices.filter((device) => !device.isRevoked), [devices]);
 
   useEffect(() => {
     if (!user) return;
@@ -127,6 +163,10 @@ function UserSettings({
       name: prev.name || user.realName || ''
     }));
   }, [user]);
+
+  useEffect(() => {
+    setActiveSection(getSettingsSectionFromHash(location.hash));
+  }, [location.hash]);
 
   useEffect(() => {
     const loadProfileThread = async () => {
@@ -357,6 +397,75 @@ function UserSettings({
     URL.revokeObjectURL(url);
   };
 
+  const loadSecurityData = useCallback(async () => {
+    setSecurityLoading(true);
+    try {
+      const [securityRes, sessionsRes, devicesRes, eventsRes] = await Promise.all([
+        authAPI.getSecurityCenter(),
+        authAPI.getSessions(),
+        authAPI.getDeviceKeys(),
+        authAPI.getSecurityEvents(1, 50)
+      ]);
+
+      setSecurityData(securityRes.data);
+      setSessions(sessionsRes.data.sessions || []);
+      setDevices(devicesRes.data.devices || []);
+      setEvents(eventsRes.data.events || []);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to load security center');
+    } finally {
+      setSecurityLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!profileUserId) return;
+    loadSecurityData();
+  }, [loadSecurityData, profileUserId]);
+
+  const handleSectionClick = (sectionId) => {
+    setActiveSection(sectionId);
+    const target = document.getElementById(`settings-section-${sectionId}`);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    if (window.history?.replaceState) {
+      window.history.replaceState(null, '', `${window.location.pathname}#${sectionId}`);
+    } else {
+      window.location.hash = sectionId;
+    }
+  };
+
+  const revokeSession = async (sessionId) => {
+    try {
+      await authAPI.revokeSession(sessionId);
+      toast.success('Session revoked');
+      await loadSecurityData();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to revoke session');
+    }
+  };
+
+  const revokeAllOthers = async () => {
+    try {
+      await authAPI.revokeAllOtherSessions();
+      toast.success('Other sessions revoked');
+      await loadSecurityData();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to revoke sessions');
+    }
+  };
+
+  const revokeDevice = async (deviceId) => {
+    try {
+      await authAPI.revokeDeviceKey(deviceId);
+      toast.success('Device key revoked');
+      await loadSecurityData();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to revoke device key');
+    }
+  };
+
   const handleSendProfileThreadMessage = async (event) => {
     event.preventDefault();
     const trimmed = profileThreadInput.trim();
@@ -379,170 +488,319 @@ function UserSettings({
   }
 
   return (
-    <div className="max-w-2xl mx-auto bg-white rounded shadow p-6 space-y-4">
-      <h2 className="text-xl font-semibold">User Settings</h2>
-
-      {encryptionPasswordRequired ? (
-        <div className="text-sm text-yellow-800 bg-yellow-50 border border-yellow-200 rounded p-3" role="alert">
-          You must set an encryption password before you can use the rest of the app.
-        </div>
-      ) : null}
-
-      {cameFromDeprecatedPgpRoute ? (
-        <div className="text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded p-3" role="status">
-          The standalone PGP tools page has been deprecated. Public PGP key setup now lives in User Settings.
-        </div>
-      ) : null}
-
-      <div className="text-sm text-gray-700 bg-gray-50 border rounded p-3">
-        <p><span className="font-semibold">Username:</span> @{user.username}</p>
-        <p><span className="font-semibold">Registration:</span> {user.registrationStatus}</p>
-        <p><span className="font-semibold">PGP Enabled:</span> {user.hasPGP ? 'Yes' : 'No'}</p>
-        <p><span className="font-semibold">Encryption Password:</span> {hasEncryptionPassword ? 'Set' : 'Not set'}</p>
+    <div className="max-w-7xl mx-auto px-4 md:px-6 pb-8">
+      <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 p-6 text-white shadow-xl">
+        <h2 className="text-2xl font-semibold">User Settings</h2>
+        <p className="mt-2 text-sm text-blue-100">
+          Manage your profile, privacy, and account security from one place.
+        </p>
       </div>
 
-      <form onSubmit={handleSaveEncryptionPassword} className="space-y-3 border rounded p-4 bg-gray-50">
-        <h3 className="text-lg font-semibold text-gray-800">
-          {hasEncryptionPassword ? 'Change Encryption Password' : 'Set Encryption Password'}
-        </h3>
-        <p className="text-sm text-gray-600">
-          This password is required to unlock full app usage and should be at least {ENCRYPTION_PASSWORD_MIN_LENGTH} characters.
-        </p>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-24 lg:self-start">
+          <nav className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+            <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Sections</p>
+            <div className="space-y-1">
+              {SETTINGS_SECTIONS.map((section) => {
+                const isActive = section.id === activeSection;
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => handleSectionClick(section.id)}
+                    className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                      isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {section.label}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        </aside>
 
-        {encryptionErrorMessage ? (
-          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" role="alert">
-            {encryptionErrorMessage}
-          </div>
-        ) : null}
-        {encryptionSuccessMessage ? (
-          <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3" role="status">
-            {encryptionSuccessMessage}
-          </div>
-        ) : null}
+        <div className="space-y-6">
+          <section id="settings-section-account" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            {encryptionPasswordRequired ? (
+              <div className="mb-3 text-sm text-yellow-800 bg-yellow-50 border border-yellow-200 rounded p-3" role="alert">
+                You must set an encryption password before you can use the rest of the app.
+              </div>
+            ) : null}
+            {cameFromDeprecatedPgpRoute ? (
+              <div className="mb-3 text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded p-3" role="status">
+                The standalone PGP tools page has been deprecated. Public PGP key setup now lives in User Settings.
+              </div>
+            ) : null}
+            <h3 className="text-lg font-semibold text-gray-900">Account overview</h3>
+            <div className="mt-3 grid gap-3 text-sm text-gray-700 md:grid-cols-2">
+              <p className="rounded border border-gray-200 bg-gray-50 p-3"><span className="font-semibold">Username:</span> @{user.username}</p>
+              <p className="rounded border border-gray-200 bg-gray-50 p-3"><span className="font-semibold">Registration:</span> {user.registrationStatus}</p>
+              <p className="rounded border border-gray-200 bg-gray-50 p-3"><span className="font-semibold">PGP Enabled:</span> {user.hasPGP ? 'Yes' : 'No'}</p>
+              <p className="rounded border border-gray-200 bg-gray-50 p-3"><span className="font-semibold">Encryption Password:</span> {hasEncryptionPassword ? 'Set' : 'Not set'}</p>
+            </div>
+          </section>
 
-        {hasEncryptionPassword ? (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Current Encryption Password</label>
-            <input
-              type="password"
-              name="currentEncryptionPassword"
-              value={encryptionForm.currentEncryptionPassword}
-              onChange={handleEncryptionFieldChange}
-              className="w-full border rounded p-2"
-              autoComplete="current-password"
-              required
-            />
-          </div>
-        ) : null}
+          <section id="settings-section-encryption" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <form onSubmit={handleSaveEncryptionPassword} className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800">
+                {hasEncryptionPassword ? 'Change Encryption Password' : 'Set Encryption Password'}
+              </h3>
+              <p className="text-sm text-gray-600">
+                This password is required to unlock full app usage and should be at least {ENCRYPTION_PASSWORD_MIN_LENGTH} characters.
+              </p>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {hasEncryptionPassword ? 'New Encryption Password' : 'Encryption Password'}
-          </label>
-          <input
-            type="password"
-            name="encryptionPassword"
-            value={encryptionForm.encryptionPassword}
-            onChange={handleEncryptionFieldChange}
-            className="w-full border rounded p-2"
-            autoComplete="new-password"
-            minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
-            required
-          />
-        </div>
+              {encryptionErrorMessage ? (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" role="alert">
+                  {encryptionErrorMessage}
+                </div>
+              ) : null}
+              {encryptionSuccessMessage ? (
+                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3" role="status">
+                  {encryptionSuccessMessage}
+                </div>
+              ) : null}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {hasEncryptionPassword ? 'Confirm New Encryption Password' : 'Confirm Encryption Password'}
-          </label>
-          <input
-            type="password"
-            name="confirmEncryptionPassword"
-            value={encryptionForm.confirmEncryptionPassword}
-            onChange={handleEncryptionFieldChange}
-            className="w-full border rounded p-2"
-            autoComplete="new-password"
-            minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
-            required
-          />
-        </div>
+              {hasEncryptionPassword ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Current Encryption Password</label>
+                  <input
+                    type="password"
+                    name="currentEncryptionPassword"
+                    value={encryptionForm.currentEncryptionPassword}
+                    onChange={handleEncryptionFieldChange}
+                    className="w-full border rounded p-2"
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+              ) : null}
 
-        <button
-          type="submit"
-          disabled={savingEncryptionPassword}
-          className="bg-indigo-600 text-white rounded px-4 py-2 disabled:opacity-50"
-        >
-          {savingEncryptionPassword
-            ? (hasEncryptionPassword ? 'Changing...' : 'Setting...')
-            : (hasEncryptionPassword ? 'Change Encryption Password' : 'Set Encryption Password')}
-        </button>
-      </form>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {hasEncryptionPassword ? 'New Encryption Password' : 'Encryption Password'}
+                </label>
+                <input
+                  type="password"
+                  name="encryptionPassword"
+                  value={encryptionForm.encryptionPassword}
+                  onChange={handleEncryptionFieldChange}
+                  className="w-full border rounded p-2"
+                  autoComplete="new-password"
+                  minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
+                  required
+                />
+              </div>
 
-      <form onSubmit={handleSave} className="space-y-3">
-        {errorMessage ? (
-          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" role="alert">
-            {errorMessage}
-          </div>
-        ) : null}
-        {successMessage ? (
-          <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3" role="status">
-            {successMessage}
-          </div>
-        ) : null}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {hasEncryptionPassword ? 'Confirm New Encryption Password' : 'Confirm Encryption Password'}
+                </label>
+                <input
+                  type="password"
+                  name="confirmEncryptionPassword"
+                  value={encryptionForm.confirmEncryptionPassword}
+                  onChange={handleEncryptionFieldChange}
+                  className="w-full border rounded p-2"
+                  autoComplete="new-password"
+                  minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
+                  required
+                />
+              </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Real Name</label>
-          <input name="realName" value={form.realName} onChange={handleChange} className="w-full border rounded p-2" required />
-        </div>
+              <button
+                type="submit"
+                disabled={savingEncryptionPassword}
+                className="bg-indigo-600 text-white rounded px-4 py-2 disabled:opacity-50"
+              >
+                {savingEncryptionPassword
+                  ? (hasEncryptionPassword ? 'Changing...' : 'Setting...')
+                  : (hasEncryptionPassword ? 'Change Encryption Password' : 'Set Encryption Password')}
+              </button>
+            </form>
+          </section>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
-          <textarea
-            name="bio"
-            value={form.bio}
-            onChange={handleChange}
-            className="w-full border rounded p-2"
-            rows={4}
-            maxLength={500}
-            placeholder="Tell people about yourself"
-          />
-          <p className="text-xs text-gray-500 mt-1">{form.bio.length}/500</p>
-        </div>
+          <form onSubmit={handleSave} className="space-y-6">
+            <section id="settings-section-profile" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800">Profile</h3>
+              {errorMessage ? (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" role="alert">
+                  {errorMessage}
+                </div>
+              ) : null}
+              {successMessage ? (
+                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3" role="status">
+                  {successMessage}
+                </div>
+              ) : null}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Real Name</label>
+                <input name="realName" value={form.realName} onChange={handleChange} className="w-full border rounded p-2" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
+                <textarea
+                  name="bio"
+                  value={form.bio}
+                  onChange={handleChange}
+                  className="w-full border rounded p-2"
+                  rows={4}
+                  maxLength={500}
+                  placeholder="Tell people about yourself"
+                />
+                <p className="text-xs text-gray-500 mt-1">{form.bio.length}/500</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Avatar URL</label>
+                  <input
+                    name="avatarUrl"
+                    value={form.avatarUrl}
+                    onChange={handleChange}
+                    className="w-full border rounded p-2"
+                    placeholder="https://example.com/avatar.jpg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Banner URL</label>
+                  <input
+                    name="bannerUrl"
+                    value={form.bannerUrl}
+                    onChange={handleChange}
+                    className="w-full border rounded p-2"
+                    placeholder="https://example.com/banner.jpg"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Links (one URL per line, up to 10)</label>
+                <textarea
+                  name="linksText"
+                  value={form.linksText}
+                  onChange={handleChange}
+                  className="w-full border rounded p-2"
+                  rows={4}
+                  placeholder="https://example.com\nhttps://github.com/username"
+                />
+              </div>
+            </section>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Avatar URL</label>
-            <input
-              name="avatarUrl"
-              value={form.avatarUrl}
-              onChange={handleChange}
-              className="w-full border rounded p-2"
-              placeholder="https://example.com/avatar.jpg"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Banner URL</label>
-            <input
-              name="bannerUrl"
-              value={form.bannerUrl}
-              onChange={handleChange}
-              className="w-full border rounded p-2"
-              placeholder="https://example.com/banner.jpg"
-            />
-          </div>
-        </div>
+            <section id="settings-section-social" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800">Social page customization</h3>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Profile Theme</label>
+                <select
+                  name="profileTheme"
+                  value={form.profileTheme}
+                  onChange={handleChange}
+                  className="w-full border rounded p-2"
+                >
+                  {PROFILE_THEMES.map((theme) => (
+                    <option key={theme} value={theme}>
+                      {theme}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-3 border rounded p-4 bg-gray-50">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-base font-semibold text-gray-800">Social layout controls</h4>
+                  <button
+                    type="button"
+                    onClick={handleResetSocialPreferences}
+                    className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100"
+                  >
+                    Reset defaults
+                  </button>
+                </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Links (one URL per line, up to 10)</label>
-          <textarea
-            name="linksText"
-            value={form.linksText}
-            onChange={handleChange}
-            className="w-full border rounded p-2"
-            rows={4}
-            placeholder="https://example.com\nhttps://github.com/username"
-          />
-        </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Accent Color Token</label>
+                  <select
+                    value={form.socialPagePreferences?.accentColorToken || 'blue'}
+                    onChange={(event) => {
+                      updateSocialPreferences((prev) => ({
+                        ...prev,
+                        accentColorToken: event.target.value
+                      }));
+                    }}
+                    className="w-full border rounded p-2"
+                  >
+                    {(THEME_TO_ALLOWED_ACCENTS[form.socialPagePreferences?.themePreset || form.profileTheme] || SOCIAL_ACCENT_TOKENS)
+                      .map((token) => (
+                        <option key={token} value={token}>
+                          {token}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">Section Visibility</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {SOCIAL_SECTION_IDS.map((sectionId) => {
+                      const isMandatory = SOCIAL_MANDATORY_SECTION_IDS.includes(sectionId);
+                      const isChecked = !(form.socialPagePreferences?.hiddenSections || []).includes(sectionId);
+                      return (
+                        <label key={sectionId} className="flex items-center gap-2 text-sm text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isMandatory}
+                            onChange={() => handleToggleSection(sectionId)}
+                          />
+                          <span>{SOCIAL_SECTION_LABELS[sectionId] || sectionId}</span>
+                          {isMandatory ? <span className="text-xs text-gray-500">(required)</span> : null}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">Section Order</p>
+                  <ul className="space-y-1">
+                    {(form.socialPagePreferences?.sectionOrder || []).map((sectionId, index, arr) => (
+                      <li key={sectionId} className="flex items-center justify-between border rounded bg-white px-3 py-2 text-sm">
+                        <span>{SOCIAL_SECTION_LABELS[sectionId] || sectionId}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleMoveSection(sectionId, 'up')}
+                            disabled={index === 0}
+                            className="px-2 py-1 border rounded text-xs disabled:opacity-40"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveSection(sectionId, 'down')}
+                            disabled={index === arr.length - 1}
+                            className="px-2 py-1 border rounded text-xs disabled:opacity-40"
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">Optional Module Visibility</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {SOCIAL_MODULE_IDS.map((moduleId) => (
+                      <label key={moduleId} className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={!(form.socialPagePreferences?.hiddenModules || []).includes(moduleId)}
+                          onChange={() => handleToggleModule(moduleId)}
+                        />
+                        <span>{SOCIAL_MODULE_LABELS[moduleId] || moduleId}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="md:col-span-3 text-xs text-gray-500">
@@ -562,187 +820,172 @@ function UserSettings({
           </div>
         </div>
 
-        <button type="submit" disabled={saving} className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50">
-          {saving ? 'Saving...' : 'Save Profile'}
-        </button>
-      </form>
-
-      <form onSubmit={handleSavePgpPublicKey} className="space-y-3 border rounded p-4 bg-gray-50">
-        <h3 className="text-lg font-semibold text-gray-800">Public PGP Key</h3>
-        <div className="text-sm text-red-800 bg-red-50 border border-red-200 rounded p-3" role="alert">
-          <span className="font-semibold">Security warning:</span> never paste or upload your private key here.
-          Only your <span className="font-semibold">public key</span> is accepted and stored.
-        </div>
-
-        <div className="space-y-3 border rounded p-3 bg-white">
-          <h4 className="font-semibold text-gray-800">Generate key pair locally (optional)</h4>
-          <p className="text-xs text-gray-600">
-            This happens in your browser. Your private key is never sent to the server.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              name="name"
-              value={pgpGenerationForm.name}
-              onChange={handlePgpGenerationFieldChange}
-              className="w-full border rounded p-2"
-              placeholder="Name"
-            />
-            <input
-              name="email"
-              value={pgpGenerationForm.email}
-              onChange={handlePgpGenerationFieldChange}
-              className="w-full border rounded p-2"
-              placeholder="Email"
-              type="email"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              name="passphrase"
-              value={pgpGenerationForm.passphrase}
-              onChange={handlePgpGenerationFieldChange}
-              className="w-full border rounded p-2"
-              placeholder="Key passphrase"
-              type="password"
-              minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
-            />
-            <input
-              name="confirmPassphrase"
-              value={pgpGenerationForm.confirmPassphrase}
-              onChange={handlePgpGenerationFieldChange}
-              className="w-full border rounded p-2"
-              placeholder="Confirm passphrase"
-              type="password"
-              minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={handleGeneratePgpKeyPair}
-            disabled={generatingPgpKey}
-            className="bg-indigo-600 text-white rounded px-4 py-2 disabled:opacity-50"
-          >
-            {generatingPgpKey ? 'Generating...' : 'Generate Key Pair Locally'}
-          </button>
-
-          {generatedPrivateKey ? (
-            <div className="space-y-2 border border-yellow-300 bg-yellow-50 rounded p-3">
-              <p className="text-xs text-yellow-900">
-                Private key generated. Save it securely now. It is not sent to the server.
-              </p>
-              <textarea
-                readOnly
-                value={generatedPrivateKey}
-                className="w-full border rounded p-2 font-mono text-xs"
-                rows={6}
-              />
-              <div className="space-x-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadPrivateKey}
-                  className="bg-gray-800 text-white rounded px-3 py-1 text-sm"
-                >
-                  Download Private Key
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGeneratedPrivateKey('')}
-                  className="bg-gray-200 text-gray-800 rounded px-3 py-1 text-sm"
-                >
-                  Clear Private Key from Screen
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        {pgpErrorMessage ? (
-          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" role="alert">
-            {pgpErrorMessage}
-          </div>
-        ) : null}
-
-        {pgpSuccessMessage ? (
-          <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3" role="status">
-            {pgpSuccessMessage}
-          </div>
-        ) : null}
-
-        <textarea
-          value={pgpPublicKey}
-          onChange={(e) => setPgpPublicKey(e.target.value)}
-          className="w-full border rounded p-2 font-mono text-xs"
-          rows={8}
-          maxLength={MAX_PGP_PUBLIC_KEY_LENGTH}
-          placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
-        />
-        <p className="text-xs text-gray-500">{pgpPublicKey.length}/{MAX_PGP_PUBLIC_KEY_LENGTH} characters</p>
-
-        <button
-          type="submit"
-          disabled={savingPgpPublicKey}
-          className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
-        >
-          {savingPgpPublicKey ? 'Saving...' : 'Save Public Key'}
-        </button>
-      </form>
-
-      <div className="space-y-3 border rounded p-4 bg-gray-50">
-        <h3 className="text-lg font-semibold text-gray-800">Profile Thread Chat</h3>
-        <p className="text-sm text-gray-600">
-          This is the same profile-specific thread available from the Chat hub.
-        </p>
-        <div className="max-h-48 overflow-y-auto border rounded p-2 bg-white space-y-2">
-          {profileThreadLoading ? (
-            <p className="text-sm text-gray-500">Loading profile thread...</p>
-          ) : profileThreadMessages.length === 0 ? (
-            <p className="text-sm text-gray-500">No profile thread messages yet.</p>
-          ) : (
-            profileThreadMessages.map((message) => (
-              <div key={String(message._id)} className="text-sm">
-                <div className="text-xs text-gray-500">
-                  @{message.userId?.username || message.userId?.realName || 'user'} · {new Date(message.createdAt).toLocaleString()}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input
+                    name="name"
+                    value={pgpGenerationForm.name}
+                    onChange={handlePgpGenerationFieldChange}
+                    className="w-full border rounded p-2"
+                    placeholder="Name"
+                  />
+                  <input
+                    name="email"
+                    value={pgpGenerationForm.email}
+                    onChange={handlePgpGenerationFieldChange}
+                    className="w-full border rounded p-2"
+                    placeholder="Email"
+                    type="email"
+                  />
                 </div>
-                <div className="whitespace-pre-wrap">{message.content}</div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input
+                    name="passphrase"
+                    value={pgpGenerationForm.passphrase}
+                    onChange={handlePgpGenerationFieldChange}
+                    className="w-full border rounded p-2"
+                    placeholder="Key passphrase"
+                    type="password"
+                    minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
+                  />
+                  <input
+                    name="confirmPassphrase"
+                    value={pgpGenerationForm.confirmPassphrase}
+                    onChange={handlePgpGenerationFieldChange}
+                    className="w-full border rounded p-2"
+                    placeholder="Confirm passphrase"
+                    type="password"
+                    minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGeneratePgpKeyPair}
+                  disabled={generatingPgpKey}
+                  className="bg-indigo-600 text-white rounded px-4 py-2 disabled:opacity-50"
+                >
+                  {generatingPgpKey ? 'Generating...' : 'Generate Key Pair Locally'}
+                </button>
+
+                {generatedPrivateKey ? (
+                  <div className="space-y-2 border border-yellow-300 bg-yellow-50 rounded p-3">
+                    <p className="text-xs text-yellow-900">
+                      Private key generated. Save it securely now. It is not sent to the server.
+                    </p>
+                    <textarea
+                      readOnly
+                      value={generatedPrivateKey}
+                      className="w-full border rounded p-2 font-mono text-xs"
+                      rows={6}
+                    />
+                    <div className="space-x-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadPrivateKey}
+                        className="bg-gray-800 text-white rounded px-3 py-1 text-sm"
+                      >
+                        Download Private Key
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGeneratedPrivateKey('')}
+                        className="bg-gray-200 text-gray-800 rounded px-3 py-1 text-sm"
+                      >
+                        Clear Private Key from Screen
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ))
-          )}
+
+              {pgpErrorMessage ? (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" role="alert">
+                  {pgpErrorMessage}
+                </div>
+              ) : null}
+
+              {pgpSuccessMessage ? (
+                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3" role="status">
+                  {pgpSuccessMessage}
+                </div>
+              ) : null}
+
+              <textarea
+                value={pgpPublicKey}
+                onChange={(e) => setPgpPublicKey(e.target.value)}
+                className="w-full border rounded p-2 font-mono text-xs"
+                rows={8}
+                maxLength={MAX_PGP_PUBLIC_KEY_LENGTH}
+                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
+              />
+              <p className="text-xs text-gray-500">{pgpPublicKey.length}/{MAX_PGP_PUBLIC_KEY_LENGTH} characters</p>
+
+              <button
+                type="submit"
+                disabled={savingPgpPublicKey}
+                className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
+              >
+                {savingPgpPublicKey ? 'Saving...' : 'Save Public Key'}
+              </button>
+            </form>
+          </section>
+
+          <section id="settings-section-messages" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800">Profile Thread Chat</h3>
+              <p className="text-sm text-gray-600">
+                This is the same profile-specific thread available from the Chat hub.
+              </p>
+              <div className="max-h-48 overflow-y-auto border rounded p-2 bg-gray-50 space-y-2">
+                {profileThreadLoading ? (
+                  <p className="text-sm text-gray-500">Loading profile thread...</p>
+                ) : profileThreadMessages.length === 0 ? (
+                  <p className="text-sm text-gray-500">No profile thread messages yet.</p>
+                ) : (
+                  profileThreadMessages.map((message) => (
+                    <div key={String(message._id)} className="text-sm">
+                      <div className="text-xs text-gray-500">
+                        @{message.userId?.username || message.userId?.realName || 'user'} · {new Date(message.createdAt).toLocaleString()}
+                      </div>
+                      <div className="whitespace-pre-wrap">{message.content}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <form onSubmit={handleSendProfileThreadMessage} className="flex gap-2">
+                <input
+                  value={profileThreadInput}
+                  onChange={(event) => setProfileThreadInput(event.target.value)}
+                  className="flex-1 border rounded p-2"
+                  maxLength={2000}
+                  placeholder="Message on your profile thread"
+                  disabled={!profileThreadId || profileThreadSending}
+                />
+                <button
+                  type="submit"
+                  className="bg-blue-600 text-white rounded px-3 py-2 disabled:opacity-50"
+                  disabled={!profileThreadId || !profileThreadInput.trim() || profileThreadSending}
+                >
+                  {profileThreadSending ? 'Sending...' : 'Send'}
+                </button>
+              </form>
+            </div>
+          </section>
+
+          <section id="settings-section-friends" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <FriendsManager currentUser={user} onUserUpdate={setUser} />
+          </section>
+
+          <section id="settings-section-recovery" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <RecoveryKitManager
+              encryptionPassword={encryptionForm.encryptionPassword || encryptionForm.currentEncryptionPassword}
+              pgpPrivateKey={generatedPrivateKey}
+              userId={user?._id}
+              username={user?.username}
+            />
+          </section>
         </div>
-        <form onSubmit={handleSendProfileThreadMessage} className="flex gap-2">
-          <input
-            value={profileThreadInput}
-            onChange={(event) => setProfileThreadInput(event.target.value)}
-            className="flex-1 border rounded p-2"
-            maxLength={2000}
-            placeholder="Message on your profile thread"
-            disabled={!profileThreadId || profileThreadSending}
-          />
-          <button
-            type="submit"
-            className="bg-blue-600 text-white rounded px-3 py-2 disabled:opacity-50"
-            disabled={!profileThreadId || !profileThreadInput.trim() || profileThreadSending}
-          >
-            {profileThreadSending ? 'Sending...' : 'Send'}
-          </button>
-        </form>
-      </div>
-
-      {/* Friends Management Section */}
-      <div className="mt-8">
-        <FriendsManager currentUser={user} onUserUpdate={setUser} />
-      </div>
-
-      {/* Recovery Kit Section */}
-      <div className="mt-8">
-        <RecoveryKitManager
-          encryptionPassword={encryptionForm.encryptionPassword || encryptionForm.currentEncryptionPassword}
-          pgpPrivateKey={generatedPrivateKey}
-          userId={user?._id}
-          username={user?.username}
-        />
       </div>
     </div>
   );

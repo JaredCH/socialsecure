@@ -16,7 +16,6 @@ import Calendar from './pages/Calendar';
 import ResumeBuilder from './pages/ResumeBuilder';
 import OnboardingPage from './pages/OnboardingPage';
 import PostRegistrationWelcome from './pages/PostRegistrationWelcome';
-import SecurityCenter from './pages/SecurityCenter';
 import ModerationDashboard from './pages/ModerationDashboard';
 import NotificationCenter from './components/NotificationCenter';
 import NotificationSettings from './pages/NotificationSettings';
@@ -535,7 +534,7 @@ function App() {
                   encryptionPasswordRequired={encryptionPasswordRequired}
                   allowWhenEncryptionRequired={false}
                 >
-                  <SecurityCenter />
+                  <Navigate to="/settings#security" replace />
                 </ProtectedRoute>
               )}
             />
