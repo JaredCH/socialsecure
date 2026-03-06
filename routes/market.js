@@ -213,7 +213,7 @@ const normalizeImageList = (value) => {
   if (parsed === undefined) {
     return { ok: true, images: undefined };
   }
-  const normalized = parsed.map(item => String(item || '').trim()).filter(Boolean);
+  const normalized = parsed.map(item => String(item ?? '').trim()).filter(Boolean);
   const invalid = normalized.filter((item) => !isValidMarketImage(item));
   if (invalid.length > 0) {
     return { ok: false, error: 'Images must be valid HTTP URLs or uploaded image paths' };
@@ -534,6 +534,9 @@ router.post('/listings', [
     if (!uploadResult.ok) {
       return res.status(400).json({ error: uploadResult.error });
     }
+    if (uploadResult.images.length > 0 && imageListResult.images !== undefined) {
+      return res.status(400).json({ error: 'Provide either uploaded images or image URLs, not both' });
+    }
     const images = uploadResult.images.length > 0
       ? uploadResult.images
       : (imageListResult.images || []);
@@ -663,10 +666,12 @@ router.put('/listings/:listingId', [
     const currentImages = Array.isArray(listing.images) ? listing.images : [];
     const hasUploads = uploadResult.images.length > 0;
     const hasImageList = imageListResult.images !== undefined;
+    if (hasUploads && hasImageList) {
+      return res.status(400).json({ error: 'Provide either uploaded images or image URLs, not both' });
+    }
     let nextImages;
     if (hasUploads) {
-      const baseImages = hasImageList ? imageListResult.images : [];
-      nextImages = [...baseImages, ...uploadResult.images];
+      nextImages = uploadResult.images;
     } else if (hasImageList) {
       nextImages = imageListResult.images;
     }
