@@ -100,6 +100,13 @@ export const authAPI = {
   getRecoveryKitStatus: () => api.get('/auth/recovery-kit/status'),
 };
 
+export const resumeAPI = {
+  getMyResume: () => api.get('/resume/me'),
+  upsertMyResume: (data) => api.put('/resume/me', data),
+  deleteMyResume: () => api.delete('/resume/me'),
+  trackEvent: (eventType, metadata = {}) => api.post('/resume/me/telemetry', { eventType, metadata })
+};
+
 // User API
 export const userAPI = {
   search: (query) => api.get(`/users/search?q=${query}`),

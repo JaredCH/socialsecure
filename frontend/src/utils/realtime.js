@@ -73,13 +73,6 @@ export const getRealtimeSocket = ({ token, userId }) => {
 
 export const initRealtime = ({ token, userId }) => getRealtimeSocket({ token, userId });
 
-export const disconnectRealtime = () => {
-  if (!socket) return;
-  socket.disconnect();
-  socket = null;
-  activeAuthKey = null;
-};
-
 const bindListener = (eventName, callback) => {
   if (!socket || typeof callback !== 'function') {
     return () => {};
@@ -131,3 +124,10 @@ export const onFeedInteraction = (callback) => bindListener('feed:interaction', 
 export const onChatMessage = (callback) => bindListener('chat:message', callback);
 export const onTyping = (callback) => bindListener('typing', callback);
 export const onFriendPresence = (callback) => bindListener('friend:presence', callback);
+
+export const disconnectRealtime = () => {
+  if (!socket) return;
+  socket.disconnect();
+  socket = null;
+  activeAuthKey = null;
+};
