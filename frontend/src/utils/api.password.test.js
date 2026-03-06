@@ -57,4 +57,8 @@ describe('normalizeApiBaseUrl', () => {
   it('keeps absolute API URLs unchanged', () => {
     expect(normalizeApiBaseUrl('https://example.com/api')).toBe('https://example.com/api');
   });
+
+  it('preserves protocol-relative URLs', () => {
+    expect(normalizeApiBaseUrl('//example.com/api')).toBe('//example.com/api');
+  });
 });

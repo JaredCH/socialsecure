@@ -4,10 +4,10 @@ export const normalizeApiBaseUrl = (apiUrl) => {
   const trimmedApiUrl = (apiUrl || '').trim();
   if (!trimmedApiUrl) return '/api';
 
-  const isAbsoluteUrl = /^https?:\/\//i.test(trimmedApiUrl) || trimmedApiUrl.startsWith('//');
-  const normalizedApiUrl = isAbsoluteUrl || trimmedApiUrl.startsWith('/')
+  const isAbsoluteUrl = /^(https?:)?\/\//i.test(trimmedApiUrl);
+  const normalizedApiUrl = isAbsoluteUrl
     ? trimmedApiUrl
-    : `/${trimmedApiUrl}`;
+    : `/${trimmedApiUrl.replace(/^\/+/, '')}`;
 
   return normalizedApiUrl.replace(/\/+$/, '') || '/api';
 };
