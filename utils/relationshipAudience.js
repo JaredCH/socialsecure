@@ -16,6 +16,8 @@ const socialOrUnsetAudienceQuery = (fieldName = 'relationshipAudience') => ({
 });
 
 const readAudienceValue = (friendship, side) => {
+  // Prefer the current schema field first, then fall back to alternative key names
+  // to safely read companion/legacy friendship documents without data migration.
   const candidates = side === 'requester'
     ? [
       friendship?.requesterRelationshipAudience,
@@ -101,7 +103,6 @@ const isViewerSecureFriendOfOwner = async (viewerId, ownerId) => {
   const normalizedViewerId = String(viewerId || '').trim();
   const normalizedOwnerId = String(ownerId || '').trim();
   if (!normalizedViewerId || !normalizedOwnerId) return false;
-  if (normalizedViewerId === normalizedOwnerId) return true;
 
   const friendship = await Friendship.findOne({
     status: 'accepted',

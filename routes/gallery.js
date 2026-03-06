@@ -524,7 +524,7 @@ router.post(
 
       const userId = String(req.user.userId || '');
       const viewerContext = await getGalleryViewerContext(owner._id, userId);
-      if (!image.canView(userId, { isSecureFriend: viewerContext.isSecureFriend })) {
+      if (!image.canView(userId, viewerContext)) {
         if (normalizeRelationshipAudience(image.relationshipAudience) === 'secure') {
           logRelationshipAudienceEvent({
             eventType: 'secure_content_access_denied',

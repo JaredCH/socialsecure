@@ -22,12 +22,14 @@ function PrivacySelector({
   onToggleVisibleUser,
   onToggleExcludeUser
 }) {
+  const relationshipAudience = form.relationshipAudience || 'social';
+
   return (
     <div className="space-y-3">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
         <select
-          value={form.relationshipAudience || 'social'}
+          value={relationshipAudience}
           onChange={(event) => onChange('relationshipAudience', event.target.value)}
           className="w-full border rounded p-2"
         >
@@ -49,7 +51,7 @@ function PrivacySelector({
               key={option.value}
               value={option.value}
               disabled={
-                (form.relationshipAudience || 'social') === 'secure'
+                relationshipAudience === 'secure'
                 && !SECURE_ALLOWED_VISIBILITY.has(option.value)
               }
             >
@@ -57,7 +59,7 @@ function PrivacySelector({
             </option>
           ))}
         </select>
-        {(form.relationshipAudience || 'social') === 'secure' && !SECURE_ALLOWED_VISIBILITY.has(form.visibility) ? (
+        {relationshipAudience === 'secure' && !SECURE_ALLOWED_VISIBILITY.has(form.visibility) ? (
           <p className="mt-1 text-xs text-amber-700">
             Secure audience currently supports only Friends visibility.
           </p>

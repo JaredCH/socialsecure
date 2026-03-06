@@ -305,6 +305,7 @@ postSchema.methods.canView = function(viewerId, context = {}) {
     return false;
   }
 
+  // Owners always retain access to their own posts, including secure audience posts.
   if (author === viewer || target === viewer) {
     return true;
   }

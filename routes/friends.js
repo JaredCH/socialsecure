@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const TopFriend = require('../models/TopFriend');
@@ -20,6 +21,20 @@ const getViewerRelationshipAudience = (friendship, viewerId) => {
   }
   return 'social';
 };
+
+const friendReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: { error: 'Too many friend requests, please slow down.' },
+  keyGenerator: (req) => String(req?.user?._id || req.ip || req.socket?.remoteAddress || 'unknown')
+});
+
+const friendWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { error: 'Too many friendship updates, please slow down.' },
+  keyGenerator: (req) => String(req?.user?._id || req.ip || req.socket?.remoteAddress || 'unknown')
+});
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -374,7 +389,7 @@ router.post('/:id/block', authenticateToken, async (req, res) => {
 });
 
 // GET /api/friends - Get all accepted friends
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', friendReadLimiter, authenticateToken, async (req, res) => {
   try {
     const friends = await Friendship.getFriends(req.user._id);
     const friendIds = friends.map((friend) => friend._id);
@@ -418,7 +433,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // PATCH /api/friends/:id/audience - Set per-friend relationship audience
-router.patch('/:id/audience', authenticateToken, async (req, res) => {
+router.patch('/:id/audience', friendWriteLimiter, authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const requestedAudience = String(req.body?.relationshipAudience || '').trim().toLowerCase();

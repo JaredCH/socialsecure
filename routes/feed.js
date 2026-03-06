@@ -21,7 +21,6 @@ const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
 const VALID_VISIBILITY = ['public', 'friends', 'circles', 'specific_users', 'private'];
-const SECURE_VISIBILITY_COMPATIBILITY = new Set(['friends']);
 const interactionRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
@@ -678,7 +677,7 @@ router.post('/post', [
 
     if (
       normalizedRelationshipAudience === 'secure'
-      && !SECURE_VISIBILITY_COMPATIBILITY.has(visibility)
+      && visibility !== 'friends'
     ) {
       return res.status(400).json({
         error: 'Secure audience currently supports only friends visibility'
