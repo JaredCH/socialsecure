@@ -62,7 +62,7 @@ const RouteMain = ({ children }) => {
       ? 'flex-1 min-h-0 overflow-hidden'
       : isCalendarRoute
         ? 'container mx-auto mt-4 mb-4 flex-1 min-h-0 overflow-hidden'
-        : 'container mx-auto mt-8'}
+        : 'container mx-auto mt-8 flex-1 min-h-0 overflow-y-auto'}
     >
       {children}
     </main>
@@ -427,8 +427,8 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-gray-100 flex flex-col">
-        <nav className="bg-white shadow-md border-b border-gray-200 p-4">
+      <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
+        <nav className="shrink-0 bg-white shadow-md border-b border-gray-200 p-4">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
             <div className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible">
