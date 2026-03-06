@@ -32,6 +32,7 @@ const chatRoomSchema = new mongoose.Schema({
   state: String,
   country: String,
   county: String,
+  zipCode: String,
   members: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -74,6 +75,7 @@ const chatRoomSchema = new mongoose.Schema({
 // Geospatial index for location-based queries
 chatRoomSchema.index({ location: '2dsphere' });
 chatRoomSchema.index({ type: 1, city: 1, state: 1, country: 1 });
+chatRoomSchema.index({ type: 1, zipCode: 1 });
 
 // Static method to find rooms near a location
 chatRoomSchema.statics.findNearby = function(longitude, latitude, maxDistanceMiles = 50) {
@@ -95,14 +97,18 @@ chatRoomSchema.statics.findNearby = function(longitude, latitude, maxDistanceMil
 
 // Static method to find or create a room by location (idempotent)
 chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
-  const { type, city, state, country, county, coordinates, radius = 50 } = locationData;
+  const { type, city, state, country, county, zipCode, coordinates, radius = 50 } = locationData;
   
   // Build query for existing room
   const query = { type };
   if (type === 'city') {
-    query.city = city;
-    query.state = state;
-    query.country = country;
+    if (zipCode) {
+      query.zipCode = zipCode;
+    } else {
+      query.city = city;
+      query.state = state;
+      query.country = country;
+    }
   } else if (type === 'state') {
     query.state = state;
     query.country = country;
@@ -123,7 +129,9 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
   // Create room name based on location type
   let name;
   if (type === 'city') {
-    name = city ? `${city}, ${state || ''}` : 'Unknown City';
+    name = zipCode
+      ? (city ? `${city} (ZIP ${zipCode})` : `ZIP ${zipCode}`)
+      : (city ? `${city}, ${state || ''}` : 'Unknown City');
   } else if (type === 'state') {
     name = state || 'Unknown State';
   } else if (type === 'county') {
@@ -141,6 +149,7 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
     state,
     country,
     county: type === 'county' ? county : undefined,
+    zipCode: type === 'city' ? zipCode : undefined,
     location: {
       type: 'Point',
       coordinates: coordinates || [0, 0]
@@ -163,21 +172,23 @@ chatRoomSchema.statics.syncUserLocationRooms = async function(user) {
   }
   
   const [longitude, latitude] = user.location.coordinates;
-  const { city, state, country } = user;
+  const { city, state, country, county, zipCode } = user;
   
-  if (!city && !state && !country) {
+  if (!zipCode && !city && !state && !country) {
     return { rooms: [], created: 0 };
   }
   
   const createdRooms = [];
   
   // Create/find city-level room
-  if (city) {
+  if (zipCode || city) {
     const { room, created } = await this.findOrCreateByLocation({
       type: 'city',
       city,
       state,
       country,
+      county,
+      zipCode,
       coordinates: [longitude, latitude],
       radius: 25
     });

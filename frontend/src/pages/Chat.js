@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { authAPI, chatAPI } from '../utils/api';
 import {
-  parseCommandArguments,
   parseSlashCommand,
-  SUPPORTED_COMMANDS,
-  UNKNOWN_COMMAND_HELP
+  runSlashCommand,
+  UNKNOWN_COMMAND_HELP,
+  SUPPORTED_COMMANDS
 } from '../utils/chatCommands';
 import {
   createWrappedRoomKeyPackage,
@@ -18,12 +18,14 @@ import {
 } from '../utils/e2ee';
 import EncryptionUnlockModal from '../components/EncryptionUnlockModal';
 import TypingIndicator from '../components/TypingIndicator';
-import PresenceIndicator from '../components/PresenceIndicator';
 import {
-  joinChatRoom,
-  onRealtimeEvent,
   emitTypingStart,
-  emitTypingStop
+  emitTypingStop,
+  getRealtimeSocket,
+  joinRealtimeRoom,
+  leaveRealtimeRoom,
+  onChatMessage,
+  onTyping
 } from '../utils/realtime';
 
 const MESSAGE_PAGE_SIZE = {
@@ -33,7 +35,9 @@ const MESSAGE_PAGE_SIZE = {
 const MAX_MESSAGES_IN_MEMORY = 1200;
 const MAX_VISIBLE_DECRYPT = 120;
 const SCROLL_BOTTOM_THRESHOLD = 48;
-const CHAT_TYPING_STOP_DELAY_MS = 900;
+const CHAT_POLL_INTERVAL_MS = 15000;
+const TYPING_TIMEOUT_MS = 900;
+const REMOTE_TYPING_TTL_MS = 3000;
 
 const getMessageId = (message) => String(message?._id || `${message?.e2ee?.clientMessageId || 'msg'}:${message?.createdAt || ''}`);
 
@@ -103,9 +107,7 @@ const Chat = () => {
   const [useMonospace, setUseMonospace] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [typingUsersByRoom, setTypingUsersByRoom] = useState({});
-  const [roomUsers, setRoomUsers] = useState([]);
-  const [presenceByUserId, setPresenceByUserId] = useState({});
+  const [replyToUsername, setReplyToUsername] = useState('');
 
   const [decrypting, setDecrypting] = useState(false);
   const [decryptErrors, setDecryptErrors] = useState({});
@@ -115,9 +117,11 @@ const Chat = () => {
   const latestPackageSyncByRoomRef = useRef({});
   const messageViewportRef = useRef(null);
   const messageCountRef = useRef(0);
-  const typingStopTimerRef = useRef(null);
+  const localTypingTimeoutRef = useRef(null);
+  const remoteTypingTimeoutsRef = useRef({});
 
   const isUnlocked = Boolean(session);
+  const realtimeEnabled = profile?.realtimePreferences?.enabled !== false;
   const activeRoom = useMemo(
     () => rooms.find((room) => String(room._id) === String(activeRoomId)) || null,
     [rooms, activeRoomId]
@@ -135,39 +139,12 @@ const Chat = () => {
     });
   };
 
-  const appendLocalSystemMessage = (content) => {
-    appendMessage({
-      _id: `local:${Date.now()}:${Math.random().toString(36).slice(2)}`,
-      roomId: activeRoomId,
-      userId: {
-        _id: profile?._id || 'system',
-        username: 'system',
-        realName: 'System'
-      },
-      content,
-      messageType: 'system',
-      createdAt: new Date().toISOString(),
-      isEncrypted: false,
-      isE2EE: false
-    });
-  };
-
   const scrollToBottom = () => {
     const viewport = messageViewportRef.current;
     if (!viewport) return;
     viewport.scrollTop = viewport.scrollHeight;
     setUnreadCount(0);
     setIsAtBottom(true);
-  };
-
-  const findRoomByQuery = (query) => {
-    const normalized = String(query || '').trim().toLowerCase();
-    if (!normalized) return null;
-    return rooms.find((room) => {
-      const roomId = String(room._id).toLowerCase();
-      const label = normalizeRoomLabel(room).toLowerCase();
-      return roomId === normalized || label === normalized || label.includes(normalized);
-    }) || null;
   };
 
   const getDisplayName = (message) => {
@@ -429,6 +406,7 @@ const Chat = () => {
       setNextCursor(null);
       setHasMore(true);
       setUnreadCount(0);
+      setTypingLabelsByRoom({});
       return;
     }
 
@@ -448,85 +426,111 @@ const Chat = () => {
   }, [activeRoomId]);
 
   useEffect(() => {
-    if (!activeRoomId) {
-      setRoomUsers([]);
-      return;
+    if (!profile?._id || !realtimeEnabled) {
+      return undefined;
     }
 
-    joinChatRoom(activeRoomId);
-    chatAPI.getRoomUsers(activeRoomId)
-      .then((response) => {
-        const users = Array.isArray(response.data?.users) ? response.data.users : [];
-        setRoomUsers(users);
-      })
-      .catch(() => {
-        setRoomUsers([]);
-      });
-  }, [activeRoomId]);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return undefined;
+    }
 
-  useEffect(() => {
-    const offMessage = onRealtimeEvent('chat-message', (incoming) => {
-      if (!incoming?.roomId || String(incoming.roomId) !== String(activeRoomId)) return;
+    getRealtimeSocket({ token, userId: profile._id });
+
+    const offChatMessage = onChatMessage((payload) => {
+      const incoming = payload?.message;
+      if (!incoming?._id) return;
+
+      if (String(incoming.roomId) !== String(activeRoomId)) {
+        return;
+      }
+
       appendMessage(incoming);
     });
 
-    const offTyping = onRealtimeEvent('typing', (payload) => {
-      if (payload?.type !== 'chat') return;
-      if (String(payload?.targetId || '') !== String(activeRoomId)) return;
-      const userId = String(payload?.userId || '');
-      if (!userId || userId === String(profile?._id)) return;
-      setTypingUsersByRoom((prev) => {
-        const roomKey = String(activeRoomId || '');
-        const current = prev[roomKey] || [];
-        if (payload.status === 'stop') {
-          return { ...prev, [roomKey]: current.filter((entry) => entry.userId !== userId) };
+    const offTyping = onTyping((payload) => {
+      if (payload?.scope !== 'chat' || String(payload?.targetId) !== String(activeRoomId) || !payload?.userId) {
+        return;
+      }
+
+      const timeoutKey = String(payload.userId);
+      if (payload.status === 'stop') {
+        const timeoutId = remoteTypingTimeoutsRef.current[timeoutKey];
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+          delete remoteTypingTimeoutsRef.current[timeoutKey];
         }
-        if (current.some((entry) => entry.userId === userId)) return prev;
-        const username = payload.username || 'Someone';
-        return { ...prev, [roomKey]: [...current, { userId, username }] };
-      });
-    });
-
-    const offFriendOnline = onRealtimeEvent('friend_online', (payload) => {
-      const userId = String(payload?.userId || '');
-      if (!userId) return;
-      setPresenceByUserId((prev) => ({
-        ...prev,
-        [userId]: { status: 'online', lastSeen: payload?.lastSeen || null }
-      }));
-    });
-
-    const offFriendOffline = onRealtimeEvent('friend_offline', (payload) => {
-      const userId = String(payload?.userId || '');
-      if (!userId) return;
-      setPresenceByUserId((prev) => ({
-        ...prev,
-        [userId]: { status: 'offline', lastSeen: payload?.lastSeen || null }
-      }));
-    });
-
-    const offPresenceSnapshot = onRealtimeEvent('presence_snapshot', (payload) => {
-      const friends = Array.isArray(payload?.friends) ? payload.friends : [];
-      if (friends.length === 0) return;
-      setPresenceByUserId((prev) => {
-        const next = { ...prev };
-        friends.forEach((friend) => {
-          const friendId = String(friend?.userId || '');
-          if (!friendId) return;
-          next[friendId] = { status: friend?.status || 'offline', lastSeen: friend?.lastSeen || null };
+        setTypingLabelsByRoom((prev) => {
+          const next = { ...(prev[String(activeRoomId)] || {}) };
+          delete next[timeoutKey];
+          return {
+            ...prev,
+            [String(activeRoomId)]: next
+          };
         });
-        return next;
-      });
+        return;
+      }
+
+      setTypingLabelsByRoom((prev) => ({
+        ...prev,
+        [String(activeRoomId)]: {
+          ...(prev[String(activeRoomId)] || {}),
+          [timeoutKey]: payload.label || 'Someone'
+        }
+      }));
+
+      const existingTimeout = remoteTypingTimeoutsRef.current[timeoutKey];
+      if (existingTimeout) {
+        window.clearTimeout(existingTimeout);
+      }
+      remoteTypingTimeoutsRef.current[timeoutKey] = window.setTimeout(() => {
+        setTypingLabelsByRoom((prev) => {
+          const next = { ...(prev[String(activeRoomId)] || {}) };
+          delete next[timeoutKey];
+          return {
+            ...prev,
+            [String(activeRoomId)]: next
+          };
+        });
+        delete remoteTypingTimeoutsRef.current[timeoutKey];
+      }, REMOTE_TYPING_TTL_MS);
     });
 
     return () => {
-      offMessage();
+      offChatMessage();
       offTyping();
-      offFriendOnline();
-      offFriendOffline();
-      offPresenceSnapshot();
     };
-  }, [activeRoomId, profile?._id]);
+  }, [profile?._id, realtimeEnabled, activeRoomId]);
+
+  useEffect(() => {
+    if (!activeRoomId || !profile?._id || !realtimeEnabled) {
+      return undefined;
+    }
+
+    joinRealtimeRoom(activeRoomId);
+    return () => {
+      leaveRealtimeRoom(activeRoomId);
+    };
+  }, [activeRoomId, profile?._id, realtimeEnabled]);
+
+  useEffect(() => {
+    if (!activeRoomId || realtimeEnabled) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      fetchMessagesPage(activeRoomId, null, true);
+    }, CHAT_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeRoomId, realtimeEnabled]);
+
+  useEffect(() => () => {
+    if (localTypingTimeoutRef.current) {
+      window.clearTimeout(localTypingTimeoutRef.current);
+    }
+    Object.values(remoteTypingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+  }, []);
 
   useEffect(() => {
     const decryptVisible = async () => {
@@ -641,119 +645,40 @@ const Chat = () => {
     }
   };
 
+  const handleCopyMessage = async (text) => {
+    const normalized = String(text || '').trim();
+    if (!normalized) return;
+    try {
+      await navigator.clipboard.writeText(normalized);
+      toast.success('Copied message');
+    } catch {
+      toast.error('Unable to copy message');
+    }
+  };
+
+  const handleReplyToUser = (username) => {
+    const normalized = String(username || '').trim();
+    if (!normalized) return;
+    setReplyToUsername(normalized);
+    setSendValue((prev) => {
+      if (prev.trim().startsWith(`@${normalized}`)) return prev;
+      if (prev.trim().length === 0) return `@${normalized} `;
+      return `@${normalized} ${prev}`;
+    });
+  };
+
   const handleSlashCommand = async ({ command, argsRaw }) => {
-    const parsed = parseCommandArguments(command, argsRaw);
-    if (!parsed.ok) {
-      toast.error(parsed.error || UNKNOWN_COMMAND_HELP);
+    const result = runSlashCommand({
+      command,
+      argsRaw,
+      username: localNickname || profile?.username || profile?.realName || 'user'
+    });
+
+    if (!result.ok) {
+      toast.error(result.error || UNKNOWN_COMMAND_HELP);
       return;
     }
-
-    switch (command) {
-      case 'join': {
-        const targetRoom = findRoomByQuery(parsed.data.roomQuery);
-        if (!targetRoom) {
-          toast.error(`Room not found: ${parsed.data.roomQuery}`);
-          return;
-        }
-        const response = await chatAPI.joinRoom(String(targetRoom._id));
-        setRooms((prev) => prev.map((room) => {
-          if (String(room._id) !== String(targetRoom._id)) return room;
-          return {
-            ...room,
-            memberCount: response.data?.room?.memberCount ?? room.memberCount
-          };
-        }));
-        if (String(activeRoomId) === String(targetRoom._id) && response.data?.systemMessage) {
-          appendMessage(response.data.systemMessage);
-        }
-        setActiveRoomId(String(targetRoom._id));
-        toast.success(`Joined ${normalizeRoomLabel(targetRoom)}`);
-        break;
-      }
-      case 'leave': {
-        if (!activeRoomId) {
-          toast.error('No active room selected.');
-          return;
-        }
-        const leavingRoomId = String(activeRoomId);
-        const response = await chatAPI.leaveRoom(leavingRoomId);
-        if (response.data?.systemMessage) {
-          appendMessage(response.data.systemMessage);
-        }
-        setRooms((prev) => prev.map((room) => {
-          if (String(room._id) !== leavingRoomId) return room;
-          return {
-            ...room,
-            memberCount: response.data?.room?.memberCount ?? room.memberCount
-          };
-        }));
-
-        const fallbackRoom = rooms.find((room) => String(room._id) !== leavingRoomId) || null;
-        setActiveRoomId(fallbackRoom ? String(fallbackRoom._id) : '');
-        toast.success('Left room.');
-        break;
-      }
-      case 'nick': {
-        const previous = localNickname || profile?.username || profile?.realName || 'user';
-        const nickname = parsed.data.nickname;
-        setLocalNickname(nickname);
-        if (profile?._id) {
-          setNickByUserId((prev) => ({ ...prev, [String(profile._id)]: nickname }));
-        }
-
-        const rendered = `${previous} is now known as ${nickname}`;
-        await sendEncryptedPayload({
-          plaintext: rendered,
-          messageType: 'command',
-          commandData: {
-            command: 'nick',
-            nickname,
-            targetUserId: String(profile?._id || ''),
-            targetUsername: profile?.username || profile?.realName || 'user',
-            processedContent: rendered
-          }
-        });
-        toast.success(`Nickname set to ${nickname}`);
-        break;
-      }
-      case 'msg': {
-        const target = parsed.data.target;
-        const message = parsed.data.message;
-        const rendered = `→ ${target}: ${message}`;
-        await sendEncryptedPayload({
-          plaintext: rendered,
-          messageType: 'command',
-          commandData: {
-            command: 'msg',
-            targetUsername: target,
-            processedContent: rendered
-          }
-        });
-        break;
-      }
-      case 'list': {
-        if (!activeRoomId) {
-          toast.error('No active room selected.');
-          return;
-        }
-        const response = await chatAPI.getRoomUsers(activeRoomId);
-        const users = Array.isArray(response.data?.users) ? response.data.users : [];
-        const names = users
-          .map((user) => {
-            const userId = String(user._id);
-            return nickByUserId[userId] || user.username || user.realName || userId;
-          })
-          .filter(Boolean);
-        const rendered = names.length > 0
-          ? `Users (${names.length}): ${names.join(', ')}`
-          : 'No users currently in this room.';
-        appendLocalSystemMessage(rendered);
-        toast.success(`Listed ${names.length} user${names.length === 1 ? '' : 's'}.`);
-        break;
-      }
-      default:
-        toast.error(`Unsupported command. Available: ${SUPPORTED_COMMANDS.map((name) => `/${name}`).join(', ')}`);
-    }
+    await sendEncryptedPayload(result.payload);
   };
 
   const handleSend = async (event) => {
@@ -767,10 +692,11 @@ const Chat = () => {
       if (parsed) {
         await handleSlashCommand(parsed);
       } else {
-        await sendEncryptedPayload({ plaintext: trimmed, messageType: 'text' });
+        const withReply = replyToUsername ? `@${replyToUsername} ${trimmed}` : trimmed;
+        await sendEncryptedPayload({ plaintext: withReply, messageType: 'text' });
       }
       setSendValue('');
-      emitTypingStop({ roomId: activeRoomId, type: 'chat' });
+      setReplyToUsername('');
       if (isAtBottom) {
         requestAnimationFrame(() => scrollToBottom());
       }
@@ -795,6 +721,33 @@ const Chat = () => {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleInputChange = (value) => {
+    setSendValue(value);
+
+    if (!activeRoomId || !realtimeEnabled || !profile?._id) {
+      return;
+    }
+
+    if (!value.trim()) {
+      emitTypingStop({ scope: 'chat', targetId: activeRoomId });
+      if (localTypingTimeoutRef.current) {
+        window.clearTimeout(localTypingTimeoutRef.current);
+        localTypingTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    emitTypingStart({ scope: 'chat', targetId: activeRoomId });
+    if (localTypingTimeoutRef.current) {
+      window.clearTimeout(localTypingTimeoutRef.current);
+    }
+
+    localTypingTimeoutRef.current = window.setTimeout(() => {
+      emitTypingStop({ scope: 'chat', targetId: activeRoomId });
+      localTypingTimeoutRef.current = null;
+    }, TYPING_TIMEOUT_MS);
   };
 
   return (
@@ -875,21 +828,17 @@ const Chat = () => {
             </div>
           </div>
 
-          {roomUsers.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {roomUsers.slice(0, 6).map((roomUser) => {
-                const userId = String(roomUser?._id || '');
-                const presence = presenceByUserId[userId] || { status: 'offline', lastSeen: null };
-                const label = roomUser?.username || roomUser?.realName || userId;
-                return (
-                  <span key={userId} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-gray-100">
-                    <span>{label}</span>
-                    <PresenceIndicator status={presence.status} lastSeen={presence.lastSeen} />
-                  </span>
-                );
-              })}
-            </div>
-          ) : null}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => fetchMessagesPage(activeRoomId, nextCursor, false)}
+              disabled={!activeRoomId || !hasMore || messagesLoading || olderLoading}
+              className="px-3 py-2 border rounded text-sm disabled:opacity-50"
+            >
+              {olderLoading ? 'Loading...' : hasMore ? `Load Older (${MESSAGE_PAGE_SIZE.OLDER_LOAD})` : 'No More Messages'}
+            </button>
+            {decrypting ? <span className="text-xs text-gray-500 self-center">Decrypting visible messages...</span> : null}
+          </div>
 
           <div
             ref={messageViewportRef}
@@ -962,6 +911,24 @@ const Chat = () => {
                     </>
                   )}
                   <span className="ml-2 hidden group-hover:inline text-[10px] text-gray-400">{fullTs}</span>
+                  {messageType !== 'system' ? (
+                    <span className="ml-2 hidden group-hover:inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleReplyToUser(author)}
+                        className="text-[10px] text-blue-600 hover:underline"
+                      >
+                        Reply
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(bodyText)}
+                        className="text-[10px] text-blue-600 hover:underline"
+                      >
+                        Copy
+                      </button>
+                    </span>
+                  ) : null}
                 </div>
               );
             })}
@@ -979,39 +946,16 @@ const Chat = () => {
             </div>
           ) : null}
 
-          <TypingIndicator users={(typingUsersByRoom[String(activeRoomId)] || []).map((entry) => entry.username)} />
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => fetchMessagesPage(activeRoomId, nextCursor, false)}
-              disabled={!activeRoomId || !hasMore || messagesLoading || olderLoading}
-              className="px-3 py-2 border rounded text-sm disabled:opacity-50"
-            >
-              {olderLoading ? 'Loading...' : hasMore ? `Load Older (${MESSAGE_PAGE_SIZE.OLDER_LOAD})` : 'No More Messages'}
-            </button>
-            {decrypting ? <span className="text-xs text-gray-500 self-center">Decrypting visible messages...</span> : null}
-          </div>
-
           <form onSubmit={handleSend} className="flex gap-2">
             <input
               type="text"
               value={sendValue}
-              onChange={(event) => {
-                setSendValue(event.target.value);
-                if (!activeRoomId) return;
-                emitTypingStart({ roomId: activeRoomId, type: 'chat' });
-                if (typingStopTimerRef.current) {
-                  clearTimeout(typingStopTimerRef.current);
-                }
-                typingStopTimerRef.current = setTimeout(() => {
-                  emitTypingStop({ roomId: activeRoomId, type: 'chat' });
-                }, CHAT_TYPING_STOP_DELAY_MS);
-              }}
+              onChange={(event) => handleInputChange(event.target.value)}
+              onBlur={() => emitTypingStop({ scope: 'chat', targetId: activeRoomId })}
               disabled={!isUnlocked || !activeRoomId || sending}
               className="flex-1 border rounded p-2"
               maxLength={2000}
-              placeholder={isUnlocked ? 'Type encrypted message or /join /leave /nick /msg /list' : 'Unlock encryption to send'}
+              placeholder={isUnlocked ? `Type encrypted message or ${SUPPORTED_COMMANDS.map((name) => `/${name}`).join(' ')}` : 'Unlock encryption to send'}
             />
             <button
               type="submit"
@@ -1035,8 +979,21 @@ const Chat = () => {
             </div>
           )}
 
+          {replyToUsername ? (
+            <div className="text-xs text-gray-600 -mt-1">
+              Replying to <span className="font-semibold">@{replyToUsername}</span>
+              <button
+                type="button"
+                onClick={() => setReplyToUsername('')}
+                className="ml-2 text-blue-600 hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+          ) : null}
+
           <p className="text-xs text-gray-500">
-            Slash commands: /join [room], /leave, /nick [name], /msg [user] [message], /list
+            Slash commands: {SUPPORTED_COMMANDS.map((name) => `/${name}`).join(', ')}
           </p>
         </section>
       </div>

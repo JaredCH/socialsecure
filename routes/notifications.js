@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Session = require('../models/Session');
 const Notification = require('../models/Notification');
 const { getUserNotificationPreferences, toPayload } = require('../services/notifications');
+const { normalizeRealtimePreferences } = require('../utils/realtimePreferences');
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
@@ -42,7 +43,7 @@ const getUserFromBearerToken = async (req, select = '') => {
 };
 
 const authenticateToken = async (req, res, next) => {
-  const auth = await getUserFromBearerToken(req, 'notificationPreferences unreadNotificationCount');
+  const auth = await getUserFromBearerToken(req, 'notificationPreferences realtimePreferences unreadNotificationCount');
   if (auth.error) {
     return res.status(auth.status).json({ error: auth.error });
   }
@@ -179,7 +180,8 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 
 router.get('/preferences', authenticateToken, async (req, res) => {
   return res.json({
-    preferences: getUserNotificationPreferences(req.user)
+    preferences: getUserNotificationPreferences(req.user),
+    realtimePreferences: normalizeRealtimePreferences(req.user.realtimePreferences)
   });
 });
 
@@ -237,12 +239,23 @@ router.put('/preferences', [
       }
     };
 
+    const updatedRealtimePreferences = normalizeRealtimePreferences(req.body?.realtime || req.user.realtimePreferences);
+
     await User.updateOne(
       { _id: req.user._id },
-      { $set: { notificationPreferences: updatedPreferences } }
+      {
+        $set: {
+          notificationPreferences: updatedPreferences,
+          realtimePreferences: updatedRealtimePreferences
+        }
+      }
     );
 
-    return res.json({ success: true, preferences: updatedPreferences });
+    return res.json({
+      success: true,
+      preferences: updatedPreferences,
+      realtimePreferences: updatedRealtimePreferences
+    });
   } catch (error) {
     console.error('Update notification preferences error:', error);
     return res.status(500).json({ error: 'Failed to update notification preferences' });

@@ -39,6 +39,39 @@ function Home() {
     }
   ];
 
+  const plannedFeatures = [
+    {
+      title: 'Real-time social updates',
+      description:
+        'Faster feed refresh and live interactions to keep community activity current without manual reloads.'
+    },
+    {
+      title: 'Notification center',
+      description:
+        'A unified panel for important account, community, and message updates with clear prioritization.'
+    },
+    {
+      title: 'Granular privacy controls',
+      description:
+        'More detailed visibility settings to fine-tune who can discover, contact, and engage with your profile.'
+    },
+    {
+      title: 'User moderation tools',
+      description:
+        'Stronger self-service moderation options to help users manage interactions and community safety.'
+    },
+    {
+      title: 'Location chatroom improvements',
+      description:
+        'Improved location room usability and reliability for local, context-aware conversation spaces.'
+    },
+    {
+      title: 'Security center and key backup',
+      description:
+        'Centralized security controls and guided key backup support for stronger account resilience.'
+    }
+  ];
+
   return (
     <div className="space-y-10 pb-10">
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 text-white shadow-xl">
@@ -81,6 +114,7 @@ function Home() {
               <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-blue-100">
                 <span>✓ End-to-end encrypted chats</span>
                 <span>✓ Security-forward defaults</span>
+                <span>✓ Upcoming features roadmap</span>
                 <span>✓ Built for community trust</span>
               </div>
             </div>
@@ -120,6 +154,32 @@ function Home() {
             <article key={feature.title} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
               <h3 className="text-lg font-semibold text-gray-900">{feature.title}</h3>
               <p className="mt-2 text-sm text-gray-600">{feature.description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-5" aria-labelledby="planned-features-heading">
+        <div className="text-center">
+          <h2 id="planned-features-heading" className="text-2xl font-bold text-slate-900 sm:text-3xl">
+            Planned features
+          </h2>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-gray-600 sm:text-base">
+            Our roadmap is focused on expanding control, safety, and real-time engagement. The items below are marked
+            as Coming Soon.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {plannedFeatures.map((feature) => (
+            <article key={feature.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold text-slate-900">{feature.title}</h3>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  Coming Soon
+                </span>
+              </div>
+              <p className="mt-3 text-sm text-slate-600">{feature.description}</p>
             </article>
           ))}
         </div>

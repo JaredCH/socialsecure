@@ -406,14 +406,40 @@ referralInvitationSchema.statics.getReferralStats = async function(userId) {
 
 // Static method to validate referral (anti-abuse)
 referralInvitationSchema.statics.validateReferral = async function(inviterId, email, phone, ip, deviceFingerprint) {
-  const errors = [];
+  const errors = new Set();
+  const addError = (message) => {
+    errors.add(message);
+  };
+  const normalizedEmail = email ? email.toLowerCase().trim() : null;
+  const normalizedPhone = phone ? phone.trim() : null;
+  const normalizedInviterId = inviterId ? inviterId.toString() : '';
   
   // Check for self-referral
   const User = mongoose.model('User');
-  if (email) {
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser && existingUser._id.toString() === inviterId.toString()) {
-      errors.push('You cannot refer yourself');
+  const inviter = await User.findById(inviterId).select('email phone');
+
+  if (normalizedEmail) {
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser && existingUser._id.toString() === normalizedInviterId) {
+      addError('You cannot refer yourself');
+    }
+  }
+
+  if (normalizedPhone && inviter && inviter.phone && inviter.phone.trim() === normalizedPhone) {
+    addError('You cannot refer yourself');
+  }
+
+  // Check if invitee already has a registered account
+  if (normalizedEmail || normalizedPhone) {
+    const existingRegisteredUser = await User.findOne({
+      $or: [
+        ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        ...(normalizedPhone ? [{ phone: normalizedPhone }] : [])
+      ]
+    }).select('_id');
+
+    if (existingRegisteredUser) {
+      addError('This user is already registered');
     }
   }
   
@@ -422,13 +448,13 @@ referralInvitationSchema.statics.validateReferral = async function(inviterId, em
     inviterId: inviterId,
     status: { $in: ['sent', 'opened', 'registered'] },
     $or: [
-      ...(email ? [{ inviteeEmail: email.toLowerCase() }] : []),
-      ...(phone ? [{ inviteePhone: phone }] : [])
+      ...(normalizedEmail ? [{ inviteeEmail: normalizedEmail }] : []),
+      ...(normalizedPhone ? [{ inviteePhone: normalizedPhone }] : [])
     ]
   });
   
   if (existingInvite) {
-    errors.push('A pending invitation already exists for this user');
+    addError('A pending invitation already exists for this user');
   }
   
   // Check rate limiting (max 10 invitations per day)
@@ -441,12 +467,37 @@ referralInvitationSchema.statics.validateReferral = async function(inviterId, em
   });
   
   if (todayCount >= 10) {
-    errors.push('You have reached the daily invitation limit (10)');
+    addError('You have reached the daily invitation limit (10)');
+  }
+
+  // Additional burst-rate abuse checks
+  if (ip) {
+    const oneHourAgo = new Date(Date.now() - (60 * 60 * 1000));
+    const ipHourlyCount = await this.countDocuments({
+      inviterIp: ip,
+      createdAt: { $gte: oneHourAgo }
+    });
+
+    if (ipHourlyCount >= 5) {
+      addError('Too many referral invites from this IP address. Try again later.');
+    }
+  }
+
+  if (deviceFingerprint) {
+    const oneDayAgo = new Date(Date.now() - (24 * 60 * 60 * 1000));
+    const deviceDailyCount = await this.countDocuments({
+      inviterDeviceFingerprint: deviceFingerprint,
+      createdAt: { $gte: oneDayAgo }
+    });
+
+    if (deviceDailyCount >= 15) {
+      addError('Referral invites temporarily blocked for this device');
+    }
   }
   
   return {
-    valid: errors.length === 0,
-    errors
+    valid: errors.size === 0,
+    errors: Array.from(errors)
   };
 };
 

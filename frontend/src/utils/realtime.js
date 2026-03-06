@@ -1,71 +1,124 @@
 import { io } from 'socket.io-client';
 
+const LAST_EVENT_ID_STORAGE_KEY = 'socialsecure:lastRealtimeEventId';
+
 let socket = null;
+let activeAuthKey = null;
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
+const getSocketOrigin = () => process.env.REACT_APP_SOCKET_URL || window.location.origin;
 
-export const initRealtime = ({ token, userId, lastEventTimestamp } = {}) => {
-  if (!token || !userId) return null;
-  if (socket?.connected && socket.auth?.userId === String(userId)) {
+const getLastEventId = () => {
+  try {
+    return localStorage.getItem(LAST_EVENT_ID_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+const setLastEventId = (eventId) => {
+  if (!eventId) return;
+  try {
+    localStorage.setItem(LAST_EVENT_ID_STORAGE_KEY, eventId);
+  } catch {
+    // best effort only
+  }
+};
+
+const trackEventMeta = (payload) => {
+  const eventId = payload?._meta?.eventId;
+  if (eventId) {
+    setLastEventId(eventId);
+  }
+};
+
+export const getRealtimeSocket = ({ token, userId }) => {
+  const authKey = `${String(userId || '')}:${String(token || '')}`;
+  if (socket && activeAuthKey === authKey) {
     return socket;
   }
 
   if (socket) {
     socket.disconnect();
+    socket = null;
+    activeAuthKey = null;
   }
 
-  socket = io(SOCKET_URL, {
+  socket = io(getSocketOrigin(), {
     auth: {
       token,
-      userId: String(userId),
-      lastEventTimestamp: Number(lastEventTimestamp || 0)
+      userId: String(userId || ''),
+      lastEventId: getLastEventId()
     },
     reconnection: true,
-    reconnectionAttempts: 8,
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000
+  });
+
+  activeAuthKey = authKey;
+
+  socket.on('connect', () => {
+    if (userId) {
+      socket.emit('join-user', String(userId));
+    }
+
+    const lastEventId = getLastEventId();
+    if (lastEventId) {
+      socket.emit('replay-missed-events', { lastEventId });
+    }
   });
 
   return socket;
 };
 
-export const getRealtimeSocket = () => socket;
-
-export const disconnectRealtime = () => {
-  if (!socket) return;
-  socket.disconnect();
-  socket = null;
-};
-
-export const subscribeFeed = (userIds = []) => {
-  if (!socket || !Array.isArray(userIds)) return;
-  socket.emit('subscribe_feed', userIds);
-};
-
-export const subscribePost = (postId) => {
-  if (!socket || !postId) return;
-  socket.emit('subscribe_post', postId);
-};
-
-export const joinChatRoom = (roomId) => {
-  if (!socket || !roomId) return;
-  socket.emit('join-room', roomId);
-};
-
-export const emitTypingStart = ({ roomId, postId, type }) => {
-  if (!socket) return;
-  socket.emit('typing_start', { roomId, postId, type });
-};
-
-export const emitTypingStop = ({ roomId, postId, type }) => {
-  if (!socket) return;
-  socket.emit('typing_stop', { roomId, postId, type });
-};
-
-export const onRealtimeEvent = (eventName, callback) => {
-  if (!socket || !eventName || typeof callback !== 'function') {
+const bindListener = (eventName, callback) => {
+  if (!socket || typeof callback !== 'function') {
     return () => {};
   }
-  socket.on(eventName, callback);
-  return () => socket?.off(eventName, callback);
+
+  const handler = (payload) => {
+    trackEventMeta(payload);
+    callback(payload);
+  };
+
+  socket.on(eventName, handler);
+  return () => {
+    socket?.off(eventName, handler);
+  };
 };
+
+export const subscribeToPost = (postId) => {
+  if (!socket || !postId) return;
+  socket.emit('subscribe-post', String(postId));
+};
+
+export const unsubscribeFromPost = (postId) => {
+  if (!socket || !postId) return;
+  socket.emit('unsubscribe-post', String(postId));
+};
+
+export const joinRealtimeRoom = (roomId) => {
+  if (!socket || !roomId) return;
+  socket.emit('join-room', String(roomId));
+};
+
+export const leaveRealtimeRoom = (roomId) => {
+  if (!socket || !roomId) return;
+  socket.emit('leave-room', String(roomId));
+};
+
+export const emitTypingStart = ({ scope, targetId }) => {
+  if (!socket || !scope || !targetId) return;
+  socket.emit('typing_start', { scope, targetId: String(targetId) });
+};
+
+export const emitTypingStop = ({ scope, targetId }) => {
+  if (!socket || !scope || !targetId) return;
+  socket.emit('typing_stop', { scope, targetId: String(targetId) });
+};
+
+export const onFeedPost = (callback) => bindListener('feed:new-post', callback);
+export const onFeedInteraction = (callback) => bindListener('feed:interaction', callback);
+export const onChatMessage = (callback) => bindListener('chat:message', callback);
+export const onTyping = (callback) => bindListener('typing', callback);
+export const onFriendPresence = (callback) => bindListener('friend:presence', callback);
