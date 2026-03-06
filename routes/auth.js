@@ -1175,10 +1175,11 @@ router.put('/profile', [
       state: normalizeLocationValue(state),
       country: normalizeLocationValue(country)
     };
-    const hasLocationUpdates = LOCATION_CHANGE_FIELDS.some((field) =>
-      Object.prototype.hasOwnProperty.call(req.body, field) && requestedLocation[field]
+    const hasLocationFieldsInRequest = LOCATION_CHANGE_FIELDS.some((field) =>
+      Object.prototype.hasOwnProperty.call(req.body, field)
     );
-    if (hasLocationUpdates) {
+    const hasNonEmptyLocationValues = LOCATION_CHANGE_FIELDS.some((field) => requestedLocation[field]);
+    if (hasLocationFieldsInRequest && hasNonEmptyLocationValues) {
       const currentLocation = {
         city: normalizeLocationValue(user.city),
         state: normalizeLocationValue(user.state),
@@ -1193,7 +1194,7 @@ router.put('/profile', [
 
       if (locationChanged) {
         const lastLocationUpdateTime = user.locationLastUpdatedAt ? new Date(user.locationLastUpdatedAt).getTime() : null;
-        if (lastLocationUpdateTime && !Number.isNaN(lastLocationUpdateTime) && now - lastLocationUpdateTime < LOCATION_CHANGE_COOLDOWN_MS) {
+        if (Number.isFinite(lastLocationUpdateTime) && now - lastLocationUpdateTime < LOCATION_CHANGE_COOLDOWN_MS) {
           return res.status(429).json({
             error: 'Location can only be changed once every 7 days'
           });
