@@ -13,6 +13,8 @@ const geocoder = NodeGeocoder({
   formatter: null
 });
 
+const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -307,20 +309,21 @@ router.post('/distance', [
 // Get user's primary city and nearby cities based on zip code
 router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
   try {
-    const { zipCode } = req.params;
+    const normalizedZipCode = normalizeZipCode(req.params.zipCode);
     
-    if (!zipCode || zipCode.length < 5) {
+    if (!normalizedZipCode || normalizedZipCode.length < 5) {
       return res.status(400).json({ error: 'Valid zip code required' });
     }
 
     // Try to resolve zip code to location
     let locationData = null;
     try {
-      const results = await geocoder.geocode(`${zipCode}, United States`);
+      const results = await geocoder.geocode(`${normalizedZipCode}, United States`);
       if (results && results.length > 0) {
         const result = results[0];
         locationData = {
-          zipCode: zipCode,
+          zipCode: normalizedZipCode,
+          county: result.county || null,
           city: result.city,
           state: result.state,
           country: result.country,
@@ -329,7 +332,7 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
         };
       }
     } catch (geoError) {
-      console.warn('Geocoding failed for zip:', zipCode, geoError.message);
+      console.warn('Geocoding failed for zip:', normalizedZipCode, geoError.message);
     }
 
     if (!locationData) {
@@ -338,8 +341,11 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
 
     // Find or create primary city room
     let primaryRoom = await ChatRoom.findOne({
-      city: locationData.city,
-      state: locationData.state,
+      type: 'city',
+      $or: [
+        { zipCode: locationData.zipCode },
+        { city: locationData.city, state: locationData.state }
+      ],
       isActive: true
     });
 
@@ -348,6 +354,7 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
       isActive: true,
       $or: [
         { city: locationData.city, state: locationData.state },
+        { zipCode: locationData.zipCode },
         {
           location: {
             $near: {
@@ -386,6 +393,7 @@ router.get('/zip/:zipCode', authenticateToken, async (req, res) => {
     // Update user's location
     await User.findByIdAndUpdate(req.user.userId, {
       zipCode: locationData.zipCode,
+      county: locationData.county,
       city: locationData.city,
       state: locationData.state,
       country: locationData.country,

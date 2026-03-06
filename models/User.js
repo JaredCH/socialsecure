@@ -96,6 +96,11 @@ const userSchema = new mongoose.Schema({
   city: String,
   state: String,
   country: String,
+  county: {
+    type: String,
+    trim: true,
+    default: null
+  },
   zipCode: {
     type: String,
     trim: true,
@@ -304,6 +309,7 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ location: '2dsphere' });
 userSchema.index({ registrationStatus: 1, createdAt: -1 });
 userSchema.index({ city: 1, state: 1, country: 1 });
+userSchema.index({ zipCode: 1 });
 userSchema.index({ friendCount: -1, createdAt: -1 });
 
 // Compound index to support discovery queries: active users ordered by recency
@@ -359,6 +365,8 @@ userSchema.methods.toPublicProfile = function() {
     city: this.city,
     state: this.state,
     country: this.country,
+    county: this.county,
+    zipCode: this.zipCode,
     registrationStatus: this.registrationStatus,
     hasPGP: !!this.pgpPublicKey,
     hasEncryptionPassword,
