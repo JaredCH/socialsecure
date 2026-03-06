@@ -429,8 +429,8 @@ function App() {
                     ? <Navigate to="/onboarding" replace />
                     : encryptionPasswordRequired
                       ? <Navigate to="/onboarding" replace />
-                      : <Home />
-                  : <Home />
+                      : <Home isAuthenticated={isAuthenticated} />
+                  : <Home isAuthenticated={isAuthenticated} />
               }
             />
             <Route path="/login" element={<Login onSuccess={handleAuthSuccess} />} />

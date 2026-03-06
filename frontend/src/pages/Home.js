@@ -1,22 +1,27 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-function Home() {
+function Home({ isAuthenticated = false }) {
   const featureHighlights = [
     {
-      title: 'End-to-end encrypted messaging',
+      title: 'Interactive maps with population density heatmaps',
       description:
-        'Private chats are protected with modern E2EE flows, keeping message content readable only by intended participants.'
+        'Explore local activity through map views and density overlays that help communities understand where conversations are happening.'
     },
     {
-      title: 'Community-first social feed',
+      title: 'Geo chat rooms plus encrypted direct messaging',
       description:
-        'Share updates, media, and discussions in a clean social experience designed for genuine connection, not noise.'
+        'Join location-based chat rooms, then move to private end-to-end encrypted chats when conversations need stronger privacy.'
     },
     {
-      title: 'User-controlled security settings',
+      title: 'Calendars, circles, and watch parties',
       description:
-        'Manage encryption credentials and account safeguards from your settings so privacy stays in your hands.'
+        'Coordinate events with shared calendars, organize trusted circles, and host watch parties that keep your group connected.'
+    },
+    {
+      title: 'Custom profiles with resume and blog support',
+      description:
+        'Build a personalized profile page, publish blog-style updates, and share resume-ready experience highlights in one place.'
     }
   ];
 
@@ -39,36 +44,36 @@ function Home() {
     }
   ];
 
-  const plannedFeatures = [
+  const platformCapabilities = [
     {
-      title: 'Real-time social updates',
+      title: 'Maps and heatmaps',
       description:
-        'Faster feed refresh and live interactions to keep community activity current without manual reloads.'
+        'Switch between map views and density overlays to discover what is trending around your community.'
     },
     {
-      title: 'Notification center',
+      title: 'Chat rooms and DMs',
       description:
-        'A unified panel for important account, community, and message updates with clear prioritization.'
+        'Keep up with regional chat rooms, circles, and private conversations secured with modern encryption.'
     },
     {
-      title: 'Granular privacy controls',
+      title: 'Calendar planning',
       description:
-        'More detailed visibility settings to fine-tune who can discover, contact, and engage with your profile.'
+        'Plan events, share schedules, and keep your community aligned with integrated calendar tools.'
     },
     {
-      title: 'User moderation tools',
+      title: 'Circles and watch parties',
       description:
-        'Stronger self-service moderation options to help users manage interactions and community safety.'
+        'Create smaller trusted groups and watch together in real time for a more social, less noisy experience.'
     },
     {
-      title: 'Location chatroom improvements',
+      title: 'Custom profile pages',
       description:
-        'Improved location room usability and reliability for local, context-aware conversation spaces.'
+        'Showcase who you are with profile customization, featured interests, and community-facing identity controls.'
     },
     {
-      title: 'Security center and key backup',
+      title: 'Resume and blog support',
       description:
-        'Centralized security controls and guided key backup support for stronger account resilience.'
+        'Share career experience with resume tools and publish longer-form blog content without leaving SocialSecure.'
     }
   ];
 
@@ -87,22 +92,41 @@ function Home() {
                 Build real connections on a social network designed around trust.
               </h1>
               <p className="mt-4 max-w-2xl text-base text-blue-100 sm:text-lg">
-                SocialSecure combines modern social features with clear security guarantees, including end-to-end encrypted messaging and user-controlled protection settings.
+                SocialSecure combines maps, heatmaps, chat rooms, circles, watch parties, calendars, custom profiles, and encrypted messaging in one trusted network.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
-                <Link
-                  to="/register"
-                  className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  Sign Up Free
-                </Link>
-                <Link
-                  to="/login"
-                  className="rounded-lg border border-white/40 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  Login
-                </Link>
+                {isAuthenticated ? (
+                  <>
+                    <Link
+                      to="/social"
+                      className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    >
+                      Open Social Feed
+                    </Link>
+                    <Link
+                      to="/maps"
+                      className="rounded-lg border border-white/40 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    >
+                      Explore Maps
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      to="/register"
+                      className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    >
+                      Sign Up Free
+                    </Link>
+                    <Link
+                      to="/login"
+                      className="rounded-lg border border-white/40 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    >
+                      Login
+                    </Link>
+                  </>
+                )}
                 <a
                   href="#why-socialsecure"
                   className="rounded-lg border border-transparent px-5 py-3 text-sm font-semibold text-blue-100 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
@@ -113,9 +137,9 @@ function Home() {
 
               <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-blue-100">
                 <span>✓ End-to-end encrypted chats</span>
-                <span>✓ Security-forward defaults</span>
-                <span>✓ Upcoming features roadmap</span>
-                <span>✓ Built for community trust</span>
+                <span>✓ Location maps + heatmaps</span>
+                <span>✓ Circles, calendars, and watch parties</span>
+                <span>✓ Custom profiles, resumes, and blogs</span>
               </div>
             </div>
 
@@ -162,23 +186,18 @@ function Home() {
       <section className="space-y-5" aria-labelledby="planned-features-heading">
         <div className="text-center">
           <h2 id="planned-features-heading" className="text-2xl font-bold text-slate-900 sm:text-3xl">
-            Planned features
+            Everything you can do on SocialSecure
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-gray-600 sm:text-base">
-            Our roadmap is focused on expanding control, safety, and real-time engagement. The items below are marked
-            as Coming Soon.
+            From discovery to private messaging and professional presence, SocialSecure keeps community and privacy in
+            the same experience.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {plannedFeatures.map((feature) => (
+          {platformCapabilities.map((feature) => (
             <article key={feature.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-semibold text-slate-900">{feature.title}</h3>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">
-                  Coming Soon
-                </span>
-              </div>
+              <h3 className="text-lg font-semibold text-slate-900">{feature.title}</h3>
               <p className="mt-3 text-sm text-slate-600">{feature.description}</p>
             </article>
           ))}
@@ -220,21 +239,41 @@ function Home() {
       <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8">
         <h2 className="text-2xl font-bold text-slate-900">Ready for a more secure social experience?</h2>
         <p className="mx-auto mt-3 max-w-2xl text-sm text-gray-600 sm:text-base">
-          Join SocialSecure to connect with your community while keeping privacy and end-to-end encryption front and center.
+          Connect with your community across maps, circles, chat, calendars, watch parties, and profile tools while
+          keeping privacy and end-to-end encryption front and center.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Link
-            to="/register"
-            className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          >
-            Register
-          </Link>
-          <Link
-            to="/login"
-            className="rounded-lg border border-gray-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400"
-          >
-            Login
-          </Link>
+          {isAuthenticated ? (
+            <>
+              <Link
+                to="/social"
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                Go to Social
+              </Link>
+              <Link
+                to="/calendar"
+                className="rounded-lg border border-gray-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400"
+              >
+                Open Calendar
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/register"
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                Register
+              </Link>
+              <Link
+                to="/login"
+                className="rounded-lg border border-gray-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400"
+              >
+                Login
+              </Link>
+            </>
+          )}
         </div>
       </section>
     </div>
