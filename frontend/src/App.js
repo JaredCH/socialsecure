@@ -377,11 +377,7 @@ function App() {
         <nav className="bg-white shadow-md p-4">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
-            <div
-              className="flex flex-nowrap items-center gap-3 overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-              tabIndex={0}
-              aria-label="Primary navigation links"
-            >
+            <div className="flex flex-nowrap items-center gap-3 overflow-x-auto">
               {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Home</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/social" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Social</Link>}
               {isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired && <Link to="/discover" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Discover</Link>}
