@@ -678,26 +678,32 @@ function News() {
             {/* Location Preferences */}
             <div className="py-3">
               <h3 className="font-medium mb-3">Location Preferences</h3>
+              <p className="text-sm text-gray-500 mb-3">
+                Add locations you want news for. Your primary location drives local/regional news; additional locations expand your coverage.
+              </p>
               <div className="space-y-2 mb-3">
-                {preferences?.locations?.map((loc) => (
-                  <div 
-                    key={loc._id}
-                    className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
-                  >
-                    <span className="text-gray-700">
-                      {loc.city || loc.zipCode || loc.county || loc.state || loc.country}
-                      {loc.isPrimary && <span className="ml-2 text-xs text-blue-600">Primary</span>}
-                    </span>
-                    <button
-                      onClick={() => handleRemoveLocation(loc._id)}
-                      className="text-gray-400 hover:text-red-500"
+                {preferences?.locations?.map((loc) => {
+                  const parts = [loc.city, loc.zipCode, loc.county, loc.state, loc.country].filter(Boolean);
+                  return (
+                    <div 
+                      key={loc._id}
+                      className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
                     >
-                      ×
-                    </button>
-                  </div>
-                ))}
+                      <span className="text-gray-700">
+                        {parts.join(', ') || 'Unknown location'}
+                        {loc.isPrimary && <span className="ml-2 text-xs text-blue-600 font-medium">Primary</span>}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveLocation(loc._id)}
+                        className="text-gray-400 hover:text-red-500"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
                 {(!preferences?.locations || preferences.locations.length === 0) && (
-                  <p className="text-sm text-gray-500">No locations added yet</p>
+                  <p className="text-sm text-gray-500">No locations added yet. Add your zip code or city to get local news.</p>
                 )}
               </div>
               

@@ -66,6 +66,36 @@ const TOPIC_FILTER_ALIASES = {
   ai: ['ai', 'artificial intelligence', 'machine learning']
 };
 
+// ============================================
+// LOCATION DICTIONARIES
+// ============================================
+
+const US_STATE_NAMES = new Map([
+  ['alabama','al'],['alaska','ak'],['arizona','az'],['arkansas','ar'],['california','ca'],
+  ['colorado','co'],['connecticut','ct'],['delaware','de'],['florida','fl'],['georgia','ga'],
+  ['hawaii','hi'],['idaho','id'],['illinois','il'],['indiana','in'],['iowa','ia'],
+  ['kansas','ks'],['kentucky','ky'],['louisiana','la'],['maine','me'],['maryland','md'],
+  ['massachusetts','ma'],['michigan','mi'],['minnesota','mn'],['mississippi','ms'],['missouri','mo'],
+  ['montana','mt'],['nebraska','ne'],['nevada','nv'],['new hampshire','nh'],['new jersey','nj'],
+  ['new mexico','nm'],['new york','ny'],['north carolina','nc'],['north dakota','nd'],['ohio','oh'],
+  ['oklahoma','ok'],['oregon','or'],['pennsylvania','pa'],['rhode island','ri'],['south carolina','sc'],
+  ['south dakota','sd'],['tennessee','tn'],['texas','tx'],['utah','ut'],['vermont','vt'],
+  ['virginia','va'],['washington','wa'],['west virginia','wv'],['wisconsin','wi'],['wyoming','wy'],
+  ['district of columbia','dc']
+]);
+
+const US_STATE_ABBREVS = new Set([...US_STATE_NAMES.values()]);
+
+const COUNTRY_NAMES = new Set([
+  'united states','usa','us','canada','united kingdom','uk','australia','germany','france',
+  'japan','china','india','brazil','mexico','south korea','russia','italy','spain',
+  'netherlands','sweden','norway','switzerland','israel','ireland','new zealand','south africa',
+  'argentina','colombia','saudi arabia','turkey','poland','belgium','austria','portugal',
+  'denmark','finland','czech republic','greece','romania','hungary','egypt','nigeria',
+  'kenya','philippines','indonesia','thailand','vietnam','malaysia','singapore','taiwan',
+  'pakistan','bangladesh','ukraine','chile','peru','venezuela'
+]);
+
 const SUPPORTED_RSS_PROVIDERS = [
   { id: 'google-news', label: 'Google News', hostPatterns: ['news.google.com'] },
   { id: 'reuters', label: 'Reuters', hostPatterns: ['reuters.com'] },
@@ -130,10 +160,12 @@ const inferLocationTokensFromText = (input = '') => {
   const lower = text.toLowerCase();
   const tokens = [];
 
+  // Match US and Canadian zip codes
   const usZipMatches = text.match(/\b\d{5}(?:-\d{4})?\b/g) || [];
   const canadaZipMatches = text.match(/\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/gi) || [];
   tokens.push(...usZipMatches, ...canadaZipMatches.map((zip) => zip.replace(/\s+/g, '').toUpperCase()));
 
+  // Match "in/at/from/near <Place>" phrases
   const locationPhrases = lower.match(/\b(?:in|at|from|near)\s+([a-z][a-z\s\-]{1,40})\b/g) || [];
   for (const phrase of locationPhrases) {
     const normalized = phrase
@@ -145,9 +177,38 @@ const inferLocationTokensFromText = (input = '') => {
     }
   }
 
-  if (lower.includes(' united states') || lower.includes(' usa') || lower.includes(' us ')) tokens.push('us', 'usa', 'united states');
-  if (lower.includes(' canada')) tokens.push('canada');
-  if (lower.includes(' united kingdom') || lower.includes(' uk ')) tokens.push('uk', 'united kingdom');
+  // Match US state full names
+  for (const [stateName, abbrev] of US_STATE_NAMES) {
+    if (lower.includes(stateName)) {
+      tokens.push(stateName, abbrev);
+    }
+  }
+
+  // Match "City, ST" pattern (e.g. "Austin, TX" or "San Marcos, TX")
+  const cityStateMatches = text.match(/\b([A-Z][a-zA-Z\s]{1,25}),\s*([A-Z]{2})\b/g) || [];
+  for (const match of cityStateMatches) {
+    const parts = match.split(',').map(s => s.trim());
+    if (parts.length === 2) {
+      const city = parts[0].toLowerCase();
+      const stateAbbrev = parts[1].toLowerCase();
+      if (US_STATE_ABBREVS.has(stateAbbrev)) {
+        tokens.push(city, stateAbbrev);
+        // Also add the full state name
+        for (const [name, abbr] of US_STATE_NAMES) {
+          if (abbr === stateAbbrev) { tokens.push(name); break; }
+        }
+      }
+    }
+  }
+
+  // Match country names mentioned in text
+  for (const country of COUNTRY_NAMES) {
+    // Use word-boundary-style check to avoid partial matches
+    const pattern = new RegExp(`\\b${country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+    if (pattern.test(lower)) {
+      tokens.push(country);
+    }
+  }
 
   return toUniqueNonEmptyLocationTokens(tokens);
 };
@@ -170,6 +231,35 @@ const getItemDescription = (item = {}) => {
     || item.content
     || item.summary
     || '';
+};
+
+/**
+ * Infer localityLevel from the detected location tokens of an article.
+ * Returns 'city', 'county', 'state', 'country', or 'global'.
+ */
+const inferLocalityLevel = (locationTokens = []) => {
+  if (!locationTokens.length) return 'global';
+
+  const tokenSet = new Set(locationTokens.map(normalizeLocationToken));
+
+  // Check for zip codes (US 5-digit or CA postal) → city-level
+  for (const token of tokenSet) {
+    if (/^\d{5}(-\d{4})?$/.test(token)) return 'city';
+    if (/^[a-z]\d[a-z]\d[a-z]\d$/i.test(token)) return 'city';
+  }
+
+  // Check for US state names or abbreviations → state-level
+  for (const token of tokenSet) {
+    if (US_STATE_NAMES.has(token) || US_STATE_ABBREVS.has(token)) return 'state';
+  }
+
+  // Check for country names → country-level
+  for (const token of tokenSet) {
+    if (COUNTRY_NAMES.has(token)) return 'country';
+  }
+
+  // If we have tokens but couldn't classify, assume city-level (local place mention)
+  return tokenSet.size > 0 ? 'city' : 'global';
 };
 
 const getItemPublishedAt = (item = {}) => {
@@ -406,12 +496,16 @@ const articleMentionsLocationToken = (articleLocationToken, userToken) => {
 };
 
 const articleMatchesLocation = (article, locationContext) => {
-  const articleLocations = Array.isArray(article.locations) ? article.locations.map(normalizeLocationToken) : [];
+  // Combine stored locations with runtime inference from title/description
+  const storedLocations = Array.isArray(article.locations) ? article.locations : [];
+  const textContent = `${article.title || ''} ${article.description || ''}`;
+  const inferredTokens = inferLocationTokensFromText(textContent);
+  const allLocationTokens = toUniqueNonEmptyLocationTokens([...storedLocations, ...inferredTokens]);
 
   const matchesAnyLocationValue = (values = []) => values
     .map(normalizeLocationToken)
     .filter(Boolean)
-    .some((value) => articleLocations.some((token) => articleMentionsLocationToken(token, value)));
+    .some((value) => allLocationTokens.some((token) => articleMentionsLocationToken(token, value)));
 
   const hasZipCode = matchesAnyLocationValue(locationContext?.zipCodeValues || [locationContext?.zipCode]);
   const hasCity = matchesAnyLocationValue(locationContext?.cityValues || [locationContext?.city]);
@@ -469,8 +563,8 @@ const scoreLocalityLevel = (scope, localityLevel) => {
 
 const articlePassesScope = (scope, scopeTier) => {
   if (scope === 'local') return scopeTier <= 2;
-  if (scope === 'regional') return scopeTier === 0;
-  if (scope === 'national') return scopeTier === 0;
+  if (scope === 'regional') return scopeTier <= 1;
+  if (scope === 'national') return scopeTier <= 1;
   return true;
 };
 
@@ -510,22 +604,9 @@ async function fetchRssSource(source) {
     const feed = await parser.parseURL(source.url);
     
     return feed.items.map(item => {
-      // Determine locality level from content
-      let localityLevel = 'global';
-      const content = `${item.title || ''} ${getItemDescription(item)}`.toLowerCase();
-      
-      if (content.includes('local') || content.includes('city') || 
-          item.categories?.some(c => ['local', 'city'].includes(c.toLowerCase()))) {
-        localityLevel = 'city';
-      } else if (content.includes('county')) {
-        localityLevel = 'county';
-      } else if (content.includes('state')) {
-        localityLevel = 'state';
-      } else if (content.includes('country') || content.includes('national')) {
-        localityLevel = 'country';
-      }
-
       const providerId = detectProviderIdFromUrl(source.url);
+      const locationTokens = buildArticleLocationTokens({ source, item });
+      const localityLevel = inferLocalityLevel(locationTokens);
       
       return {
         title: item.title || 'Untitled',
@@ -536,7 +617,7 @@ async function fetchRssSource(source) {
         imageUrl: getItemImageUrl(item),
         publishedAt: getItemPublishedAt(item),
         topics: toUniqueNonEmptyStrings(item.categories?.map(c => normalizeTopicToken(c)) || []),
-        locations: buildArticleLocationTokens({ source, item }),
+        locations: locationTokens,
         sourceType: 'rss',
         localityLevel,
         language: item.isoLanguage || feed.language || 'en',
@@ -573,19 +654,9 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
       if (dashIndex > 0) {
         sourceName = item.title.substring(dashIndex + 3);
       }
-      
-      // Determine locality based on query
-      let localityLevel = 'global';
-      const queryLower = query.toLowerCase();
-      
-      if (queryLower.includes('city:') || queryLower.includes(',') || 
-          /^[A-Z][a-z]+,?\s*[A-Z]{2}$/.test(query)) {
-        localityLevel = 'city';
-      } else if (queryLower.includes('state:')) {
-        localityLevel = 'state';
-      } else if (queryLower.includes('country:')) {
-        localityLevel = 'country';
-      }
+
+      const locationTokens = buildArticleLocationTokens({ source: { name: sourceName, category: query }, item, query });
+      const localityLevel = inferLocalityLevel(locationTokens);
       
       return {
         title: item.title || 'Untitled',
@@ -595,8 +666,8 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
         url: item.link,
         imageUrl: getItemImageUrl(item),
         publishedAt: getItemPublishedAt(item),
-        topics: toUniqueNonEmptyStrings([queryLower, ...(item.categories || []).map((category) => normalizeTopicToken(category))]),
-        locations: buildArticleLocationTokens({ source: { name: sourceName, category: query }, item, query }),
+        topics: toUniqueNonEmptyStrings([query.toLowerCase(), ...(item.categories || []).map((category) => normalizeTopicToken(category))]),
+        locations: locationTokens,
         sourceType,
         localityLevel,
         language: 'en'
@@ -1013,6 +1084,22 @@ router.get('/feed', authenticateToken, async (req, res) => {
           break;
         }
       }
+    }
+
+    // Mix in national/global articles when viewing local or regional scope
+    // so users see their local news first, plus top broader stories
+    if ((activeScope === 'local' || activeScope === 'regional') && scopeFilteredArticles.length > 0) {
+      const seenIds = new Set(scopeFilteredArticles.map((a) => String(a._id)));
+      const globalCandidates = buildScopedArticles('global')
+        .filter((a) => !seenIds.has(String(a._id)));
+      // Append up to ~30% broader articles (minimum 3 if available)
+      const mixCount = Math.max(3, Math.ceil(scopeFilteredArticles.length * 0.3));
+      const mixArticles = globalCandidates.slice(0, mixCount);
+      // Mark mixed articles with a higher scope tier so they sort after local
+      for (const mixed of mixArticles) {
+        mixed._scopeTier = MAX_SCOPE_TIERS;
+      }
+      scopeFilteredArticles = [...scopeFilteredArticles, ...mixArticles];
     }
 
     articles = scopeFilteredArticles;
