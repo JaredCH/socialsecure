@@ -44,7 +44,7 @@ const RELATIONSHIP_AUDIENCE_LABELS = {
   secure: 'Secure'
 };
 
-const SOCIAL_SECTION_IDS = ['header', 'shortcuts', 'snapshot', 'guestLookup', 'composer', 'circles', 'timeline', 'gallery', 'moderation', 'chatPanel', 'communityNotes'];
+const SOCIAL_SECTION_ORDER_IDS = Object.values(SOCIAL_SECTION_IDS);
 const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
 const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest'];
 const THEME_TO_DEFAULT_ACCENT = {
@@ -90,9 +90,9 @@ const normalizeSocialPreferences = (input, profileTheme = 'default') => {
     ? input.accentColorToken
     : (allowedAccents.includes(THEME_TO_DEFAULT_ACCENT[themePreset]) ? THEME_TO_DEFAULT_ACCENT[themePreset] : allowedAccents[0]);
 
-  const requestedOrder = uniqueStrings(input?.sectionOrder).filter((id) => SOCIAL_SECTION_IDS.includes(id));
-  const sectionOrder = [...requestedOrder, ...SOCIAL_SECTION_IDS.filter((id) => !requestedOrder.includes(id))];
-  const hiddenSections = uniqueStrings(input?.hiddenSections).filter((id) => SOCIAL_SECTION_IDS.includes(id) && id !== 'header');
+  const requestedOrder = uniqueStrings(input?.sectionOrder).filter((id) => SOCIAL_SECTION_ORDER_IDS.includes(id));
+  const sectionOrder = [...requestedOrder, ...SOCIAL_SECTION_ORDER_IDS.filter((id) => !requestedOrder.includes(id))];
+  const hiddenSections = uniqueStrings(input?.hiddenSections).filter((id) => SOCIAL_SECTION_ORDER_IDS.includes(id) && id !== SOCIAL_SECTION_IDS.profile_header);
   const hiddenModules = uniqueStrings(input?.hiddenModules).filter((id) => SOCIAL_MODULE_IDS.includes(id));
 
   return {
@@ -424,8 +424,6 @@ const Social = () => {
     () => new Set(topFriends.map((friend) => String(friend._id))),
     [topFriends]
   );
-
-  const activeProfile = isViewingAnotherProfile ? guestProfile : currentUser;
 
   const trackSocialEvent = useCallback((eventType, metadata = {}) => {
     if (!isAuthenticated) return;
