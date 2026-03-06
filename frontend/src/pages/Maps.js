@@ -21,7 +21,10 @@ const STATE_ICONS = {
 
 function Maps() {
   const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const leafletRef = useRef(null);
   const [map, setMap] = useState(null);
+  const [mapInitAttempt, setMapInitAttempt] = useState(0);
   const [viewMode, setViewMode] = useState('local'); // local, community
   const [layers, setLayers] = useState({
     friends: true,
@@ -48,57 +51,105 @@ function Maps() {
     category: 'other'
   });
 
-  // Initialize map and fetch data
+  // Initialize map
   useEffect(() => {
-    initMap();
-    fetchMapData();
-    fetchUserPresence();
-  }, [viewMode]);
+    let cancelled = false;
+    let initTimeoutId = null;
 
-  // Initialize map (using Leaflet)
-  const initMap = async () => {
-    if (typeof window === 'undefined') return;
-    
-    const L = await import('leaflet');
-    await import('leaflet/dist/leaflet.css');
-    
-    // Fix Leaflet marker icons
-    delete L.Icon.Default.prototype._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-    });
+    const initMap = async () => {
+      if (typeof window === 'undefined' || mapInstanceRef.current) return;
+      setLoading(true);
+      setError(null);
 
-    // Get user location
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          setUserLocation([latitude, longitude]);
-          
-          // Initialize map
-          const mapInstance = L.map(mapRef.current).setView([latitude, longitude], 12);
-          
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-          }).addTo(mapInstance);
-          
-          setMap(mapInstance);
-        },
-        () => {
-          // Default to center of US if geolocation fails
-          const mapInstance = L.map(mapRef.current).setView([39.8283, -98.5795], 4);
-          
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-          }).addTo(mapInstance);
-          
-          setMap(mapInstance);
+      if (!mapRef.current) {
+        setError('Map failed to initialize. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      initTimeoutId = window.setTimeout(() => {
+        if (!cancelled && !mapInstanceRef.current) {
+          setError('Map is taking too long to load. Please try again.');
+          setLoading(false);
         }
-      );
-    }
-  };
+      }, 10000);
+
+      try {
+        const L = await import('leaflet');
+        await import('leaflet/dist/leaflet.css');
+        if (cancelled) return;
+
+        leafletRef.current = L;
+
+        // Fix Leaflet marker icons
+        delete L.Icon.Default.prototype._getIconUrl;
+        L.Icon.Default.mergeOptions({
+          iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+          iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        });
+
+        const createMap = (center, zoom) => {
+          if (!mapRef.current || cancelled) return;
+
+          const mapInstance = L.map(mapRef.current).setView(center, zoom);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+          }).addTo(mapInstance);
+
+          mapInstanceRef.current = mapInstance;
+          setMap(mapInstance);
+          setUserLocation(center);
+          setLoading(false);
+          if (initTimeoutId) {
+            clearTimeout(initTimeoutId);
+          }
+        };
+
+        // Get user location
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              if (cancelled || mapInstanceRef.current) return;
+              const { latitude, longitude } = position.coords;
+              createMap([latitude, longitude], 12);
+            },
+            () => {
+              if (cancelled || mapInstanceRef.current) return;
+              // Default to center of US if geolocation fails
+              createMap([39.8283, -98.5795], 4);
+            }
+          );
+        } else {
+          createMap([39.8283, -98.5795], 4);
+        }
+      } catch (err) {
+        console.error('Error initializing map:', err);
+        if (!cancelled) {
+          setError('Failed to initialize map. Please try again.');
+          setLoading(false);
+        }
+      }
+    };
+
+    initMap();
+    fetchUserPresence();
+    return () => {
+      cancelled = true;
+      if (initTimeoutId) {
+        clearTimeout(initTimeoutId);
+      }
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+      }
+      mapInstanceRef.current = null;
+    };
+  }, [mapInitAttempt]);
+
+  useEffect(() => {
+    if (!userLocation) return;
+    fetchMapData();
+  }, [userLocation, viewMode, layers.friends, layers.heatmap]);
 
   // Fetch map data based on view mode
   const fetchMapData = async () => {
@@ -226,7 +277,8 @@ function Maps() {
 
   // Render markers on map
   useEffect(() => {
-    if (!map) return;
+    const L = leafletRef.current;
+    if (!map || !L) return;
     
     // Clear existing layers
     map.eachLayer((layer) => {
@@ -281,15 +333,16 @@ function Maps() {
     
   }, [map, friendsLocations, spotlights, layers]);
 
-  if (!map && loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="flex items--center justify-center h64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      </div>
-    );
-  }
+  const retryMapInitialization = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
+    setMap(null);
+    setError(null);
+    setLoading(true);
+    setMapInitAttempt((attempt) => attempt + 1);
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -406,8 +459,14 @@ function Maps() {
         
         {/* Error Toast */}
         {error && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-600 px-4 py-2 rounded-lg">
-            {error}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-600 px-4 py-3 rounded-lg flex items-center gap-3 max-w-[90%]">
+            <span>{error}</span>
+            <button
+              onClick={retryMapInitialization}
+              className="px-3 py-1 text-sm bg-red-700 hover:bg-red-800 rounded"
+            >
+              Retry
+            </button>
           </div>
         )}
       </div>
