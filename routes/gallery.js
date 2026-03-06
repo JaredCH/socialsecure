@@ -118,22 +118,15 @@ const validateImageUrl = (urlString) => {
     return { ok: false, error: 'Image URL must be a valid http/https URL' };
   }
 
-  try {
-    const parsed = new URL(normalized);
-    if (parsed.username || parsed.password) {
-      return { ok: false, error: 'Image URL cannot include embedded credentials' };
-    }
-
-    const hostname = String(parsed.hostname || '').toLowerCase();
-    if (BLOCKED_HOSTNAMES.has(hostname) || isPrivateOrLocalIp(hostname)) {
-      return { ok: false, error: 'Image URL host is blocked' };
-    }
-
-    parsed.hash = '';
-    return { ok: true, mediaUrl: parsed.toString() };
-  } catch {
-    return { ok: false, error: 'Image URL must be a valid http/https URL' };
+  const ext = extractExtensionFromUrl(normalized);
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return {
+      ok: false,
+      error: `Image URL must end with an allowed image extension (${Array.from(ALLOWED_EXTENSIONS).join(', ')})`
+    };
   }
+
+  return { ok: true, mediaUrl: normalized };
 };
 
 const findOwnerByIdentifier = async (identifier) => {

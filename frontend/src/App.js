@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { io } from 'socket.io-client';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -19,6 +18,7 @@ import ModerationDashboard from './pages/ModerationDashboard';
 import NotificationCenter from './components/NotificationCenter';
 import NotificationSettings from './pages/NotificationSettings';
 import { authAPI, notificationAPI } from './utils/api';
+import { initRealtime, disconnectRealtime } from './utils/realtime';
 
 const ProtectedRoute = ({
   isAuthenticated,
@@ -208,37 +208,63 @@ function App() {
 
   useEffect(() => {
     if (!isAuthenticated || !user?._id) {
-      if (notificationSocketRef.current) {
-        notificationSocketRef.current.disconnect();
-        notificationSocketRef.current = null;
-      }
+      disconnectRealtime();
+      notificationSocketRef.current = null;
       return;
     }
 
-    const socketOrigin = process.env.REACT_APP_SOCKET_URL || window.location.origin;
-    const socket = io(socketOrigin, {
-      auth: {
-        userId: String(user._id)
+    let cancelled = false;
+    const connectSocket = async () => {
+      let preferences = null;
+      try {
+        const response = await notificationAPI.getPreferences();
+        preferences = response.data?.preferences || null;
+      } catch {
+        preferences = null;
       }
-    });
 
-    socket.on('connect', () => {
-      socket.emit('join-user', String(user._id));
-    });
+      if (cancelled) return;
+      if (preferences?.realtime?.enabled === false) {
+        disconnectRealtime();
+        notificationSocketRef.current = null;
+        return;
+      }
 
-    socket.on('notification', (payload) => {
-      if (!payload) return;
-      setIncomingNotification(payload);
-      setUnreadNotificationCount((prev) => prev + (payload.isRead ? 0 : 1));
-    });
+      const token = localStorage.getItem('token');
+      const socket = initRealtime({
+        token,
+        userId: String(user._id),
+        lastEventTimestamp: Number(localStorage.getItem('realtime:lastEventTs') || 0)
+      });
+      if (!socket) return;
 
-    notificationSocketRef.current = socket;
+      socket.on('notification', (payload) => {
+        if (!payload) return;
+        setIncomingNotification(payload);
+        setUnreadNotificationCount((prev) => prev + (payload.isRead ? 0 : 1));
+        localStorage.setItem('realtime:lastEventTs', String(Date.now()));
+      });
+
+      socket.on('realtime_events_replay', (payload) => {
+        const events = Array.isArray(payload?.events) ? payload.events : [];
+        events.forEach((event) => {
+          if (event?.eventName === 'notification' && event?.payload) {
+            setIncomingNotification(event.payload);
+            setUnreadNotificationCount((prev) => prev + (event.payload.isRead ? 0 : 1));
+          }
+        });
+        localStorage.setItem('realtime:lastEventTs', String(Date.now()));
+      });
+
+      notificationSocketRef.current = socket;
+    };
+
+    connectSocket();
 
     return () => {
-      socket.disconnect();
-      if (notificationSocketRef.current === socket) {
-        notificationSocketRef.current = null;
-      }
+      cancelled = true;
+      disconnectRealtime();
+      notificationSocketRef.current = null;
     };
   }, [isAuthenticated, user?._id]);
 
