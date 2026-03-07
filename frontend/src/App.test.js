@@ -114,6 +114,7 @@ describe('App navbar features dropdown', () => {
     const dropdownPanel = container.querySelector('#features-menu-panel');
     expect(dropdownPanel).not.toBeNull();
     expect(dropdownPanel.className).toContain('top-full');
+    expect(dropdownPanel.className).toContain('z-[1310]');
     expect(featuresMenu.parentElement.className).toContain('overflow-visible');
 
     expect(featuresMenu.textContent).toContain('Features');
@@ -183,7 +184,8 @@ describe('App navbar features dropdown', () => {
       mobileToggle.click();
     });
 
-    expect(navMenu.className).toContain('mt-3 flex');
+    expect(navMenu.className).toContain('absolute');
+    expect(navMenu.className).toContain('top-full');
     expect(navMenu.className).not.toContain('hidden');
   });
 });

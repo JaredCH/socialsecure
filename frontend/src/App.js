@@ -342,7 +342,11 @@ function App() {
   }, [isFeaturesMenuOpen]);
 
   useEffect(() => {
-    if (isFeaturesMenuOpen && firstFeatureItemRef.current) {
+    if (!isFeaturesMenuOpen || !firstFeatureItemRef.current || !featuresMenuRef.current) {
+      return;
+    }
+
+    if (featuresMenuRef.current.contains(document.activeElement)) {
       firstFeatureItemRef.current.focus();
     }
   }, [isFeaturesMenuOpen]);
@@ -434,8 +438,8 @@ function App() {
   return (
     <Router>
       <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
-        <nav className="shrink-0 border-b border-blue-100 bg-gradient-to-r from-white via-slate-50 to-blue-50/60 p-3 shadow-md">
-          <div className="container mx-auto">
+        <nav className="relative z-[1200] shrink-0 border-b border-blue-100 bg-gradient-to-r from-white via-slate-50 to-blue-50/60 p-3 shadow-md">
+          <div className="container relative mx-auto">
             <div className="flex items-center justify-between gap-3">
               <h1 className="text-xl font-black tracking-tight text-blue-700">SocialSecure</h1>
               <div className="flex items-center gap-2">
@@ -461,7 +465,7 @@ function App() {
             </div>
             <div
               id="main-nav-menu"
-              className={`${isMobileMenuOpen ? 'mt-3 flex' : 'hidden'} flex-col gap-2 overflow-visible rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-sm md:mt-3 md:flex md:flex-row md:flex-wrap md:items-center md:justify-end md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
+              className={`${isMobileMenuOpen ? 'flex' : 'hidden'} absolute right-0 top-full z-[1300] mt-2 w-64 flex-col gap-2 overflow-visible rounded-2xl border border-slate-200 bg-white p-2 shadow-lg md:static md:z-auto md:mt-3 md:flex md:w-auto md:flex-row md:flex-wrap md:items-center md:justify-end md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
             >
               {!encryptionPasswordRequired && <Link to="/" onClick={closeNavMenus} className={navLinkClass}>Home</Link>}
               {canUseProtectedFeatures && <Link to="/social" onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
@@ -514,7 +518,7 @@ function App() {
                   <div
                     id="features-menu-panel"
                     role="menu"
-                    className="z-20 mt-2 min-w-40 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg md:absolute md:right-0 md:top-full"
+                    className="z-[1310] mt-2 min-w-40 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg md:absolute md:right-0 md:top-full"
                   >
                     {canUseProtectedFeatures && (
                       <Link ref={firstFeatureItemRef} to="/discover" role="menuitem" onClick={closeNavMenus} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
