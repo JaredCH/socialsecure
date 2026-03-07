@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import ChatComposerBar from '../components/chat/ChatComposerBar';
+import ChatMessageList from '../components/chat/ChatMessageList';
 import { authAPI, chatAPI, userAPI } from '../utils/api';
 
 const CHANNELS = [
@@ -12,62 +14,80 @@ const CHAT_THEMES = [
   {
     key: 'classic',
     label: 'Classic Light',
-    shell: 'bg-white text-gray-900',
-    panel: 'bg-white border-gray-300',
-    accent: 'bg-blue-600 text-white hover:bg-blue-700',
-    subtle: 'bg-gray-100 text-gray-700 border-gray-200',
-    messages: 'bg-gray-50 border-gray-200',
-    input: 'bg-white border-gray-300 text-gray-900'
+    shell: 'bg-slate-100 text-slate-900',
+    panel: 'border-slate-300 bg-white/80 backdrop-blur-sm',
+    panelGlass: 'border-slate-300 bg-white/85 backdrop-blur-md',
+    accent: 'border border-blue-700 bg-blue-700 text-white hover:bg-blue-800',
+    subtle: 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200',
+    input: 'border-slate-300 bg-white text-slate-900',
+    messagesShell: 'border-slate-300 bg-gradient-to-b from-white to-slate-100',
+    messageOwn: 'border-blue-700 bg-blue-100',
+    messageOther: 'border-slate-400 bg-white'
   },
   {
     key: 'midnight',
     label: 'Midnight',
-    shell: 'bg-slate-900 text-slate-100',
-    panel: 'bg-slate-800 border-slate-700',
-    accent: 'bg-indigo-500 text-white hover:bg-indigo-600',
-    subtle: 'bg-slate-700 text-slate-100 border-slate-600',
-    messages: 'bg-slate-950 border-slate-700',
-    input: 'bg-slate-900 border-slate-600 text-slate-100'
+    shell: 'bg-slate-950 text-slate-100',
+    panel: 'border-cyan-700/70 bg-slate-900/85 backdrop-blur-sm',
+    panelGlass: 'border-cyan-700/70 bg-slate-900/90 backdrop-blur-md',
+    accent: 'border border-cyan-400 bg-cyan-400 text-slate-950 hover:bg-cyan-300',
+    subtle: 'border-cyan-800 bg-slate-800 text-cyan-100 hover:bg-slate-700',
+    input: 'border-cyan-700 bg-slate-950 text-cyan-100',
+    messagesShell: 'border-cyan-700 bg-gradient-to-b from-slate-900 to-slate-950',
+    messageOwn: 'border-cyan-400 bg-cyan-400/20',
+    messageOther: 'border-slate-600 bg-slate-800'
   },
   {
     key: 'ocean',
     label: 'Ocean',
     shell: 'bg-cyan-950 text-cyan-50',
-    panel: 'bg-cyan-900 border-cyan-700',
-    accent: 'bg-cyan-400 text-cyan-950 hover:bg-cyan-300',
-    subtle: 'bg-cyan-800 text-cyan-50 border-cyan-700',
-    messages: 'bg-cyan-950 border-cyan-700',
-    input: 'bg-cyan-900 border-cyan-600 text-cyan-50'
+    panel: 'border-cyan-700 bg-cyan-900/85 backdrop-blur-sm',
+    panelGlass: 'border-cyan-600 bg-cyan-900/90 backdrop-blur-md',
+    accent: 'border border-cyan-300 bg-cyan-300 text-cyan-950 hover:bg-cyan-200',
+    subtle: 'border-cyan-700 bg-cyan-800 text-cyan-50 hover:bg-cyan-700',
+    input: 'border-cyan-600 bg-cyan-950 text-cyan-50',
+    messagesShell: 'border-cyan-700 bg-gradient-to-b from-cyan-900 to-cyan-950',
+    messageOwn: 'border-cyan-300 bg-cyan-300/20',
+    messageOther: 'border-cyan-700 bg-cyan-900'
   },
   {
     key: 'terminal',
     label: 'Terminal',
     shell: 'bg-zinc-950 text-lime-200',
-    panel: 'bg-zinc-900 border-lime-800',
-    accent: 'bg-lime-500 text-zinc-950 hover:bg-lime-400',
-    subtle: 'bg-zinc-800 text-lime-200 border-lime-800',
-    messages: 'bg-zinc-950 border-lime-900',
-    input: 'bg-zinc-900 border-lime-700 text-lime-200'
+    panel: 'border-lime-700 bg-zinc-900/90 backdrop-blur-sm',
+    panelGlass: 'border-lime-700 bg-zinc-900/95 backdrop-blur-md',
+    accent: 'border border-lime-500 bg-lime-500 text-zinc-950 hover:bg-lime-400',
+    subtle: 'border-lime-800 bg-zinc-800 text-lime-200 hover:bg-zinc-700',
+    input: 'border-lime-700 bg-zinc-950 text-lime-200',
+    messagesShell: 'border-lime-700 bg-zinc-950',
+    messageOwn: 'border-lime-500 bg-lime-500/20',
+    messageOther: 'border-lime-800 bg-zinc-900'
   },
   {
     key: 'sunset',
     label: 'Sunset',
     shell: 'bg-orange-50 text-orange-950',
-    panel: 'bg-white border-orange-300',
-    accent: 'bg-orange-600 text-white hover:bg-orange-700',
-    subtle: 'bg-orange-100 text-orange-900 border-orange-200',
-    messages: 'bg-amber-50 border-orange-200',
-    input: 'bg-white border-orange-300 text-orange-950'
+    panel: 'border-orange-300 bg-white/85 backdrop-blur-sm',
+    panelGlass: 'border-orange-300 bg-white/95 backdrop-blur-md',
+    accent: 'border border-orange-600 bg-orange-600 text-white hover:bg-orange-700',
+    subtle: 'border-orange-300 bg-orange-100 text-orange-900 hover:bg-orange-200',
+    input: 'border-orange-300 bg-white text-orange-950',
+    messagesShell: 'border-orange-300 bg-gradient-to-b from-white to-orange-100',
+    messageOwn: 'border-orange-600 bg-orange-200',
+    messageOther: 'border-orange-300 bg-white'
   },
   {
     key: 'lavender',
     label: 'Lavender',
     shell: 'bg-violet-50 text-violet-950',
-    panel: 'bg-white border-violet-300',
-    accent: 'bg-violet-600 text-white hover:bg-violet-700',
-    subtle: 'bg-violet-100 text-violet-900 border-violet-200',
-    messages: 'bg-violet-50 border-violet-200',
-    input: 'bg-white border-violet-300 text-violet-950'
+    panel: 'border-violet-300 bg-white/85 backdrop-blur-sm',
+    panelGlass: 'border-violet-300 bg-white/95 backdrop-blur-md',
+    accent: 'border border-violet-600 bg-violet-600 text-white hover:bg-violet-700',
+    subtle: 'border-violet-300 bg-violet-100 text-violet-900 hover:bg-violet-200',
+    input: 'border-violet-300 bg-white text-violet-950',
+    messagesShell: 'border-violet-300 bg-gradient-to-b from-white to-violet-100',
+    messageOwn: 'border-violet-600 bg-violet-200',
+    messageOther: 'border-violet-300 bg-white'
   }
 ];
 
@@ -93,6 +113,15 @@ const getConversationLabel = (conversation) => {
   return conversation.title || 'Conversation';
 };
 
+const getPresenceState = (lastActiveAt) => {
+  if (!lastActiveAt) return { label: 'Away', tone: 'bg-amber-400' };
+  const ageMs = Date.now() - new Date(lastActiveAt).getTime();
+  if (Number.isNaN(ageMs)) return { label: 'Away', tone: 'bg-amber-400' };
+  return ageMs <= 5 * 60 * 1000
+    ? { label: 'Online', tone: 'bg-emerald-400' }
+    : { label: 'Away', tone: 'bg-amber-400' };
+};
+
 function Chat() {
   const [profile, setProfile] = useState(null);
   const [loadingHub, setLoadingHub] = useState(true);
@@ -109,6 +138,7 @@ function Chat() {
   const [messagesError, setMessagesError] = useState('');
   const [composerValue, setComposerValue] = useState('');
   const [sending, setSending] = useState(false);
+  const [localTyping, setLocalTyping] = useState(false);
 
   const [dmQuery, setDmQuery] = useState('');
   const [dmSuggestions, setDmSuggestions] = useState([]);
@@ -119,16 +149,23 @@ function Chat() {
     try {
       const saved = localStorage.getItem('chatTheme');
       if (saved && CHAT_THEMES.some((t) => t.key === saved)) return saved;
-    } catch { /* ignore localStorage errors */ }
+    } catch {
+      // ignore localStorage errors
+    }
     return CHAT_THEMES[0].key;
   });
   const [roomUsers, setRoomUsers] = useState([]);
   const [roomUsersLoading, setRoomUsersLoading] = useState(false);
+  const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
 
   const handleThemeChange = useCallback((nextTheme) => {
     if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
     setTheme(nextTheme);
-    try { localStorage.setItem('chatTheme', nextTheme); } catch { /* ignore */ }
+    try {
+      localStorage.setItem('chatTheme', nextTheme);
+    } catch {
+      // ignore localStorage errors
+    }
   }, []);
 
   const conversationList = useMemo(() => {
@@ -180,6 +217,11 @@ function Chat() {
   const resolvedZipCode = useMemo(
     () => profile?.zipCode || hubData?.zip?.current?.zipCode || null,
     [profile, hubData]
+  );
+
+  const sharedMediaSnippets = useMemo(
+    () => messages.filter((message) => /\[[^\]]+\]|https?:\/\//i.test(message.content || '')).slice(-6),
+    [messages]
   );
 
   const applyDefaultConversationSelection = (channelKey, data) => {
@@ -294,6 +336,17 @@ function Chat() {
     loadRoomUsers();
   }, [activeConversationId]);
 
+  useEffect(() => {
+    if (!composerValue.trim()) {
+      setLocalTyping(false);
+      return;
+    }
+
+    setLocalTyping(true);
+    const timer = setTimeout(() => setLocalTyping(false), 1200);
+    return () => clearTimeout(timer);
+  }, [composerValue]);
+
   const handleSend = async (event) => {
     event.preventDefault();
     const trimmed = composerValue.trim();
@@ -304,6 +357,7 @@ function Chat() {
       const { data } = await chatAPI.sendConversationMessage(activeConversationId, trimmed);
       setMessages((prev) => [...prev, data.message]);
       setComposerValue('');
+      setLocalTyping(false);
       await refreshHub(activeChannel);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to send message');
@@ -320,6 +374,7 @@ function Chat() {
       setActiveConversationId(String(data.conversation._id));
       setDmSuggestions([]);
       setDmQuery('');
+      setMobileWorkspaceOpen(true);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to start DM');
     }
@@ -370,7 +425,10 @@ function Chat() {
     setActiveChannel(room.__channel || 'zip');
     setActiveConversationId(String(room._id));
     setRoomQuery(room.__label || getConversationLabel(room));
+    setMobileWorkspaceOpen(true);
   };
+
+  const conversationPresence = getPresenceState(activeConversation?.lastMessageAt);
 
   if (loadingHub) {
     return (
@@ -382,197 +440,271 @@ function Chat() {
 
   return (
     <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${activeTheme.shell}`}>
-      <div className="flex flex-col gap-3 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Classic Chat Lounge</h2>
-          <p className="text-sm opacity-90">
-            IRC/AIM-inspired flow: pick a channel, pick a room, then jump into the conversation.
-          </p>
-          {resolvedZipCode ? (
-            <p className="text-xs mt-1 opacity-80">Your default zip room: {resolvedZipCode}</p>
-          ) : null}
+      <header className={`border-b-2 p-3 md:p-4 ${activeTheme.panelGlass}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold md:text-2xl">Retro-Modern Chat Workspace</h2>
+            <p className="text-xs opacity-90 md:text-sm">Classic IM bones with modern speed, smooth gestures, and glass accents.</p>
+            {resolvedZipCode ? (
+              <p className="mt-1 text-xs opacity-80">Your default zip room: {resolvedZipCode}</p>
+            ) : null}
+          </div>
+          <label className="text-sm font-medium flex items-center gap-2">
+            Theme
+            <select
+              value={theme}
+              onChange={(event) => handleThemeChange(event.target.value)}
+              className={`border rounded px-2 py-1 text-sm ${activeTheme.input}`}
+            >
+              {CHAT_THEMES.map((themeOption) => (
+                <option key={themeOption.key} value={themeOption.key}>
+                  {themeOption.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <label className="text-sm font-medium flex items-center gap-2">
-          Theme
-          <select
-            value={theme}
-            onChange={(event) => handleThemeChange(event.target.value)}
-            className={`border rounded px-2 py-1 text-sm ${activeTheme.input}`}
-          >
-            {CHAT_THEMES.map((themeOption) => (
-              <option key={themeOption.key} value={themeOption.key}>
-                {themeOption.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      </header>
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-0 lg:grid-cols-12">
-        <aside className={`lg:col-span-3 min-h-0 border-b p-3 space-y-3 overflow-y-auto lg:border-b-0 lg:border-r ${activeTheme.panel}`}>
-          <h3 className="font-semibold">Channels & Actions</h3>
-          <div className="space-y-2">
-            {CHANNELS.map((channel) => (
-              <button
-                key={channel.key}
-                type="button"
-                onClick={() => setActiveChannel(channel.key)}
-                className={`w-full text-left border rounded px-2 py-2 text-sm ${activeChannel === channel.key ? activeTheme.subtle : 'opacity-90'}`}
-              >
-                {channel.label}
-              </button>
-            ))}
+      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-12">
+        <aside
+          className={[
+            mobileWorkspaceOpen ? 'hidden' : 'flex',
+            'min-h-0 flex-col border-b-2 p-3 md:p-4 lg:col-span-3 lg:flex lg:border-b-0 lg:border-r-2',
+            activeTheme.panel
+          ].join(' ')}
+        >
+          <div className="sticky top-0 z-10 space-y-3 pb-3">
+            <h3 className="font-semibold">Conversations</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {CHANNELS.map((channel) => (
+                <button
+                  key={channel.key}
+                  type="button"
+                  onClick={() => setActiveChannel(channel.key)}
+                  className={`rounded border px-2 py-2 text-xs md:text-sm transition ${activeChannel === channel.key ? activeTheme.subtle : 'opacity-80 hover:opacity-100'}`}
+                >
+                  {channel.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="border-t pt-3 space-y-2">
-            <label className="text-xs font-semibold block">Find Rooms</label>
-            <input
-              value={roomQuery}
-              onChange={(event) => setRoomQuery(event.target.value)}
-              className={`w-full border rounded p-2 text-sm ${activeTheme.input}`}
-              placeholder="Search room names..."
-            />
-            {roomSuggestions.length > 0 ? (
-              <ul className={`max-h-36 overflow-auto border rounded divide-y text-xs ${activeTheme.panel}`}>
-                {roomSuggestions.map((room) => (
-                  <li key={String(room._id)}>
-                    <button
-                      type="button"
-                      onClick={() => selectRoomSuggestion(room)}
-                      className="w-full text-left p-2 hover:opacity-80"
-                    >
-                      {room.__label || getConversationLabel(room)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-
-          <div className="border-t pt-3 space-y-2">
-            <label className="text-xs font-semibold block">Find Users (DM)</label>
-            <input
-              value={dmQuery}
-              onChange={(event) => setDmQuery(event.target.value)}
-              className={`w-full border rounded p-2 text-sm ${activeTheme.input}`}
-              placeholder="Search username or name..."
-            />
-            {dmSearchLoading ? (
-              <p className="text-xs opacity-80">Searching users...</p>
-            ) : null}
-            {dmSuggestions.length > 0 ? (
-              <ul className={`max-h-40 overflow-auto border rounded divide-y text-xs ${activeTheme.panel}`}>
-                {dmSuggestions.map((user) => (
-                  <li key={String(user._id)} className="p-2 flex justify-between items-center gap-2">
-                    <span>@{user.username || user.realName || 'user'}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleStartDM(user._id)}
-                      className={`border rounded px-2 py-1 ${activeTheme.subtle}`}
-                    >
-                      Start DM
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-
-          <div className="border-t pt-3 space-y-2">
-            <p className="text-xs font-semibold">Rooms in this channel</p>
-            {conversationList.length === 0 ? (
-              <p className="text-xs opacity-80">No rooms available in this channel yet.</p>
-            ) : (
-              <ul className="space-y-2 max-h-52 overflow-auto pr-1">
-                {conversationList.map((conversation) => {
-                  const selected = String(conversation._id) === String(activeConversationId);
-                  return (
-                    <li key={String(conversation._id)}>
+          <div className="mt-2 space-y-3 overflow-y-auto pr-1">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold block">Find Rooms</label>
+              <input
+                value={roomQuery}
+                onChange={(event) => setRoomQuery(event.target.value)}
+                className={`w-full border rounded p-2 text-sm ${activeTheme.input}`}
+                placeholder="Search room names..."
+              />
+              {roomSuggestions.length > 0 ? (
+                <ul className={`max-h-36 overflow-auto border rounded divide-y text-xs ${activeTheme.panelGlass}`}>
+                  {roomSuggestions.map((room) => (
+                    <li key={String(room._id)}>
                       <button
                         type="button"
-                        onClick={() => setActiveConversationId(String(conversation._id))}
-                        className={`w-full text-left border rounded px-2 py-2 text-sm ${selected ? activeTheme.subtle : ''}`}
+                        onClick={() => selectRoomSuggestion(room)}
+                        className="w-full text-left p-2 hover:opacity-80"
                       >
-                        <div className="font-medium">{getConversationLabel(conversation)}</div>
-                        {conversation.lastMessageAt ? (
-                          <div className="text-xs opacity-80">Last active {new Date(conversation.lastMessageAt).toLocaleString()}</div>
-                        ) : null}
+                        {room.__label || getConversationLabel(room)}
                       </button>
                     </li>
-                  );
-                })}
-              </ul>
-            )}
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <div className="space-y-2 border-t pt-3">
+              <label className="text-xs font-semibold block">Find Users (DM)</label>
+              <input
+                value={dmQuery}
+                onChange={(event) => setDmQuery(event.target.value)}
+                className={`w-full border rounded p-2 text-sm ${activeTheme.input}`}
+                placeholder="Search username or name..."
+              />
+              {dmSearchLoading ? (
+                <p className="text-xs opacity-80">Searching users...</p>
+              ) : null}
+              {dmSuggestions.length > 0 ? (
+                <ul className={`max-h-40 overflow-auto border rounded divide-y text-xs ${activeTheme.panelGlass}`}>
+                  {dmSuggestions.map((user) => (
+                    <li key={String(user._id)} className="p-2 flex justify-between items-center gap-2">
+                      <span>@{user.username || user.realName || 'user'}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleStartDM(user._id)}
+                        className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
+                      >
+                        Start DM
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <div className="space-y-2 border-t pt-3">
+              <p className="text-xs font-semibold">Rooms in this channel</p>
+              {conversationList.length === 0 ? (
+                <p className="text-xs opacity-80">No rooms available in this channel yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {conversationList.map((conversation) => {
+                    const selected = String(conversation._id) === String(activeConversationId);
+                    const status = getPresenceState(conversation.lastMessageAt);
+                    return (
+                      <li key={String(conversation._id)}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveConversationId(String(conversation._id));
+                            setMobileWorkspaceOpen(true);
+                          }}
+                          className={`w-full rounded border px-3 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">{getConversationLabel(conversation)}</span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
+                              <span className={`h-2 w-2 rounded-full ${status.tone}`} />
+                              {status.label}
+                            </span>
+                          </div>
+                          {conversation.lastMessageAt ? (
+                            <div className="text-[11px] opacity-80 font-mono">Last active {new Date(conversation.lastMessageAt).toLocaleString()}</div>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           </div>
         </aside>
 
-        <section className={`lg:col-span-6 border-b p-3 space-y-3 flex flex-col min-h-0 lg:border-b-0 lg:border-r ${activeTheme.panel}`}>
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
-            <div className="text-xs opacity-80">Guided Flow: 1) Channel 2) Room 3) Chat</div>
-          </div>
+        <section
+          className={[
+            mobileWorkspaceOpen ? 'flex' : 'hidden',
+            'min-h-0 flex-col border-b-2 p-3 md:p-4 lg:col-span-6 lg:flex lg:border-b-0 lg:border-r-2',
+            activeTheme.panel
+          ].join(' ')}
+        >
+          <header className={`sticky top-0 z-10 mb-3 rounded border p-2 ${activeTheme.panelGlass}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMobileWorkspaceOpen(false)}
+                  className={`rounded border px-2 py-1 text-xs lg:hidden ${activeTheme.subtle}`}
+                >
+                  Back
+                </button>
+                <div>
+                  <h3 className="font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
+                  <p className="text-[11px] font-mono opacity-80">Classic IM Window · hover bubbles for metadata</p>
+                </div>
+              </div>
+              {activeConversation ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
+                  <span className={`h-2 w-2 rounded-full ${conversationPresence.tone}`} />
+                  {conversationPresence.label}
+                </span>
+              ) : null}
+            </div>
+          </header>
+
           {messagesError ? (
-            <div className="text-sm bg-red-50 border border-red-200 text-red-700 rounded p-2">{messagesError}</div>
+            <div className="mb-3 rounded border border-red-400 bg-red-50 p-2 text-sm text-red-700">{messagesError}</div>
           ) : null}
 
-          <div className={`flex-1 min-h-0 overflow-y-auto border rounded p-2 space-y-2 ${activeTheme.messages}`}>
-            {messagesLoading ? (
-              <p className="text-sm opacity-80">Loading messages...</p>
-            ) : messages.length === 0 ? (
-              <p className="text-sm opacity-80">No messages yet.</p>
-            ) : (
-              messages.map((message) => (
-                <div key={String(message._id)} className="text-sm">
-                  <div className="text-xs opacity-80">
-                    @{message.userId?.username || message.userId?.realName || 'user'} · {new Date(message.createdAt).toLocaleString()}
-                  </div>
-                  <div className="whitespace-pre-wrap">{message.content}</div>
-                </div>
-              ))
-            )}
-          </div>
+          <ChatMessageList
+            conversationId={activeConversationId}
+            messages={messages}
+            loading={messagesLoading}
+            profile={profile}
+            theme={activeTheme}
+          />
 
-          <form onSubmit={handleSend} className="flex gap-2">
-            <input
-              type="text"
-              className={`flex-1 border rounded p-2 ${activeTheme.input}`}
-              value={composerValue}
-              onChange={(event) => setComposerValue(event.target.value)}
-              maxLength={2000}
-              disabled={!activeConversationId || sending}
-              placeholder={activeConversationId ? 'Type your message' : 'Choose a conversation to message'}
-            />
-            <button
-              type="submit"
-              disabled={!activeConversationId || !composerValue.trim() || sending}
-              className={`rounded px-4 py-2 disabled:opacity-50 ${activeTheme.accent}`}
-            >
-              {sending ? 'Sending...' : 'Send'}
-            </button>
-          </form>
+          <div className="mt-2 space-y-2">
+            {localTyping ? (
+              <div className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-mono opacity-80">
+                <span className="animate-pulse">●</span>
+                <span className="animate-pulse [animation-delay:120ms]">●</span>
+                <span className="animate-pulse [animation-delay:240ms]">●</span>
+                You are typing...
+              </div>
+            ) : null}
+
+            <div className="sticky bottom-0">
+              <ChatComposerBar
+                composerValue={composerValue}
+                setComposerValue={setComposerValue}
+                onSubmit={handleSend}
+                disabled={!activeConversationId}
+                sending={sending}
+                theme={activeTheme}
+              />
+            </div>
+          </div>
         </section>
 
-        <aside className={`lg:col-span-3 p-3 space-y-2 min-h-0 flex flex-col ${activeTheme.panel}`}>
-          <h3 className="font-semibold">Users in Room</h3>
-          {activeConversation ? (
-            <p className="text-xs opacity-80">{getConversationLabel(activeConversation)}</p>
-          ) : (
-            <p className="text-xs opacity-80">Select a room to view users.</p>
-          )}
-          <div className="border rounded overflow-auto flex-1 min-h-0">
-            {roomUsersLoading ? (
-              <p className="text-xs p-2 opacity-80">Loading users...</p>
-            ) : roomUsers.length === 0 ? (
-              <p className="text-xs p-2 opacity-80">No users to display.</p>
+        <aside className={`hidden min-h-0 flex-col p-3 md:p-4 lg:col-span-3 lg:flex ${activeTheme.panel}`}>
+          <div className={`sticky top-0 z-10 rounded border p-3 ${activeTheme.panelGlass}`}>
+            <h3 className="font-semibold">Conversation Details</h3>
+            {activeConversation ? (
+              <>
+                <p className="text-xs opacity-80">{getConversationLabel(activeConversation)}</p>
+                <p className="text-[11px] font-mono opacity-80 mt-1">Status: {conversationPresence.label}</p>
+              </>
             ) : (
-              <ul className="divide-y">
-                {roomUsers.map((user) => (
-                  <li key={String(user._id)} className="p-2 text-sm">
-                    @{user.username || user.realName || 'user'}
-                  </li>
-                ))}
-              </ul>
+              <p className="text-xs opacity-80">Select a room to view details.</p>
             )}
+            <p className="mt-2 text-xs opacity-80">About: Retro-modern workspace with neon borders and classic buddy presence markers.</p>
+          </div>
+
+          <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
+            <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+              <h4 className="text-sm font-semibold">Users in Room</h4>
+              <div className="mt-2 rounded border overflow-auto max-h-56">
+                {roomUsersLoading ? (
+                  <p className="p-2 text-xs opacity-80">Loading users...</p>
+                ) : roomUsers.length === 0 ? (
+                  <p className="p-2 text-xs opacity-80">No users to display.</p>
+                ) : (
+                  <ul className="divide-y">
+                    {roomUsers.map((user) => {
+                      const status = getPresenceState(user.lastActiveAt || user.updatedAt || user.lastSeenAt);
+                      return (
+                        <li key={String(user._id)} className="flex items-center justify-between gap-2 p-2 text-sm">
+                          <span>@{user.username || user.realName || 'user'}</span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase opacity-80">
+                            <span className={`h-2 w-2 rounded-full ${status.tone}`} />
+                            {status.label}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </section>
+
+            <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+              <h4 className="text-sm font-semibold">Shared Media / Links</h4>
+              {sharedMediaSnippets.length === 0 ? (
+                <p className="mt-2 text-xs opacity-80">No shared media yet.</p>
+              ) : (
+                <ul className="mt-2 space-y-1 text-xs">
+                  {sharedMediaSnippets.map((message) => (
+                    <li key={String(message._id)} className="rounded border px-2 py-1">
+                      {(message.content || '').slice(0, 70)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
         </aside>
       </div>
