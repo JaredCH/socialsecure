@@ -155,10 +155,14 @@ router.get('/presence', authenticateToken, async (req, res) => {
 router.put('/presence/privacy', authenticateToken, async (req, res) => {
   try {
     const { shareWithFriends } = req.body;
+    const updatePayload = { shareWithFriends };
+    if (shareWithFriends === false) {
+      updatePayload.lastActivityAt = new Date();
+    }
     
     const presence = await LocationPresence.findOneAndUpdate(
       { user: req.user.userId },
-      { $set: { shareWithFriends } },
+      { $set: updatePayload },
       { new: true }
     );
     
@@ -206,13 +210,14 @@ router.get('/friends', authenticateToken, async (req, res) => {
     // Return coarse (already rounded by precision level) coordinates for map display
     // and only include live updates from the last minute.
     const sanitized = locations.flatMap(loc => {
-      // Missing activity timestamps are treated as stale and omitted from live friend data.
+      // Missing activity timestamps are treated as stale and omitted.
       const lastActivityTime = loc.lastActivityAt ? new Date(loc.lastActivityAt).getTime() : 0;
       if (!lastActivityTime || now - lastActivityTime > FRIENDS_LIVE_WINDOW_MS) {
         return [];
       }
       const [lng = null, lat = null] = loc.location?.coordinates || [];
       const liveAgeSeconds = Math.max(0, Math.floor((now - lastActivityTime) / 1000));
+      const isLive = Boolean(loc.shareWithFriends);
       return {
         user: {
           _id: loc.user._id,
@@ -229,7 +234,7 @@ router.get('/friends', authenticateToken, async (req, res) => {
         precisionLevel: loc.precisionLevel,
         lastActivityAt: loc.lastActivityAt,
         liveAgeSeconds,
-        isLive: true,
+        isLive,
         isActive: loc.isActive
       };
     });

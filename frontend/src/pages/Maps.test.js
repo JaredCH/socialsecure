@@ -1,6 +1,12 @@
 jest.mock('../utils/api', () => ({ mapsAPI: {} }));
 
-import { configureLeafletMarkerAssets, resolveLeafletModule, withDataFallback } from './Maps';
+import {
+  FRIENDS_REFRESH_INTERVAL_MS,
+  LOCATION_PUBLISH_INTERVAL_MS,
+  configureLeafletMarkerAssets,
+  resolveLeafletModule,
+  withDataFallback
+} from './Maps';
 
 describe('resolveLeafletModule', () => {
   it('uses default export when it contains Leaflet map API', () => {
@@ -69,5 +75,15 @@ describe('configureLeafletMarkerAssets', () => {
     await configureLeafletMarkerAssets({}, assetLoader);
 
     expect(assetLoader).not.toHaveBeenCalled();
+  });
+});
+
+describe('map polling intervals', () => {
+  it('publishes user location every 30 seconds', () => {
+    expect(LOCATION_PUBLISH_INTERVAL_MS).toBe(30000);
+  });
+
+  it('refreshes friend locations every 10 seconds', () => {
+    expect(FRIENDS_REFRESH_INTERVAL_MS).toBe(10000);
   });
 });

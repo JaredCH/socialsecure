@@ -199,10 +199,9 @@ locationPresenceSchema.statics.getFriendsLocations = async function(userId) {
     f.requester.toString() === userId.toString() ? f.recipient : f.requester
   );
   
-  // Get friends' locations who have sharing enabled
+  // Get active friends' location records (route layer decides what is visible)
   const locations = await this.find({
     user: { $in: friendIds },
-    shareWithFriends: true,
     isActive: true
   }).populate('user', 'username realName avatarUrl');
   

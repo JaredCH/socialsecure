@@ -128,19 +128,28 @@ describe('Maps route audit fixes', () => {
     );
   });
 
-  it('returns only friend locations active within the last minute', async () => {
+  it('returns live friends and recently-hidden friends for up to 60 seconds', async () => {
     const app = buildApp();
     const now = Date.now();
     mockLocationPresence.getFriendsLocations.mockResolvedValue([
       {
         user: { _id: 'friend-1', username: 'liveFriend', realName: 'Live Friend', avatarUrl: null },
         location: { coordinates: [-73.9857, 40.7484] },
+        shareWithFriends: true,
         lastActivityAt: new Date(now - 25 * 1000),
         isActive: true
       },
       {
-        user: { _id: 'friend-2', username: 'staleFriend', realName: 'Stale Friend', avatarUrl: null },
+        user: { _id: 'friend-2', username: 'recentlyHidden', realName: 'Recently Hidden', avatarUrl: null },
         location: { coordinates: [-73.98, 40.74] },
+        shareWithFriends: false,
+        lastActivityAt: new Date(now - 40 * 1000),
+        isActive: true
+      },
+      {
+        user: { _id: 'friend-3', username: 'staleFriend', realName: 'Stale Friend', avatarUrl: null },
+        location: { coordinates: [-73.97, 40.73] },
+        shareWithFriends: false,
         lastActivityAt: new Date(now - 2 * 60 * 1000),
         isActive: true
       }
@@ -151,7 +160,7 @@ describe('Maps route audit fixes', () => {
       .set('Authorization', 'Bearer token');
 
     expect(response.status).toBe(200);
-    expect(response.body.friends).toHaveLength(1);
+    expect(response.body.friends).toHaveLength(2);
     expect(response.body.friends[0]).toEqual(
       expect.objectContaining({
         user: expect.objectContaining({ _id: 'friend-1', username: 'liveFriend' }),
@@ -160,6 +169,14 @@ describe('Maps route audit fixes', () => {
     );
     expect(response.body.friends[0].liveAgeSeconds).toBeGreaterThanOrEqual(0);
     expect(response.body.friends[0].liveAgeSeconds).toBeLessThanOrEqual(60);
+    expect(response.body.friends[1]).toEqual(
+      expect.objectContaining({
+        user: expect.objectContaining({ _id: 'friend-2', username: 'recentlyHidden' }),
+        isLive: false
+      })
+    );
+    expect(response.body.friends[1].liveAgeSeconds).toBeGreaterThanOrEqual(0);
+    expect(response.body.friends[1].liveAgeSeconds).toBeLessThanOrEqual(60);
   });
 
   it('jitter heatmap coordinates and timestamps for privacy', async () => {
