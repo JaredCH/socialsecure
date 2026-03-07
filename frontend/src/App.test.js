@@ -166,4 +166,24 @@ describe('App navbar features dropdown', () => {
     expect(featuresMenu.textContent).not.toContain('Discover');
     expect(featuresMenu.textContent).not.toContain('Resume');
   });
+
+  it('toggles the mobile nav menu with the hamburger button', async () => {
+    localStorage.setItem('token', 'token');
+
+    await renderApp();
+
+    const mobileToggle = container.querySelector('button[aria-label="Toggle navigation menu"]');
+    expect(mobileToggle).not.toBeNull();
+
+    const navMenu = container.querySelector('#main-nav-menu');
+    expect(navMenu).not.toBeNull();
+    expect(navMenu.className).toContain('hidden');
+
+    await act(async () => {
+      mobileToggle.click();
+    });
+
+    expect(navMenu.className).toContain('mt-3 flex');
+    expect(navMenu.className).not.toContain('hidden');
+  });
 });

@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { notificationAPI } from '../utils/api';
+import { friendsAPI, notificationAPI } from '../utils/api';
 import NotificationItem from './NotificationItem';
 
 const PAGE_SIZE = 20;
 
-const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNotification }) => {
+const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNotification, userDisplayName = 'Account' }) => {
   const navigate = useNavigate();
   const panelRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -13,6 +13,9 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [friendActionLoadingById, setFriendActionLoadingById] = useState({});
+  const [friendCircleById, setFriendCircleById] = useState({});
+  const [friendActionMessage, setFriendActionMessage] = useState('');
 
   const loadNotifications = async (nextPage = 1, replace = false) => {
     setLoading(true);
@@ -92,6 +95,68 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
     }
   };
 
+  const setFriendActionLoading = (id, loadingValue) => {
+    setFriendActionLoadingById((prev) => ({ ...prev, [String(id)]: loadingValue }));
+  };
+
+  const handleFriendCircleChange = (notificationId, value) => {
+    setFriendCircleById((prev) => ({ ...prev, [String(notificationId)]: value === 'secure' ? 'secure' : 'social' }));
+  };
+
+  const resolveFriendshipForNotification = async (notification) => {
+    const directFriendshipId = String(notification?.data?.friendshipId || '').trim();
+    if (directFriendshipId) {
+      return { friendshipId: directFriendshipId, relationship: 'pending' };
+    }
+    const senderId = String(notification?.senderId || '').trim();
+    if (!senderId) {
+      return { friendshipId: null, relationship: null };
+    }
+    const relationshipResponse = await friendsAPI.getRelationship(senderId);
+    return {
+      friendshipId: relationshipResponse?.data?.friendshipId ? String(relationshipResponse.data.friendshipId) : null,
+      relationship: String(relationshipResponse?.data?.relationship || '')
+    };
+  };
+
+  const handleFriendRequestAction = async (notification, action) => {
+    const notificationId = String(notification?._id || '');
+    if (!notificationId) return;
+    const confirmLabel = action === 'accept' ? 'accept' : 'decline';
+    const isConfirmed = window.confirm(`Are you sure you want to ${confirmLabel} this friend request?`);
+    if (!isConfirmed) return;
+
+    setFriendActionMessage('');
+    setFriendActionLoading(notificationId, true);
+    try {
+      const { friendshipId, relationship } = await resolveFriendshipForNotification(notification);
+      if (!friendshipId || (relationship && relationship !== 'pending')) {
+        setFriendActionMessage('This request is no longer pending.');
+        return;
+      }
+
+      if (action === 'accept') {
+        await friendsAPI.acceptRequest(friendshipId);
+        const selectedCircle = friendCircleById[notificationId] === 'secure' ? 'secure' : 'social';
+        await friendsAPI.updateFriendCategory(friendshipId, selectedCircle);
+      } else {
+        await friendsAPI.declineRequest(friendshipId);
+      }
+
+      setNotifications((prev) => prev.map((item) => (
+        String(item._id) === notificationId
+          ? { ...item, isRead: true, readAt: item.readAt || new Date().toISOString() }
+          : item
+      )));
+      onUnreadCountChange((prev) => Math.max(0, prev - (notification?.isRead ? 0 : 1)));
+      setFriendActionMessage(action === 'accept' ? 'Friend request accepted.' : 'Friend request declined.');
+    } catch {
+      setFriendActionMessage('Unable to update friend request. Please try again.');
+    } finally {
+      setFriendActionLoading(notificationId, false);
+    }
+  };
+
   const openNotification = async (notification) => {
     if (!notification?.isRead) {
       await markRead(notification._id);
@@ -141,16 +206,29 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
   };
 
   return (
-    <div className="relative" ref={panelRef}>
+    <div
+      className="relative"
+      ref={panelRef}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="relative text-gray-600 hover:text-blue-600"
+        className="relative inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/80 hover:text-blue-700"
         aria-label="Notifications"
+        aria-expanded={open}
       >
-        🔔
+        <span className="hidden max-w-24 truncate sm:inline" title={userDisplayName}>{userDisplayName}</span>
+        <span aria-hidden="true">🔔</span>
         {unreadCount > 0 ? (
-          <span className="absolute -top-2 -right-3 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] leading-[18px] text-center">
+          <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] leading-[18px] text-center">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         ) : null}
@@ -167,6 +245,9 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
           </div>
 
           <div className="max-h-96 overflow-y-auto" onScroll={handleScroll}>
+            {friendActionMessage ? (
+              <div className="px-3 pt-2 text-xs text-slate-600">{friendActionMessage}</div>
+            ) : null}
             {notifications.length === 0 && !loading ? (
               <div className="p-4 text-sm text-gray-500">No notifications yet.</div>
             ) : notifications.map((notification) => (
@@ -176,6 +257,10 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
                 onOpen={openNotification}
                 onMarkRead={markRead}
                 onDelete={deleteNotification}
+                onFriendRequestAction={handleFriendRequestAction}
+                onFriendCircleChange={handleFriendCircleChange}
+                friendActionLoading={Boolean(friendActionLoadingById[String(notification._id)])}
+                friendCircle={friendCircleById[String(notification._id)] || 'social'}
               />
             ))}
             {loading ? <div className="p-3 text-xs text-gray-500">Loading...</div> : null}
