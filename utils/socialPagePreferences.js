@@ -1,4 +1,5 @@
 const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest'];
+const SOCIAL_LAYOUT_MODES = ['desktop', 'mobile'];
 const SOCIAL_ACCENT_TOKENS = ['blue', 'violet', 'emerald', 'rose', 'amber'];
 const SOCIAL_FONT_FAMILIES = ['Inter', 'Manrope', 'Space Grotesk', 'Merriweather', 'Fira Sans', 'Georgia'];
 const SOCIAL_FONT_SIZE_TOKENS = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl'];
@@ -86,6 +87,21 @@ const DEFAULT_PANEL_LAYOUTS = Object.freeze({
   chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, visible: true, gridPlacement: { row: 0, col: 10 } },
   top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, visible: true, gridPlacement: { row: 2, col: 10 } },
   community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, visible: true, gridPlacement: { row: 6, col: 10 } }
+});
+const DEFAULT_MOBILE_PANEL_LAYOUTS = Object.freeze({
+  profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, visible: true, gridPlacement: { row: 0, col: 0 } },
+  guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 1, visible: true, gridPlacement: { row: 1, col: 0 } },
+  composer: { area: 'main', size: 'fourCols', height: 'fullRow', order: 2, visible: true, gridPlacement: { row: 2, col: 0 } },
+  timeline: { area: 'main', size: 'fourCols', height: 'threeRows', order: 3, visible: true, gridPlacement: { row: 4, col: 0 } },
+  gallery: { area: 'main', size: 'fourCols', height: 'twoRows', order: 4, visible: true, gridPlacement: { row: 10, col: 0 } },
+  chat_panel: { area: 'main', size: 'fourCols', height: 'fullRow', order: 5, visible: true, gridPlacement: { row: 14, col: 0 } },
+  top_friends: { area: 'main', size: 'twoCols', height: 'fullRow', order: 6, visible: true, gridPlacement: { row: 16, col: 0 } },
+  snapshot: { area: 'main', size: 'twoCols', height: 'fullRow', order: 7, visible: true, gridPlacement: { row: 16, col: 6 } },
+  circles: { area: 'main', size: 'fourCols', height: 'fullRow', order: 8, visible: true, gridPlacement: { row: 18, col: 0 } },
+  guest_lookup: { area: 'main', size: 'twoCols', height: 'fullRow', order: 9, visible: true, gridPlacement: { row: 17, col: 0 } },
+  moderation_status: { area: 'main', size: 'twoCols', height: 'fullRow', order: 10, visible: true, gridPlacement: { row: 17, col: 6 } },
+  community_notes: { area: 'main', size: 'fourCols', height: 'halfRow', order: 11, visible: true, gridPlacement: { row: 19, col: 0 } },
+  shortcuts: { area: 'main', size: 'fourCols', height: 'halfRow', order: 12, visible: true, gridPlacement: { row: 19, col: 6 } }
 });
 
 const SOCIAL_DESIGN_TEMPLATES = Object.freeze([
@@ -304,9 +320,27 @@ const buildDefaultPanels = () => SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
   };
   return acc;
 }, {});
+const buildDefaultPanelsForMode = (mode = 'desktop') => SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
+  const defaults = mode === 'mobile'
+    ? (DEFAULT_MOBILE_PANEL_LAYOUTS[panelId] || DEFAULT_PANEL_LAYOUTS[panelId])
+    : DEFAULT_PANEL_LAYOUTS[panelId];
+  acc[panelId] = {
+    area: defaults.area,
+    size: defaults.size,
+    height: defaults.height,
+    order: defaults.order,
+    visible: defaults.visible,
+    gridPlacement: defaults.gridPlacement ? { ...defaults.gridPlacement } : undefined,
+    useCustomStyles: false,
+    styles: {}
+  };
+  return acc;
+}, {});
 
 const buildDefaultSocialPagePreferences = (profileTheme = 'default') => {
   const resolvedThemePreset = SOCIAL_THEME_PRESETS.includes(profileTheme) ? profileTheme : 'default';
+  const desktopPanels = buildDefaultPanelsForMode('desktop');
+  const mobilePanels = buildDefaultPanelsForMode('mobile');
   return {
     themePreset: resolvedThemePreset,
     accentColorToken: THEME_TO_DEFAULT_ACCENT[resolvedThemePreset] || 'blue',
@@ -317,7 +351,12 @@ const buildDefaultSocialPagePreferences = (profileTheme = 'default') => {
       ...DEFAULT_GLOBAL_STYLES,
       fontSizes: { ...DEFAULT_GLOBAL_STYLES.fontSizes }
     },
-    panels: buildDefaultPanels(),
+    panels: desktopPanels,
+    layouts: {
+      desktop: { panels: desktopPanels },
+      mobile: { panels: mobilePanels },
+      activeMode: 'desktop'
+    },
     activeConfigId: null,
     version: SOCIAL_PREFERENCES_VERSION
   };
@@ -335,7 +374,27 @@ const mergeDesignPatch = (base, patch = {}) => {
         ...((patch.globalStyles && patch.globalStyles.fontSizes) || {})
       }
     },
-    panels: { ...(base.panels || {}) }
+    panels: { ...(base.panels || {}) },
+    layouts: {
+      ...(base.layouts || {}),
+      ...(patch.layouts || {}),
+      desktop: {
+        ...((base.layouts && base.layouts.desktop) || {}),
+        ...((patch.layouts && patch.layouts.desktop) || {}),
+        panels: {
+          ...(((base.layouts && base.layouts.desktop) || {}).panels || {}),
+          ...(((patch.layouts && patch.layouts.desktop) || {}).panels || {})
+        }
+      },
+      mobile: {
+        ...((base.layouts && base.layouts.mobile) || {}),
+        ...((patch.layouts && patch.layouts.mobile) || {}),
+        panels: {
+          ...(((base.layouts && base.layouts.mobile) || {}).panels || {}),
+          ...(((patch.layouts && patch.layouts.mobile) || {}).panels || {})
+        }
+      }
+    }
   };
 
   if (isPlainObject(patch.panels)) {
@@ -345,6 +404,14 @@ const mergeDesignPatch = (base, patch = {}) => {
         ...(panelPatch || {}),
         styles: {
           ...(((base.panels && base.panels[panelId]) || {}).styles || {}),
+          ...((panelPatch && panelPatch.styles) || {})
+        }
+      };
+      merged.layouts.desktop.panels[panelId] = {
+        ...((base.layouts && base.layouts.desktop && base.layouts.desktop.panels && base.layouts.desktop.panels[panelId]) || {}),
+        ...(panelPatch || {}),
+        styles: {
+          ...(((base.layouts && base.layouts.desktop && base.layouts.desktop.panels && base.layouts.desktop.panels[panelId]) || {}).styles || {}),
           ...((panelPatch && panelPatch.styles) || {})
         }
       };
@@ -408,7 +475,11 @@ const normalizePanelEntry = (rawPanel = {}, defaults, globalStyles = DEFAULT_GLO
   };
 };
 
-const normalizeSocialPagePreferences = (input, { profileTheme = 'default', strict = false } = {}) => {
+const normalizeSocialPagePreferences = (input, {
+  profileTheme = 'default',
+  strict = false,
+  layoutMode = 'desktop'
+} = {}) => {
   const defaults = buildDefaultSocialPagePreferences(profileTheme);
   const raw = isPlainObject(input) ? input : {};
 
@@ -422,11 +493,14 @@ const normalizeSocialPagePreferences = (input, { profileTheme = 'default', stric
     : (allowedAccents.includes(defaults.accentColorToken) ? defaults.accentColorToken : allowedAccents[0]);
 
   const hiddenModules = uniqueStrings(raw.hiddenModules).filter((moduleId) => SOCIAL_MODULE_IDS.includes(moduleId));
-  const panels = buildDefaultPanels();
+  const desktopPanels = buildDefaultPanelsForMode('desktop');
+  const mobilePanels = buildDefaultPanelsForMode('mobile');
   const requestedLegacyOrder = uniqueStrings(raw.sectionOrder || raw.effective?.sectionOrder);
   const requestedLegacyHidden = uniqueStrings(raw.hiddenSections);
 
   const requestedPanelKeys = isPlainObject(raw.panels) ? Object.keys(raw.panels) : [];
+  const requestedDesktopPanelKeys = isPlainObject(raw.layouts?.desktop?.panels) ? Object.keys(raw.layouts.desktop.panels) : [];
+  const requestedMobilePanelKeys = isPlainObject(raw.layouts?.mobile?.panels) ? Object.keys(raw.layouts.mobile.panels) : [];
   if (strict) {
     const unknownPanelKey = requestedPanelKeys.find((panelId) => !normalizePanelId(panelId));
     if (unknownPanelKey) {
@@ -440,31 +514,71 @@ const normalizeSocialPagePreferences = (input, { profileTheme = 'default', stric
     if (unknownLegacyHidden) {
       return { error: `Unknown hidden section ID: ${unknownLegacyHidden}` };
     }
+    const unknownDesktopPanelKey = requestedDesktopPanelKeys.find((panelId) => !normalizePanelId(panelId));
+    if (unknownDesktopPanelKey) {
+      return { error: `Unknown desktop panel ID: ${unknownDesktopPanelKey}` };
+    }
+    const unknownMobilePanelKey = requestedMobilePanelKeys.find((panelId) => !normalizePanelId(panelId));
+    if (unknownMobilePanelKey) {
+      return { error: `Unknown mobile panel ID: ${unknownMobilePanelKey}` };
+    }
   }
 
-  applyLegacyOrdering(panels, requestedLegacyOrder, requestedLegacyHidden);
+  applyLegacyOrdering(desktopPanels, requestedLegacyOrder, requestedLegacyHidden);
+  applyLegacyOrdering(mobilePanels, requestedLegacyOrder, requestedLegacyHidden);
 
   if (isPlainObject(raw.panels)) {
     for (const [rawPanelId, panelConfig] of Object.entries(raw.panels)) {
       const panelId = normalizePanelId(rawPanelId);
-      if (!panelId || !panels[panelId]) continue;
-      panels[panelId] = normalizePanelEntry(panelConfig, {
+      if (!panelId || !desktopPanels[panelId]) continue;
+      desktopPanels[panelId] = normalizePanelEntry(panelConfig, {
         ...DEFAULT_PANEL_LAYOUTS[panelId],
-        ...(panels[panelId] || {})
+        ...(desktopPanels[panelId] || {})
+      });
+    }
+  }
+
+  if (isPlainObject(raw.layouts?.desktop?.panels)) {
+    for (const [rawPanelId, panelConfig] of Object.entries(raw.layouts.desktop.panels)) {
+      const panelId = normalizePanelId(rawPanelId);
+      if (!panelId || !desktopPanels[panelId]) continue;
+      desktopPanels[panelId] = normalizePanelEntry(panelConfig, {
+        ...DEFAULT_PANEL_LAYOUTS[panelId],
+        ...(desktopPanels[panelId] || {})
+      });
+    }
+  }
+
+  if (isPlainObject(raw.layouts?.mobile?.panels)) {
+    for (const [rawPanelId, panelConfig] of Object.entries(raw.layouts.mobile.panels)) {
+      const panelId = normalizePanelId(rawPanelId);
+      if (!panelId || !mobilePanels[panelId]) continue;
+      mobilePanels[panelId] = normalizePanelEntry(panelConfig, {
+        ...(DEFAULT_MOBILE_PANEL_LAYOUTS[panelId] || DEFAULT_PANEL_LAYOUTS[panelId]),
+        ...(mobilePanels[panelId] || {})
       });
     }
   }
 
   for (const mandatoryPanelId of SOCIAL_MANDATORY_SECTION_IDS) {
-    panels[mandatoryPanelId].visible = true;
+    desktopPanels[mandatoryPanelId].visible = true;
+    mobilePanels[mandatoryPanelId].visible = true;
   }
 
-  const visiblePrimaryCount = SOCIAL_PRIMARY_SECTION_IDS.filter((panelId) => panels[panelId]?.visible !== false).length;
+  const visiblePrimaryCount = SOCIAL_PRIMARY_SECTION_IDS.filter((panelId) => desktopPanels[panelId]?.visible !== false).length;
   if (visiblePrimaryCount === 0) {
     if (strict) {
       return { error: 'At least one primary section must remain visible' };
     }
-    panels[SOCIAL_PRIMARY_SECTION_IDS[0]].visible = true;
+    desktopPanels[SOCIAL_PRIMARY_SECTION_IDS[0]].visible = true;
+  }
+
+  const visibleMobilePrimaryCount = SOCIAL_PRIMARY_SECTION_IDS.filter((panelId) => mobilePanels[panelId]?.visible !== false).length;
+  if (visibleMobilePrimaryCount === 0) {
+    if (strict) {
+      return { error: 'At least one primary section must remain visible for mobile layout' };
+    }
+    mobilePanels[SOCIAL_PRIMARY_SECTION_IDS[0]].visible = true;
   }
 
   const globalStyles = {
@@ -476,15 +590,34 @@ const normalizeSocialPagePreferences = (input, { profileTheme = 'default', stric
     fontSizes: normalizeFontSizeMap(raw.globalStyles?.fontSizes, DEFAULT_GLOBAL_STYLES.fontSizes)
   };
 
+  const requestedMode = SOCIAL_LAYOUT_MODES.includes(layoutMode) ? layoutMode : 'desktop';
+  const activeLayoutMode = SOCIAL_LAYOUT_MODES.includes(raw.layouts?.activeMode)
+    ? raw.layouts.activeMode
+    : requestedMode;
+  const sourcePanels = activeLayoutMode === 'mobile' ? mobilePanels : desktopPanels;
   const effectivePanels = {};
   for (const panelId of SOCIAL_PANEL_IDS) {
-    const basePanel = panels[panelId] || normalizePanelEntry({}, DEFAULT_PANEL_LAYOUTS[panelId]);
+    const basePanel = sourcePanels[panelId] || normalizePanelEntry({}, DEFAULT_PANEL_LAYOUTS[panelId]);
     effectivePanels[panelId] = {
       ...basePanel,
       resolvedStyles: basePanel.useCustomStyles ? normalizePanelStyles(basePanel.styles, globalStyles) : globalStyles
     };
   }
 
+  const normalizeResolvedPanels = (panelsByMode) => {
+    const resolved = {};
+    for (const panelId of SOCIAL_PANEL_IDS) {
+      const basePanel = panelsByMode[panelId] || normalizePanelEntry({}, DEFAULT_PANEL_LAYOUTS[panelId]);
+      resolved[panelId] = {
+        ...basePanel,
+        resolvedStyles: basePanel.useCustomStyles ? normalizePanelStyles(basePanel.styles, globalStyles) : globalStyles
+      };
+    }
+    return resolved;
+  };
+
+  const desktopResolvedPanels = normalizeResolvedPanels(desktopPanels);
+  const mobileResolvedPanels = normalizeResolvedPanels(mobilePanels);
   const { sectionOrder, hiddenSections } = deriveLegacySectionData(effectivePanels);
   const value = {
     themePreset,
@@ -494,6 +627,11 @@ const normalizeSocialPagePreferences = (input, { profileTheme = 'default', stric
     hiddenModules,
     globalStyles,
     panels: effectivePanels,
+    layouts: {
+      desktop: { panels: desktopResolvedPanels },
+      mobile: { panels: mobileResolvedPanels },
+      activeMode: activeLayoutMode
+    },
     activeConfigId: raw.activeConfigId ? String(raw.activeConfigId) : null,
     version: Number.isInteger(raw.version) && raw.version > 0 ? raw.version : SOCIAL_PREFERENCES_VERSION,
     effective: {
@@ -517,6 +655,7 @@ const toPublicSocialPagePreferences = (input, options = {}) => {
 
 module.exports = {
   SOCIAL_THEME_PRESETS,
+  SOCIAL_LAYOUT_MODES,
   SOCIAL_ACCENT_TOKENS,
   SOCIAL_FONT_FAMILIES,
   SOCIAL_FONT_SIZE_TOKENS,

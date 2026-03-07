@@ -329,10 +329,12 @@ const Social = () => {
   const [designBusy, setDesignBusy] = useState(false);
   const [designError, setDesignError] = useState('');
   const [designSuccessMessage, setDesignSuccessMessage] = useState('');
+  const [hasUnsavedDesignChanges, setHasUnsavedDesignChanges] = useState(false);
   const [activeDesignConfigId, setActiveDesignConfigId] = useState(null);
+  const [viewportLayoutMode, setViewportLayoutMode] = useState(() => (window.innerWidth < 1024 ? 'mobile' : 'desktop'));
+  const [editorLayoutMode, setEditorLayoutMode] = useState(() => (window.innerWidth < 1024 ? 'mobile' : 'desktop'));
   const localTypingTimeoutsRef = useRef({});
   const remoteTypingTimeoutsRef = useRef({});
-  const designAutosaveRef = useRef(null);
   const designDirtyRef = useRef(false);
 
   const realtimeEnabled = currentUser?.realtimePreferences?.enabled !== false;
@@ -351,9 +353,14 @@ const Social = () => {
   const activeProfile = isAuthenticated && !isViewingAnotherProfile
     ? currentUser
     : guestProfile;
+  const activeLayoutMode = designStudioOpen ? editorLayoutMode : viewportLayoutMode;
   const socialPreferences = useMemo(
-    () => normalizeSocialPreferences(draftSocialPreferences || activeProfile?.socialPagePreferences, activeProfile?.profileTheme),
-    [draftSocialPreferences, activeProfile?.socialPagePreferences, activeProfile?.profileTheme]
+    () => normalizeSocialPreferences(
+      draftSocialPreferences || activeProfile?.socialPagePreferences,
+      activeProfile?.profileTheme,
+      activeLayoutMode
+    ),
+    [draftSocialPreferences, activeProfile?.socialPagePreferences, activeProfile?.profileTheme, activeLayoutMode]
   );
   const panelsByArea = useMemo(() => getPanelsByArea(socialPreferences), [socialPreferences]);
   const activePanelCount = useMemo(
@@ -811,6 +818,21 @@ const Social = () => {
     Object.values(remoteTypingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
   }, []);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportLayoutMode(window.innerWidth < 1024 ? 'mobile' : 'desktop');
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!designStudioOpen) {
+      setEditorLayoutMode(viewportLayoutMode);
+    }
+  }, [designStudioOpen, viewportLayoutMode]);
+
   const loadDesignData = useCallback(async () => {
     if (!isOwnSocialContext) {
       setSocialConfigs([]);
@@ -827,6 +849,8 @@ const Social = () => {
         : SOCIAL_DESIGN_TEMPLATES);
       setLayoutPresets(SOCIAL_LAYOUT_PRESETS);
       setActiveDesignConfigId(response.data?.activeConfigId || null);
+      setHasUnsavedDesignChanges(false);
+      designDirtyRef.current = false;
       if (response.data?.currentPreferences) {
         setCurrentUser((prev) => (prev ? {
           ...prev,
@@ -867,82 +891,101 @@ const Social = () => {
     loadSharedDesigns();
   }, [loadSharedDesigns]);
 
-  useEffect(() => () => {
-    if (designAutosaveRef.current) {
-      window.clearTimeout(designAutosaveRef.current);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isOwnSocialContext || !draftSocialPreferences || !designDirtyRef.current) {
-      return undefined;
-    }
-
-    if (designAutosaveRef.current) {
-      window.clearTimeout(designAutosaveRef.current);
-    }
-
-    designAutosaveRef.current = window.setTimeout(async () => {
-      setDesignBusy(true);
-      try {
-        const response = await socialPageAPI.savePreferences(draftSocialPreferences, true);
-        const savedPreferences = normalizeSocialPreferences(
-          response.data?.preferences || draftSocialPreferences,
-          currentUser?.profileTheme || activeProfile?.profileTheme || 'default'
-        );
-        setCurrentUser((prev) => (prev ? { ...prev, socialPagePreferences: savedPreferences } : prev));
-        setDraftSocialPreferences(savedPreferences);
-        setActiveDesignConfigId(savedPreferences.activeConfigId || null);
-        setDesignError('');
-        setDesignSuccessMessage('Layout saved');
-        designDirtyRef.current = false;
-      } catch (error) {
-        setDesignError(error.response?.data?.error || 'Failed to save social page customization.');
-      } finally {
-        setDesignBusy(false);
-      }
-    }, 700);
-
-    return () => {
-      if (designAutosaveRef.current) {
-        window.clearTimeout(designAutosaveRef.current);
-      }
-    };
-  }, [draftSocialPreferences, isOwnSocialContext, currentUser?.profileTheme, activeProfile?.profileTheme]);
-
   const patchDraftPreferences = useCallback((updater) => {
     setDesignError('');
     setDesignSuccessMessage('');
     setDraftSocialPreferences((prev) => {
       const base = prev || socialPreferences;
       const nextValue = typeof updater === 'function' ? updater(base) : updater;
-      return normalizeSocialPreferences(nextValue, currentUser?.profileTheme || activeProfile?.profileTheme || 'default');
+      return normalizeSocialPreferences(
+        nextValue,
+        currentUser?.profileTheme || activeProfile?.profileTheme || 'default',
+        activeLayoutMode
+      );
     });
     designDirtyRef.current = true;
-  }, [socialPreferences, currentUser?.profileTheme, activeProfile?.profileTheme]);
+    setHasUnsavedDesignChanges(true);
+  }, [socialPreferences, currentUser?.profileTheme, activeProfile?.profileTheme, activeLayoutMode]);
+
+  const saveDraftPreferences = useCallback(async () => {
+    if (!isOwnSocialContext || !draftSocialPreferences || !designDirtyRef.current) return;
+    setDesignBusy(true);
+    setDesignError('');
+    try {
+      const response = await socialPageAPI.savePreferences(draftSocialPreferences, true);
+      const savedPreferences = normalizeSocialPreferences(
+        response.data?.preferences || draftSocialPreferences,
+        currentUser?.profileTheme || activeProfile?.profileTheme || 'default',
+        activeLayoutMode
+      );
+      setCurrentUser((prev) => (prev ? { ...prev, socialPagePreferences: savedPreferences } : prev));
+      setDraftSocialPreferences(savedPreferences);
+      setActiveDesignConfigId(savedPreferences.activeConfigId || null);
+      setDesignSuccessMessage('Layout saved');
+      designDirtyRef.current = false;
+      setHasUnsavedDesignChanges(false);
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to save social page customization.');
+    } finally {
+      setDesignBusy(false);
+    }
+  }, [
+    isOwnSocialContext,
+    draftSocialPreferences,
+    currentUser?.profileTheme,
+    activeProfile?.profileTheme,
+    activeLayoutMode
+  ]);
+
+  const cancelDraftPreferences = useCallback(() => {
+    const restored = normalizeSocialPreferences(
+      activeProfile?.socialPagePreferences,
+      activeProfile?.profileTheme || 'default',
+      activeLayoutMode
+    );
+    setDraftSocialPreferences(restored);
+    setDesignError('');
+    setDesignSuccessMessage('Draft changes discarded');
+    designDirtyRef.current = false;
+    setHasUnsavedDesignChanges(false);
+  }, [activeProfile?.socialPagePreferences, activeProfile?.profileTheme, activeLayoutMode]);
 
   const updateGlobalStyles = useCallback((patch) => {
     patchDraftPreferences((prev) => mergeDesignPatch(prev, { globalStyles: patch }));
   }, [patchDraftPreferences]);
 
-  const updatePanelPreferences = useCallback((panelId, patch) => {
-    patchDraftPreferences((prev) => mergeDesignPatch(prev, {
-      panels: {
-        [panelId]: patch
+  const updatePanelPreferences = useCallback((panelId, patch, mode = activeLayoutMode) => {
+    const scopedPatch = {
+      layouts: {
+        activeMode: mode,
+        [mode]: {
+          panels: {
+            [panelId]: patch
+          }
+        }
       }
+    };
+    if (mode === 'desktop') {
+      scopedPatch.panels = { [panelId]: patch };
+    }
+    patchDraftPreferences((prev) => mergeDesignPatch(prev, {
+      ...scopedPatch
     }));
-  }, [patchDraftPreferences]);
+  }, [patchDraftPreferences, activeLayoutMode]);
 
   const buildPanelOverridePatch = useCallback((enabled) => (
     enabled ? { useCustomStyles: true } : { useCustomStyles: false, styles: {} }
   ), []);
 
-  const movePanel = useCallback((panelId, direction) => {
+  const movePanel = useCallback((panelId, direction, mode = activeLayoutMode) => {
     patchDraftPreferences((prev) => {
       const next = JSON.parse(JSON.stringify(prev));
-      const panel = next.panels?.[panelId];
+      const panelCollection = mode === 'desktop'
+        ? (next.layouts?.desktop?.panels || next.panels || {})
+        : (next.layouts?.mobile?.panels || {});
+      const panel = panelCollection?.[panelId];
       if (!panel) return next;
-      const siblings = Object.entries(next.panels)
+      const siblings = Object.entries(panelCollection)
         .filter(([, value]) => value.area === panel.area)
         .sort((left, right) => (left[1].order || 0) - (right[1].order || 0));
       const index = siblings.findIndex(([id]) => id === panelId);
@@ -950,22 +993,43 @@ const Social = () => {
       if (index < 0 || targetIndex < 0 || targetIndex >= siblings.length) return next;
       const [currentId] = siblings[index];
       const [targetId] = siblings[targetIndex];
-      const currentOrder = next.panels[currentId].order;
-      next.panels[currentId].order = next.panels[targetId].order;
-      next.panels[targetId].order = currentOrder;
+      const currentOrder = panelCollection[currentId].order;
+      panelCollection[currentId].order = panelCollection[targetId].order;
+      panelCollection[targetId].order = currentOrder;
+      if (mode === 'desktop') {
+        next.panels = {
+          ...(next.panels || {}),
+          [currentId]: panelCollection[currentId],
+          [targetId]: panelCollection[targetId]
+        };
+      }
+      next.layouts = {
+        ...(next.layouts || {}),
+        activeMode: mode,
+        [mode]: {
+          ...((next.layouts && next.layouts[mode]) || {}),
+          panels: panelCollection
+        }
+      };
       return next;
     });
-  }, [patchDraftPreferences]);
+  }, [patchDraftPreferences, activeLayoutMode]);
 
   const applyTemplate = useCallback((template) => {
     if (!template?.design) return;
     patchDraftPreferences((prev) => mergeDesignPatch(prev, template.design));
   }, [patchDraftPreferences]);
 
-  const applyLayoutPreset = useCallback((preset) => {
+  const applyLayoutPreset = useCallback((preset, mode = activeLayoutMode) => {
     if (!preset?.panels) return;
-    patchDraftPreferences((prev) => mergeDesignPatch(prev, { panels: preset.panels }));
-  }, [patchDraftPreferences]);
+    patchDraftPreferences((prev) => mergeDesignPatch(prev, {
+      ...(mode === 'desktop' ? { panels: preset.panels } : {}),
+      layouts: {
+        activeMode: mode,
+        [mode]: { panels: preset.panels }
+      }
+    }));
+  }, [patchDraftPreferences, activeLayoutMode]);
 
   const saveNewConfig = useCallback(async (name) => {
     setDesignBusy(true);
@@ -1010,19 +1074,25 @@ const Social = () => {
     setDesignError('');
     try {
       const response = await socialPageAPI.applyConfig(configId);
-      const preferences = normalizeSocialPreferences(response.data?.preferences || socialPreferences, currentUser?.profileTheme || 'default');
+      const preferences = normalizeSocialPreferences(
+        response.data?.preferences || socialPreferences,
+        currentUser?.profileTheme || 'default',
+        activeLayoutMode
+      );
       setCurrentUser((prev) => (prev ? { ...prev, socialPagePreferences: preferences } : prev));
       setDraftSocialPreferences(preferences);
       setActiveDesignConfigId(response.data?.activeConfigId || configId);
       setInlineEditingPanelId('');
       setDesignSuccessMessage('Configuration applied');
+      setHasUnsavedDesignChanges(false);
+      designDirtyRef.current = false;
       await loadDesignData();
     } catch (error) {
       setDesignError(error.response?.data?.error || 'Failed to apply configuration.');
     } finally {
       setDesignBusy(false);
     }
-  }, [socialPreferences, currentUser?.profileTheme, loadDesignData]);
+  }, [socialPreferences, currentUser?.profileTheme, loadDesignData, activeLayoutMode]);
 
   const duplicateConfig = useCallback(async (configId, name) => {
     setDesignBusy(true);
@@ -2393,11 +2463,16 @@ const Social = () => {
         favoriteDesigns={favoriteDesigns}
         layoutPresets={layoutPresets}
         onApplyTemplate={applyTemplate}
-        onApplyLayoutPreset={applyLayoutPreset}
+        onApplyLayoutPreset={(preset) => applyLayoutPreset(preset, editorLayoutMode)}
         onGlobalStylesChange={updateGlobalStyles}
-        onPanelOverrideToggle={(panelId, enabled) => updatePanelPreferences(panelId, buildPanelOverridePatch(enabled))}
-        onPanelStyleChange={(panelId, patch) => updatePanelPreferences(panelId, { useCustomStyles: true, styles: patch })}
-        onPanelLayoutChange={(panelId, patch) => updatePanelPreferences(panelId, patch)}
+        onPanelOverrideToggle={(panelId, enabled) => updatePanelPreferences(panelId, buildPanelOverridePatch(enabled), editorLayoutMode)}
+        onPanelStyleChange={(panelId, patch) => updatePanelPreferences(panelId, { useCustomStyles: true, styles: patch }, editorLayoutMode)}
+        onPanelLayoutChange={(panelId, patch) => updatePanelPreferences(panelId, patch, editorLayoutMode)}
+        layoutMode={editorLayoutMode}
+        onLayoutModeChange={(mode) => setEditorLayoutMode(mode)}
+        onSaveChanges={saveDraftPreferences}
+        onCancelChanges={cancelDraftPreferences}
+        hasUnsavedChanges={hasUnsavedDesignChanges}
         onCreateConfig={saveNewConfig}
         onUpdateConfig={saveConfigUpdate}
         onApplyConfig={applySavedConfig}

@@ -5,6 +5,7 @@ import {
   SOCIAL_FONT_FAMILIES,
   SOCIAL_FONT_SIZE_TOKENS,
   SOCIAL_LAYOUT_PRESETS,
+  SOCIAL_LAYOUT_MODES,
   SOCIAL_PANEL_IDS,
   SOCIAL_PANEL_LABELS,
   SOCIAL_THEME_STYLE_PRESETS,
@@ -202,7 +203,12 @@ const SocialDesignStudioModal = ({
   onCloneShared,
   busy,
   error,
-  successMessage
+  successMessage,
+  layoutMode,
+  onLayoutModeChange,
+  onSaveChanges,
+  onCancelChanges,
+  hasUnsavedChanges
 }) => {
   const [newConfigName, setNewConfigName] = useState('');
   const [duplicateNames, setDuplicateNames] = useState({});
@@ -210,7 +216,7 @@ const SocialDesignStudioModal = ({
   const [layoutDraftById, setLayoutDraftById] = useState({});
   const [pointerAction, setPointerAction] = useState(null);
   const gridRef = useRef(null);
-  const normalized = useMemo(() => normalizeSocialPreferences(preferences), [preferences]);
+  const normalized = useMemo(() => normalizeSocialPreferences(preferences, 'default', layoutMode), [preferences, layoutMode]);
   const gridLayout = useMemo(() => buildPanelLayoutMap(normalized), [normalized]);
   const previewPanels = useMemo(() => gridLayout.placed.map((panel) => {
     const draft = layoutDraftById[panel.id] || {};
@@ -383,7 +389,12 @@ const SocialDesignStudioModal = ({
             <h2 className="text-2xl font-semibold">Social Page Customization</h2>
             <p className="text-sm text-slate-100">Batch edit your live layout, save reusable appearances, and clone shared designs.</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-full border border-white/20 px-4 py-2 text-sm hover:bg-white/10">Close</button>
+          <div className="flex items-center gap-2">
+            {hasUnsavedChanges ? <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">Live preview draft</span> : null}
+            <button type="button" onClick={onCancelChanges} className="rounded-full border border-white/20 px-4 py-2 text-sm hover:bg-white/10">Cancel</button>
+            <button type="button" disabled={busy || !hasUnsavedChanges} onClick={onSaveChanges} className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-slate-100">Save</button>
+            <button type="button" onClick={onClose} className="rounded-full border border-white/20 px-4 py-2 text-sm hover:bg-white/10">Close</button>
+          </div>
         </div>
 
         <div className="grid max-h-[calc(92vh-5rem)] grid-cols-1 overflow-y-auto xl:grid-cols-[1.2fr_0.9fr]">
@@ -394,7 +405,20 @@ const SocialDesignStudioModal = ({
                   <h3 className="text-lg font-semibold text-slate-900">Layout studio</h3>
                   <p className="text-sm text-slate-800">Drag panels directly on the canvas to reposition. Drag each panel&apos;s bottom-right handle to resize with live constraints. Keyboard: press Enter/Space to focus a panel, arrows to move, and Shift+arrows to resize.</p>
                 </div>
-                {busy ? <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Saving…</span> : null}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-700" htmlFor="layout-mode-select">Layout</label>
+                  <select
+                    id="layout-mode-select"
+                    value={layoutMode}
+                    onChange={(event) => onLayoutModeChange(event.target.value)}
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-900"
+                  >
+                    {SOCIAL_LAYOUT_MODES.map((mode) => (
+                      <option key={mode} value={mode}>{mode === 'desktop' ? 'Desktop' : 'Mobile'}</option>
+                    ))}
+                  </select>
+                  {busy ? <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Saving…</span> : null}
+                </div>
               </div>
               <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(260px,0.85fr)_minmax(0,1.4fr)]">
                 <div className="rounded-2xl border border-slate-200 p-4">
@@ -752,7 +776,12 @@ SocialDesignStudioModal.defaultProps = {
   busy: false,
   error: '',
   successMessage: '',
-  onApplyLayoutPreset: () => {}
+  onApplyLayoutPreset: () => {},
+  layoutMode: 'desktop',
+  hasUnsavedChanges: false,
+  onLayoutModeChange: () => {},
+  onSaveChanges: () => {},
+  onCancelChanges: () => {}
 };
 
 export default SocialDesignStudioModal;
