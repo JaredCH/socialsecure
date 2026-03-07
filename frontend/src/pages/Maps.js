@@ -96,6 +96,8 @@ function Maps() {
   const [error, setError] = useState(null);
   const [showCreateSpotlight, setShowCreateSpotlight] = useState(false);
   const [creatingSpotlight, setCreatingSpotlight] = useState(false);
+  const [mobileLayersMenuOpen, setMobileLayersMenuOpen] = useState(false);
+  const [mobilePrivacyMenuOpen, setMobilePrivacyMenuOpen] = useState(false);
   const [lastMapRefreshAt, setLastMapRefreshAt] = useState(null);
   const [lastFriendsRefreshAt, setLastFriendsRefreshAt] = useState(null);
   const [spotlightForm, setSpotlightForm] = useState({
@@ -287,7 +289,7 @@ function Maps() {
   const fetchUserPresence = async () => {
     try {
       const res = await mapsAPI.getPresence();
-      if (res.data.presence) {
+      if (res?.data?.presence) {
         setPresence(res.data.presence);
         setPrivacySettings({ shareWithFriends: res.data.presence.shareWithFriends });
       }
@@ -517,9 +519,9 @@ function Maps() {
   return (
     <div className="h-full w-full flex flex-col overflow-hidden bg-gray-50 text-gray-900">
       {/* Header */}
-      <div className="shrink-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="hidden shrink-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 py-3 lg:flex lg:items-center lg:justify-between">
         <h1 className="text-xl font-bold">🗺️ Maps</h1>
-        <div className="grid grid-cols-2 gap-2 text-sm sm:flex sm:items-center">
+        <div className="flex items-center gap-2 text-sm">
           <button
             onClick={updateLocation}
             className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
@@ -536,9 +538,9 @@ function Maps() {
       </div>
 
       {/* Responsive body */}
-      <div className="flex flex-1 min-h-0 overflow-hidden flex-col lg:flex-row">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left Sidebar – Controls & Filters */}
-        <aside className="w-full lg:w-72 shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 overflow-y-auto flex flex-col lg:max-h-none max-h-[36vh]">
+        <aside className="hidden lg:flex w-72 shrink-0 bg-white border-r border-gray-200 overflow-y-auto flex-col">
           {/* View Mode */}
           <div className="p-4 border-b border-gray-200">
             <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2">View Mode</h2>
@@ -676,7 +678,7 @@ function Maps() {
         </aside>
 
         {/* Center – Map */}
-        <div className="flex-1 min-w-0 relative min-h-[45vh] lg:min-h-0">
+        <div className="flex-1 min-w-0 relative min-h-0">
           <div ref={mapRef} className="absolute inset-0" />
 
           {/* Loading Overlay */}
@@ -698,10 +700,142 @@ function Maps() {
               </button>
             </div>
           )}
+
+          {/* Mobile controls */}
+          <div className="absolute inset-x-3 top-3 z-[550] lg:hidden pointer-events-none">
+            <div className="flex items-center justify-between gap-2 pointer-events-auto">
+              <div className="inline-flex rounded-full border border-white/70 bg-white/95 p-1 shadow-lg">
+                <button
+                  onClick={() => setViewMode('local')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                    viewMode === 'local'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  aria-label="Show local map view"
+                >
+                  📍 Local
+                </button>
+                <button
+                  onClick={() => setViewMode('community')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                    viewMode === 'community'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  aria-label="Show community map view"
+                >
+                  🌍
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setMobileLayersMenuOpen((open) => !open);
+                    setMobilePrivacyMenuOpen(false);
+                  }}
+                  className="h-10 w-10 rounded-full border border-white/70 bg-white/95 text-lg shadow-lg"
+                  aria-label="Open map layers controls"
+                  aria-expanded={mobileLayersMenuOpen}
+                >
+                  🗂️
+                </button>
+                <button
+                  onClick={() => {
+                    setMobilePrivacyMenuOpen((open) => !open);
+                    setMobileLayersMenuOpen(false);
+                  }}
+                  className="h-10 w-10 rounded-full border border-white/70 bg-white/95 text-lg shadow-lg"
+                  aria-label="Open map privacy controls"
+                  aria-expanded={mobilePrivacyMenuOpen}
+                >
+                  🔒
+                </button>
+              </div>
+            </div>
+
+            {mobileLayersMenuOpen && (
+              <div className="mt-2 ml-auto w-56 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg pointer-events-auto">
+                <h2 className="text-[11px] font-semibold uppercase text-gray-500 mb-2">Layers</h2>
+                <div className="space-y-2 text-sm">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={layers.friends}
+                      onChange={() => toggleLayer('friends')}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>👥 Friends</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={layers.spotlights}
+                      onChange={() => toggleLayer('spotlights')}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>✨ Spotlights</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={layers.heatmap}
+                      onChange={() => toggleLayer('heatmap')}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>🔥 Heatmap</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {mobilePrivacyMenuOpen && (
+              <div className="mt-2 ml-auto w-56 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg pointer-events-auto">
+                <h2 className="text-[11px] font-semibold uppercase text-gray-500 mb-2">Privacy</h2>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Share Location</p>
+                    <p className="text-xs text-gray-500">Friends see your area</p>
+                  </div>
+                  <button
+                    onClick={() => updatePrivacy(!privacySettings.shareWithFriends)}
+                    className={`w-11 h-6 rounded-full transition-colors ${
+                      privacySettings.shareWithFriends ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      privacySettings.shareWithFriends ? 'translate-x-5' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  ℹ️ Heatmap participation is mandatory and anonymized
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="absolute bottom-4 right-3 z-[550] flex flex-col gap-2 lg:hidden">
+            <button
+              onClick={updateLocation}
+              className="h-11 w-11 rounded-full border border-white/70 bg-white/95 text-lg shadow-lg"
+              aria-label="Update map to your location"
+            >
+              📍
+            </button>
+            <button
+              onClick={() => setShowCreateSpotlight(true)}
+              className="h-11 w-11 rounded-full border border-white/70 bg-white/95 text-lg shadow-lg"
+              aria-label="Create a spotlight"
+            >
+              ✨
+            </button>
+          </div>
         </div>
 
         {/* Right Sidebar – Friends */}
-        <aside className="w-full lg:w-64 shrink-0 bg-white border-t lg:border-t-0 lg:border-l border-gray-200 overflow-y-auto flex flex-col lg:max-h-none max-h-[30vh]">
+        <aside className="hidden lg:flex w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto flex-col">
           <div className="p-4 border-b border-gray-200">
             <h2 className="text-xs font-semibold uppercase text-gray-500">Friends Nearby</h2>
             <p className="text-[11px] text-gray-400 mt-1">
