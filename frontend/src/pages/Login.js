@@ -72,7 +72,7 @@ function Login({ onSuccess }) {
               autoComplete="current-password"
               required
             />
-            <p className="mt-2 hidden text-xs text-gray-600 sm:block">
+            <p className="mt-2 hidden text-xs text-gray-600 sm:block" data-testid="login-password-advisory">
               Password quality indicator (advisory only).
             </p>
             <p className="mt-2 text-sm text-gray-700" aria-live="polite" role="status">

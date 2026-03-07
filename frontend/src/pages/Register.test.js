@@ -22,6 +22,18 @@ describe('Register mobile-first layout', () => {
   let container;
   let root;
 
+  const setInputValue = async (input, value) => {
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    ).set;
+
+    await act(async () => {
+      nativeInputValueSetter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+
   const renderRegister = async (initialEntries = ['/register']) => {
     await act(async () => {
       root.render(
@@ -36,13 +48,16 @@ describe('Register mobile-first layout', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    evaluateRegisterPassword.mockReturnValue({
-      strengthLabel: 'Strong',
-      allRequirementsMet: true,
-      requirementChecks: [
-        { id: 'length', label: 'At least 8 characters', met: true },
-        { id: 'case', label: 'Upper and lower case letters', met: true }
-      ]
+    evaluateRegisterPassword.mockImplementation((password = '') => {
+      const isStrong = password.length >= 10;
+      return {
+        strengthLabel: isStrong ? 'Strong' : 'Weak',
+        allRequirementsMet: isStrong,
+        requirementChecks: [
+          { id: 'length', label: 'At least 8 characters', met: password.length >= 8 },
+          { id: 'case', label: 'Upper and lower case letters', met: /[a-z]/.test(password) && /[A-Z]/.test(password) }
+        ]
+      };
     });
   });
 
@@ -77,5 +92,19 @@ describe('Register mobile-first layout', () => {
     expect(submitFooter.className).toContain('sticky');
     expect(submitFooter.className).toContain('bottom-0');
     expect(submitButton.className).toContain('min-h-[44px]');
+  });
+
+  it('updates the password summary and submit hint when password strength changes', async () => {
+    await renderRegister();
+
+    const passwordInput = container.querySelector('input[name="password"]');
+
+    expect(container.textContent).toContain('Strength: Weak');
+    expect(container.textContent).toContain('Complete all password requirements to enable account creation.');
+
+    await setInputValue(passwordInput, 'StrongPass1');
+
+    expect(container.textContent).toContain('Strength: Strong');
+    expect(container.textContent).toContain('Password requirements satisfied.');
   });
 });

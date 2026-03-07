@@ -22,6 +22,18 @@ describe('Login mobile-first layout', () => {
   let container;
   let root;
 
+  const setInputValue = async (input, value) => {
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    ).set;
+
+    await act(async () => {
+      nativeInputValueSetter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+
   const renderLogin = async () => {
     await act(async () => {
       root.render(
@@ -36,9 +48,9 @@ describe('Login mobile-first layout', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    evaluateRegisterPassword.mockReturnValue({
-      strengthLabel: 'Strong'
-    });
+    evaluateRegisterPassword.mockImplementation((password = '') => ({
+      strengthLabel: password.length >= 10 ? 'Strong' : 'Weak'
+    }));
   });
 
   afterEach(() => {
@@ -65,7 +77,20 @@ describe('Login mobile-first layout', () => {
   it('keeps the advisory password helper visually quieter on small screens', async () => {
     await renderLogin();
 
+    const advisory = container.querySelector('[data-testid="login-password-advisory"]');
+
+    expect(container.textContent).toContain('Strength: Weak');
+    expect(advisory.className).toContain('hidden');
+    expect(advisory.className).toContain('sm:block');
+  });
+
+  it('updates the password strength label when the password changes', async () => {
+    await renderLogin();
+
+    const passwordInput = container.querySelector('input[name="password"]');
+
+    await setInputValue(passwordInput, 'LongerPass1');
+
     expect(container.textContent).toContain('Strength: Strong');
-    expect(container.innerHTML).toContain('hidden text-xs text-gray-600 sm:block');
   });
 });
