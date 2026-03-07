@@ -11,7 +11,6 @@ function ChatComposerBar({
   theme
 }) {
   const textAreaRef = useRef(null);
-  const fileInputRef = useRef(null);
   const [showEmojiTray, setShowEmojiTray] = useState(false);
 
   useEffect(() => {
@@ -19,10 +18,6 @@ function ChatComposerBar({
     textAreaRef.current.style.height = 'auto';
     textAreaRef.current.style.height = `${Math.min(textAreaRef.current.scrollHeight, 160)}px`;
   }, [composerValue]);
-
-  const handleAttachmentClick = () => {
-    if (fileInputRef.current) fileInputRef.current.click();
-  };
 
   return (
     <form onSubmit={onSubmit} className={`relative rounded-md border-2 p-2 ${theme.panelGlass}`}>
@@ -39,10 +34,11 @@ function ChatComposerBar({
 
         <button
           type="button"
-          onClick={handleAttachmentClick}
           className={`rounded border px-2 py-2 text-sm transition active:scale-95 ${theme.subtle}`}
           aria-label="Attach file"
-          disabled={disabled}
+          aria-describedby="chat-attachment-coming-soon"
+          disabled
+          title="File attachment is coming soon"
         >
           📎
         </button>
@@ -86,17 +82,9 @@ function ChatComposerBar({
           </div>
         </div>
       ) : null}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        onChange={(event) => {
-          if (event.target.files?.length) {
-            setComposerValue((value) => `${value}${value ? ' ' : ''}[${event.target.files[0].name}]`);
-          }
-        }}
-      />
+      <span id="chat-attachment-coming-soon" className="sr-only">
+        File attachment is coming soon and is currently unavailable.
+      </span>
     </form>
   );
 }

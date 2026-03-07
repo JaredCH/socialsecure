@@ -21,10 +21,7 @@ function ChatMessageItem({ message, isOwnMessage, theme }) {
         <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.content}</p>
         <div className="mt-1 flex items-center justify-between text-[10px] opacity-0 transition-opacity duration-200 group-hover:opacity-80">
           <span className="font-mono">{fullTimestamp}</span>
-          <span className="flex items-center gap-2">
-            <button type="button" className="rounded border px-1 leading-4">👍</button>
-            <button type="button" className="rounded border px-1 leading-4">✨</button>
-          </span>
+          <span className="rounded border px-1 leading-4 font-mono">Reactions soon</span>
         </div>
       </div>
     </article>
