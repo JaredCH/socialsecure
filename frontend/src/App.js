@@ -95,6 +95,7 @@ function App() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [incomingNotification, setIncomingNotification] = useState(null);
   const [isFeaturesMenuOpen, setIsFeaturesMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [welcomeConfirmationPending, setWelcomeConfirmationPending] = useState(
     () => sessionStorage.getItem(WELCOME_PENDING_KEY) === 'true'
   );
@@ -425,20 +426,49 @@ function App() {
   const navLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700';
   const navEmphasisLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50';
   const navDangerButtonClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50';
+  const closeNavMenus = () => {
+    setIsMobileMenuOpen(false);
+    setIsFeaturesMenuOpen(false);
+  };
 
   return (
     <Router>
       <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
-        <nav className="shrink-0 bg-white shadow-md border-b border-gray-200 p-4">
-          <div className="container mx-auto flex justify-between items-center">
-            <h1 className="text-xl font-bold text-blue-600">SocialSecure</h1>
-            <div className="flex flex-wrap items-center gap-3 overflow-visible">
-              {!encryptionPasswordRequired && <Link to="/" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Home</Link>}
-              {canUseProtectedFeatures && <Link to="/social" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Social</Link>}
-              {canUseProtectedFeatures && <Link to="/chat" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Chat</Link>}
-              {canUseProtectedFeatures && <Link to="/market" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Market</Link>}
-              {canUseProtectedFeatures && <Link to="/news" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">News</Link>}
-              {canUseProtectedFeatures && <Link to="/maps" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Maps</Link>}
+        <nav className="shrink-0 border-b border-blue-100 bg-gradient-to-r from-white via-slate-50 to-blue-50/60 p-3 shadow-md">
+          <div className="container mx-auto">
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="text-xl font-black tracking-tight text-blue-700">SocialSecure</h1>
+              <div className="flex items-center gap-2">
+                {canUseProtectedFeatures && (
+                  <NotificationCenter
+                    unreadCount={unreadNotificationCount}
+                    onUnreadCountChange={setUnreadNotificationCount}
+                    incomingNotification={incomingNotification}
+                    userDisplayName={user?.username || user?.realName || 'Account'}
+                  />
+                )}
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50 md:hidden"
+                  onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+                  aria-expanded={isMobileMenuOpen}
+                  aria-controls="main-nav-menu"
+                  aria-label="Toggle navigation menu"
+                >
+                  <span aria-hidden="true" className="text-lg">☰</span>
+                </button>
+              </div>
+            </div>
+            <div
+              id="main-nav-menu"
+              className={`${isMobileMenuOpen ? 'mt-3 flex' : 'hidden'} flex-col gap-2 overflow-visible rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-sm md:mt-3 md:flex md:flex-row md:flex-wrap md:items-center md:justify-end md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
+            >
+              {!encryptionPasswordRequired && <Link to="/" onClick={closeNavMenus} className={navLinkClass}>Home</Link>}
+              {canUseProtectedFeatures && <Link to="/social" onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
+              {canUseProtectedFeatures && <Link to="/chat" onClick={closeNavMenus} className={navLinkClass}>Chat</Link>}
+              {canUseProtectedFeatures && <Link to="/market" onClick={closeNavMenus} className={navLinkClass}>Market</Link>}
+              {canUseProtectedFeatures && <Link to="/news" onClick={closeNavMenus} className={navLinkClass}>News</Link>}
+              {canUseProtectedFeatures && <Link to="/maps" onClick={closeNavMenus} className={navLinkClass}>Maps</Link>}
               <div
                 className="relative"
                 data-testid="features-menu"
@@ -475,7 +505,7 @@ function App() {
                       }
                     }
                   }}
-                  className="flex items-center gap-1 text-gray-600 hover:text-blue-600 whitespace-nowrap"
+                  className={navLinkClass}
                 >
                   Features
                   <span aria-hidden="true">▾</span>
@@ -484,10 +514,10 @@ function App() {
                   <div
                     id="features-menu-panel"
                     role="menu"
-                    className="absolute right-0 top-full z-20 mt-2 min-w-40 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+                    className="z-20 mt-2 min-w-40 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg md:absolute md:right-0 md:top-full"
                   >
                     {canUseProtectedFeatures && (
-                      <Link ref={firstFeatureItemRef} to="/discover" role="menuitem" onClick={() => setIsFeaturesMenuOpen(false)} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
+                      <Link ref={firstFeatureItemRef} to="/discover" role="menuitem" onClick={closeNavMenus} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
                         Discover
                       </Link>
                     )}
@@ -500,38 +530,31 @@ function App() {
                       }}
                       to="/calendar"
                       role="menuitem"
-                      onClick={() => setIsFeaturesMenuOpen(false)}
+                      onClick={closeNavMenus}
                       className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap"
                     >
                       Calendar
                     </Link>
                     {canUseProtectedFeatures && (
-                      <Link ref={lastFeatureItemRef} to="/resume" role="menuitem" onClick={() => setIsFeaturesMenuOpen(false)} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
+                      <Link ref={lastFeatureItemRef} to="/resume" role="menuitem" onClick={closeNavMenus} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
                         Resume
                       </Link>
                     )}
                   </div>
                 ) : null}
               </div>
-              {canUseProtectedFeatures && user?.isAdmin && <Link to="/control-panel" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Control Panel</Link>}
-              {canUseProtectedFeatures && <Link to="/refer" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">Refer Friend</Link>}
-              {canUseProtectedFeatures && (
-                <NotificationCenter
-                  unreadCount={unreadNotificationCount}
-                  onUnreadCountChange={setUnreadNotificationCount}
-                  incomingNotification={incomingNotification}
-                />
-              )}
-              {isAuthenticated && onboardingRequired && <Link to="/onboarding" className="text-blue-600 font-medium whitespace-nowrap">Onboarding</Link>}
+              {canUseProtectedFeatures && user?.isAdmin && <Link to="/control-panel" onClick={closeNavMenus} className={navLinkClass}>Control Panel</Link>}
+              {canUseProtectedFeatures && <Link to="/refer" onClick={closeNavMenus} className={navLinkClass}>Refer Friend</Link>}
+              {isAuthenticated && onboardingRequired && <Link to="/onboarding" onClick={closeNavMenus} className={navEmphasisLinkClass}>Onboarding</Link>}
               {isAuthenticated ? (
                 <>
-                  <Link to="/settings" className="text-gray-600 hover:text-blue-600 whitespace-nowrap">User Settings</Link>
-                  <button onClick={handleLogout} className="text-red-600 font-medium whitespace-nowrap">Logout</button>
+                  <Link to="/settings" onClick={closeNavMenus} className={navLinkClass}>User Settings</Link>
+                  <button onClick={handleLogout} className={navDangerButtonClass}>Logout</button>
                 </>
               ) : (
                 <>
-                  <Link to="/login" className="text-blue-600 font-medium whitespace-nowrap">Login</Link>
-                  <Link to="/register" className="text-blue-600 font-medium whitespace-nowrap">Register</Link>
+                  <Link to="/login" onClick={closeNavMenus} className={navEmphasisLinkClass}>Login</Link>
+                  <Link to="/register" onClick={closeNavMenus} className={navEmphasisLinkClass}>Register</Link>
                 </>
               )}
             </div>
