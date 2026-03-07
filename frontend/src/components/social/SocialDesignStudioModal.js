@@ -10,6 +10,7 @@ import {
   SOCIAL_THEME_STYLE_PRESETS,
   normalizeSocialPreferences
 } from '../../utils/socialPagePreferences';
+import SocialArchitectureBlueprint from './SocialArchitectureBlueprint';
 
 const Field = ({ label, children }) => (
   <label className="flex flex-col gap-1 text-sm font-semibold text-slate-800">
@@ -625,6 +626,12 @@ const SocialDesignStudioModal = ({
           </div>
 
           <div className="space-y-6 border-l border-slate-200 bg-white px-6 py-6">
+            <SocialArchitectureBlueprint
+              activePanelCount={previewPanels.length}
+              currentThemePreset={normalized.themePreset}
+              currentFontFamily={normalized.globalStyles.fontFamily}
+            />
+
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-lg font-semibold text-slate-900">Layout presets</h3>
               <div className="mt-4 grid gap-3">

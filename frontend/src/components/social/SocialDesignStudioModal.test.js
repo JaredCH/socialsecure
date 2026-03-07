@@ -63,6 +63,10 @@ describe('SocialDesignStudioModal layout studio', () => {
 
     const compactPreset = getButtonContainingText('Compact');
     expect(compactPreset).toBeTruthy();
+    expect(container.textContent).toContain('Social Page redesign plan');
+    expect(container.textContent).toContain('Independent desktop and mobile layouts');
+    expect(container.textContent).toContain('Page shell + panel registry + layout engine');
+
     await act(async () => {
       compactPreset.click();
     });
