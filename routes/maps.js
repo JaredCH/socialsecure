@@ -25,6 +25,7 @@ const HEATMAP_TIME_JITTER_MAX_MS = 30 * 60 * 1000;
 const EARTH_RADIUS_METERS = 6378137;
 
 const jitterCoordinates = (lat, lng, maxDistanceMeters = HEATMAP_LOCATION_JITTER_RADIUS_METERS) => {
+  // sqrt(random) keeps the resulting points uniformly distributed across the full circle area.
   const distance = Math.sqrt(Math.random()) * maxDistanceMeters;
   const bearing = Math.random() * 2 * Math.PI;
   const deltaLat = (distance * Math.cos(bearing)) / EARTH_RADIUS_METERS;
@@ -205,6 +206,7 @@ router.get('/friends', authenticateToken, async (req, res) => {
     // Return coarse (already rounded by precision level) coordinates for map display
     // and only include live updates from the last minute.
     const sanitized = locations.flatMap(loc => {
+      // Missing activity timestamps are treated as stale and omitted from live friend data.
       const lastActivityTime = loc.lastActivityAt ? new Date(loc.lastActivityAt).getTime() : 0;
       if (!lastActivityTime || now - lastActivityTime > FRIENDS_LIVE_WINDOW_MS) {
         return [];

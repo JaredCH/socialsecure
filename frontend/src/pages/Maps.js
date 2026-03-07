@@ -22,6 +22,11 @@ const GEOLOCATION_OPTIONS_TIMEOUT_MS = 8000;
 const GEOLOCATION_OPTIONS_MAX_AGE_MS = 300000;
 const HEATMAP_CIRCLE_RADIUS_METERS = 2000;
 const MAP_REFRESH_INTERVAL_MS = 60 * 1000;
+const HEATMAP_USERS_PER_LAYER = 3;
+const HEATMAP_MAX_STACK_LAYERS = 6;
+const HEATMAP_BASE_FILL_OPACITY = 0.08;
+const HEATMAP_INTENSITY_OPACITY_FACTOR = 0.14;
+const HEATMAP_MAX_FILL_OPACITY = 0.34;
 const createFallbackResponse = (data) => ({ data });
 
 export const withDataFallback = (request, fallbackData) =>
@@ -431,16 +436,23 @@ function Maps() {
       heatmapData.forEach(point => {
         if (point.lat != null && point.lng != null && point.intensity > 0) {
           const intensity = Math.max(0, Math.min(point.intensity, 1));
-          const stackLayers = Math.max(1, Math.min(6, Math.ceil((point.userCount || 1) / 3)));
+          const stackLayers = Math.max(
+            1,
+            Math.min(HEATMAP_MAX_STACK_LAYERS, Math.ceil((point.userCount || 1) / HEATMAP_USERS_PER_LAYER))
+          );
 
           for (let index = 0; index < stackLayers; index += 1) {
+            // Keep outer circles softer so overlapping layers read as glow instead of an opaque block.
             const layerWeight = 1 - (index / (stackLayers + 1));
 
             L.circle([point.lat, point.lng], {
               radius: HEATMAP_CIRCLE_RADIUS_METERS * (1 + index * 0.45),
               color: 'transparent',
               fillColor: '#ef4444',
-              fillOpacity: Math.min(0.08 + (intensity * 0.14 * layerWeight), 0.34),
+              fillOpacity: Math.min(
+                HEATMAP_BASE_FILL_OPACITY + (intensity * HEATMAP_INTENSITY_OPACITY_FACTOR * layerWeight),
+                HEATMAP_MAX_FILL_OPACITY
+              ),
               interactive: false
             }).addTo(map);
           }
