@@ -577,15 +577,22 @@ function Chat() {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setThemeMenuOpen((open) => !open)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setThemeMenuOpen((open) => !open);
+                }}
                 className={`rounded border px-2 py-1 text-sm ${activeTheme.subtle}`}
                 aria-label="Open chat theme menu"
                 aria-expanded={themeMenuOpen}
               >
                 🎨
+                <span className="sr-only">Theme menu</span>
               </button>
               {themeMenuOpen ? (
-                <div className={`absolute right-0 top-9 z-20 min-w-40 rounded border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}>
+                <div
+                  className={`absolute right-0 top-9 z-20 min-w-40 rounded border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}
+                  onClick={(event) => event.stopPropagation()}
+                >
                   {CHAT_THEMES.map((themeOption) => (
                     <button
                       key={themeOption.key}
@@ -609,8 +616,6 @@ function Chat() {
               value={theme}
               onChange={(event) => handleThemeChange(event.target.value)}
               className="sr-only"
-              aria-label="Set chat theme"
-              tabIndex={-1}
             >
               {CHAT_THEMES.map((themeOption) => (
                 <option key={themeOption.key} value={themeOption.key}>
@@ -763,8 +768,9 @@ function Chat() {
                   type="button"
                   onClick={() => setMobileWorkspaceOpen(false)}
                   className={`rounded border px-2 py-1 text-xs lg:hidden ${activeTheme.subtle}`}
+                  aria-label="Back to conversations"
                 >
-                  ←
+                  ← Back
                 </button>
                 <div>
                   <h3 className="text-sm font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>

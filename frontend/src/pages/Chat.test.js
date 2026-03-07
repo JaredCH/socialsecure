@@ -146,7 +146,7 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    const themeSelect = container.querySelector('select[aria-label="Set chat theme"]');
+    const themeSelect = container.querySelector('select#chat-theme-select-fallback');
     expect(themeSelect).not.toBeNull();
     expect(themeSelect.options).toHaveLength(6);
     expect(Array.from(themeSelect.options).map((option) => option.textContent)).toEqual([
