@@ -15,6 +15,7 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
   const [loading, setLoading] = useState(false);
   const [friendActionLoadingById, setFriendActionLoadingById] = useState({});
   const [friendCircleById, setFriendCircleById] = useState({});
+  const [friendActionMessage, setFriendActionMessage] = useState('');
 
   const loadNotifications = async (nextPage = 1, replace = false) => {
     setLoading(true);
@@ -125,10 +126,12 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
     const isConfirmed = window.confirm(`Are you sure you want to ${confirmLabel} this friend request?`);
     if (!isConfirmed) return;
 
+    setFriendActionMessage('');
     setFriendActionLoading(notificationId, true);
     try {
       const { friendshipId, relationship } = await resolveFriendshipForNotification(notification);
       if (!friendshipId || (relationship && relationship !== 'pending')) {
+        setFriendActionMessage('This request is no longer pending.');
         return;
       }
 
@@ -146,8 +149,9 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
           : item
       )));
       onUnreadCountChange((prev) => Math.max(0, prev - (notification?.isRead ? 0 : 1)));
+      setFriendActionMessage(action === 'accept' ? 'Friend request accepted.' : 'Friend request declined.');
     } catch {
-      // no-op
+      setFriendActionMessage('Unable to update friend request. Please try again.');
     } finally {
       setFriendActionLoading(notificationId, false);
     }
@@ -202,7 +206,18 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
   };
 
   return (
-    <div className="relative" ref={panelRef} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div
+      className="relative"
+      ref={panelRef}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -230,6 +245,9 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
           </div>
 
           <div className="max-h-96 overflow-y-auto" onScroll={handleScroll}>
+            {friendActionMessage ? (
+              <div className="px-3 pt-2 text-xs text-slate-600">{friendActionMessage}</div>
+            ) : null}
             {notifications.length === 0 && !loading ? (
               <div className="p-4 text-sm text-gray-500">No notifications yet.</div>
             ) : notifications.map((notification) => (
