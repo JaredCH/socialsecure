@@ -74,6 +74,11 @@ function Maps() {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const leafletRef = useRef(null);
+  const mobileControlsRef = useRef(null);
+  const mobileLayersButtonRef = useRef(null);
+  const mobilePrivacyButtonRef = useRef(null);
+  const mobileLayersFirstInputRef = useRef(null);
+  const mobilePrivacyToggleRef = useRef(null);
   const [map, setMap] = useState(null);
   const [mapInitAttempt, setMapInitAttempt] = useState(0);
   const [viewMode, setViewMode] = useState('local'); // local, community
@@ -516,6 +521,47 @@ function Maps() {
     map.setView([friend.lat, friend.lng], 14);
   };
 
+  useEffect(() => {
+    if (mobileLayersMenuOpen && mobileLayersFirstInputRef.current) {
+      mobileLayersFirstInputRef.current.focus();
+    }
+  }, [mobileLayersMenuOpen]);
+
+  useEffect(() => {
+    if (mobilePrivacyMenuOpen && mobilePrivacyToggleRef.current) {
+      mobilePrivacyToggleRef.current.focus();
+    }
+  }, [mobilePrivacyMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileLayersMenuOpen && !mobilePrivacyMenuOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      const shouldReturnToLayers = mobileLayersMenuOpen;
+      setMobileLayersMenuOpen(false);
+      setMobilePrivacyMenuOpen(false);
+      if (shouldReturnToLayers && mobileLayersButtonRef.current) {
+        mobileLayersButtonRef.current.focus();
+      } else if (mobilePrivacyButtonRef.current) {
+        mobilePrivacyButtonRef.current.focus();
+      }
+    };
+
+    const handlePointerDown = (event) => {
+      if (mobileControlsRef.current?.contains(event.target)) return;
+      setMobileLayersMenuOpen(false);
+      setMobilePrivacyMenuOpen(false);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [mobileLayersMenuOpen, mobilePrivacyMenuOpen]);
+
   return (
     <div className="h-full w-full flex flex-col overflow-hidden bg-gray-50 text-gray-900">
       {/* Header */}
@@ -615,6 +661,7 @@ function Maps() {
                 className={`w-11 h-6 rounded-full transition-colors ${
                   privacySettings.shareWithFriends ? 'bg-blue-600' : 'bg-gray-300'
                 }`}
+                aria-label={`Toggle location sharing, currently ${privacySettings.shareWithFriends ? 'on' : 'off'}`}
               >
                 <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
                   privacySettings.shareWithFriends ? 'translate-x-5' : 'translate-x-0.5'
@@ -702,9 +749,16 @@ function Maps() {
           )}
 
           {/* Mobile controls */}
-          <div className="absolute inset-x-3 top-3 z-[550] lg:hidden pointer-events-none">
+          <div
+            className="absolute inset-x-3 top-3 z-[550] lg:hidden pointer-events-none"
+            ref={mobileControlsRef}
+          >
             <div className="flex items-center justify-between gap-2 pointer-events-auto">
-              <div className="inline-flex rounded-full border border-white/70 bg-white/95 p-1 shadow-lg">
+              <div
+                className="inline-flex rounded-full border border-white/70 bg-white/95 p-1 shadow-lg"
+                role="group"
+                aria-label="View mode selection"
+              >
                 <button
                   onClick={() => setViewMode('local')}
                   className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
@@ -713,6 +767,7 @@ function Maps() {
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
                   aria-label="Show local map view"
+                  aria-pressed={viewMode === 'local'}
                 >
                   📍 Local
                 </button>
@@ -724,8 +779,9 @@ function Maps() {
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
                   aria-label="Show community map view"
+                  aria-pressed={viewMode === 'community'}
                 >
-                  🌍
+                  🌍 Community
                 </button>
               </div>
 
@@ -735,9 +791,11 @@ function Maps() {
                     setMobileLayersMenuOpen((open) => !open);
                     setMobilePrivacyMenuOpen(false);
                   }}
+                  ref={mobileLayersButtonRef}
                   className="h-10 w-10 rounded-full border border-white/70 bg-white/95 text-lg shadow-lg"
                   aria-label="Open map layers controls"
                   aria-expanded={mobileLayersMenuOpen}
+                  aria-controls="mobile-layers-menu"
                 >
                   🗂️
                 </button>
@@ -746,9 +804,11 @@ function Maps() {
                     setMobilePrivacyMenuOpen((open) => !open);
                     setMobileLayersMenuOpen(false);
                   }}
+                  ref={mobilePrivacyButtonRef}
                   className="h-10 w-10 rounded-full border border-white/70 bg-white/95 text-lg shadow-lg"
                   aria-label="Open map privacy controls"
                   aria-expanded={mobilePrivacyMenuOpen}
+                  aria-controls="mobile-privacy-menu"
                 >
                   🔒
                 </button>
@@ -756,12 +816,16 @@ function Maps() {
             </div>
 
             {mobileLayersMenuOpen && (
-              <div className="mt-2 ml-auto w-56 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg pointer-events-auto">
+              <div
+                className="mt-2 ml-auto w-56 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg pointer-events-auto"
+                id="mobile-layers-menu"
+              >
                 <h2 className="text-[11px] font-semibold uppercase text-gray-500 mb-2">Layers</h2>
                 <div className="space-y-2 text-sm">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
+                      ref={mobileLayersFirstInputRef}
                       checked={layers.friends}
                       onChange={() => toggleLayer('friends')}
                       className="rounded text-blue-600 focus:ring-blue-500"
@@ -791,7 +855,10 @@ function Maps() {
             )}
 
             {mobilePrivacyMenuOpen && (
-              <div className="mt-2 ml-auto w-56 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg pointer-events-auto">
+              <div
+                className="mt-2 ml-auto w-56 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg pointer-events-auto"
+                id="mobile-privacy-menu"
+              >
                 <h2 className="text-[11px] font-semibold uppercase text-gray-500 mb-2">Privacy</h2>
                 <div className="flex items-center justify-between">
                   <div>
@@ -800,9 +867,11 @@ function Maps() {
                   </div>
                   <button
                     onClick={() => updatePrivacy(!privacySettings.shareWithFriends)}
+                    ref={mobilePrivacyToggleRef}
                     className={`w-11 h-6 rounded-full transition-colors ${
                       privacySettings.shareWithFriends ? 'bg-blue-600' : 'bg-gray-300'
                     }`}
+                    aria-label={`Toggle location sharing, currently ${privacySettings.shareWithFriends ? 'on' : 'off'}`}
                   >
                     <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
                       privacySettings.shareWithFriends ? 'translate-x-5' : 'translate-x-0.5'

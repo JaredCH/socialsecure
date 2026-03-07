@@ -1,5 +1,12 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import Maps, {
+  FRIENDS_REFRESH_INTERVAL_MS,
+  LOCATION_PUBLISH_INTERVAL_MS,
+  configureLeafletMarkerAssets,
+  resolveLeafletModule,
+  withDataFallback
+} from './Maps';
 
 jest.mock('../utils/api', () => ({
   mapsAPI: {
@@ -25,17 +32,6 @@ jest.mock('leaflet', () => ({
     Default: {}
   }
 }));
-
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-const {
-  default: Maps,
-  FRIENDS_REFRESH_INTERVAL_MS,
-  LOCATION_PUBLISH_INTERVAL_MS,
-  configureLeafletMarkerAssets,
-  resolveLeafletModule,
-  withDataFallback
-} = require('./Maps');
 
 describe('resolveLeafletModule', () => {
   it('uses default export when it contains Leaflet map API', () => {
@@ -121,6 +117,11 @@ describe('Maps mobile-first controls', () => {
   let container;
   let root;
   const originalGeolocation = navigator.geolocation;
+  const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+
+  beforeAll(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  });
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -143,6 +144,10 @@ describe('Maps mobile-first controls', () => {
       configurable: true,
       value: originalGeolocation
     });
+  });
+
+  afterAll(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment;
   });
 
   it('renders compact mobile overlay controls for layers and privacy', async () => {
