@@ -8,7 +8,6 @@ import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
 import SocialEditablePanel from '../components/social/SocialEditablePanel';
 import SocialDesignStudioModal from '../components/social/SocialDesignStudioModal';
-import SocialArchitectureBlueprint from '../components/social/SocialArchitectureBlueprint';
 import {
   getFontSizeClass,
   getPanelsByArea,
@@ -363,10 +362,6 @@ const Social = () => {
     [draftSocialPreferences, activeProfile?.socialPagePreferences, activeProfile?.profileTheme, activeLayoutMode]
   );
   const panelsByArea = useMemo(() => getPanelsByArea(socialPreferences), [socialPreferences]);
-  const activePanelCount = useMemo(
-    () => Object.values(panelsByArea).reduce((total, panels) => total + (Array.isArray(panels) ? panels.length : 0), 0),
-    [panelsByArea]
-  );
   const isSectionVisible = useCallback(
     (sectionId) => socialPreferences.effective?.panels?.[sectionId]?.visible !== false,
     [socialPreferences]
@@ -2425,7 +2420,7 @@ const Social = () => {
 
   return (
     <div
-      className={`relative left-1/2 right-1/2 min-h-[calc(100vh-9rem)] w-screen -translate-x-1/2 space-y-6 px-3 py-4 sm:px-4 ${pageThemeClass}`}
+      className={`min-h-[calc(100vh-9rem)] w-full space-y-6 px-3 py-4 sm:px-4 ${pageThemeClass}`}
       style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor }}
     >
       {ownerEditingEnabled ? (
@@ -2439,14 +2434,6 @@ const Social = () => {
       ) : null}
 
       <div className="space-y-6">
-        {ownerEditingEnabled ? (
-          <SocialArchitectureBlueprint
-            activePanelCount={activePanelCount}
-            currentThemePreset={socialPreferences.themePreset}
-            currentFontFamily={socialPreferences.globalStyles.fontFamily}
-          />
-        ) : null}
-
         {panelsByArea.top.map(renderPanel)}
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(240px,0.95fr)_minmax(0,2fr)_minmax(240px,0.95fr)]">

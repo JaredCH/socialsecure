@@ -188,4 +188,17 @@ describe('App navbar features dropdown', () => {
     expect(navMenu.className).toContain('top-full');
     expect(navMenu.className).not.toContain('hidden');
   });
+
+  it('uses full-width main layout on the social route', async () => {
+    localStorage.setItem('token', 'token');
+    window.history.pushState({}, '', '/social');
+
+    await renderApp();
+
+    const main = container.querySelector('main');
+    expect(main).not.toBeNull();
+    expect(main.className).toContain('w-full');
+    expect(main.className).not.toContain('container');
+    expect(container.textContent).toContain('Social Page');
+  });
 });
