@@ -170,6 +170,7 @@ function Chat() {
   const [roomUsers, setRoomUsers] = useState([]);
   const [roomUsersLoading, setRoomUsersLoading] = useState(false);
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [userContextMenu, setUserContextMenu] = useState({
     open: false,
     x: 0,
@@ -516,6 +517,20 @@ function Chat() {
     };
   }, [userContextMenu.open]);
 
+  useEffect(() => {
+    if (!themeMenuOpen) return undefined;
+    const handleWindowClick = () => setThemeMenuOpen(false);
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setThemeMenuOpen(false);
+    };
+    window.addEventListener('click', handleWindowClick);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('click', handleWindowClick);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [themeMenuOpen]);
+
   const roomSuggestions = useMemo(() => {
     const query = roomQuery.trim().toLowerCase();
     if (query.length < 2) return [];
@@ -532,6 +547,12 @@ function Chat() {
   };
 
   const conversationPresence = getPresenceState(activeConversation?.lastMessageAt);
+  const activeConversationUser = useMemo(() => {
+    if (!activeConversation) return null;
+    if (activeConversation.type === 'dm') return activeConversation.peer || null;
+    if (activeConversation.type === 'profile-thread') return activeConversation.profileUser || null;
+    return null;
+  }, [activeConversation]);
 
   if (loadingHub) {
     return (
@@ -543,37 +564,66 @@ function Chat() {
 
   return (
     <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${activeTheme.shell}`}>
-      <header className={`border-b-2 p-3 md:p-4 ${activeTheme.panelGlass}`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold md:text-2xl">Retro-Modern Chat Workspace</h2>
-            <p className="text-xs opacity-90 md:text-sm">Classic IM bones with modern speed, smooth gestures, and glass accents.</p>
+      <header className={`border-b px-2 py-2 md:px-3 ${activeTheme.panelGlass}`}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold md:text-base">Chat</h2>
+            <p className="truncate text-[11px] opacity-80">@{profile?.username || 'you'}</p>
             {resolvedZipCode ? (
-              <p className="mt-1 text-xs opacity-80">Your default zip room: {resolvedZipCode}</p>
+              <p className="text-[11px] opacity-70">Zip {resolvedZipCode}</p>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-sm font-medium flex items-center gap-2">
-              Theme
-              <select
-                value={theme}
-                onChange={(event) => handleThemeChange(event.target.value)}
-                className={`border rounded px-2 py-1 text-sm ${activeTheme.input}`}
+          <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setThemeMenuOpen((open) => !open)}
+                className={`rounded border px-2 py-1 text-sm ${activeTheme.subtle}`}
+                aria-label="Open chat theme menu"
+                aria-expanded={themeMenuOpen}
               >
-                {CHAT_THEMES.map((themeOption) => (
-                  <option key={themeOption.key} value={themeOption.key}>
-                    {themeOption.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-medium flex items-center gap-2">
-              Name color
+                🎨
+              </button>
+              {themeMenuOpen ? (
+                <div className={`absolute right-0 top-9 z-20 min-w-40 rounded border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}>
+                  {CHAT_THEMES.map((themeOption) => (
+                    <button
+                      key={themeOption.key}
+                      type="button"
+                      onClick={() => {
+                        handleThemeChange(themeOption.key);
+                        setThemeMenuOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded px-2 py-1 text-left hover:opacity-80 ${theme === themeOption.key ? 'font-semibold' : ''}`}
+                    >
+                      <span>{themeOption.label}</span>
+                      {theme === themeOption.key ? <span>✓</span> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <label className="sr-only" htmlFor="chat-theme-select-fallback">Theme</label>
+            <select
+              id="chat-theme-select-fallback"
+              value={theme}
+              onChange={(event) => handleThemeChange(event.target.value)}
+              className="sr-only"
+              aria-label="Set chat theme"
+              tabIndex={-1}
+            >
+              {CHAT_THEMES.map((themeOption) => (
+                <option key={themeOption.key} value={themeOption.key}>
+                  {themeOption.label}
+                </option>
+              ))}
+            </select>
+            <label className="text-xs font-medium flex items-center">
               <input
                 type="color"
                 value={nameColor}
                 onChange={(event) => handleNameColorChange(event.target.value)}
-                className="h-8 w-10 rounded border border-slate-300 bg-transparent p-0.5"
+                className="h-7 w-8 rounded border border-slate-300 bg-transparent p-0.5"
                 aria-label="Set your chat name color"
               />
             </label>
@@ -585,7 +635,7 @@ function Chat() {
         <aside
           className={[
             mobileWorkspaceOpen ? 'hidden' : 'flex',
-            'min-h-0 flex-col border-b-2 p-3 md:p-4 lg:col-span-3 lg:flex lg:border-b-0 lg:border-r-2',
+            'min-h-0 flex-col border-b p-2 md:p-3 lg:col-span-3 lg:flex lg:border-b-0 lg:border-r',
             activeTheme.panel
           ].join(' ')}
         >
@@ -702,11 +752,11 @@ function Chat() {
         <section
           className={[
             mobileWorkspaceOpen ? 'flex' : 'hidden',
-            'min-h-0 flex-col border-b-2 p-3 md:p-4 lg:col-span-6 lg:flex lg:border-b-0 lg:border-r-2',
+            'min-h-0 flex-col border-b px-2 pb-2 pt-1 md:p-3 lg:col-span-6 lg:flex lg:border-b-0 lg:border-r',
             activeTheme.panel
           ].join(' ')}
         >
-          <header className={`sticky top-0 z-10 mb-3 rounded border p-2 ${activeTheme.panelGlass}`}>
+          <header className={`sticky top-0 z-10 mb-2 rounded border px-2 py-1.5 ${activeTheme.panelGlass}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <button
@@ -714,19 +764,30 @@ function Chat() {
                   onClick={() => setMobileWorkspaceOpen(false)}
                   className={`rounded border px-2 py-1 text-xs lg:hidden ${activeTheme.subtle}`}
                 >
-                  Back
+                  ←
                 </button>
                 <div>
-                  <h3 className="font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
-                  <p className="text-[11px] font-mono opacity-80">Classic IM Window · hover bubbles for metadata</p>
+                  <h3 className="text-sm font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
+                  <p className="text-[10px] font-mono opacity-75">Mobile chat</p>
                 </div>
               </div>
-              {activeConversation ? (
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
-                  <span className={`h-2 w-2 rounded-full ${conversationPresence.tone}`} />
-                  {conversationPresence.label}
-                </span>
-              ) : null}
+              <div className="flex items-center gap-2">
+                {activeConversationUser?.username ? (
+                  <a
+                    href={`/social/${encodeURIComponent(activeConversationUser.username)}`}
+                    className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle}`}
+                    aria-label={`View @${activeConversationUser.username} profile`}
+                  >
+                    👤
+                  </a>
+                ) : null}
+                {activeConversation ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
+                    <span className={`h-2 w-2 rounded-full ${conversationPresence.tone}`} />
+                    {conversationPresence.label}
+                  </span>
+                ) : null}
+              </div>
             </div>
           </header>
 
@@ -742,7 +803,7 @@ function Chat() {
             theme={activeTheme}
           />
 
-          <div className="mt-2 space-y-2">
+          <div className="mt-1 space-y-1">
             {localTyping ? (
               <div className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-mono opacity-80">
                 <span className="animate-pulse">●</span>
@@ -752,7 +813,7 @@ function Chat() {
               </div>
             ) : null}
 
-            <div className="sticky bottom-0">
+            <div className="sticky bottom-0 pb-[env(safe-area-inset-bottom)]">
               <ChatComposerBar
                 composerValue={composerValue}
                 setComposerValue={setComposerValue}
@@ -765,7 +826,7 @@ function Chat() {
           </div>
         </section>
 
-        <aside className={`hidden min-h-0 flex-col p-3 md:p-4 lg:col-span-3 lg:flex ${activeTheme.panel}`}>
+        <aside className={`hidden min-h-0 flex-col p-2 md:p-3 lg:col-span-3 lg:flex ${activeTheme.panel}`}>
           <div className={`sticky top-0 z-10 rounded border p-3 ${activeTheme.panelGlass}`}>
             <h3 className="font-semibold">Conversation Details</h3>
             {activeConversation ? (
