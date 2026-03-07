@@ -30,6 +30,9 @@ describe('SocialDesignStudioModal layout studio', () => {
     const onApplyTemplate = jest.fn();
     const onApplyLayoutPreset = jest.fn();
     const onPanelOverrideToggle = jest.fn();
+    const onLayoutModeChange = jest.fn();
+    const onSaveChanges = jest.fn();
+    const onCancelChanges = jest.fn();
 
     await act(async () => {
       root.render(
@@ -54,6 +57,11 @@ describe('SocialDesignStudioModal layout studio', () => {
           onDeleteConfig={jest.fn()}
           onFavoriteShared={jest.fn()}
           onCloneShared={jest.fn()}
+          layoutMode="desktop"
+          onLayoutModeChange={onLayoutModeChange}
+          onSaveChanges={onSaveChanges}
+          onCancelChanges={onCancelChanges}
+          hasUnsavedChanges
           busy={false}
           error=""
           successMessage=""
@@ -71,6 +79,23 @@ describe('SocialDesignStudioModal layout studio', () => {
       compactPreset.click();
     });
     expect(onApplyLayoutPreset).toHaveBeenCalled();
+
+    const modeSelect = container.querySelector('#layout-mode-select');
+    expect(modeSelect).toBeTruthy();
+    await act(async () => {
+      modeSelect.value = 'mobile';
+      modeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(onLayoutModeChange).toHaveBeenCalledWith('mobile');
+
+    const saveButton = getButtonContainingText('Save');
+    const cancelButton = getButtonContainingText('Cancel');
+    await act(async () => {
+      saveButton.click();
+      cancelButton.click();
+    });
+    expect(onSaveChanges).toHaveBeenCalled();
+    expect(onCancelChanges).toHaveBeenCalled();
 
     const oceanicPreset = getButtonContainingText('Oceanic');
     expect(oceanicPreset).toBeTruthy();

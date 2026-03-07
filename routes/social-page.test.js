@@ -105,6 +105,10 @@ describe('social page route', () => {
     expect(response.status).toBe(201);
     expect(response.body.config.name).toBe('Studio Draft');
     expect(mockSocialPageConfigModel.create).toHaveBeenCalled();
+    expect(mockSocialPageConfigModel.create.mock.calls[0][0].design.layouts).toEqual(expect.objectContaining({
+      desktop: expect.any(Object),
+      mobile: expect.any(Object)
+    }));
     expect(user.save).not.toHaveBeenCalled();
   });
 

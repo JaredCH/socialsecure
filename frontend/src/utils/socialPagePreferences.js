@@ -1,4 +1,5 @@
 export const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest'];
+export const SOCIAL_LAYOUT_MODES = ['desktop', 'mobile'];
 export const SOCIAL_FONT_FAMILIES = ['Inter', 'Manrope', 'Space Grotesk', 'Merriweather', 'Fira Sans', 'Georgia'];
 export const SOCIAL_FONT_SIZE_TOKENS = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl'];
 export const SOCIAL_LAYOUT_AREAS = ['top', 'sideLeft', 'main', 'sideRight'];
@@ -227,6 +228,21 @@ const BALANCED_LAYOUT_PRESET = SOCIAL_LAYOUT_PRESETS.find((preset) => preset.id 
   || { panels: {} };
 
 export const DEFAULT_PANEL_LAYOUTS = BALANCED_LAYOUT_PRESET.panels;
+export const DEFAULT_MOBILE_PANEL_LAYOUTS = {
+  profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, visible: true, gridPlacement: { row: 0, col: 0 } },
+  guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 1, visible: true, gridPlacement: { row: 1, col: 0 } },
+  composer: { area: 'main', size: 'fourCols', height: 'fullRow', order: 2, visible: true, gridPlacement: { row: 2, col: 0 } },
+  timeline: { area: 'main', size: 'fourCols', height: 'threeRows', order: 3, visible: true, gridPlacement: { row: 4, col: 0 } },
+  gallery: { area: 'main', size: 'fourCols', height: 'twoRows', order: 4, visible: true, gridPlacement: { row: 10, col: 0 } },
+  chat_panel: { area: 'main', size: 'fourCols', height: 'fullRow', order: 5, visible: true, gridPlacement: { row: 14, col: 0 } },
+  top_friends: { area: 'main', size: 'twoCols', height: 'fullRow', order: 6, visible: true, gridPlacement: { row: 16, col: 0 } },
+  snapshot: { area: 'main', size: 'twoCols', height: 'fullRow', order: 7, visible: true, gridPlacement: { row: 16, col: 6 } },
+  circles: { area: 'main', size: 'fourCols', height: 'fullRow', order: 8, visible: true, gridPlacement: { row: 18, col: 0 } },
+  guest_lookup: { area: 'main', size: 'twoCols', height: 'fullRow', order: 9, visible: true, gridPlacement: { row: 17, col: 0 } },
+  moderation_status: { area: 'main', size: 'twoCols', height: 'fullRow', order: 10, visible: true, gridPlacement: { row: 17, col: 6 } },
+  community_notes: { area: 'main', size: 'fourCols', height: 'halfRow', order: 11, visible: true, gridPlacement: { row: 19, col: 0 } },
+  shortcuts: { area: 'main', size: 'fourCols', height: 'halfRow', order: 12, visible: true, gridPlacement: { row: 19, col: 6 } }
+};
 
 export const SOCIAL_DESIGN_TEMPLATES = [
   {
@@ -375,11 +391,38 @@ export const buildDefaultSocialPreferences = (profileTheme = 'default') => ({
     };
     return acc;
   }, {}),
+  layouts: {
+    desktop: {
+      panels: SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
+        const panelDefaults = DEFAULT_PANEL_LAYOUTS[panelId];
+        acc[panelId] = {
+          ...panelDefaults,
+          gridPlacement: panelDefaults.gridPlacement ? { ...panelDefaults.gridPlacement } : undefined,
+          useCustomStyles: false,
+          styles: {}
+        };
+        return acc;
+      }, {})
+    },
+    mobile: {
+      panels: SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
+        const panelDefaults = DEFAULT_MOBILE_PANEL_LAYOUTS[panelId] || DEFAULT_PANEL_LAYOUTS[panelId];
+        acc[panelId] = {
+          ...panelDefaults,
+          gridPlacement: panelDefaults.gridPlacement ? { ...panelDefaults.gridPlacement } : undefined,
+          useCustomStyles: false,
+          styles: {}
+        };
+        return acc;
+      }, {})
+    },
+    activeMode: 'desktop'
+  },
   activeConfigId: null,
   version: 2
 });
 
-export const normalizeSocialPreferences = (input, profileTheme = 'default') => {
+export const normalizeSocialPreferences = (input, profileTheme = 'default', requestedLayoutMode = 'desktop') => {
   const defaults = buildDefaultSocialPreferences(profileTheme);
   const raw = isPlainObject(input) ? input : {};
   const themePreset = SOCIAL_THEME_PRESETS.includes(raw.themePreset) ? raw.themePreset : defaults.themePreset;
@@ -395,28 +438,44 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default') => {
     pageBackgroundColor: isHex(raw.globalStyles?.pageBackgroundColor || '') ? raw.globalStyles.pageBackgroundColor : DEFAULT_GLOBAL_STYLES.pageBackgroundColor,
     fontSizes: normalizeFontSizes(raw.globalStyles?.fontSizes)
   };
-  const panels = { ...defaults.panels };
-  SOCIAL_PANEL_IDS.forEach((panelId) => {
-    const panelRaw = raw.panels?.[panelId] || {};
-    const area = SOCIAL_LAYOUT_AREAS.includes(panelRaw.area) ? panelRaw.area : defaults.panels[panelId].area;
-    panels[panelId] = {
-      area,
-      order: Number.isFinite(Number(panelRaw.order)) ? Number(panelRaw.order) : defaults.panels[panelId].order,
-      visible: panelRaw.visible !== false,
-      size: normalizeSizeForArea(panelRaw.size, area, defaults.panels[panelId].size),
-      height: normalizeHeightForArea(panelRaw.height, area, defaults.panels[panelId].height, panelRaw.size),
-      gridPlacement: normalizeGridPlacement(panelRaw.gridPlacement, defaults.panels[panelId].gridPlacement),
-      useCustomStyles: Boolean(panelRaw.useCustomStyles),
-      styles: {
-        panelColor: isHex(panelRaw.styles?.panelColor || '') ? panelRaw.styles.panelColor : globalStyles.panelColor,
-        headerColor: isHex(panelRaw.styles?.headerColor || '') ? panelRaw.styles.headerColor : globalStyles.headerColor,
-        fontFamily: SOCIAL_FONT_FAMILIES.includes(panelRaw.styles?.fontFamily) ? panelRaw.styles.fontFamily : globalStyles.fontFamily,
-        fontColor: isHex(panelRaw.styles?.fontColor || '') ? panelRaw.styles.fontColor : globalStyles.fontColor,
-        fontSizes: normalizeFontSizes(panelRaw.styles?.fontSizes, globalStyles.fontSizes)
-      }
-    };
-  });
+  const normalizePanelsForMode = (panelInput = {}, fallbackPanels = defaults.panels) => {
+    const normalizedPanels = {};
+    SOCIAL_PANEL_IDS.forEach((panelId) => {
+      const panelRaw = panelInput?.[panelId] || {};
+      const panelFallback = fallbackPanels[panelId] || defaults.panels[panelId];
+      const area = SOCIAL_LAYOUT_AREAS.includes(panelRaw.area) ? panelRaw.area : panelFallback.area;
+      normalizedPanels[panelId] = {
+        area,
+        order: Number.isFinite(Number(panelRaw.order)) ? Number(panelRaw.order) : panelFallback.order,
+        visible: panelRaw.visible !== false,
+        size: normalizeSizeForArea(panelRaw.size, area, panelFallback.size),
+        height: normalizeHeightForArea(panelRaw.height, area, panelFallback.height, panelRaw.size),
+        gridPlacement: normalizeGridPlacement(panelRaw.gridPlacement, panelFallback.gridPlacement),
+        useCustomStyles: Boolean(panelRaw.useCustomStyles),
+        styles: {
+          panelColor: isHex(panelRaw.styles?.panelColor || '') ? panelRaw.styles.panelColor : globalStyles.panelColor,
+          headerColor: isHex(panelRaw.styles?.headerColor || '') ? panelRaw.styles.headerColor : globalStyles.headerColor,
+          fontFamily: SOCIAL_FONT_FAMILIES.includes(panelRaw.styles?.fontFamily) ? panelRaw.styles.fontFamily : globalStyles.fontFamily,
+          fontColor: isHex(panelRaw.styles?.fontColor || '') ? panelRaw.styles.fontColor : globalStyles.fontColor,
+          fontSizes: normalizeFontSizes(panelRaw.styles?.fontSizes, globalStyles.fontSizes)
+        }
+      };
+    });
+    return normalizedPanels;
+  };
 
+  const desktopPanels = normalizePanelsForMode(
+    raw.layouts?.desktop?.panels || raw.panels || {},
+    defaults.layouts.desktop.panels
+  );
+  const mobilePanels = normalizePanelsForMode(
+    raw.layouts?.mobile?.panels || {},
+    defaults.layouts.mobile.panels
+  );
+  const activeLayoutMode = SOCIAL_LAYOUT_MODES.includes(raw.layouts?.activeMode)
+    ? raw.layouts.activeMode
+    : (SOCIAL_LAYOUT_MODES.includes(requestedLayoutMode) ? requestedLayoutMode : 'desktop');
+  const panels = activeLayoutMode === 'mobile' ? mobilePanels : desktopPanels;
   const orderedPanels = [...SOCIAL_PANEL_IDS].sort((a, b) => (panels[a]?.order || 0) - (panels[b]?.order || 0));
   return {
     ...defaults,
@@ -424,6 +483,11 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default') => {
     themePreset,
     accentColorToken,
     globalStyles,
+    layouts: {
+      desktop: { panels: desktopPanels },
+      mobile: { panels: mobilePanels },
+      activeMode: activeLayoutMode
+    },
     panels,
     sectionOrder: orderedPanels,
     hiddenSections: orderedPanels.filter((panelId) => panels[panelId]?.visible === false),
@@ -462,16 +526,45 @@ export const mergeDesignPatch = (base, patch = {}) => {
         ...((patch.globalStyles && patch.globalStyles.fontSizes) || {})
       }
     },
-    panels: { ...(base.panels || {}) }
+    panels: { ...(base.panels || {}) },
+    layouts: {
+      ...(base.layouts || {}),
+      ...(patch.layouts || {}),
+      desktop: {
+        ...((base.layouts && base.layouts.desktop) || {}),
+        ...((patch.layouts && patch.layouts.desktop) || {}),
+        panels: {
+          ...(((base.layouts && base.layouts.desktop) || {}).panels || {}),
+          ...(((patch.layouts && patch.layouts.desktop) || {}).panels || {})
+        }
+      },
+      mobile: {
+        ...((base.layouts && base.layouts.mobile) || {}),
+        ...((patch.layouts && patch.layouts.mobile) || {}),
+        panels: {
+          ...(((base.layouts && base.layouts.mobile) || {}).panels || {}),
+          ...(((patch.layouts && patch.layouts.mobile) || {}).panels || {})
+        }
+      }
+    }
   };
 
   if (isPlainObject(patch.panels)) {
     Object.entries(patch.panels).forEach(([panelId, value]) => {
+      const baseDesktopPanel = base.layouts?.desktop?.panels?.[panelId] || {};
       merged.panels[panelId] = {
         ...((base.panels && base.panels[panelId]) || {}),
         ...(value || {}),
         styles: {
           ...(((base.panels && base.panels[panelId]) || {}).styles || {}),
+          ...((value && value.styles) || {})
+        }
+      };
+      merged.layouts.desktop.panels[panelId] = {
+        ...baseDesktopPanel,
+        ...(value || {}),
+        styles: {
+          ...(baseDesktopPanel.styles || {}),
           ...((value && value.styles) || {})
         }
       };
