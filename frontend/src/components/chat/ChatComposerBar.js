@@ -36,9 +36,9 @@ function ChatComposerBar({
           type="button"
           className={`rounded border px-2 py-2 text-sm transition active:scale-95 ${theme.subtle}`}
           aria-label="Attach file"
-          aria-describedby="chat-attachment-coming-soon"
+          aria-describedby="chat-attachment-disabled"
           disabled
-          title="File attachment is coming soon"
+          title="Attachments are disabled"
         >
           📎
         </button>
@@ -82,8 +82,8 @@ function ChatComposerBar({
           </div>
         </div>
       ) : null}
-      <span id="chat-attachment-coming-soon" className="sr-only">
-        File attachment is coming soon and is currently unavailable.
+      <span id="chat-attachment-disabled" className="sr-only">
+        File attachments are disabled in chat.
       </span>
     </form>
   );

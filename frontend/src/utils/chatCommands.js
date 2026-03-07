@@ -1,8 +1,9 @@
 export const COMMAND_REGEX = /^\/(\w+)(?:\s+([\s\S]*))?$/;
 
-export const SUPPORTED_COMMANDS = ['me', 'sing', 'shout', 'cry', 'dice', 'diceN'];
+// "diceN" represents variable dice commands like /dice20, /dice100, etc.
+export const SUPPORTED_COMMANDS = ['me', 'sing', 'shout', 'cry', 'runaway', 'scream', 'dice', 'diceN'];
 
-export const UNKNOWN_COMMAND_HELP = 'Unknown command. Available: /me, /sing, /shout, /cry, /dice, /diceN';
+export const UNKNOWN_COMMAND_HELP = 'Unknown command. Available: /me, /sing, /shout, /cry, /runaway, /scream, /dice, /diceN';
 
 export const parseSlashCommand = (input = '') => {
   const match = String(input).trim().match(COMMAND_REGEX);
@@ -73,14 +74,43 @@ export const runSlashCommand = ({ command, argsRaw = '', username = 'user' }) =>
   }
 
   if (command === 'cry') {
-    const validation = ensureArgs(args, 'Usage: /cry <text>');
-    if (!validation.ok) return validation;
     return {
       ok: true,
       payload: {
-        messageType: 'text',
-        plaintext: `${args} 😢`,
-        commandData: null
+        messageType: 'action',
+        plaintext: `${normalizedName} cries`,
+        commandData: {
+          command: 'cry',
+          processedContent: `${normalizedName} cries`
+        }
+      }
+    };
+  }
+
+  if (command === 'runaway') {
+    return {
+      ok: true,
+      payload: {
+        messageType: 'action',
+        plaintext: `${normalizedName} runs away`,
+        commandData: {
+          command: 'runaway',
+          processedContent: `${normalizedName} runs away`
+        }
+      }
+    };
+  }
+
+  if (command === 'scream') {
+    return {
+      ok: true,
+      payload: {
+        messageType: 'action',
+        plaintext: `${normalizedName} SCREAMS`,
+        commandData: {
+          command: 'scream',
+          processedContent: `${normalizedName} SCREAMS`
+        }
       }
     };
   }

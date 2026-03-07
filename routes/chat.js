@@ -2305,6 +2305,13 @@ router.post(
   unifiedChatLimiter,
   authenticateToken,
   body('content').trim().notEmpty().isLength({ max: 2000 }).withMessage('Message content is required and must be <= 2000 chars'),
+  body('senderNameColor')
+    .optional({ nullable: true })
+    .isString()
+    .bail()
+    .custom((value) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value).trim()))
+    .withMessage('senderNameColor must be a valid hex color'),
+  body('attachments').not().exists().withMessage('Attachments are not supported in chat messages'),
   async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -2315,6 +2322,9 @@ router.post(
     const { conversationId } = req.params;
     const userId = req.user.userId;
     const content = req.body.content.trim();
+    const senderNameColor = typeof req.body.senderNameColor === 'string'
+      ? req.body.senderNameColor.trim()
+      : null;
 
     const conversation = await ChatConversation.findById(conversationId);
     if (!conversation) {
@@ -2341,7 +2351,8 @@ router.post(
     const message = await ConversationMessage.create({
       conversationId: conversation._id,
       userId,
-      content
+      content,
+      senderNameColor: senderNameColor || null
     });
 
     conversation.lastMessageAt = new Date();

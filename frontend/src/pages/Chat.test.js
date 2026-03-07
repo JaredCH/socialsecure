@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import Chat from './Chat';
-import { authAPI, chatAPI, userAPI } from '../utils/api';
+import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -15,6 +15,12 @@ jest.mock('../utils/api', () => ({
     getConversationUsers: jest.fn(),
     sendConversationMessage: jest.fn(),
     startDM: jest.fn()
+  },
+  friendsAPI: {
+    sendRequest: jest.fn()
+  },
+  moderationAPI: {
+    blockUser: jest.fn()
   },
   userAPI: {
     search: jest.fn()
@@ -47,6 +53,18 @@ describe('Chat zip room indicator', () => {
     localStorage.clear();
     chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
     chatAPI.getConversationUsers.mockResolvedValue({ data: { users: [] } });
+    chatAPI.sendConversationMessage.mockResolvedValue({
+      data: {
+        message: {
+          _id: 'm-1',
+          content: 'ok',
+          userId: { _id: 'u1', username: 'alpha' },
+          createdAt: new Date().toISOString()
+        }
+      }
+    });
+    friendsAPI.sendRequest.mockResolvedValue({ data: { success: true } });
+    moderationAPI.blockUser.mockResolvedValue({ data: { success: true } });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -291,5 +309,140 @@ describe('Chat zip room indicator', () => {
     const themeSelect = container.querySelector('select');
     expect(themeSelect).not.toBeNull();
     expect(themeSelect.value).toBe('classic');
+  });
+
+  it('sends transformed slash command content with selected name color', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const colorInput = container.querySelector('input[type="color"]');
+    expect(colorInput).not.toBeNull();
+    await act(async () => {
+      const colorSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      colorSetter.call(colorInput, '#ff0000');
+      colorInput.dispatchEvent(new Event('input', { bubbles: true }));
+      colorInput.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+
+    const composer = container.querySelector('textarea[placeholder="Type your message"]');
+    expect(composer).not.toBeNull();
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      valueSetter.call(composer, '/cry');
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      await flush();
+    });
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Send');
+    expect(sendButton).not.toBeUndefined();
+    await act(async () => {
+      sendButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(chatAPI.sendConversationMessage).toHaveBeenCalledWith('zip1', {
+      content: 'alpha cries',
+      senderNameColor: '#ff0000'
+    });
+  });
+
+  it('opens a user context menu with requested actions on right click', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationUsers.mockResolvedValue({
+      data: {
+        users: [{ _id: 'u2', username: 'buddy', realName: 'Buddy' }]
+      }
+    });
+
+    await renderChat();
+
+    const userRow = Array.from(container.querySelectorAll('li')).find((node) => node.textContent.includes('@buddy'));
+    expect(userRow).not.toBeUndefined();
+
+    await act(async () => {
+      userRow.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 140, clientY: 120 }));
+      await flush();
+    });
+
+    expect(container.textContent).toContain('Send direct message');
+    expect(container.textContent).toContain('View user social');
+    expect(container.textContent).toContain('Request friendship');
+    expect(container.textContent).toContain('Block/ignore');
+  });
+
+  it('renders links as new-window anchors and warns before opening external links', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            _id: 'm-link',
+            content: 'Internal https://socialsecure.test/social and external https://example.com',
+            userId: { _id: 'u2', username: 'buddy' },
+            createdAt: '2024-01-01T00:00:00.000Z'
+          }
+        ]
+      }
+    });
+
+    const originalLocation = window.location;
+    delete window.location;
+    window.location = new URL('https://socialsecure.test/chat');
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false);
+
+    await renderChat();
+
+    const links = container.querySelectorAll('a[target="_blank"]');
+    expect(links.length).toBe(2);
+
+    await act(async () => {
+      links[0].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await flush();
+    });
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      links[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await flush();
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    window.location = originalLocation;
   });
 });

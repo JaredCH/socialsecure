@@ -222,4 +222,52 @@ describe('Unified chat hub routes', () => {
       { _id: '507f1f77bcf86cd799439022', username: 'buddy', realName: 'Buddy' }
     ]);
   });
+
+  it('stores sender name color when posting conversation messages', async () => {
+    const app = buildApp();
+    const conversationDoc = {
+      _id: 'conv-dm',
+      type: 'dm',
+      participants: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439022'],
+      messageCount: 0,
+      save: jest.fn().mockResolvedValue(undefined)
+    };
+    const populate = jest.fn().mockResolvedValue(undefined);
+    const createdMessage = {
+      _id: 'msg-1',
+      content: 'hello',
+      senderNameColor: '#ff0000',
+      userId: { _id: '507f1f77bcf86cd799439011', username: 'alpha' },
+      populate
+    };
+
+    mockChatConversation.findById.mockResolvedValue(conversationDoc);
+    mockConversationMessage.create.mockResolvedValue(createdMessage);
+
+    const response = await request(app)
+      .post('/api/chat/conversations/conv-dm/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'hello', senderNameColor: '#ff0000' });
+
+    expect(response.status).toBe(201);
+    expect(mockConversationMessage.create).toHaveBeenCalledWith({
+      conversationId: 'conv-dm',
+      userId: '507f1f77bcf86cd799439011',
+      content: 'hello',
+      senderNameColor: '#ff0000'
+    });
+    expect(populate).toHaveBeenCalledWith('userId', '_id username realName');
+  });
+
+  it('rejects conversation message attachments', async () => {
+    const app = buildApp();
+
+    const response = await request(app)
+      .post('/api/chat/conversations/conv-dm/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'hello', attachments: [{ name: 'file.png' }] });
+
+    expect(response.status).toBe(400);
+    expect(response.body.errors?.[0]?.msg).toMatch(/Attachments are not supported/);
+  });
 });
