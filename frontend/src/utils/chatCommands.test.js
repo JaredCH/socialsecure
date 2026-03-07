@@ -23,10 +23,15 @@ describe('chatCommands', () => {
     });
   });
 
-  it('builds transformed text payloads for sing/shout/cry', () => {
+  it('builds transformed text payloads for sing/shout', () => {
     expect(runSlashCommand({ command: 'sing', argsRaw: 'hello', username: 'alice' }).payload.plaintext).toBe('♪ hello ♪');
     expect(runSlashCommand({ command: 'shout', argsRaw: 'hello', username: 'alice' }).payload.plaintext).toBe('HELLO!');
-    expect(runSlashCommand({ command: 'cry', argsRaw: 'hello', username: 'alice' }).payload.plaintext).toBe('hello 😢');
+  });
+
+  it('builds action payloads for cry/runaway/scream', () => {
+    expect(runSlashCommand({ command: 'cry', username: 'alice' }).payload.plaintext).toBe('alice cries');
+    expect(runSlashCommand({ command: 'runaway', username: 'alice' }).payload.plaintext).toBe('alice runs away');
+    expect(runSlashCommand({ command: 'scream', username: 'alice' }).payload.plaintext).toBe('alice SCREAMS');
   });
 
   it('builds dice command payloads including diceN', () => {

@@ -249,8 +249,12 @@ export const chatAPI = {
     api.get(`/chat/conversations/${conversationId}/messages?page=${page}&limit=${limit}`),
   getConversationUsers: (conversationId) =>
     api.get(`/chat/conversations/${conversationId}/users`),
-  sendConversationMessage: (conversationId, content) =>
-    api.post(`/chat/conversations/${conversationId}/messages`, { content }),
+  sendConversationMessage: (conversationId, payload) => {
+    if (typeof payload === 'string') {
+      return api.post(`/chat/conversations/${conversationId}/messages`, { content: payload });
+    }
+    return api.post(`/chat/conversations/${conversationId}/messages`, payload);
+  },
   startDM: (targetUserId) => api.post('/chat/dm/start', { targetUserId }),
   getProfileThread: (userId) => api.get(`/chat/profile/${encodeURIComponent(userId)}/thread`),
 };

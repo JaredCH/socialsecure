@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import ChatComposerBar from '../components/chat/ChatComposerBar';
 import ChatMessageList from '../components/chat/ChatMessageList';
-import { authAPI, chatAPI, userAPI } from '../utils/api';
+import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
+import { parseSlashCommand, runSlashCommand } from '../utils/chatCommands';
 
 const CHANNELS = [
   { key: 'zip', label: 'Zip Rooms' },
@@ -122,6 +123,9 @@ const getPresenceState = (lastActiveAt) => {
     : { label: 'Away', tone: 'bg-amber-400' };
 };
 
+const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+const DEFAULT_CHAT_NAME_COLOR = '#2563eb';
+
 function Chat() {
   const [profile, setProfile] = useState(null);
   const [loadingHub, setLoadingHub] = useState(true);
@@ -154,15 +158,40 @@ function Chat() {
     }
     return CHAT_THEMES[0].key;
   });
+  const [nameColor, setNameColor] = useState(() => {
+    try {
+      const saved = localStorage.getItem('chatNameColor');
+      if (saved && HEX_COLOR_REGEX.test(saved)) return saved;
+    } catch {
+      // ignore localStorage errors
+    }
+    return DEFAULT_CHAT_NAME_COLOR;
+  });
   const [roomUsers, setRoomUsers] = useState([]);
   const [roomUsersLoading, setRoomUsersLoading] = useState(false);
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
+  const [userContextMenu, setUserContextMenu] = useState({
+    open: false,
+    x: 0,
+    y: 0,
+    user: null
+  });
 
   const handleThemeChange = useCallback((nextTheme) => {
     if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
     setTheme(nextTheme);
     try {
       localStorage.setItem('chatTheme', nextTheme);
+    } catch {
+      // ignore localStorage errors
+    }
+  }, []);
+
+  const handleNameColorChange = useCallback((nextColor) => {
+    if (!HEX_COLOR_REGEX.test(String(nextColor || ''))) return;
+    setNameColor(nextColor);
+    try {
+      localStorage.setItem('chatNameColor', nextColor);
     } catch {
       // ignore localStorage errors
     }
@@ -352,9 +381,27 @@ function Chat() {
     const trimmed = composerValue.trim();
     if (!trimmed || !activeConversationId) return;
 
+    const parsed = parseSlashCommand(trimmed);
+    let contentToSend = trimmed;
+    if (parsed) {
+      const result = runSlashCommand({
+        command: parsed.command,
+        argsRaw: parsed.argsRaw,
+        username: profile?.username || profile?.realName || 'user'
+      });
+      if (!result.ok) {
+        toast.error(result.error || 'Invalid slash command');
+        return;
+      }
+      contentToSend = result.payload?.plaintext || trimmed;
+    }
+
     setSending(true);
     try {
-      const { data } = await chatAPI.sendConversationMessage(activeConversationId, trimmed);
+      const { data } = await chatAPI.sendConversationMessage(activeConversationId, {
+        content: contentToSend,
+        senderNameColor: nameColor
+      });
       setMessages((prev) => [...prev, data.message]);
       setComposerValue('');
       setLocalTyping(false);
@@ -377,6 +424,46 @@ function Chat() {
       setMobileWorkspaceOpen(true);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to start DM');
+    }
+  };
+
+  const openUserContextMenu = (event, user) => {
+    event.preventDefault();
+    setUserContextMenu({
+      open: true,
+      x: event.clientX,
+      y: event.clientY,
+      user
+    });
+  };
+
+  const closeUserContextMenu = () => {
+    setUserContextMenu((prev) => ({ ...prev, open: false }));
+  };
+
+  const handleViewUserSocial = (user) => {
+    const identifier = user?.username || user?._id;
+    if (!identifier) return;
+    window.open(`/social?user=${encodeURIComponent(identifier)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleRequestFriendship = async (user) => {
+    if (!user?._id || String(user._id) === String(profile?._id)) return;
+    try {
+      await friendsAPI.sendRequest(user._id);
+      toast.success(`Friend request sent to @${user.username || user.realName || 'user'}`);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to send friend request');
+    }
+  };
+
+  const handleBlockIgnore = async (user) => {
+    if (!user?._id || String(user._id) === String(profile?._id)) return;
+    try {
+      await moderationAPI.blockUser(user._id, 'Blocked from chat user context menu');
+      toast.success(`Blocked @${user.username || user.realName || 'user'}`);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to block user');
     }
   };
 
@@ -412,6 +499,22 @@ function Chat() {
       cancelled = true;
     };
   }, [dmQuery, profile]);
+
+  useEffect(() => {
+    if (!userContextMenu.open) return undefined;
+    const handleWindowClick = () => setUserContextMenu((prev) => ({ ...prev, open: false }));
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setUserContextMenu((prev) => ({ ...prev, open: false }));
+      }
+    };
+    window.addEventListener('click', handleWindowClick);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('click', handleWindowClick);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [userContextMenu.open]);
 
   const roomSuggestions = useMemo(() => {
     const query = roomQuery.trim().toLowerCase();
@@ -449,20 +552,32 @@ function Chat() {
               <p className="mt-1 text-xs opacity-80">Your default zip room: {resolvedZipCode}</p>
             ) : null}
           </div>
-          <label className="text-sm font-medium flex items-center gap-2">
-            Theme
-            <select
-              value={theme}
-              onChange={(event) => handleThemeChange(event.target.value)}
-              className={`border rounded px-2 py-1 text-sm ${activeTheme.input}`}
-            >
-              {CHAT_THEMES.map((themeOption) => (
-                <option key={themeOption.key} value={themeOption.key}>
-                  {themeOption.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              Theme
+              <select
+                value={theme}
+                onChange={(event) => handleThemeChange(event.target.value)}
+                className={`border rounded px-2 py-1 text-sm ${activeTheme.input}`}
+              >
+                {CHAT_THEMES.map((themeOption) => (
+                  <option key={themeOption.key} value={themeOption.key}>
+                    {themeOption.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-medium flex items-center gap-2">
+              Name color
+              <input
+                type="color"
+                value={nameColor}
+                onChange={(event) => handleNameColorChange(event.target.value)}
+                className="h-8 w-10 rounded border border-slate-300 bg-transparent p-0.5"
+                aria-label="Set your chat name color"
+              />
+            </label>
+          </div>
         </div>
       </header>
 
@@ -667,6 +782,7 @@ function Chat() {
           <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
             <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
               <h4 className="text-sm font-semibold">Users in Room</h4>
+              <p className="mt-1 text-[11px] opacity-80">Right-click a user for quick actions.</p>
               <div className="mt-2 rounded border overflow-auto max-h-56">
                 {roomUsersLoading ? (
                   <p className="p-2 text-xs opacity-80">Loading users...</p>
@@ -677,7 +793,11 @@ function Chat() {
                     {roomUsers.map((user) => {
                       const status = getPresenceState(user.lastActiveAt || user.updatedAt || user.lastSeenAt);
                       return (
-                        <li key={String(user._id)} className="flex items-center justify-between gap-2 p-2 text-sm">
+                        <li
+                          key={String(user._id)}
+                          className="flex items-center justify-between gap-2 p-2 text-sm"
+                          onContextMenu={(event) => openUserContextMenu(event, user)}
+                        >
                           <span>@{user.username || user.realName || 'user'}</span>
                           <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase opacity-80">
                             <span className={`h-2 w-2 rounded-full ${status.tone}`} />
@@ -708,6 +828,58 @@ function Chat() {
           </div>
         </aside>
       </div>
+      {userContextMenu.open && userContextMenu.user ? (
+        <div
+          className={`fixed z-50 w-56 rounded border p-1 shadow-xl ${activeTheme.panelGlass}`}
+          style={{ left: userContextMenu.x, top: userContextMenu.y }}
+          role="menu"
+          aria-label="User actions menu"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="w-full rounded px-2 py-1 text-left text-sm hover:opacity-80"
+            onClick={async () => {
+              await handleStartDM(userContextMenu.user._id);
+              closeUserContextMenu();
+            }}
+          >
+            Send direct message
+          </button>
+          <button
+            type="button"
+            className="w-full rounded px-2 py-1 text-left text-sm hover:opacity-80"
+            onClick={() => {
+              handleViewUserSocial(userContextMenu.user);
+              closeUserContextMenu();
+            }}
+          >
+            View user social
+          </button>
+          <button
+            type="button"
+            className="w-full rounded px-2 py-1 text-left text-sm hover:opacity-80 disabled:opacity-50"
+            disabled={String(userContextMenu.user._id) === String(profile?._id)}
+            onClick={async () => {
+              await handleRequestFriendship(userContextMenu.user);
+              closeUserContextMenu();
+            }}
+          >
+            Request friendship
+          </button>
+          <button
+            type="button"
+            className="w-full rounded px-2 py-1 text-left text-sm hover:opacity-80 disabled:opacity-50"
+            disabled={String(userContextMenu.user._id) === String(profile?._id)}
+            onClick={async () => {
+              await handleBlockIgnore(userContextMenu.user);
+              closeUserContextMenu();
+            }}
+          >
+            Block/ignore
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
