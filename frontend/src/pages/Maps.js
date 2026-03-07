@@ -19,8 +19,10 @@ const STATE_ICONS = {
   public_glow: '✨'
 };
 const GEOLOCATION_OPTIONS_TIMEOUT_MS = 8000;
-const GEOLOCATION_OPTIONS_MAX_AGE_MS = 300000;
+const GEOLOCATION_OPTIONS_MAX_AGE_MS = 30000;
 const HEATMAP_CIRCLE_RADIUS_METERS = 2000;
+export const LOCATION_PUBLISH_INTERVAL_MS = 30 * 1000;
+export const FRIENDS_REFRESH_INTERVAL_MS = 10 * 1000;
 const MAP_REFRESH_INTERVAL_MS = 60 * 1000;
 const HEATMAP_USERS_PER_LAYER = 3;
 const HEATMAP_MAX_STACK_LAYERS = 6;
@@ -194,6 +196,11 @@ function Maps() {
   useEffect(() => {
     if (!userLocation) return;
     fetchMapData();
+    if (layers.friends) {
+      fetchFriendsLocations();
+    } else {
+      setFriendsLocations([]);
+    }
   }, [userLocation, viewMode, layers.friends, layers.heatmap]);
 
   useEffect(() => {
@@ -206,7 +213,19 @@ function Maps() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [userLocation, viewMode, layers.friends, layers.heatmap]);
+  }, [userLocation, viewMode, layers.heatmap]);
+
+  useEffect(() => {
+    if (!userLocation || !layers.friends) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      fetchFriendsLocations();
+    }, FRIENDS_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [userLocation, layers.friends]);
 
   // Fetch map data based on view mode
   const fetchMapData = async ({ showLoading = true } = {}) => {
@@ -220,14 +239,11 @@ function Maps() {
       
       // Fetch map data
       const mapEndpoint = viewMode === 'local' ? 'getLocalMap' : 'getCommunityMap';
-      const [mapRes, friendsRes, heatmapRes] = await Promise.all([
+      const [mapRes, heatmapRes] = await Promise.all([
         withDataFallback(
           mapsAPI[mapEndpoint]({ lat, lng, radius: viewMode === 'local' ? 50000 : 200000 }),
           { spotlights: [] }
         ),
-        layers.friends
-          ? withDataFallback(mapsAPI.getFriendsLocations(), { friends: [] })
-          : Promise.resolve(createFallbackResponse({ friends: [] })),
         layers.heatmap
           ? withDataFallback(
             mapsAPI.getHeatmap({
@@ -239,7 +255,6 @@ function Maps() {
       ]);
       
       setSpotlights(mapRes.data.spotlights || []);
-      setFriendsLocations(friendsRes.data.friends || []);
       setHeatmapData(heatmapRes.data.heatmap || []);
       setLastMapRefreshAt(new Date());
       setError(null);
@@ -250,6 +265,21 @@ function Maps() {
       if (showLoading) {
         setLoading(false);
       }
+    }
+  };
+
+  const fetchFriendsLocations = async () => {
+    if (!layers.friends) {
+      setFriendsLocations([]);
+      return;
+    }
+
+    try {
+      const friendsRes = await withDataFallback(mapsAPI.getFriendsLocations(), { friends: [] });
+      setFriendsLocations(friendsRes.data.friends || []);
+      setLastMapRefreshAt(new Date());
+    } catch (err) {
+      console.error('Error fetching friend locations:', err);
     }
   };
 
@@ -295,7 +325,12 @@ function Maps() {
           console.error('Error updating presence:', err);
         }
       },
-      (err) => console.error('Geolocation error:', err)
+      (err) => console.error('Geolocation error:', err),
+      {
+        enableHighAccuracy: false,
+        timeout: GEOLOCATION_OPTIONS_TIMEOUT_MS,
+        maximumAge: GEOLOCATION_OPTIONS_MAX_AGE_MS
+      }
     );
   };
 
@@ -303,7 +338,7 @@ function Maps() {
     if (!userLocation) return undefined;
     const intervalId = window.setInterval(() => {
       publishCurrentLocation();
-    }, MAP_REFRESH_INTERVAL_MS);
+    }, LOCATION_PUBLISH_INTERVAL_MS);
 
     return () => {
       window.clearInterval(intervalId);
@@ -393,14 +428,15 @@ function Maps() {
     if (layers.friends && friendsLocations.length > 0) {
       friendsLocations.forEach(friend => {
         if (friend.lat != null && friend.lng != null) {
+          const markerColor = friend.isLive ? '#10b981' : '#9ca3af';
           const icon = L.divIcon({
             className: 'friend-marker',
-            html: `<div style="background:#10b981;width:24px;height:24px;border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`,
+            html: `<div style="background:${markerColor};width:24px;height:24px;border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`,
             iconSize: [24, 24]
           });
           
           L.marker([friend.lat, friend.lng], { icon })
-            .bindPopup(`<b>${friend.user?.username || 'Friend'}</b><br/>${friend.city || friend.locationName || 'Location shared'}`)
+            .bindPopup(`<b>${friend.user?.username || 'Friend'}</b><br/>${friend.city || friend.locationName || 'Location shared'}<br/>${friend.isLive ? 'Live now' : 'Recently shared'}`)
             .addTo(map);
         }
       });
@@ -481,9 +517,9 @@ function Maps() {
   return (
     <div className="h-full w-full flex flex-col overflow-hidden bg-gray-50 text-gray-900">
       {/* Header */}
-      <div className="shrink-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 py-3 flex items-center justify-between">
+      <div className="shrink-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-bold">🗺️ Maps</h1>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="grid grid-cols-2 gap-2 text-sm sm:flex sm:items-center">
           <button
             onClick={updateLocation}
             className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
@@ -499,10 +535,10 @@ function Maps() {
         </div>
       </div>
 
-      {/* Three-column body */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* Responsive body */}
+      <div className="flex flex-1 min-h-0 overflow-hidden flex-col lg:flex-row">
         {/* Left Sidebar – Controls & Filters */}
-        <aside className="w-72 shrink-0 bg-white border-r border-gray-200 overflow-y-auto flex flex-col">
+        <aside className="w-full lg:w-72 shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 overflow-y-auto flex flex-col lg:max-h-none max-h-[36vh]">
           {/* View Mode */}
           <div className="p-4 border-b border-gray-200">
             <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2">View Mode</h2>
@@ -640,7 +676,7 @@ function Maps() {
         </aside>
 
         {/* Center – Map */}
-        <div className="flex-1 min-w-0 relative">
+        <div className="flex-1 min-w-0 relative min-h-[45vh] lg:min-h-0">
           <div ref={mapRef} className="absolute inset-0" />
 
           {/* Loading Overlay */}
@@ -665,11 +701,11 @@ function Maps() {
         </div>
 
         {/* Right Sidebar – Friends */}
-        <aside className="w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto flex flex-col">
+        <aside className="w-full lg:w-64 shrink-0 bg-white border-t lg:border-t-0 lg:border-l border-gray-200 overflow-y-auto flex flex-col lg:max-h-none max-h-[30vh]">
           <div className="p-4 border-b border-gray-200">
             <h2 className="text-xs font-semibold uppercase text-gray-500">Friends Nearby</h2>
             <p className="text-[11px] text-gray-400 mt-1">
-              Live refresh every ~60 seconds
+              Updates every 10 seconds
             </p>
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -686,14 +722,18 @@ function Maps() {
                       onClick={() => flyToFriend(friend)}
                       className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3"
                     >
-                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-700 text-sm font-medium shrink-0">
+                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium shrink-0 ${
+                        friend.isLive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                      }`}>
                         {friend.user?.username?.[0]?.toUpperCase() || '?'}
                       </span>
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{friend.user?.username || 'Friend'}</p>
                         <p className="text-xs text-gray-500 truncate">{friend.city || friend.locationName || 'Location shared'}</p>
-                        <p className="text-[11px] text-emerald-600 mt-0.5">
-                          {friend.liveAgeSeconds != null ? `Live • ${friend.liveAgeSeconds}s ago` : 'Live'}
+                        <p className={`text-[11px] mt-0.5 ${friend.isLive ? 'text-emerald-600' : 'text-gray-500'}`}>
+                          {friend.liveAgeSeconds != null
+                            ? `${friend.isLive ? 'Live' : 'Recent'} • ${friend.liveAgeSeconds}s ago`
+                            : friend.isLive ? 'Live' : 'Recent'}
                         </p>
                       </div>
                     </button>
