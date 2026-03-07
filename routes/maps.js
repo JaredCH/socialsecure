@@ -18,6 +18,25 @@ const parsePositiveInteger = (value, fallbackValue) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackValue;
 };
 
+const FRIENDS_LIVE_WINDOW_MS = 60 * 1000;
+const FEET_TO_METERS = 0.3048;
+const HEATMAP_LOCATION_JITTER_RADIUS_METERS = 1500 * FEET_TO_METERS;
+const HEATMAP_TIME_JITTER_MAX_MS = 30 * 60 * 1000;
+const EARTH_RADIUS_METERS = 6378137;
+
+const jitterCoordinates = (lat, lng, maxDistanceMeters = HEATMAP_LOCATION_JITTER_RADIUS_METERS) => {
+  // sqrt(random) keeps the resulting points uniformly distributed across the full circle area.
+  const distance = Math.sqrt(Math.random()) * maxDistanceMeters;
+  const bearing = Math.random() * 2 * Math.PI;
+  const deltaLat = (distance * Math.cos(bearing)) / EARTH_RADIUS_METERS;
+  const deltaLng = (distance * Math.sin(bearing)) / (EARTH_RADIUS_METERS * Math.cos((lat * Math.PI) / 180));
+
+  return {
+    lat: lat + (deltaLat * 180) / Math.PI,
+    lng: lng + (deltaLng * 180) / Math.PI
+  };
+};
+
 // ============================================
 // AUTHENTICATION MIDDLEWARE
 // ============================================
@@ -182,10 +201,18 @@ router.delete('/presence', authenticateToken, async (req, res) => {
 router.get('/friends', authenticateToken, async (req, res) => {
   try {
     const locations = await LocationPresence.getFriendsLocations(req.user.userId);
+    const now = Date.now();
     
     // Return coarse (already rounded by precision level) coordinates for map display
-    const sanitized = locations.map(loc => {
+    // and only include live updates from the last minute.
+    const sanitized = locations.flatMap(loc => {
+      // Missing activity timestamps are treated as stale and omitted from live friend data.
+      const lastActivityTime = loc.lastActivityAt ? new Date(loc.lastActivityAt).getTime() : 0;
+      if (!lastActivityTime || now - lastActivityTime > FRIENDS_LIVE_WINDOW_MS) {
+        return [];
+      }
       const [lng = null, lat = null] = loc.location?.coordinates || [];
+      const liveAgeSeconds = Math.max(0, Math.floor((now - lastActivityTime) / 1000));
       return {
         user: {
           _id: loc.user._id,
@@ -201,6 +228,8 @@ router.get('/friends', authenticateToken, async (req, res) => {
         country: loc.country,
         precisionLevel: loc.precisionLevel,
         lastActivityAt: loc.lastActivityAt,
+        liveAgeSeconds,
+        isLive: true,
         isActive: loc.isActive
       };
     });
@@ -412,13 +441,22 @@ router.get('/heatmap', optionalAuth, async (req, res) => {
     }
     
     // Format response - anonymized, no user IDs
-    const heatmapData = tiles.map(tile => ({
-      lat: tile.center.lat,
-      lng: tile.center.lng,
-      intensity: Math.min(tile.data.userCount / 10, 1), // Normalize 0-1
-      userCount: tile.data.userCount,
-      spotlightCount: tile.data.spotlightCount
-    }));
+    const heatmapData = tiles.map(tile => {
+      const jitteredLocation = jitterCoordinates(tile.center.lat, tile.center.lng);
+      const baseTimestamp = tile.computedAt instanceof Date ? tile.computedAt : new Date();
+      const jitteredTimestamp = new Date(
+        baseTimestamp.getTime() + ((Math.random() * 2 - 1) * HEATMAP_TIME_JITTER_MAX_MS)
+      );
+
+      return {
+        lat: jitteredLocation.lat,
+        lng: jitteredLocation.lng,
+        intensity: Math.min(tile.data.userCount / 10, 1), // Normalize 0-1
+        userCount: tile.data.userCount,
+        spotlightCount: tile.data.spotlightCount,
+        jitteredAt: jitteredTimestamp.toISOString()
+      };
+    });
     
     res.json({ heatmap: heatmapData });
   } catch (error) {
