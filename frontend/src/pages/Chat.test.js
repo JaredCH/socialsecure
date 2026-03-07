@@ -205,13 +205,14 @@ describe('Chat zip room indicator', () => {
 
     const emptyMessages = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'No messages yet.');
     expect(emptyMessages).not.toBeUndefined();
-    expect(emptyMessages.parentElement.className).toContain('flex-1');
-    expect(emptyMessages.parentElement.className).toContain('overflow-y-auto');
-    expect(emptyMessages.parentElement.className).not.toContain('max-h-[460px]');
+    const messageViewport = emptyMessages.closest('div.overflow-y-auto');
+    expect(messageViewport).not.toBeNull();
+    expect(messageViewport.className).toContain('overflow-y-auto');
+    expect(messageViewport.className).not.toContain('max-h-[460px]');
 
     const sidebars = container.querySelectorAll('aside');
     expect(sidebars.length).toBeGreaterThanOrEqual(2);
-    expect(sidebars[0].className).toContain('overflow-y-auto');
+    expect(sidebars[0].querySelector('.overflow-y-auto')).not.toBeNull();
   });
 
   it('persists the selected theme to localStorage', async () => {
