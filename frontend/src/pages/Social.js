@@ -8,6 +8,7 @@ import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
 import SocialEditablePanel from '../components/social/SocialEditablePanel';
 import SocialDesignStudioModal from '../components/social/SocialDesignStudioModal';
+import SocialArchitectureBlueprint from '../components/social/SocialArchitectureBlueprint';
 import {
   getFontSizeClass,
   getPanelsByArea,
@@ -355,6 +356,10 @@ const Social = () => {
     [draftSocialPreferences, activeProfile?.socialPagePreferences, activeProfile?.profileTheme]
   );
   const panelsByArea = useMemo(() => getPanelsByArea(socialPreferences), [socialPreferences]);
+  const activePanelCount = useMemo(
+    () => Object.values(panelsByArea).reduce((total, panels) => total + (Array.isArray(panels) ? panels.length : 0), 0),
+    [panelsByArea]
+  );
   const isSectionVisible = useCallback(
     (sectionId) => socialPreferences.effective?.panels?.[sectionId]?.visible !== false,
     [socialPreferences]
@@ -2361,6 +2366,14 @@ const Social = () => {
       ) : null}
 
       <div className="space-y-6">
+        {ownerEditingEnabled ? (
+          <SocialArchitectureBlueprint
+            activePanelCount={activePanelCount}
+            currentThemePreset={socialPreferences.themePreset}
+            currentFontFamily={socialPreferences.globalStyles.fontFamily}
+          />
+        ) : null}
+
         {panelsByArea.top.map(renderPanel)}
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(240px,0.95fr)_minmax(0,2fr)_minmax(240px,0.95fr)]">
