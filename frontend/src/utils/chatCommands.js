@@ -1,5 +1,6 @@
 export const COMMAND_REGEX = /^\/(\w+)(?:\s+([\s\S]*))?$/;
 
+// "diceN" represents variable dice commands like /dice20, /dice100, etc.
 export const SUPPORTED_COMMANDS = ['me', 'sing', 'shout', 'cry', 'runaway', 'scream', 'dice', 'diceN'];
 
 export const UNKNOWN_COMMAND_HELP = 'Unknown command. Available: /me, /sing, /shout, /cry, /runaway, /scream, /dice, /diceN';

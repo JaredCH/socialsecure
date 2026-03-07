@@ -2352,7 +2352,7 @@ router.post(
       conversationId: conversation._id,
       userId,
       content,
-      senderNameColor: senderNameColor && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(senderNameColor) ? senderNameColor : null
+      senderNameColor: senderNameColor || null
     });
 
     conversation.lastMessageAt = new Date();
