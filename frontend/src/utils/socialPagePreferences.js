@@ -551,6 +551,7 @@ export const mergeDesignPatch = (base, patch = {}) => {
 
   if (isPlainObject(patch.panels)) {
     Object.entries(patch.panels).forEach(([panelId, value]) => {
+      const baseDesktopPanel = base.layouts?.desktop?.panels?.[panelId] || {};
       merged.panels[panelId] = {
         ...((base.panels && base.panels[panelId]) || {}),
         ...(value || {}),
@@ -560,10 +561,10 @@ export const mergeDesignPatch = (base, patch = {}) => {
         }
       };
       merged.layouts.desktop.panels[panelId] = {
-        ...((base.layouts?.desktop?.panels && base.layouts.desktop.panels[panelId]) || {}),
+        ...baseDesktopPanel,
         ...(value || {}),
         styles: {
-          ...(((base.layouts?.desktop?.panels && base.layouts.desktop.panels[panelId]) || {}).styles || {}),
+          ...(baseDesktopPanel.styles || {}),
           ...((value && value.styles) || {})
         }
       };

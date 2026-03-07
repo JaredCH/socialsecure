@@ -954,18 +954,19 @@ const Social = () => {
     patchDraftPreferences((prev) => mergeDesignPatch(prev, { globalStyles: patch }));
   }, [patchDraftPreferences]);
 
-  const updatePanelPreferences = useCallback((panelId, patch, mode = activeLayoutMode) => {
+  const updatePanelPreferences = useCallback((panelId, patch, mode) => {
+    const resolvedMode = mode || activeLayoutMode;
     const scopedPatch = {
       layouts: {
-        activeMode: mode,
-        [mode]: {
+        activeMode: resolvedMode,
+        [resolvedMode]: {
           panels: {
             [panelId]: patch
           }
         }
       }
     };
-    if (mode === 'desktop') {
+    if (resolvedMode === 'desktop') {
       scopedPatch.panels = { [panelId]: patch };
     }
     patchDraftPreferences((prev) => mergeDesignPatch(prev, {
@@ -977,10 +978,11 @@ const Social = () => {
     enabled ? { useCustomStyles: true } : { useCustomStyles: false, styles: {} }
   ), []);
 
-  const movePanel = useCallback((panelId, direction, mode = activeLayoutMode) => {
+  const movePanel = useCallback((panelId, direction, mode) => {
+    const resolvedMode = mode || activeLayoutMode;
     patchDraftPreferences((prev) => {
       const next = JSON.parse(JSON.stringify(prev));
-      const panelCollection = mode === 'desktop'
+      const panelCollection = resolvedMode === 'desktop'
         ? (next.layouts?.desktop?.panels || next.panels || {})
         : (next.layouts?.mobile?.panels || {});
       const panel = panelCollection?.[panelId];
@@ -996,7 +998,7 @@ const Social = () => {
       const currentOrder = panelCollection[currentId].order;
       panelCollection[currentId].order = panelCollection[targetId].order;
       panelCollection[targetId].order = currentOrder;
-      if (mode === 'desktop') {
+      if (resolvedMode === 'desktop') {
         next.panels = {
           ...(next.panels || {}),
           [currentId]: panelCollection[currentId],
@@ -1005,9 +1007,9 @@ const Social = () => {
       }
       next.layouts = {
         ...(next.layouts || {}),
-        activeMode: mode,
-        [mode]: {
-          ...((next.layouts && next.layouts[mode]) || {}),
+        activeMode: resolvedMode,
+        [resolvedMode]: {
+          ...((next.layouts && next.layouts[resolvedMode]) || {}),
           panels: panelCollection
         }
       };
@@ -1020,13 +1022,14 @@ const Social = () => {
     patchDraftPreferences((prev) => mergeDesignPatch(prev, template.design));
   }, [patchDraftPreferences]);
 
-  const applyLayoutPreset = useCallback((preset, mode = activeLayoutMode) => {
+  const applyLayoutPreset = useCallback((preset, mode) => {
+    const resolvedMode = mode || activeLayoutMode;
     if (!preset?.panels) return;
     patchDraftPreferences((prev) => mergeDesignPatch(prev, {
-      ...(mode === 'desktop' ? { panels: preset.panels } : {}),
+      ...(resolvedMode === 'desktop' ? { panels: preset.panels } : {}),
       layouts: {
-        activeMode: mode,
-        [mode]: { panels: preset.panels }
+        activeMode: resolvedMode,
+        [resolvedMode]: { panels: preset.panels }
       }
     }));
   }, [patchDraftPreferences, activeLayoutMode]);
@@ -2411,7 +2414,7 @@ const Social = () => {
         isInlineEditing={inlineEditingPanelId === panel.id}
         onToggleInlineEdit={() => setInlineEditingPanelId((prev) => (prev === panel.id ? '' : panel.id))}
         onPanelChange={(patch) => updatePanelPreferences(panel.id, patch)}
-        onMove={(direction) => movePanel(panel.id, direction)}
+        onMove={(direction) => movePanel(panel.id, direction, activeLayoutMode)}
         className={className}
         style={style}
       >

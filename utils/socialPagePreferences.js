@@ -321,9 +321,8 @@ const buildDefaultPanels = () => SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
   return acc;
 }, {});
 const buildDefaultPanelsForMode = (mode = 'desktop') => SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
-  const defaults = mode === 'mobile'
-    ? (DEFAULT_MOBILE_PANEL_LAYOUTS[panelId] || DEFAULT_PANEL_LAYOUTS[panelId])
-    : DEFAULT_PANEL_LAYOUTS[panelId];
+  const defaults = (mode === 'mobile' ? DEFAULT_MOBILE_PANEL_LAYOUTS : DEFAULT_PANEL_LAYOUTS)[panelId]
+    || DEFAULT_PANEL_LAYOUTS[panelId];
   acc[panelId] = {
     area: defaults.area,
     size: defaults.size,
@@ -399,6 +398,7 @@ const mergeDesignPatch = (base, patch = {}) => {
 
   if (isPlainObject(patch.panels)) {
     for (const [panelId, panelPatch] of Object.entries(patch.panels)) {
+      const baseDesktopPanel = base.layouts?.desktop?.panels?.[panelId] || {};
       merged.panels[panelId] = {
         ...((base.panels && base.panels[panelId]) || {}),
         ...(panelPatch || {}),
@@ -408,10 +408,10 @@ const mergeDesignPatch = (base, patch = {}) => {
         }
       };
       merged.layouts.desktop.panels[panelId] = {
-        ...((base.layouts && base.layouts.desktop && base.layouts.desktop.panels && base.layouts.desktop.panels[panelId]) || {}),
+        ...baseDesktopPanel,
         ...(panelPatch || {}),
         styles: {
-          ...(((base.layouts && base.layouts.desktop && base.layouts.desktop.panels && base.layouts.desktop.panels[panelId]) || {}).styles || {}),
+          ...(baseDesktopPanel.styles || {}),
           ...((panelPatch && panelPatch.styles) || {})
         }
       };
