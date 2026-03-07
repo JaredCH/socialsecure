@@ -100,7 +100,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    expect(container.textContent).toContain('Your default zip room: 02115');
+    expect(container.textContent).toContain('Zip 02115');
   });
 
   it('does not show zip banner when neither profile nor hub has zip information', async () => {
@@ -122,7 +122,7 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).not.toContain('Your default zip room:');
   });
 
-  it('renders six readable theme options', async () => {
+  it('renders compact theme menu with six readable options', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -138,7 +138,15 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const themeSelect = container.querySelector('select');
+    const themeMenuButton = container.querySelector('button[aria-label="Open chat theme menu"]');
+    expect(themeMenuButton).not.toBeNull();
+
+    await act(async () => {
+      themeMenuButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const themeSelect = container.querySelector('select#chat-theme-select-fallback');
     expect(themeSelect).not.toBeNull();
     expect(themeSelect.options).toHaveLength(6);
     expect(Array.from(themeSelect.options).map((option) => option.textContent)).toEqual([
@@ -444,5 +452,40 @@ describe('Chat zip room indicator', () => {
 
     confirmSpy.mockRestore();
     window.location = originalLocation;
+  });
+
+  it('renders clickable avatar profile links inside messages', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            _id: 'm-avatar',
+            content: 'hello',
+            userId: { _id: 'u2', username: 'buddy' },
+            createdAt: '2024-01-01T00:00:00.000Z'
+          }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    const profileLinks = Array.from(container.querySelectorAll('a')).filter((node) =>
+      (node.getAttribute('href') || '').includes('/social/')
+    );
+    expect(profileLinks.length).toBeGreaterThan(0);
+    expect(profileLinks.some((link) => link.getAttribute('href') === '/social/buddy')).toBe(true);
   });
 });

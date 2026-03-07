@@ -20,12 +20,12 @@ function ChatComposerBar({
   }, [composerValue]);
 
   return (
-    <form onSubmit={onSubmit} className={`relative rounded-md border-2 p-2 ${theme.panelGlass}`}>
+    <form onSubmit={onSubmit} className={`relative rounded-xl border p-1.5 ${theme.panelGlass}`}>
       <div className="flex items-end gap-2">
         <button
           type="button"
           onClick={() => setShowEmojiTray((value) => !value)}
-          className={`rounded border px-2 py-2 text-sm transition active:scale-95 ${theme.subtle}`}
+          className={`rounded border px-2 py-1.5 text-sm transition active:scale-95 ${theme.subtle}`}
           aria-label="Open emoji picker"
           disabled={disabled}
         >
@@ -34,7 +34,7 @@ function ChatComposerBar({
 
         <button
           type="button"
-          className={`rounded border px-2 py-2 text-sm transition active:scale-95 ${theme.subtle}`}
+          className={`rounded border px-2 py-1.5 text-sm transition active:scale-95 ${theme.subtle}`}
           aria-label="Attach file"
           aria-describedby="chat-attachment-disabled"
           disabled
@@ -45,7 +45,7 @@ function ChatComposerBar({
 
         <textarea
           ref={textAreaRef}
-          className={`max-h-40 min-h-[44px] flex-1 resize-none rounded border px-3 py-2 text-sm leading-5 ${theme.input}`}
+          className={`max-h-36 min-h-[40px] flex-1 resize-none rounded border px-2.5 py-1.5 text-sm leading-5 ${theme.input}`}
           value={composerValue}
           onChange={(event) => setComposerValue(event.target.value)}
           maxLength={2000}
@@ -57,14 +57,14 @@ function ChatComposerBar({
         <button
           type="submit"
           disabled={disabled || !composerValue.trim() || sending}
-          className={`rounded px-4 py-2 text-sm font-semibold transition duration-150 active:scale-95 disabled:opacity-50 ${theme.accent}`}
+          className={`rounded px-3 py-1.5 text-sm font-semibold transition duration-150 active:scale-95 disabled:opacity-50 ${theme.accent}`}
         >
           {sending ? 'Sending…' : 'Send'}
         </button>
       </div>
 
       {showEmojiTray && !disabled ? (
-        <div className={`absolute bottom-14 left-2 rounded border p-1 shadow-xl ${theme.panelGlass}`}>
+        <div className={`absolute bottom-12 left-1 rounded border p-1 shadow-xl ${theme.panelGlass}`}>
           <div className="flex gap-1">
             {QUICK_EMOJIS.map((emoji) => (
               <button
