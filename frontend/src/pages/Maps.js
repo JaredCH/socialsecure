@@ -21,6 +21,7 @@ const STATE_ICONS = {
 const GEOLOCATION_OPTIONS_TIMEOUT_MS = 8000;
 const GEOLOCATION_OPTIONS_MAX_AGE_MS = 300000;
 const HEATMAP_CIRCLE_RADIUS_METERS = 2000;
+const MAP_REFRESH_INTERVAL_MS = 60 * 1000;
 const createFallbackResponse = (data) => ({ data });
 
 export const withDataFallback = (request, fallbackData) =>
@@ -88,6 +89,7 @@ function Maps() {
   const [error, setError] = useState(null);
   const [showCreateSpotlight, setShowCreateSpotlight] = useState(false);
   const [creatingSpotlight, setCreatingSpotlight] = useState(false);
+  const [lastMapRefreshAt, setLastMapRefreshAt] = useState(null);
   const [spotlightForm, setSpotlightForm] = useState({
     locationName: '',
     description: '',
@@ -189,12 +191,26 @@ function Maps() {
     fetchMapData();
   }, [userLocation, viewMode, layers.friends, layers.heatmap]);
 
+  useEffect(() => {
+    if (!userLocation) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      fetchMapData({ showLoading: false });
+    }, MAP_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [userLocation, viewMode, layers.friends, layers.heatmap]);
+
   // Fetch map data based on view mode
-  const fetchMapData = async () => {
+  const fetchMapData = async ({ showLoading = true } = {}) => {
     if (!userLocation) return;
     
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       const [lat, lng] = userLocation;
       
       // Fetch map data
@@ -220,12 +236,15 @@ function Maps() {
       setSpotlights(mapRes.data.spotlights || []);
       setFriendsLocations(friendsRes.data.friends || []);
       setHeatmapData(heatmapRes.data.heatmap || []);
+      setLastMapRefreshAt(new Date());
       setError(null);
     } catch (err) {
       console.error('Error fetching map data:', err);
       setError('Failed to load map data');
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -243,7 +262,7 @@ function Maps() {
   };
 
   // Update user location
-  const updateLocation = () => {
+  const publishCurrentLocation = ({ recenterMap = false } = {}) => {
     if (!navigator.geolocation) return;
     
     navigator.geolocation.getCurrentPosition(
@@ -257,19 +276,37 @@ function Maps() {
             precisionLevel: 5,
             deviceType: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
           });
-          
-          setUserLocation([latitude, longitude]);
-          if (map) {
+
+          const nextLocation = [latitude, longitude];
+          setUserLocation(nextLocation);
+          if (recenterMap && map) {
             map.setView([latitude, longitude], 12);
           }
           
-          fetchMapData();
+          if (recenterMap) {
+            fetchMapData({ showLoading: true });
+          }
         } catch (err) {
           console.error('Error updating presence:', err);
         }
       },
       (err) => console.error('Geolocation error:', err)
     );
+  };
+
+  useEffect(() => {
+    if (!userLocation) return undefined;
+    const intervalId = window.setInterval(() => {
+      publishCurrentLocation();
+    }, MAP_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [userLocation]);
+
+  const updateLocation = () => {
+    publishCurrentLocation({ recenterMap: true });
   };
 
   // Toggle layer visibility
@@ -393,18 +430,20 @@ function Maps() {
     if (layers.heatmap && heatmapData.length > 0) {
       heatmapData.forEach(point => {
         if (point.lat != null && point.lng != null && point.intensity > 0) {
-          const intensity = Math.min(point.intensity, 1);
-          const red = Math.round(255 * intensity);
-          const green = Math.round(80 * (1 - intensity));
-          const color = `rgb(${red}, ${green}, 0)`;
-          
-          L.circle([point.lat, point.lng], {
-            radius: HEATMAP_CIRCLE_RADIUS_METERS,
-            color: 'transparent',
-            fillColor: color,
-            fillOpacity: 0.25 + intensity * 0.35,
-            interactive: false
-          }).addTo(map);
+          const intensity = Math.max(0, Math.min(point.intensity, 1));
+          const stackLayers = Math.max(1, Math.min(6, Math.ceil((point.userCount || 1) / 3)));
+
+          for (let index = 0; index < stackLayers; index += 1) {
+            const layerWeight = 1 - (index / (stackLayers + 1));
+
+            L.circle([point.lat, point.lng], {
+              radius: HEATMAP_CIRCLE_RADIUS_METERS * (1 + index * 0.45),
+              color: 'transparent',
+              fillColor: '#ef4444',
+              fillOpacity: Math.min(0.08 + (intensity * 0.14 * layerWeight), 0.34),
+              interactive: false
+            }).addTo(map);
+          }
         }
       });
     }
@@ -617,6 +656,9 @@ function Maps() {
         <aside className="w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto flex flex-col">
           <div className="p-4 border-b border-gray-200">
             <h2 className="text-xs font-semibold uppercase text-gray-500">Friends Nearby</h2>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Live refresh every ~60 seconds
+            </p>
           </div>
           <div className="flex-1 overflow-y-auto">
             {friendsLocations.length === 0 ? (
@@ -638,12 +680,18 @@ function Maps() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{friend.user?.username || 'Friend'}</p>
                         <p className="text-xs text-gray-500 truncate">{friend.city || friend.locationName || 'Location shared'}</p>
+                        <p className="text-[11px] text-emerald-600 mt-0.5">
+                          {friend.liveAgeSeconds != null ? `Live • ${friend.liveAgeSeconds}s ago` : 'Live'}
+                        </p>
                       </div>
                     </button>
                   </li>
                 ))}
               </ul>
             )}
+          </div>
+          <div className="p-3 border-t border-gray-200 text-[11px] text-gray-400">
+            Last refresh: {lastMapRefreshAt ? lastMapRefreshAt.toLocaleTimeString() : 'Waiting for map data'}
           </div>
         </aside>
       </div>

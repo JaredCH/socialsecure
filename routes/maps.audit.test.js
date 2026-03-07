@@ -127,4 +127,81 @@ describe('Maps route audit fixes', () => {
       5
     );
   });
+
+  it('returns only friend locations active within the last minute', async () => {
+    const app = buildApp();
+    const now = Date.now();
+    mockLocationPresence.getFriendsLocations.mockResolvedValue([
+      {
+        user: { _id: 'friend-1', username: 'liveFriend', realName: 'Live Friend', avatarUrl: null },
+        location: { coordinates: [-73.9857, 40.7484] },
+        lastActivityAt: new Date(now - 25 * 1000),
+        isActive: true
+      },
+      {
+        user: { _id: 'friend-2', username: 'staleFriend', realName: 'Stale Friend', avatarUrl: null },
+        location: { coordinates: [-73.98, 40.74] },
+        lastActivityAt: new Date(now - 2 * 60 * 1000),
+        isActive: true
+      }
+    ]);
+
+    const response = await request(app)
+      .get('/api/maps/friends')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.friends).toHaveLength(1);
+    expect(response.body.friends[0]).toEqual(
+      expect.objectContaining({
+        user: expect.objectContaining({ _id: 'friend-1', username: 'liveFriend' }),
+        isLive: true
+      })
+    );
+    expect(response.body.friends[0].liveAgeSeconds).toBeGreaterThanOrEqual(0);
+    expect(response.body.friends[0].liveAgeSeconds).toBeLessThanOrEqual(60);
+  });
+
+  it('jitter heatmap coordinates and timestamps for privacy', async () => {
+    const app = buildApp();
+    const computedAt = new Date('2026-01-01T12:00:00.000Z');
+    mockHeatmapAggregation.getTiles
+      .mockResolvedValueOnce([
+        {
+          center: { lat: 40.7484, lng: -73.9857 },
+          data: { userCount: 8, spotlightCount: 2 },
+          computedAt
+        }
+      ]);
+
+    const randomSpy = jest.spyOn(Math, 'random')
+      .mockReturnValueOnce(0.25)
+      .mockReturnValueOnce(0.5)
+      .mockReturnValueOnce(1);
+
+    try {
+      const response = await request(app)
+        .get('/api/maps/heatmap')
+        .query({
+          north: 41,
+          south: 40,
+          east: -73,
+          west: -74
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.heatmap).toHaveLength(1);
+      expect(response.body.heatmap[0]).toEqual(
+        expect.objectContaining({
+          intensity: 0.8,
+          userCount: 8,
+          spotlightCount: 2,
+          jitteredAt: '2026-01-01T12:30:00.000Z'
+        })
+      );
+      expect(response.body.heatmap[0].lat).not.toBe(40.7484);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
 });
