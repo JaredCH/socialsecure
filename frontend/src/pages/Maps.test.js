@@ -1,12 +1,37 @@
-jest.mock('../utils/api', () => ({ mapsAPI: {} }));
-
-import {
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import Maps, {
   FRIENDS_REFRESH_INTERVAL_MS,
   LOCATION_PUBLISH_INTERVAL_MS,
   configureLeafletMarkerAssets,
   resolveLeafletModule,
   withDataFallback
 } from './Maps';
+
+jest.mock('../utils/api', () => ({
+  mapsAPI: {
+    getPresence: jest.fn().mockResolvedValue({ data: { presence: { shareWithFriends: true } } }),
+    getLocalMap: jest.fn().mockResolvedValue({ data: { spotlights: [] } }),
+    getCommunityMap: jest.fn().mockResolvedValue({ data: { spotlights: [] } }),
+    getHeatmap: jest.fn().mockResolvedValue({ data: { heatmap: [] } }),
+    getFriendsLocations: jest.fn().mockResolvedValue({ data: { friends: [] } }),
+    updatePresence: jest.fn().mockResolvedValue({ data: {} }),
+    updatePrivacy: jest.fn().mockResolvedValue({ data: {} }),
+    createSpotlight: jest.fn().mockResolvedValue({ data: {} }),
+    reactToSpotlight: jest.fn().mockResolvedValue({ data: {} })
+  }
+}));
+
+jest.mock('leaflet', () => ({
+  map: jest.fn(),
+  tileLayer: jest.fn(),
+  marker: jest.fn(),
+  circle: jest.fn(),
+  divIcon: jest.fn(),
+  Icon: {
+    Default: {}
+  }
+}));
 
 describe('resolveLeafletModule', () => {
   it('uses default export when it contains Leaflet map API', () => {
@@ -85,5 +110,57 @@ describe('map polling intervals', () => {
 
   it('refreshes friend locations every 10 seconds', () => {
     expect(FRIENDS_REFRESH_INTERVAL_MS).toBe(10000);
+  });
+});
+
+describe('Maps mobile-first controls', () => {
+  let container;
+  let root;
+  const originalGeolocation = navigator.geolocation;
+  const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+
+  beforeAll(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition: jest.fn()
+      }
+    });
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: originalGeolocation
+    });
+  });
+
+  afterAll(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment;
+  });
+
+  it('renders compact mobile overlay controls for layers and privacy', async () => {
+    await act(async () => {
+      root.render(<Maps />);
+    });
+
+    const layersControlButton = container.querySelector('button[aria-label="Open map layers controls"]');
+    const privacyControlButton = container.querySelector('button[aria-label="Open map privacy controls"]');
+    const updateLocationButton = container.querySelector('button[aria-label="Update map to your location"]');
+
+    expect(layersControlButton).not.toBeNull();
+    expect(privacyControlButton).not.toBeNull();
+    expect(updateLocationButton).not.toBeNull();
   });
 });
