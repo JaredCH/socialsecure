@@ -19,7 +19,7 @@ const STATE_ICONS = {
   public_glow: '✨'
 };
 const GEOLOCATION_OPTIONS_TIMEOUT_MS = 8000;
-const GEOLOCATION_OPTIONS_MAX_AGE_MS = 30000;
+const GEOLOCATION_OPTIONS_MAX_AGE_MS = 60000;
 const HEATMAP_CIRCLE_RADIUS_METERS = 2000;
 export const LOCATION_PUBLISH_INTERVAL_MS = 30 * 1000;
 export const FRIENDS_REFRESH_INTERVAL_MS = 10 * 1000;
@@ -97,6 +97,7 @@ function Maps() {
   const [showCreateSpotlight, setShowCreateSpotlight] = useState(false);
   const [creatingSpotlight, setCreatingSpotlight] = useState(false);
   const [lastMapRefreshAt, setLastMapRefreshAt] = useState(null);
+  const [lastFriendsRefreshAt, setLastFriendsRefreshAt] = useState(null);
   const [spotlightForm, setSpotlightForm] = useState({
     locationName: '',
     description: '',
@@ -196,9 +197,7 @@ function Maps() {
   useEffect(() => {
     if (!userLocation) return;
     fetchMapData();
-    if (layers.friends) {
-      fetchFriendsLocations();
-    } else {
+    if (!layers.friends) {
       setFriendsLocations([]);
     }
   }, [userLocation, viewMode, layers.friends, layers.heatmap]);
@@ -217,6 +216,7 @@ function Maps() {
 
   useEffect(() => {
     if (!userLocation || !layers.friends) return undefined;
+    fetchFriendsLocations();
 
     const intervalId = window.setInterval(() => {
       fetchFriendsLocations();
@@ -277,7 +277,7 @@ function Maps() {
     try {
       const friendsRes = await withDataFallback(mapsAPI.getFriendsLocations(), { friends: [] });
       setFriendsLocations(friendsRes.data.friends || []);
-      setLastMapRefreshAt(new Date());
+      setLastFriendsRefreshAt(new Date());
     } catch (err) {
       console.error('Error fetching friend locations:', err);
     }
@@ -705,7 +705,7 @@ function Maps() {
           <div className="p-4 border-b border-gray-200">
             <h2 className="text-xs font-semibold uppercase text-gray-500">Friends Nearby</h2>
             <p className="text-[11px] text-gray-400 mt-1">
-              Updates every 10 seconds
+              Refreshes every 10 seconds
             </p>
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -743,7 +743,8 @@ function Maps() {
             )}
           </div>
           <div className="p-3 border-t border-gray-200 text-[11px] text-gray-400">
-            Last refresh: {lastMapRefreshAt ? lastMapRefreshAt.toLocaleTimeString() : 'Waiting for map data'}
+            <p>Map refresh: {lastMapRefreshAt ? lastMapRefreshAt.toLocaleTimeString() : 'Waiting for map data'}</p>
+            <p>Friends refresh: {lastFriendsRefreshAt ? lastFriendsRefreshAt.toLocaleTimeString() : 'Waiting for friend data'}</p>
           </div>
         </aside>
       </div>
