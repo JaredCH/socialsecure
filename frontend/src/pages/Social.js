@@ -3385,7 +3385,9 @@ const Social = () => {
                     →
                   </button>
                 </div>
-                {calendarPreviewLoading ? <span className="text-xs text-slate-500">Loading…</span> : <span className="text-xs text-slate-500">Live</span>}
+                <span role="status" aria-live="polite" className="text-xs text-slate-500">
+                  {calendarPreviewLoading ? 'Loading…' : 'Live'}
+                </span>
               </div>
               {!isOwnSocialContext && !calendarPreviewShowsOwnerEvents ? (
                 <div className="mb-3 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">
@@ -3440,7 +3442,7 @@ const Social = () => {
                       <li key={item.id} className="flex items-center justify-between gap-2 text-xs text-slate-700">
                         <span className="truncate">{item.title}</span>
                         <span className={`shrink-0 rounded-full px-2 py-0.5 ${item.type === 'event' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
-                          {item.date.toLocaleDateString()}
+                          {item.type === 'event' ? 'Event' : 'Holiday'} • {item.date.toLocaleDateString()}
                         </span>
                       </li>
                     ))}
