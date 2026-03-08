@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import ChatComposerBar from '../components/chat/ChatComposerBar';
 import ChatMessageList from '../components/chat/ChatMessageList';
@@ -177,6 +177,7 @@ function Chat() {
     y: 0,
     user: null
   });
+  const userLongPressTimerRef = useRef(null);
 
   const handleThemeChange = useCallback((nextTheme) => {
     if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
@@ -428,12 +429,23 @@ function Chat() {
     }
   };
 
-  const openUserContextMenu = (event, user) => {
-    event.preventDefault();
+  const openUserContextMenu = (event, user, point) => {
+    if (event?.preventDefault) event.preventDefault();
+    const fallbackRect = event?.currentTarget?.getBoundingClientRect?.();
+    const x = Number.isFinite(point?.x)
+      ? point.x
+      : Number.isFinite(event?.clientX)
+        ? event.clientX
+        : (fallbackRect?.left || 0) + ((fallbackRect?.width || 0) / 2);
+    const y = Number.isFinite(point?.y)
+      ? point.y
+      : Number.isFinite(event?.clientY)
+        ? event.clientY
+        : (fallbackRect?.top || 0) + ((fallbackRect?.height || 0) / 2);
     setUserContextMenu({
       open: true,
-      x: event.clientX,
-      y: event.clientY,
+      x: Math.max(8, Math.min(window.innerWidth - 240, x)),
+      y: Math.max(8, Math.min(window.innerHeight - 220, y)),
       user
     });
   };
@@ -531,6 +543,13 @@ function Chat() {
     };
   }, [themeMenuOpen]);
 
+  useEffect(() => () => {
+    if (userLongPressTimerRef.current) {
+      clearTimeout(userLongPressTimerRef.current);
+      userLongPressTimerRef.current = null;
+    }
+  }, []);
+
   const roomSuggestions = useMemo(() => {
     const query = roomQuery.trim().toLowerCase();
     if (query.length < 2) return [];
@@ -564,74 +583,13 @@ function Chat() {
 
   return (
     <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${activeTheme.shell}`}>
-      <header className={`border-b px-2 py-2 md:px-3 ${activeTheme.panelGlass}`}>
+      <header className={`border-b px-2 py-1.5 md:px-3 ${activeTheme.panelGlass}`}>
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold md:text-base">Chat</h2>
-            <p className="truncate text-[11px] opacity-80">@{profile?.username || 'you'}</p>
-            {resolvedZipCode ? (
-              <p className="text-[11px] opacity-70">Zip {resolvedZipCode}</p>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setThemeMenuOpen((open) => !open);
-                }}
-                className={`rounded border px-2 py-1 text-sm ${activeTheme.subtle}`}
-                aria-label="Open chat theme menu"
-                aria-expanded={themeMenuOpen}
-              >
-                🎨
-                <span className="sr-only">Theme menu</span>
-              </button>
-              {themeMenuOpen ? (
-                <div
-                  className={`absolute right-0 top-9 z-20 min-w-40 rounded border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {CHAT_THEMES.map((themeOption) => (
-                    <button
-                      key={themeOption.key}
-                      type="button"
-                      onClick={() => {
-                        handleThemeChange(themeOption.key);
-                        setThemeMenuOpen(false);
-                      }}
-                      className={`flex w-full items-center justify-between rounded px-2 py-1 text-left hover:opacity-80 ${theme === themeOption.key ? 'font-semibold' : ''}`}
-                    >
-                      <span>{themeOption.label}</span>
-                      {theme === themeOption.key ? <span>✓</span> : null}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <label className="sr-only" htmlFor="chat-theme-select-fallback">Theme</label>
-            <select
-              id="chat-theme-select-fallback"
-              value={theme}
-              onChange={(event) => handleThemeChange(event.target.value)}
-              className="sr-only"
-            >
-              {CHAT_THEMES.map((themeOption) => (
-                <option key={themeOption.key} value={themeOption.key}>
-                  {themeOption.label}
-                </option>
-              ))}
-            </select>
-            <label className="text-xs font-medium flex items-center">
-              <input
-                type="color"
-                value={nameColor}
-                onChange={(event) => handleNameColorChange(event.target.value)}
-                className="h-7 w-8 rounded border border-slate-300 bg-transparent p-0.5"
-                aria-label="Set your chat name color"
-              />
-            </label>
+            <h2 className="truncate text-sm font-semibold">Chat</h2>
+            <p className="truncate text-[10px] opacity-80">
+              @{profile?.username || 'you'}{resolvedZipCode ? ` • Zip ${resolvedZipCode}` : ''}
+            </p>
           </div>
         </div>
       </header>
@@ -761,7 +719,7 @@ function Chat() {
             activeTheme.panel
           ].join(' ')}
         >
-          <header className={`sticky top-0 z-10 mb-2 rounded border px-2 py-1.5 ${activeTheme.panelGlass}`}>
+          <header className={`relative sticky top-0 z-40 mb-2 rounded border px-2 py-1.5 ${activeTheme.panelGlass}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <button
@@ -778,9 +736,67 @@ function Chat() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setThemeMenuOpen((open) => !open);
+                    }}
+                    className={`rounded border px-2 py-1 text-sm ${activeTheme.subtle}`}
+                    aria-label="Open chat theme menu"
+                    aria-expanded={themeMenuOpen}
+                  >
+                    🎨
+                    <span className="sr-only">Theme menu</span>
+                  </button>
+                  {themeMenuOpen ? (
+                    <div
+                      className={`absolute right-0 top-9 z-[100] min-w-40 rounded border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {CHAT_THEMES.map((themeOption) => (
+                        <button
+                          key={themeOption.key}
+                          type="button"
+                          onClick={() => {
+                            handleThemeChange(themeOption.key);
+                            setThemeMenuOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded px-2 py-1 text-left hover:opacity-80 ${theme === themeOption.key ? 'font-semibold' : ''}`}
+                        >
+                          <span>{themeOption.label}</span>
+                          {theme === themeOption.key ? <span>✓</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <label className="sr-only" htmlFor="chat-theme-select-fallback">Theme</label>
+                <select
+                  id="chat-theme-select-fallback"
+                  value={theme}
+                  onChange={(event) => handleThemeChange(event.target.value)}
+                  className="sr-only"
+                >
+                  {CHAT_THEMES.map((themeOption) => (
+                    <option key={themeOption.key} value={themeOption.key}>
+                      {themeOption.label}
+                    </option>
+                  ))}
+                </select>
+                <label className="text-xs font-medium flex items-center">
+                  <input
+                    type="color"
+                    value={nameColor}
+                    onChange={(event) => handleNameColorChange(event.target.value)}
+                    className="h-7 w-8 rounded border border-slate-300 bg-transparent p-0.5"
+                    aria-label="Set your chat name color"
+                  />
+                </label>
                 {activeConversationUser?.username ? (
                   <a
-                    href={`/social/${encodeURIComponent(activeConversationUser.username)}`}
+                    href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
                     className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle}`}
                     aria-label={`View @${activeConversationUser.username} profile`}
                   >
@@ -807,6 +823,7 @@ function Chat() {
             loading={messagesLoading}
             profile={profile}
             theme={activeTheme}
+            onOpenUserMenu={openUserContextMenu}
           />
 
           <div className="mt-1 space-y-1">
@@ -827,6 +844,7 @@ function Chat() {
                 disabled={!activeConversationId}
                 sending={sending}
                 theme={activeTheme}
+                onComposerError={(message) => toast.error(message)}
               />
             </div>
           </div>
@@ -849,7 +867,7 @@ function Chat() {
           <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
             <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
               <h4 className="text-sm font-semibold">Users in Room</h4>
-              <p className="mt-1 text-[11px] opacity-80">Right-click a user for quick actions.</p>
+              <p className="mt-1 text-[11px] opacity-80">Click, right-click, or long-press a user for quick actions.</p>
               <div className="mt-2 rounded border overflow-auto max-h-56">
                 {roomUsersLoading ? (
                   <p className="p-2 text-xs opacity-80">Loading users...</p>
@@ -862,8 +880,23 @@ function Chat() {
                       return (
                         <li
                           key={String(user._id)}
-                          className="flex items-center justify-between gap-2 p-2 text-sm"
+                          className="flex cursor-pointer items-center justify-between gap-2 p-2 text-sm"
+                          onClick={(event) => openUserContextMenu(event, user)}
                           onContextMenu={(event) => openUserContextMenu(event, user)}
+                          onTouchStart={(event) => {
+                            const touch = event.touches?.[0];
+                            if (!touch) return;
+                            if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
+                            userLongPressTimerRef.current = setTimeout(() => {
+                              openUserContextMenu(event, user, { x: touch.clientX, y: touch.clientY });
+                            }, 550);
+                          }}
+                          onTouchEnd={() => {
+                            if (userLongPressTimerRef.current) {
+                              clearTimeout(userLongPressTimerRef.current);
+                              userLongPressTimerRef.current = null;
+                            }
+                          }}
                         >
                           <span>@{user.username || user.realName || 'user'}</span>
                           <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase opacity-80">

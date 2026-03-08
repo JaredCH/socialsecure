@@ -1,8 +1,16 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useRef } from 'react';
 
 const LINK_REGEX = /(https?:\/\/[^\s]+)/gi;
+const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi;
 const TRAILING_PUNCTUATION_REGEX = /[),.!?;:]+$/;
 const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+const getLinkPreview = (href) => {
+  const mainUrl = String(href || '').replace(/^https?:\/\//i, '');
+  if (!mainUrl) return '';
+  const previewLength = Math.max(1, Math.ceil(mainUrl.length * 0.25));
+  return mainUrl.slice(0, previewLength);
+};
 
 const extractLinkToken = (token) => {
   const match = token.match(TRAILING_PUNCTUATION_REGEX);
@@ -25,22 +33,21 @@ const isExternalLink = (href) => {
   }
 };
 
-const renderMessageContent = (content) => {
-  const text = String(content || '');
-  if (!text) return null;
-
-  const parts = text.split(LINK_REGEX);
+const renderPlainTextWithLinks = (text, keyPrefix = 'plain') => {
+  if (!text) return [];
+  const parts = String(text).split(LINK_REGEX);
   return parts.map((part, index) => {
     if (!part) return null;
     if (!/^https?:\/\//i.test(part)) {
-      return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
+      return <React.Fragment key={`${keyPrefix}-text-${index}`}>{part}</React.Fragment>;
     }
     const { link, trailing } = extractLinkToken(part);
     if (!link) {
-      return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
+      return <React.Fragment key={`${keyPrefix}-text-${index}`}>{part}</React.Fragment>;
     }
+    const preview = getLinkPreview(link);
     return (
-      <React.Fragment key={`link-${index}`}>
+      <React.Fragment key={`${keyPrefix}-link-${index}`}>
         <a
           href={link}
           target="_blank"
@@ -55,7 +62,7 @@ const renderMessageContent = (content) => {
             }
           }}
         >
-          {link}
+          {preview}
         </a>
         {trailing}
       </React.Fragment>
@@ -63,18 +70,100 @@ const renderMessageContent = (content) => {
   });
 };
 
-function ChatMessageItem({ message, isOwnMessage, theme }) {
+const renderMessageContent = (content) => {
+  const text = String(content || '');
+  if (!text) return null;
+
+  MARKDOWN_LINK_REGEX.lastIndex = 0;
+  const rendered = [];
+  let lastIndex = 0;
+  let match;
+  let matchIndex = 0;
+  while ((match = MARKDOWN_LINK_REGEX.exec(text)) !== null) {
+    const [full, shortName, href] = match;
+    const start = match.index;
+    if (start > lastIndex) {
+      rendered.push(...renderPlainTextWithLinks(text.slice(lastIndex, start), `segment-${matchIndex}`));
+    }
+    const preview = getLinkPreview(href);
+    rendered.push(
+      <a
+        key={`named-link-${matchIndex}`}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-2 hover:opacity-80"
+        onClick={(event) => {
+          if (isExternalLink(href)) {
+            const proceed = window.confirm('You are leaving SocialSecure. Continue to open this link in a new window?');
+            if (!proceed) {
+              event.preventDefault();
+            }
+          }
+        }}
+      >
+        {`${shortName} (${preview})`}
+      </a>
+    );
+    lastIndex = start + full.length;
+    matchIndex += 1;
+  }
+  if (lastIndex < text.length) {
+    rendered.push(...renderPlainTextWithLinks(text.slice(lastIndex), `segment-end`));
+  }
+  return rendered;
+};
+
+function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu }) {
   const author = message.userId?.username || message.userId?.realName || 'user';
-  const profileLink = message.userId?.username ? `/social/${encodeURIComponent(message.userId.username)}` : null;
+  const profileLink = message.userId?.username ? `/social?user=${encodeURIComponent(message.userId.username)}` : null;
   const createdAt = message.createdAt ? new Date(message.createdAt) : null;
   const timestamp = createdAt ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const fullTimestamp = createdAt ? createdAt.toLocaleString() : '';
   const senderNameColor = HEX_COLOR_REGEX.test(String(message.senderNameColor || ''))
     ? String(message.senderNameColor)
     : null;
+  const longPressTimerRef = useRef(null);
+  const menuUser = message.userId?._id ? {
+    _id: message.userId._id,
+    username: message.userId.username,
+    realName: message.userId.realName
+  } : null;
+
+  useEffect(() => () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const triggerUserMenu = (event, point) => {
+    if (!menuUser || typeof onOpenUserMenu !== 'function') return;
+    if (event?.target?.closest && event.target.closest('a')) return;
+    onOpenUserMenu(event, menuUser, point);
+  };
 
   return (
-    <article className={`group flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+    <article
+      className={`group flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+      onClick={(event) => triggerUserMenu(event)}
+      onContextMenu={(event) => triggerUserMenu(event)}
+      onTouchStart={(event) => {
+        if (!menuUser) return;
+        const touch = event.touches?.[0];
+        if (!touch) return;
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = setTimeout(() => {
+          triggerUserMenu(event, { x: touch.clientX, y: touch.clientY });
+        }, 550);
+      }}
+      onTouchEnd={() => {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+      }}
+    >
       <div className={`flex max-w-[94%] items-end gap-0.5 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
         {profileLink ? (
           <a
@@ -98,7 +187,14 @@ function ChatMessageItem({ message, isOwnMessage, theme }) {
         >
           <header className="mb-0 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-normal">
             <span className="truncate" style={senderNameColor ? { color: senderNameColor } : undefined}>
-              {isOwnMessage ? 'You' : `@${author}`}
+              <button
+                type="button"
+                className="truncate text-left hover:opacity-80"
+                onClick={(event) => triggerUserMenu(event)}
+                onContextMenu={(event) => triggerUserMenu(event)}
+              >
+                {isOwnMessage ? 'You' : `@${author}`}
+              </button>
             </span>
             <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
           </header>
