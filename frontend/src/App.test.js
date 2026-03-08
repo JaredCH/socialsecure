@@ -145,8 +145,39 @@ describe('App navbar features dropdown', () => {
     await act(async () => {
       featuresMenu.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
     });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
 
     expect(container.querySelector('#features-menu-panel')).toBeNull();
+  });
+
+  it('keeps Features dropdown open when pointer quickly re-enters', async () => {
+    jest.useFakeTimers();
+    try {
+      localStorage.setItem('token', 'token');
+
+      await renderApp();
+
+      const featuresMenu = container.querySelector('[data-testid="features-menu"]');
+      expect(featuresMenu).not.toBeNull();
+
+      await act(async () => {
+        featuresMenu.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      });
+
+      expect(container.querySelector('#features-menu-panel')).not.toBeNull();
+
+      await act(async () => {
+        featuresMenu.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+        featuresMenu.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        jest.advanceTimersByTime(150);
+      });
+
+      expect(container.querySelector('#features-menu-panel')).not.toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('keeps calendar in Features when not authenticated', async () => {
@@ -187,6 +218,22 @@ describe('App navbar features dropdown', () => {
     expect(navMenu.className).toContain('absolute');
     expect(navMenu.className).toContain('top-full');
     expect(navMenu.className).not.toContain('hidden');
+  });
+
+  it('orders the primary nav links in a more familiar sequence', async () => {
+    localStorage.setItem('token', 'token');
+
+    await renderApp();
+
+    const navItems = Array.from(container.querySelectorAll('#main-nav-menu > a, #main-nav-menu > div[data-testid="features-menu"] > button'))
+      .map((node) => node.textContent.trim().replace('▾', '').trim());
+
+    expect(navItems.indexOf('Social')).toBeGreaterThan(navItems.indexOf('Home'));
+    expect(navItems.indexOf('Chat')).toBeGreaterThan(navItems.indexOf('Social'));
+    expect(navItems.indexOf('Features')).toBeGreaterThan(navItems.indexOf('Chat'));
+    expect(navItems.indexOf('News')).toBeGreaterThan(navItems.indexOf('Features'));
+    expect(navItems.indexOf('Market')).toBeGreaterThan(navItems.indexOf('News'));
+    expect(navItems.indexOf('Maps')).toBeGreaterThan(navItems.indexOf('Market'));
   });
 
   it('uses full-width main layout on the social route', async () => {
