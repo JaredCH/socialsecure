@@ -375,6 +375,7 @@ const Social = () => {
   const [galleryLoading, setGalleryLoading] = useState(false);
   const [galleryActionLoadingByImage, setGalleryActionLoadingByImage] = useState({});
   const [galleryEditById, setGalleryEditById] = useState({});
+  const [heroRandomBackgroundImage, setHeroRandomBackgroundImage] = useState('');
   const [blockedUserIds, setBlockedUserIds] = useState([]);
   const [mutedUserIds, setMutedUserIds] = useState([]);
   const [myReports, setMyReports] = useState([]);
