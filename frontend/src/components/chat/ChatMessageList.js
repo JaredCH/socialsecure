@@ -32,7 +32,7 @@ function ChatMessageList({
 
   return (
     <div className={`relative flex-1 min-h-0 overflow-hidden rounded-xl border ${theme.messagesShell}`}>
-      <div ref={scrollRef} className="h-full overflow-y-auto px-2 py-2 space-y-2 [scrollbar-gutter:stable]">
+      <div ref={scrollRef} className="h-full overflow-y-auto px-2 py-1.5 space-y-1 [scrollbar-gutter:stable]">
         {hasOlderMessages ? (
           <div className="sticky top-0 z-10 flex justify-center pb-2">
             <button
