@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const TOP_FRIENDS_LIMIT = 8;
+const TOP_FRIENDS_LIMIT = 5;
 
 const topFriendSchema = new mongoose.Schema({
   user: {

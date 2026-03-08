@@ -12,7 +12,8 @@ const { buildPresencePayload, getPresenceMapForUsers } = require('../services/re
 const { RELATIONSHIP_AUDIENCE_VALUES, normalizeRelationshipAudience } = require('../utils/relationshipAudience');
 
 const VALID_FRIEND_CATEGORIES = [...RELATIONSHIP_AUDIENCE_VALUES];
-const TOP_FRIENDS_LIMIT = 8;
+const VALID_PARTNER_ACTIONS = ['request', 'accept', 'deny', 'clear'];
+const TOP_FRIENDS_LIMIT = 5;
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -369,6 +370,9 @@ router.delete('/:id', friendMutationLimiter, authenticateToken, async (req, res)
     
     friendship.status = 'removed';
     friendship.removedAt = new Date();
+    friendship.partnerStatus = 'none';
+    friendship.partnerRequestedBy = null;
+    friendship.partnerRequestedAt = null;
     await friendship.save();
     
     res.json({
@@ -411,6 +415,9 @@ router.post('/:id/block', friendMutationLimiter, authenticateToken, async (req, 
     friendship.blockedBy = req.user._id;
     friendship.blockReason = reason || null;
     friendship.blockedAt = new Date();
+    friendship.partnerStatus = 'none';
+    friendship.partnerRequestedBy = null;
+    friendship.partnerRequestedAt = null;
     await friendship.save();
     
     // If was friends, decrease friend counts
@@ -509,6 +516,79 @@ router.put('/:id/category', friendMutationLimiter, authenticateToken, async (req
   }
 });
 
+// PATCH /api/friends/:id/partner - Manage partner/spouse request flow
+router.patch('/:id/partner', friendMutationLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const action = String(req.body?.action || '').trim().toLowerCase();
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid friendship ID' });
+    }
+    if (!VALID_PARTNER_ACTIONS.includes(action)) {
+      return res.status(400).json({ error: 'Action must be request, accept, deny, or clear' });
+    }
+
+    const friendship = await Friendship.findById(id);
+    if (!friendship) {
+      return res.status(404).json({ error: 'Friendship not found' });
+    }
+    if (friendship.status !== 'accepted') {
+      return res.status(400).json({ error: 'Partner listing can only be managed for accepted friendships' });
+    }
+
+    const viewerId = String(req.user._id || '');
+    const isRequester = String(friendship.requester || '') === viewerId;
+    const isRecipient = String(friendship.recipient || '') === viewerId;
+    if (!isRequester && !isRecipient) {
+      return res.status(403).json({ error: 'Not authorized to update this friendship' });
+    }
+
+    const requestedByViewer = String(friendship.partnerRequestedBy || '') === viewerId;
+    const currentStatus = ['none', 'pending', 'accepted'].includes(friendship.partnerStatus)
+      ? friendship.partnerStatus
+      : 'none';
+
+    if (action === 'request') {
+      friendship.partnerStatus = 'pending';
+      friendship.partnerRequestedBy = req.user._id;
+      friendship.partnerRequestedAt = new Date();
+    } else if (action === 'accept') {
+      if (currentStatus !== 'pending' || requestedByViewer) {
+        return res.status(400).json({ error: 'No incoming partner request to accept' });
+      }
+      friendship.partnerStatus = 'accepted';
+    } else if (action === 'deny') {
+      if (currentStatus !== 'pending' || requestedByViewer) {
+        return res.status(400).json({ error: 'No incoming partner request to deny' });
+      }
+      friendship.partnerStatus = 'none';
+      friendship.partnerRequestedBy = null;
+      friendship.partnerRequestedAt = null;
+    } else {
+      friendship.partnerStatus = 'none';
+      friendship.partnerRequestedBy = null;
+      friendship.partnerRequestedAt = null;
+    }
+
+    await friendship.save();
+
+    return res.json({
+      success: true,
+      partner: {
+        friendshipId: friendship._id,
+        status: friendship.partnerStatus,
+        requestedByViewer: String(friendship.partnerRequestedBy || '') === viewerId,
+        canRespond: friendship.partnerStatus === 'pending' && String(friendship.partnerRequestedBy || '') !== viewerId,
+        requestedAt: friendship.partnerRequestedAt || null
+      }
+    });
+  } catch (error) {
+    console.error('Error updating partner listing:', error);
+    return res.status(500).json({ error: 'Failed to update partner listing' });
+  }
+});
+
 // GET /api/friends - Get all accepted friends
 router.get('/', friendReadLimiter, authenticateToken, async (req, res) => {
   try {
@@ -539,6 +619,7 @@ router.get('/', friendReadLimiter, authenticateToken, async (req, res) => {
     const friendsWithPresence = friends.map((friend) => ({
       ...friend,
       relationshipAudience: audienceByFriendId.get(String(friend._id)) || 'social',
+      partnerCanRespond: friend.partnerStatus === 'pending' && !friend.partnerRequestedByViewer,
       presence: buildPresencePayload(friend._id, presenceMap.get(String(friend._id)), friendUserMap.get(String(friend._id))?.realtimePreferences)
     }));
     
@@ -856,7 +937,15 @@ router.get('/relationship/:userId', authenticateToken, async (req, res) => {
       category,
       isOwner,
       friendshipId: friendship ? friendship._id : null,
-      relationshipAudience: friendship ? getViewerRelationshipAudience(friendship, req.user._id) : 'social'
+      relationshipAudience: friendship ? getViewerRelationshipAudience(friendship, req.user._id) : 'social',
+      partnerStatus: friendship ? (['none', 'pending', 'accepted'].includes(friendship.partnerStatus) ? friendship.partnerStatus : 'none') : 'none',
+      partnerRequestedByViewer: friendship ? String(friendship.partnerRequestedBy || '') === String(req.user._id || '') : false,
+      partnerCanRespond: friendship
+        ? (
+          (['none', 'pending', 'accepted'].includes(friendship.partnerStatus) ? friendship.partnerStatus : 'none') === 'pending'
+          && String(friendship.partnerRequestedBy || '') !== String(req.user._id || '')
+        )
+        : false
     });
   } catch (error) {
     console.error('Error getting relationship:', error);

@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import PresenceIndicator from './PresenceIndicator';
 import { getRealtimeSocket, onFriendPresence } from '../utils/realtime';
 
-const TOP_FRIENDS_LIMIT = 8;
+const TOP_FRIENDS_LIMIT = 5;
 
 function FriendsManager({ currentUser, onUserUpdate }) {
   const [friends, setFriends] = useState([]);

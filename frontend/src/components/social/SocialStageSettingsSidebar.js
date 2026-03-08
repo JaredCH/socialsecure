@@ -255,7 +255,7 @@ const SocialStageSettingsSidebar = ({
 
           <section className="space-y-4 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <div>
-              <h3 className="text-sm font-semibold text-slate-900">Top 8 Friends</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Top Friends</h3>
               <p className="mt-1 text-xs text-slate-500">Select up to {topFriendsLimit} friends for the Pulse rail and hero story bar.</p>
             </div>
 
@@ -285,7 +285,7 @@ const SocialStageSettingsSidebar = ({
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Available friends</p>
               <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                 {availableFriends.length === 0 ? (
-                  <p className="rounded-2xl border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500">Add friends to unlock Top 8 customization.</p>
+                  <p className="rounded-2xl border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500">Add friends to unlock Top Friends customization.</p>
                 ) : availableFriends.map((friend) => {
                   const isSelected = selectedTopFriends.some((selected) => String(selected._id) === String(friend._id));
                   return (
@@ -350,7 +350,7 @@ SocialStageSettingsSidebar.defaultProps = {
   fontOptions: [],
   selectedTopFriends: [],
   availableFriends: [],
-  topFriendsLimit: 8,
+  topFriendsLimit: 5,
   busy: false,
   error: '',
   successMessage: '',
