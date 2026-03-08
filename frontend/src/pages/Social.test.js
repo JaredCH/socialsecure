@@ -269,18 +269,20 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).toContain('guest-readable');
     expect(container.textContent).toContain('Sign in to post in this chat room.');
 
-    const messageText = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'guest-readable');
+    const messageViewport = container.querySelector('[data-testid="social-mini-chat-viewport"]');
+    expect(messageViewport).toBeTruthy();
+    expect(messageViewport?.className).toContain('max-h-72');
+
+    const messageText = Array.from(container.querySelectorAll('[data-testid="social-mini-chat-message-content"]')).find((node) => node.textContent === 'guest-readable');
     expect(messageText).toBeDefined();
     expect(messageText.className).toContain('leading-4');
 
-    const messageBubble = messageText?.closest('div[class*="rounded-xl"]');
+    const messageBubble = messageText?.closest('[data-testid="social-mini-chat-bubble"]');
     expect(messageBubble).toBeTruthy();
     expect(messageBubble?.className).toContain('px-1.5');
     expect(messageBubble?.className).toContain('py-0.5');
+    expect(messageBubble?.className).toContain('max-w-[94%]');
 
-    const messageViewport = messageText?.closest('div.overflow-y-auto');
-    expect(messageViewport).toBeTruthy();
-    expect(messageViewport?.className).toContain('space-y-1');
-    expect(messageViewport?.className).toContain('max-h-72');
+    expect(messageText?.closest('div.overflow-y-auto')).toBe(messageViewport);
   });
 });

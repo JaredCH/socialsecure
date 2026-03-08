@@ -2930,14 +2930,14 @@ const Social = () => {
                       <span>{activeProfile?.username ? `@${activeProfile.username}` : 'Profile'} chat room</span>
                       <span className="text-[10px] uppercase tracking-wide text-slate-500">Live</span>
                     </div>
-                    <div className="max-h-72 space-y-1 overflow-y-auto px-2 py-1.5 [scrollbar-gutter:stable]">
+                    <div data-testid="social-mini-chat-viewport" className="max-h-72 space-y-1 overflow-y-auto px-2 py-1.5 [scrollbar-gutter:stable]">
                       {profileChatMessages.length === 0 ? (
                         <p className="text-sm text-slate-500">No messages yet. Start the conversation.</p>
                       ) : profileChatMessages.map((message) => (
-                        <div key={message._id} className="group flex justify-start">
-                          <div className="max-w-[94%] rounded-xl border border-slate-200 bg-slate-50 px-1.5 py-0.5">
+                        <div key={message._id} className="flex justify-start">
+                          <div data-testid="social-mini-chat-bubble" className="max-w-[94%] rounded-xl border border-slate-200 bg-slate-50 px-1.5 py-0.5">
                             <p className="text-[10px] font-semibold uppercase tracking-normal text-slate-500">@{message?.userId?.username || 'user'}</p>
-                            <p className="whitespace-pre-wrap break-words text-[13px] leading-4 text-slate-800">{message?.content || ''}</p>
+                            <p data-testid="social-mini-chat-message-content" className="whitespace-pre-wrap break-words text-[13px] leading-4 text-slate-800">{message?.content || ''}</p>
                           </div>
                         </div>
                       ))}
@@ -2947,6 +2947,7 @@ const Social = () => {
                     <textarea
                       value={profileChatInput}
                       onChange={(event) => setProfileChatInput(event.target.value)}
+                      aria-label="Profile chat message"
                       placeholder={canPostToProfileThread ? 'Write a message…' : (isAuthenticated ? 'You do not have write access' : 'Sign in to send messages')}
                       disabled={!canPostToProfileThread || profileChatSending}
                       rows={3}
