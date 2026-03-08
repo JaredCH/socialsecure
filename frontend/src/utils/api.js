@@ -127,7 +127,12 @@ export const resumeAPI = {
 
 // User API
 export const userAPI = {
-  search: (query) => api.get(`/users/search?q=${query}`),
+  search: (queryOrCriteria) => {
+    if (typeof queryOrCriteria === 'string') {
+      return api.get(`/users/search?q=${encodeURIComponent(queryOrCriteria)}`);
+    }
+    return api.post('/users/search', queryOrCriteria || {});
+  },
   getByUsername: (username) => api.get(`/users/username/${username}`),
   getById: (userId) => api.get(`/users/${userId}`),
 };

@@ -1,7 +1,61 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { userAPI } from '../utils/api';
 
 function Home({ isAuthenticated = false }) {
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searchNotice, setSearchNotice] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchForm, setSearchForm] = useState({
+    firstName: '',
+    lastName: '',
+    city: '',
+    state: '',
+    zip: '',
+    county: '',
+    phone: '',
+    streetAddress: '',
+    friendsOfUser: '',
+    worksAt: '',
+    hobbies: '',
+    ageFilters: '',
+    sex: '',
+    race: ''
+  });
+
+  const onSearchFieldChange = (event) => {
+    const { name, value } = event.target;
+    setSearchForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSearch = async (event) => {
+    event.preventDefault();
+    setSearchError('');
+    setSearchNotice('');
+
+    const hasAnyCriteria = Object.values(searchForm).some((value) => value.trim().length > 0);
+    if (!hasAnyCriteria) {
+      setSearchError('Add at least one optional search value to start a search session.');
+      setSearchResults([]);
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const { data } = await userAPI.search(searchForm);
+      setSearchResults(Array.isArray(data?.users) ? data.users : []);
+      if (Array.isArray(data?.unsupportedCriteria) && data.unsupportedCriteria.length > 0) {
+        setSearchNotice(`Some criteria are accepted but not yet directly rankable: ${data.unsupportedCriteria.join(', ')}.`);
+      }
+    } catch (error) {
+      setSearchError(error.response?.data?.error || 'Search session failed. Please try again.');
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const featureHighlights = [
     {
       title: 'Interactive maps with population density heatmaps',
@@ -160,6 +214,103 @@ function Home({ isAuthenticated = false }) {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="search-session-heading">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="search-session-heading" className="text-2xl font-bold text-slate-900">Start a Search Session</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              All fields are optional. SocialSecure ranks results by how closely each profile matches your criteria.
+            </p>
+          </div>
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+            Focus: accurate people search
+          </span>
+        </div>
+
+        <form onSubmit={handleSearch} className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Name First</span>
+              <input name="firstName" value={searchForm.firstName} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Name Last</span>
+              <input name="lastName" value={searchForm.lastName} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">City</span>
+              <input name="city" value={searchForm.city} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">State</span>
+              <input name="state" value={searchForm.state} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Zip</span>
+              <input name="zip" value={searchForm.zip} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">County</span>
+              <input name="county" value={searchForm.county} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Phone</span>
+              <input name="phone" value={searchForm.phone} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Street Address</span>
+              <input name="streetAddress" value={searchForm.streetAddress} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Friends of User</span>
+              <input name="friendsOfUser" value={searchForm.friendsOfUser} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Works At</span>
+              <input name="worksAt" value={searchForm.worksAt} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Hobbies</span>
+              <input name="hobbies" value={searchForm.hobbies} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Age Filters</span>
+              <input name="ageFilters" value={searchForm.ageFilters} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" placeholder="Optional age detail" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Sex</span>
+              <input name="sex" value={searchForm.sex} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="mb-1 block font-medium">Race</span>
+              <input name="race" value={searchForm.race} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="submit" disabled={searching} className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
+              {searching ? 'Searching…' : 'Search'}
+            </button>
+            {searchError ? <p className="text-sm text-red-600">{searchError}</p> : null}
+            {!searchError && searchNotice ? <p className="text-sm text-amber-700">{searchNotice}</p> : null}
+          </div>
+        </form>
+
+        <div className="mt-4">
+          {searchResults.length > 0 ? (
+            <ul className="space-y-2">
+              {searchResults.map((user) => (
+                <li key={user._id} className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <span className="font-semibold text-slate-900">{user.realName}</span> (@{user.username}) · {user.city || 'N/A'}{user.state ? `, ${user.state}` : ''}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-500">Search results will appear here once you run a search session.</p>
+          )}
         </div>
       </section>
 

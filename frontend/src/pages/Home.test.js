@@ -3,6 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import Home from './Home';
 
+jest.mock('../utils/api', () => ({
+  userAPI: {
+    search: jest.fn()
+  }
+}));
+
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('Home landing page CTA behavior', () => {
@@ -37,6 +43,10 @@ describe('Home landing page CTA behavior', () => {
   it('shows registration/login CTAs for logged-out visitors', async () => {
     await renderHome({ isAuthenticated: false });
 
+    expect(container.textContent).toContain('Start a Search Session');
+    expect(container.textContent).toContain('Name First');
+    expect(container.textContent).toContain('Name Last');
+    expect(container.textContent).toContain('Friends of User');
     expect(container.textContent).toContain('Sign Up Free');
     expect(container.textContent).toContain('Register');
     expect(container.textContent).toContain('Login');
