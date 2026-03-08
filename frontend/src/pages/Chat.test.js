@@ -402,6 +402,53 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).toContain('Block/ignore');
   });
 
+  it('replaces attachment control with URL formatter and inserts a short link token', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    expect(container.querySelector('button[aria-label="Attach file"]')).toBeNull();
+    const formatterButton = container.querySelector('button[aria-label="Open URL formatter"]');
+    expect(formatterButton).not.toBeNull();
+
+    await act(async () => {
+      formatterButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const urlInput = container.querySelector('input#chat-link-url-input');
+    const shortNameInput = container.querySelector('input#chat-link-short-name');
+    expect(urlInput).not.toBeNull();
+    expect(shortNameInput).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(urlInput, 'https://example.com/some/very/long/path');
+      setInputValue(shortNameInput, 'Project Docs');
+      await flush();
+    });
+
+    const insertButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Insert link');
+    expect(insertButton).not.toBeUndefined();
+    await act(async () => {
+      insertButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const composer = container.querySelector('textarea[placeholder="Type your message"]');
+    expect(composer.value).toContain('[Project Docs](https://example.com/some/very/long/path)');
+  });
+
   it('renders links as new-window anchors and warns before opening external links', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
@@ -483,10 +530,10 @@ describe('Chat zip room indicator', () => {
     await renderChat();
 
     const profileLinks = Array.from(container.querySelectorAll('a')).filter((node) =>
-      (node.getAttribute('href') || '').includes('/social/')
+      (node.getAttribute('href') || '').includes('/social?user=')
     );
     expect(profileLinks.length).toBeGreaterThan(0);
-    expect(profileLinks.some((link) => link.getAttribute('href') === '/social/buddy')).toBe(true);
+    expect(profileLinks.some((link) => link.getAttribute('href') === '/social?user=buddy')).toBe(true);
     expect(profileLinks[0].className).toContain('h-5');
     expect(profileLinks[0].className).toContain('w-5');
 
@@ -501,5 +548,48 @@ describe('Chat zip room indicator', () => {
     const messageViewport = messageText.closest('div.overflow-y-auto');
     expect(messageViewport).not.toBeNull();
     expect(messageViewport.className).toContain('space-y-1');
+  });
+
+  it('formats named links and opens user actions from message click', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            _id: 'm-link-name',
+            content: '[Docs](https://example.com/product/guide)',
+            userId: { _id: 'u2', username: 'buddy' },
+            createdAt: '2024-01-01T00:00:00.000Z'
+          }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    const namedLink = Array.from(container.querySelectorAll('a')).find((node) => node.textContent.startsWith('Docs ('));
+    expect(namedLink).not.toBeUndefined();
+    expect(namedLink.getAttribute('href')).toBe('https://example.com/product/guide');
+
+    const authorAction = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === '@buddy');
+    expect(authorAction).not.toBeUndefined();
+    await act(async () => {
+      authorAction.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(container.textContent).toContain('Send direct message');
+    expect(container.textContent).toContain('View user social');
   });
 });
