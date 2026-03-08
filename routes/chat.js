@@ -16,6 +16,7 @@ const RoomKeyPackage = require('../models/RoomKeyPackage');
 const ChatConversation = require('../models/ChatConversation');
 const ConversationMessage = require('../models/ConversationMessage');
 const User = require('../models/User');
+const Friendship = require('../models/Friendship');
 const { createNotification } = require('../services/notifications');
 const { emitChatMessage } = require('../services/realtime');
 
@@ -93,6 +94,11 @@ const E2EE_LIMITS = {
 };
 const NEARBY_ZIP_THRESHOLD = 25;
 const MAX_NEARBY_ZIP_ROOMS = 100;
+const PROFILE_THREAD_ROLE_VALUES = ['friends', 'circles', 'guests'];
+const DEFAULT_PROFILE_THREAD_ACCESS = Object.freeze({
+  readRoles: ['friends', 'circles'],
+  writeRoles: ['friends', 'circles']
+});
 const unifiedChatLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 90,
@@ -221,6 +227,81 @@ const canAccessConversation = (conversation, userId) => {
   return isConversationParticipant(conversation, userId);
 };
 
+const normalizeProfileThreadRoles = (roles, fallback) => {
+  if (!Array.isArray(roles)) return [...fallback];
+  const uniqueRoles = [];
+  const seen = new Set();
+  for (const role of roles) {
+    if (typeof role !== 'string') continue;
+    const normalizedRole = role.trim().toLowerCase();
+    if (!PROFILE_THREAD_ROLE_VALUES.includes(normalizedRole) || seen.has(normalizedRole)) continue;
+    seen.add(normalizedRole);
+    uniqueRoles.push(normalizedRole);
+  }
+  return uniqueRoles.length > 0 ? uniqueRoles : [...fallback];
+};
+
+const normalizeProfileThreadAccess = (access) => ({
+  readRoles: normalizeProfileThreadRoles(access?.readRoles, DEFAULT_PROFILE_THREAD_ACCESS.readRoles),
+  writeRoles: normalizeProfileThreadRoles(access?.writeRoles, DEFAULT_PROFILE_THREAD_ACCESS.writeRoles)
+});
+
+const canUseRole = (roles, relationship) => {
+  if (roles.includes('guests')) return true;
+  if (roles.includes('circles') && relationship.isCircleMember) return true;
+  if (roles.includes('friends') && relationship.isFriend) return true;
+  return false;
+};
+
+const resolveProfileThreadPermissions = async (conversation, viewerId) => {
+  const profileUserId = String(conversation?.profileUserId || '');
+  if (!profileUserId) {
+    return { canRead: false, canWrite: false, access: normalizeProfileThreadAccess(null), isOwner: false };
+  }
+
+  const normalizedViewerId = String(viewerId || '');
+  if (!normalizedViewerId) {
+    return { canRead: false, canWrite: false, access: normalizeProfileThreadAccess(conversation?.profileThreadAccess), isOwner: false };
+  }
+
+  if (normalizedViewerId === profileUserId) {
+    return { canRead: true, canWrite: true, access: normalizeProfileThreadAccess(conversation?.profileThreadAccess), isOwner: true };
+  }
+
+  const [friendship, profileUser] = await Promise.all([
+    Friendship.findOne({
+      status: 'accepted',
+      $or: [
+        { requester: profileUserId, recipient: normalizedViewerId },
+        { requester: normalizedViewerId, recipient: profileUserId }
+      ]
+    }).select('_id').lean(),
+    User.findById(profileUserId).select('_id circles.members').lean()
+  ]);
+
+  const access = normalizeProfileThreadAccess(conversation?.profileThreadAccess);
+  const circleMemberIds = new Set();
+  if (Array.isArray(profileUser?.circles)) {
+    for (const circle of profileUser.circles) {
+      if (!Array.isArray(circle?.members)) continue;
+      for (const memberId of circle.members) {
+        circleMemberIds.add(String(memberId));
+      }
+    }
+  }
+  const relationship = {
+    isFriend: Boolean(friendship),
+    isCircleMember: circleMemberIds.has(normalizedViewerId)
+  };
+
+  return {
+    canRead: canUseRole(access.readRoles, relationship),
+    canWrite: canUseRole(access.writeRoles, relationship),
+    access,
+    isOwner: false
+  };
+};
+
 const formatConversationSummary = (conversation, usersById, currentUserId) => {
   const base = {
     _id: conversation._id,
@@ -253,6 +334,7 @@ const formatConversationSummary = (conversation, usersById, currentUserId) => {
     const profileUser = profileId ? usersById.get(profileId) : null;
     return {
       ...base,
+      profileThreadAccess: normalizeProfileThreadAccess(conversation.profileThreadAccess),
       profileUser: profileUser ? {
         _id: profileUser._id,
         username: profileUser.username,
@@ -2197,7 +2279,12 @@ router.get('/conversations/:conversationId/messages', unifiedChatLimiter, authen
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    if (!canAccessConversation(conversation, userId)) {
+    if (conversation.type === 'profile-thread') {
+      const permissions = await resolveProfileThreadPermissions(conversation, userId);
+      if (!permissions.canRead) {
+        return res.status(403).json({ error: 'Access denied for this conversation' });
+      }
+    } else if (!canAccessConversation(conversation, userId)) {
       return res.status(403).json({ error: 'Access denied for this conversation' });
     }
 
@@ -2217,7 +2304,10 @@ router.get('/conversations/:conversationId/messages', unifiedChatLimiter, authen
         type: conversation.type,
         title: conversation.title,
         zipCode: conversation.zipCode || null,
-        profileUserId: conversation.profileUserId || null
+        profileUserId: conversation.profileUserId || null,
+        profileThreadAccess: conversation.type === 'profile-thread'
+          ? normalizeProfileThreadAccess(conversation.profileThreadAccess)
+          : undefined
       },
       messages: messages.reverse(),
       page,
@@ -2240,7 +2330,12 @@ router.get('/conversations/:conversationId/users', unifiedChatLimiter, authentic
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    if (!canAccessConversation(conversation, userId)) {
+    if (conversation.type === 'profile-thread') {
+      const permissions = await resolveProfileThreadPermissions(conversation, userId);
+      if (!permissions.canRead) {
+        return res.status(403).json({ error: 'Access denied for this conversation' });
+      }
+    } else if (!canAccessConversation(conversation, userId)) {
       return res.status(403).json({ error: 'Access denied for this conversation' });
     }
 
@@ -2331,7 +2426,12 @@ router.post(
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    if (!canAccessConversation(conversation, userId)) {
+    if (conversation.type === 'profile-thread') {
+      const permissions = await resolveProfileThreadPermissions(conversation, userId);
+      if (!permissions.canWrite) {
+        return res.status(403).json({ error: 'Write access denied for this conversation' });
+      }
+    } else if (!canAccessConversation(conversation, userId)) {
       return res.status(403).json({ error: 'Access denied for this conversation' });
     }
 
@@ -2441,7 +2541,7 @@ router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, asy
     const viewerId = String(req.user.userId);
     const profileUserId = String(req.params.userId);
 
-    const profileUser = await User.findById(profileUserId).select('_id username realName').lean();
+    const profileUser = await User.findById(profileUserId).select('_id username realName circles.members').lean();
     if (!profileUser) {
       return res.status(404).json({ error: 'Profile user not found' });
     }
@@ -2456,20 +2556,31 @@ router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, asy
       return res.status(404).json({ error: 'Profile thread is unavailable' });
     }
 
-    let thread = await ChatConversation.findOne({
-      type: 'profile-thread',
-      profileUserId,
-      participants: { $all: [viewerId, profileUserId], $size: 2 }
-    });
+    let thread = await ChatConversation.findOne({ type: 'profile-thread', profileUserId });
 
     if (!thread) {
       thread = await ChatConversation.create({
         type: 'profile-thread',
         title: `Profile thread: @${profileUser.username}`,
         profileUserId,
-        participants: [viewerId, profileUserId],
+        participants: [profileUserId],
+        profileThreadAccess: normalizeProfileThreadAccess(DEFAULT_PROFILE_THREAD_ACCESS),
         lastMessageAt: new Date()
       });
+    }
+
+    const permissions = await resolveProfileThreadPermissions(thread, viewerId);
+    if (!permissions.canRead) {
+      return res.status(403).json({ error: 'Profile thread is unavailable' });
+    }
+
+    const participantIds = Array.isArray(thread.participants)
+      ? thread.participants.map((participantId) => String(participantId))
+      : [];
+    const shouldAddViewerAsParticipant = !participantIds.includes(viewerId);
+    if (shouldAddViewerAsParticipant) {
+      thread.participants = [...participantIds, viewerId];
+      await thread.save();
     }
 
     return res.json({
@@ -2480,6 +2591,12 @@ router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, asy
         title: thread.title,
         profileUserId: thread.profileUserId,
         participants: thread.participants,
+        profileThreadAccess: permissions.access,
+        permissions: {
+          isOwner: permissions.isOwner,
+          canRead: permissions.canRead,
+          canWrite: permissions.canWrite
+        },
         lastMessageAt: thread.lastMessageAt,
         messageCount: thread.messageCount || 0
       }
@@ -2489,5 +2606,70 @@ router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, asy
     return res.status(500).json({ error: 'Failed to resolve profile thread' });
   }
 });
+
+router.put(
+  '/profile/:userId/thread/settings',
+  unifiedChatLimiter,
+  authenticateToken,
+  body('readRoles').optional().isArray().withMessage('readRoles must be an array'),
+  body('readRoles.*').optional().isIn(PROFILE_THREAD_ROLE_VALUES).withMessage('Invalid read role'),
+  body('writeRoles').optional().isArray().withMessage('writeRoles must be an array'),
+  body('writeRoles.*').optional().isIn(PROFILE_THREAD_ROLE_VALUES).withMessage('Invalid write role'),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const ownerId = String(req.user.userId);
+      const profileUserId = String(req.params.userId);
+      if (ownerId !== profileUserId) {
+        return res.status(403).json({ error: 'Only the profile owner can update chat access' });
+      }
+
+      const profileUser = await User.findById(profileUserId).select('_id username').lean();
+      if (!profileUser) {
+        return res.status(404).json({ error: 'Profile user not found' });
+      }
+
+      const nextAccess = normalizeProfileThreadAccess(req.body);
+      let thread = await ChatConversation.findOne({ type: 'profile-thread', profileUserId });
+      if (!thread) {
+        thread = await ChatConversation.create({
+          type: 'profile-thread',
+          title: `Profile thread: @${profileUser.username}`,
+          profileUserId,
+          participants: [profileUserId],
+          profileThreadAccess: nextAccess,
+          lastMessageAt: new Date()
+        });
+      } else {
+        thread.profileThreadAccess = nextAccess;
+        if (!Array.isArray(thread.participants) || thread.participants.length === 0) {
+          thread.participants = [profileUserId];
+        }
+        await thread.save();
+      }
+
+      return res.json({
+        success: true,
+        conversation: {
+          _id: thread._id,
+          profileUserId: thread.profileUserId,
+          profileThreadAccess: normalizeProfileThreadAccess(thread.profileThreadAccess),
+          permissions: {
+            isOwner: true,
+            canRead: true,
+            canWrite: true
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error updating profile thread settings:', error);
+      return res.status(500).json({ error: 'Failed to update profile thread settings' });
+    }
+  }
+);
 
 module.exports = router;

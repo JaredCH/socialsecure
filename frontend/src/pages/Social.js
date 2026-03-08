@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
+import { authAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
@@ -68,6 +68,11 @@ const RELATIONSHIP_AUDIENCE_LABELS = {
   social: 'Social',
   secure: 'Secure'
 };
+const PROFILE_CHAT_ROLE_OPTIONS = [
+  { value: 'friends', label: 'Friends' },
+  { value: 'circles', label: 'Circles' },
+  { value: 'guests', label: 'Guests' }
+];
 
 const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
 const THEME_ACCENT_TO_HEADER_CLASS = {
@@ -398,7 +403,16 @@ const Social = () => {
   const [activeDesignConfigId, setActiveDesignConfigId] = useState(null);
   const [viewportLayoutMode, setViewportLayoutMode] = useState(() => (window.innerWidth < 1024 ? 'mobile' : 'desktop'));
   const [editorLayoutMode, setEditorLayoutMode] = useState(() => (window.innerWidth < 1024 ? 'mobile' : 'desktop'));
-  const [heroRandomBackgroundImage, setHeroRandomBackgroundImage] = useState('');
+  const [profileChatThreadId, setProfileChatThreadId] = useState('');
+  const [profileChatMessages, setProfileChatMessages] = useState([]);
+  const [profileChatLoading, setProfileChatLoading] = useState(false);
+  const [profileChatError, setProfileChatError] = useState('');
+  const [profileChatInput, setProfileChatInput] = useState('');
+  const [profileChatSending, setProfileChatSending] = useState(false);
+  const [profileChatPermissions, setProfileChatPermissions] = useState({ isOwner: false, canRead: false, canWrite: false });
+  const [profileChatAccess, setProfileChatAccess] = useState({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] });
+  const [profileChatAccessDraft, setProfileChatAccessDraft] = useState({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] });
+  const [profileChatSavingAccess, setProfileChatSavingAccess] = useState(false);
   const localTypingTimeoutsRef = useRef({});
   const remoteTypingTimeoutsRef = useRef({});
   const designDirtyRef = useRef(false);
@@ -511,6 +525,122 @@ const Social = () => {
   const socialChatLabel = !isOwnSocialContext && activeProfile?.username
     ? `Message @${activeProfile.username}`
     : 'Open chat';
+  const profileChatAccessSummary = useMemo(() => {
+    const readLabels = profileChatAccess.readRoles.map((role) => PROFILE_CHAT_ROLE_OPTIONS.find((option) => option.value === role)?.label || role);
+    const writeLabels = profileChatAccess.writeRoles.map((role) => PROFILE_CHAT_ROLE_OPTIONS.find((option) => option.value === role)?.label || role);
+    return {
+      read: readLabels.join(', ') || 'Friends, Circles',
+      write: writeLabels.join(', ') || 'Friends, Circles'
+    };
+  }, [profileChatAccess]);
+
+  const toggleProfileChatRole = useCallback((field, role) => {
+    setProfileChatAccessDraft((prev) => {
+      const current = Array.isArray(prev[field]) ? prev[field] : [];
+      const hasRole = current.includes(role);
+      const nextRoles = hasRole ? current.filter((entry) => entry !== role) : [...current, role];
+      return {
+        ...prev,
+        [field]: nextRoles.length > 0 ? nextRoles : current
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    const loadProfileChatThread = async () => {
+      if (!isAuthenticated || !activeProfile?._id) {
+        setProfileChatThreadId('');
+        setProfileChatMessages([]);
+        setProfileChatPermissions({ isOwner: false, canRead: false, canWrite: false });
+        setProfileChatError('');
+        return;
+      }
+
+      setProfileChatLoading(true);
+      setProfileChatError('');
+      try {
+        const { data } = await chatAPI.getProfileThread(activeProfile._id);
+        const thread = data?.conversation || {};
+        const threadId = thread?._id ? String(thread._id) : '';
+        const nextAccess = {
+          readRoles: Array.isArray(thread?.profileThreadAccess?.readRoles) ? thread.profileThreadAccess.readRoles : ['friends', 'circles'],
+          writeRoles: Array.isArray(thread?.profileThreadAccess?.writeRoles) ? thread.profileThreadAccess.writeRoles : ['friends', 'circles']
+        };
+        setProfileChatThreadId(threadId);
+        setProfileChatAccess(nextAccess);
+        setProfileChatAccessDraft(nextAccess);
+        setProfileChatPermissions({
+          isOwner: Boolean(thread?.permissions?.isOwner),
+          canRead: Boolean(thread?.permissions?.canRead),
+          canWrite: Boolean(thread?.permissions?.canWrite)
+        });
+
+        if (!threadId || !thread?.permissions?.canRead) {
+          setProfileChatMessages([]);
+          return;
+        }
+
+        const { data: messageData } = await chatAPI.getConversationMessages(threadId, 1, 25);
+        setProfileChatMessages(Array.isArray(messageData?.messages) ? messageData.messages : []);
+      } catch (error) {
+        setProfileChatThreadId('');
+        setProfileChatMessages([]);
+        setProfileChatPermissions({ isOwner: false, canRead: false, canWrite: false });
+        setProfileChatError(error.response?.data?.error || 'Unable to load profile chat room.');
+      } finally {
+        setProfileChatLoading(false);
+      }
+    };
+
+    loadProfileChatThread();
+  }, [isAuthenticated, activeProfile?._id]);
+
+  const handleSendProfileChatMessage = useCallback(async () => {
+    const content = profileChatInput.trim();
+    if (!content || !profileChatThreadId || profileChatSending || !profileChatPermissions.canWrite) return;
+    setProfileChatSending(true);
+    setProfileChatError('');
+    try {
+      const { data } = await chatAPI.sendConversationMessage(profileChatThreadId, { content });
+      if (data?.message) {
+        setProfileChatMessages((prev) => [...prev, data.message]);
+      }
+      setProfileChatInput('');
+    } catch (error) {
+      setProfileChatError(error.response?.data?.error || 'Failed to send message.');
+    } finally {
+      setProfileChatSending(false);
+    }
+  }, [profileChatInput, profileChatThreadId, profileChatSending, profileChatPermissions.canWrite]);
+
+  const handleSaveProfileChatAccess = useCallback(async () => {
+    if (!profileChatPermissions.isOwner || !activeProfile?._id) return;
+    setProfileChatSavingAccess(true);
+    setProfileChatError('');
+    try {
+      const payload = {
+        readRoles: profileChatAccessDraft.readRoles,
+        writeRoles: profileChatAccessDraft.writeRoles
+      };
+      const { data } = await chatAPI.updateProfileThreadSettings(activeProfile._id, payload);
+      const savedAccess = {
+        readRoles: Array.isArray(data?.conversation?.profileThreadAccess?.readRoles) ? data.conversation.profileThreadAccess.readRoles : payload.readRoles,
+        writeRoles: Array.isArray(data?.conversation?.profileThreadAccess?.writeRoles) ? data.conversation.profileThreadAccess.writeRoles : payload.writeRoles
+      };
+      setProfileChatAccess(savedAccess);
+      setProfileChatAccessDraft(savedAccess);
+      setProfileChatPermissions((prev) => ({
+        ...prev,
+        isOwner: data?.conversation?.permissions?.isOwner ?? true,
+        canRead: data?.conversation?.permissions?.canRead ?? true,
+        canWrite: data?.conversation?.permissions?.canWrite ?? true
+      }));
+    } catch (error) {
+      setProfileChatError(error.response?.data?.error || 'Failed to save chat access settings.');
+    } finally {
+      setProfileChatSavingAccess(false);
+    }
+  }, [profileChatPermissions.isOwner, activeProfile?._id, profileChatAccessDraft]);
 
   const galleryOwnerIdentifier = useMemo(() => {
     // Profile context (/social?user=...) uses target user gallery
@@ -2594,7 +2724,95 @@ const Social = () => {
       case 'chat_panel':
         return (
           <div className="space-y-3">
-            <p className="text-sm text-gray-700">Jump into direct or room conversations without leaving the social experience.</p>
+            <div className="rounded-xl border bg-white/70 p-3 text-xs text-slate-600">
+              <p><span className="font-semibold text-slate-800">Read:</span> {profileChatAccessSummary.read}</p>
+              <p><span className="font-semibold text-slate-800">Write:</span> {profileChatAccessSummary.write}</p>
+            </div>
+            {!isAuthenticated ? (
+              <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-600">
+                Sign in to join this profile chat room.
+              </div>
+            ) : profileChatLoading ? (
+              <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">Loading chat room…</div>
+            ) : profileChatPermissions.canRead ? (
+              <>
+                <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border bg-white p-3">
+                  {profileChatMessages.length === 0 ? (
+                    <p className="text-sm text-slate-500">No messages yet. Start the conversation.</p>
+                  ) : profileChatMessages.map((message) => (
+                    <div key={message._id} className="rounded-lg bg-slate-50 px-3 py-2">
+                      <p className="text-xs font-semibold text-slate-700">@{message?.userId?.username || 'user'}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{message?.content || ''}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  <textarea
+                    value={profileChatInput}
+                    onChange={(event) => setProfileChatInput(event.target.value)}
+                    placeholder={profileChatPermissions.canWrite ? 'Write a message…' : 'You do not have write access'}
+                    disabled={!profileChatPermissions.canWrite || profileChatSending}
+                    rows={3}
+                    className="w-full rounded-xl border px-3 py-2 text-sm disabled:bg-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendProfileChatMessage}
+                    disabled={!profileChatPermissions.canWrite || profileChatSending || !profileChatInput.trim()}
+                    className="w-full rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-60"
+                  >
+                    {profileChatSending ? 'Sending…' : 'Send'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-600">
+                This profile chat room is limited by the owner&apos;s access settings.
+              </div>
+            )}
+            {profileChatPermissions.isOwner ? (
+              <div className="space-y-3 rounded-xl border bg-slate-50 p-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Read access</p>
+                  <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-700">
+                    {PROFILE_CHAT_ROLE_OPTIONS.map((option) => (
+                      <label key={`read-${option.value}`} className="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={profileChatAccessDraft.readRoles.includes(option.value)}
+                          onChange={() => toggleProfileChatRole('readRoles', option.value)}
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Write access</p>
+                  <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-700">
+                    {PROFILE_CHAT_ROLE_OPTIONS.map((option) => (
+                      <label key={`write-${option.value}`} className="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={profileChatAccessDraft.writeRoles.includes(option.value)}
+                          onChange={() => toggleProfileChatRole('writeRoles', option.value)}
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveProfileChatAccess}
+                  disabled={profileChatSavingAccess}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-white disabled:opacity-60"
+                >
+                  {profileChatSavingAccess ? 'Saving access…' : 'Save chat access'}
+                </button>
+              </div>
+            ) : null}
+            {profileChatError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{profileChatError}</div> : null}
             <Link to={socialChatPath} className="inline-flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800">{socialChatLabel}</Link>
           </div>
         );
