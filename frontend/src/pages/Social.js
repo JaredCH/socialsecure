@@ -43,6 +43,7 @@ const FEED_POLL_INTERVAL_MS = 30000;
 const TOP_FRIENDS_LIMIT = 5;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
+const MAX_UPCOMING_CALENDAR_ITEMS = 6;
 const PANEL_WIDTH_UNITS_BY_SIZE = {
   halfCol: 1,
   oneCol: 2,
@@ -282,6 +283,56 @@ const formatCalendarDayKey = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+const createHolidayEntry = (year, monthIndex, day, name, category) => {
+  const date = new Date(year, monthIndex, day);
+  return {
+    id: `${category}-${name}-${formatCalendarDayKey(date)}`,
+    name,
+    category,
+    date,
+    dayKey: formatCalendarDayKey(date),
+  };
+};
+
+const nthWeekdayOfMonth = (year, monthIndex, weekday, occurrence) => {
+  const firstDay = new Date(year, monthIndex, 1);
+  const dayOffset = (weekday - firstDay.getDay() + 7) % 7;
+  return 1 + dayOffset + ((occurrence - 1) * 7);
+};
+
+const lastWeekdayOfMonth = (year, monthIndex, weekday) => {
+  const lastDay = new Date(year, monthIndex + 1, 0);
+  const dayOffset = (lastDay.getDay() - weekday + 7) % 7;
+  return lastDay.getDate() - dayOffset;
+};
+
+const buildHolidayEntriesForYear = (year) => {
+  const international = [
+    createHolidayEntry(year, 0, 1, 'New Year\'s Day', 'international'),
+    createHolidayEntry(year, 2, 8, 'International Women\'s Day', 'international'),
+    createHolidayEntry(year, 3, 22, 'Earth Day', 'international'),
+    createHolidayEntry(year, 4, 1, 'International Workers\' Day', 'international'),
+    createHolidayEntry(year, 9, 24, 'United Nations Day', 'international'),
+    createHolidayEntry(year, 11, 10, 'Human Rights Day', 'international'),
+  ];
+
+  const usFederal = [
+    createHolidayEntry(year, 0, 1, 'US: New Year\'s Day', 'government'),
+    createHolidayEntry(year, 0, nthWeekdayOfMonth(year, 0, 1, 3), 'US: Martin Luther King Jr. Day', 'government'),
+    createHolidayEntry(year, 1, nthWeekdayOfMonth(year, 1, 1, 3), 'US: Presidents\' Day', 'government'),
+    createHolidayEntry(year, 4, lastWeekdayOfMonth(year, 4, 1), 'US: Memorial Day', 'government'),
+    createHolidayEntry(year, 5, 19, 'US: Juneteenth', 'government'),
+    createHolidayEntry(year, 6, 4, 'US: Independence Day', 'government'),
+    createHolidayEntry(year, 8, nthWeekdayOfMonth(year, 8, 1, 1), 'US: Labor Day', 'government'),
+    createHolidayEntry(year, 9, nthWeekdayOfMonth(year, 9, 1, 2), 'US: Columbus Day', 'government'),
+    createHolidayEntry(year, 10, 11, 'US: Veterans Day', 'government'),
+    createHolidayEntry(year, 10, nthWeekdayOfMonth(year, 10, 4, 4), 'US: Thanksgiving Day', 'government'),
+    createHolidayEntry(year, 11, 25, 'US: Christmas Day', 'government'),
+  ];
+
+  return [...international, ...usFederal];
+};
+
 const normalizePost = (post) => {
   const normalizedLikes = Array.isArray(post.likes)
     ? post.likes.map((like) => (typeof like === 'string' ? like : String(like?._id || like)))
@@ -456,6 +507,13 @@ const Social = () => {
   const [calendarPreviewEvents, setCalendarPreviewEvents] = useState([]);
   const [calendarPreviewLoading, setCalendarPreviewLoading] = useState(false);
   const [calendarPreviewError, setCalendarPreviewError] = useState('');
+  const [calendarPreviewOwnerVisibility, setCalendarPreviewOwnerVisibility] = useState('private');
+  const [calendarPreviewShowsOwnerEvents, setCalendarPreviewShowsOwnerEvents] = useState(false);
+  const [calendarPreviewAnchorDate, setCalendarPreviewAnchorDate] = useState(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now;
+  });
   const [partnerActionBusyFriendshipId, setPartnerActionBusyFriendshipId] = useState('');
   const [partnerActionError, setPartnerActionError] = useState('');
   const [composerVisible, setComposerVisible] = useState(false);
@@ -668,12 +726,12 @@ const Social = () => {
       if (!calendarUsername) {
         setCalendarPreviewEvents([]);
         setCalendarPreviewError('');
+        setCalendarPreviewOwnerVisibility('private');
+        setCalendarPreviewShowsOwnerEvents(false);
         return;
       }
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const monthGrid = buildCalendarPreviewMonthGrid(today);
+      const monthGrid = buildCalendarPreviewMonthGrid(calendarPreviewAnchorDate);
       const rangeStart = monthGrid[0];
       const rangeEnd = new Date(monthGrid[monthGrid.length - 1]);
       rangeEnd.setDate(rangeEnd.getDate() + 1);
@@ -682,14 +740,32 @@ const Social = () => {
       setCalendarPreviewError('');
       try {
         const params = { from: rangeStart.toISOString(), to: rangeEnd.toISOString() };
-        const response = isOwnSocialContext && isAuthenticated
-          ? await calendarAPI.getMyEvents(params)
-          : await calendarAPI.getUserCalendarEvents(calendarUsername, params);
+        let response = null;
+
+        if (isOwnSocialContext && isAuthenticated) {
+          setCalendarPreviewOwnerVisibility('private');
+          setCalendarPreviewShowsOwnerEvents(true);
+          response = await calendarAPI.getMyEvents(params);
+        } else {
+          const { data: calendarMeta } = await calendarAPI.getUserCalendar(calendarUsername);
+          const ownerGuestVisibility = calendarMeta?.calendar?.guestVisibility || 'private';
+          const viewerIsOwner = Boolean(calendarMeta?.isOwner);
+          setCalendarPreviewOwnerVisibility(ownerGuestVisibility);
+          setCalendarPreviewShowsOwnerEvents(viewerIsOwner || ownerGuestVisibility !== 'private');
+          response = await calendarAPI.getUserCalendarEvents(calendarUsername, params);
+        }
+
         const nextEvents = Array.isArray(response.data?.events) ? response.data.events : [];
         setCalendarPreviewEvents(nextEvents);
       } catch (error) {
         setCalendarPreviewEvents([]);
-        setCalendarPreviewError(error.response?.data?.error || 'Unable to load calendar preview.');
+        setCalendarPreviewShowsOwnerEvents(false);
+        const statusCode = Number(error?.response?.status || 0);
+        if (statusCode === 403) {
+          setCalendarPreviewError('This owner has hidden calendar events for your current access level.');
+        } else {
+          setCalendarPreviewError(error.response?.data?.error || 'Unable to load calendar preview.');
+        }
       } finally {
         setCalendarPreviewLoading(false);
       }
@@ -703,7 +779,8 @@ const Social = () => {
     isAuthenticated,
     currentUser?.username,
     activeProfile?.username,
-    requestedProfileIdentifier
+    requestedProfileIdentifier,
+    calendarPreviewAnchorDate
   ]);
 
   const handleSendProfileChatMessage = useCallback(async () => {
@@ -3071,15 +3148,26 @@ const Social = () => {
   const availablePartnerCandidates = friends.filter((friend) => friend.partnerStatus === 'none');
   const liveTypingCount = Object.values(commentTypingByPostId).reduce((total, entry) => total + Object.keys(entry || {}).length, 0);
   const calendarCountdowns = posts.filter((post) => post?.interaction?.type === 'countdown').slice(0, 5);
-  const calendarPreviewAnchorDate = useMemo(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now;
-  }, []);
   const calendarPreviewMonthDays = useMemo(
     () => buildCalendarPreviewMonthGrid(calendarPreviewAnchorDate),
     [calendarPreviewAnchorDate]
   );
+  const calendarPreviewYears = useMemo(
+    () => Array.from(new Set(calendarPreviewMonthDays.map((day) => day.getFullYear()))),
+    [calendarPreviewMonthDays]
+  );
+  const calendarPreviewHolidays = useMemo(
+    () => calendarPreviewYears.flatMap((year) => buildHolidayEntriesForYear(year)),
+    [calendarPreviewYears]
+  );
+  const calendarPreviewHolidaysByDay = useMemo(() => {
+    const holidaysByDay = new Map();
+    calendarPreviewHolidays.forEach((holiday) => {
+      const list = holidaysByDay.get(holiday.dayKey) || [];
+      holidaysByDay.set(holiday.dayKey, [...list, holiday]);
+    });
+    return holidaysByDay;
+  }, [calendarPreviewHolidays]);
   const calendarPreviewEventCountByDay = useMemo(() => {
     const counts = new Map();
     calendarPreviewEvents.forEach((event) => {
@@ -3100,6 +3188,39 @@ const Social = () => {
     });
     return counts;
   }, [calendarPreviewEvents]);
+  const upcomingCalendarItems = useMemo(() => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const upcomingEvents = calendarPreviewEvents
+      .map((event) => {
+        const startAt = new Date(event?.startAt);
+        if (Number.isNaN(startAt.getTime())) return null;
+        return {
+          id: `event-${event._id || startAt.toISOString()}`,
+          title: event.title || 'Untitled event',
+          date: startAt,
+          type: 'event'
+        };
+      })
+      .filter((entry) => entry && entry.date >= startOfToday);
+
+    const upcomingHolidays = calendarPreviewHolidays
+      .filter((holiday) => holiday.date >= startOfToday)
+      .map((holiday) => ({
+        id: holiday.id,
+        title: holiday.name,
+        date: holiday.date,
+        type: holiday.category
+      }));
+
+    return [...upcomingEvents, ...upcomingHolidays]
+      .sort((left, right) => left.date - right.date)
+      .slice(0, MAX_UPCOMING_CALENDAR_ITEMS);
+  }, [calendarPreviewEvents, calendarPreviewHolidays]);
+  const navigateCalendarPreviewMonth = useCallback((monthOffset) => {
+    setCalendarPreviewAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + monthOffset, 1));
+  }, []);
 
   const renderGlassPanel = (title, body, options = {}) => (
     <section
@@ -3243,11 +3364,36 @@ const Social = () => {
             </div>
             <div className="rounded-2xl bg-white/55 p-3">
               <div className="mb-3 flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-slate-900">
-                  {calendarPreviewAnchorDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                </p>
-                {calendarPreviewLoading ? <span className="text-xs text-slate-500">Loading…</span> : null}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigateCalendarPreviewMonth(-1)}
+                    className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
+                    aria-label="Previous month"
+                  >
+                    ←
+                  </button>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {calendarPreviewAnchorDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigateCalendarPreviewMonth(1)}
+                    className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
+                    aria-label="Next month"
+                  >
+                    →
+                  </button>
+                </div>
+                <span role="status" aria-live="polite" className="text-xs text-slate-500">
+                  {calendarPreviewLoading ? 'Loading…' : 'Live'}
+                </span>
               </div>
+              {!isOwnSocialContext && !calendarPreviewShowsOwnerEvents ? (
+                <div className="mb-3 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">
+                  Owner setting: {calendarPreviewOwnerVisibility === 'friends_readonly' ? 'Friends only' : 'Private'}.
+                </div>
+              ) : null}
               {calendarPreviewError ? (
                 <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{calendarPreviewError}</div>
               ) : null}
@@ -3262,15 +3408,21 @@ const Social = () => {
                     const inMonth = day.getMonth() === calendarPreviewAnchorDate.getMonth();
                     const dayKey = formatCalendarDayKey(day);
                     const eventCount = calendarPreviewEventCountByDay.get(dayKey) || 0;
+                    const holidays = calendarPreviewHolidaysByDay.get(dayKey) || [];
                     return (
                       <div
                         key={dayKey}
                         className={`rounded-lg border px-1 py-1 text-center text-xs ${inMonth ? 'border-slate-200 bg-white/80 text-slate-800' : 'border-slate-100 bg-white/40 text-slate-400'}`}
+                        title={holidays.map((holiday) => holiday.name).join(', ')}
                       >
                         <p>{day.getDate()}</p>
                         {eventCount > 0 ? (
                           <p className="mt-0.5 text-[10px] font-semibold" style={{ color: accentColor }}>
                             {eventCount}
+                          </p>
+                        ) : holidays.length > 0 ? (
+                          <p className="mt-0.5 text-[10px] font-semibold text-rose-600">
+                            ★
                           </p>
                         ) : (
                           <span className="mt-0.5 block h-[12px]" aria-hidden="true" />
@@ -3279,6 +3431,23 @@ const Social = () => {
                     );
                   })}
                 </div>
+              </div>
+              <div className="mt-3 space-y-2 rounded-xl bg-white/70 px-3 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Upcoming</p>
+                {upcomingCalendarItems.length === 0 ? (
+                  <p className="text-xs text-slate-500">No upcoming events or holidays in this window.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {upcomingCalendarItems.map((item) => (
+                      <li key={item.id} className="flex items-center justify-between gap-2 text-xs text-slate-700">
+                        <span className="truncate">{item.title}</span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 ${item.type === 'event' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {item.type === 'event' ? 'Event' : 'Holiday'} • {item.date.toLocaleDateString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
             {calendarCountdowns.length === 0 ? (
