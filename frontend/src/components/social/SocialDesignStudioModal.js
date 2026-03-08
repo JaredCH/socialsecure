@@ -20,6 +20,58 @@ import { SocialHeroPreview } from './SocialHero';
 
 const GRID_COLUMNS = 12;
 const GRID_ROWS = 20;
+const PANEL_WIDTH_OPTIONS = [
+  { token: 'halfCol', units: 1 },
+  { token: 'oneCol', units: 2 },
+  { token: 'twoCols', units: 4 },
+  { token: 'threeCols', units: 6 },
+  { token: 'fourCols', units: 8 }
+];
+const PANEL_HEIGHT_OPTIONS = [
+  { token: 'halfRow', units: 1 },
+  { token: 'fullRow', units: 2 },
+  { token: 'twoRows', units: 4 },
+  { token: 'threeRows', units: 6 },
+  { token: 'fourRows', units: 8 }
+];
+const RESIZE_HANDLES = [
+  { id: 'n', className: 'left-1/2 top-0 h-3 w-8 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize' },
+  { id: 'e', className: 'right-0 top-1/2 h-8 w-3 translate-x-1/2 -translate-y-1/2 cursor-ew-resize' },
+  { id: 's', className: 'bottom-0 left-1/2 h-3 w-8 -translate-x-1/2 translate-y-1/2 cursor-ns-resize' },
+  { id: 'w', className: 'left-0 top-1/2 h-8 w-3 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize' },
+  { id: 'ne', className: 'right-0 top-0 h-3.5 w-3.5 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize' },
+  { id: 'se', className: 'bottom-0 right-0 h-3.5 w-3.5 translate-x-1/2 translate-y-1/2 cursor-nwse-resize' },
+  { id: 'sw', className: 'bottom-0 left-0 h-3.5 w-3.5 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize' },
+  { id: 'nw', className: 'left-0 top-0 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize' }
+];
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const getWidthOptionsForArea = (area) => {
+  if (area === 'sideLeft' || area === 'sideRight') {
+    return [{ token: 'oneCol', units: 2 }];
+  }
+  return PANEL_WIDTH_OPTIONS;
+};
+
+const getHeightOptionsForArea = (area) => {
+  if (area === 'top') {
+    return [{ token: 'fullRow', units: 2 }];
+  }
+  if (area === 'sideLeft' || area === 'sideRight') {
+    return PANEL_HEIGHT_OPTIONS.filter((option) => option.token !== 'threeRows');
+  }
+  return PANEL_HEIGHT_OPTIONS;
+};
+
+const snapUnitsToOptions = (rawUnits, options) => {
+  const safeUnits = Math.max(1, rawUnits);
+  return options.reduce((best, option) => (
+    Math.abs(option.units - safeUnits) < Math.abs(best.units - safeUnits)
+      ? option
+      : best
+  ), options[0]);
+};
 
 const getPanelWidthUnits = (panel = {}) => {
   if (panel.area === 'sideLeft' || panel.area === 'sideRight') return 2;
@@ -133,6 +185,41 @@ const SocialDesignStudioModal = ({
 
   const selectedPanel = activePanelId ? previewPanels.find((panel) => panel.id === activePanelId) : null;
 
+  const buildPanelRect = (panel) => ({
+    col: Number(panel?.gridPlacement?.col) || 0,
+    row: Number(panel?.gridPlacement?.row) || 0,
+    width: getPanelWidthUnits(panel),
+    height: getPanelHeightUnits(panel)
+  });
+
+  const buildSnappedLayoutPatch = (panel, rect) => {
+    const widthOption = snapUnitsToOptions(rect.width, getWidthOptionsForArea(panel.area));
+    const heightOption = snapUnitsToOptions(rect.height, getHeightOptionsForArea(panel.area));
+    const snappedWidth = widthOption.units;
+    const snappedHeight = heightOption.units;
+    const nextCol = clamp(rect.col, 0, GRID_COLUMNS - snappedWidth);
+    const nextRow = clamp(rect.row, 0, GRID_ROWS - snappedHeight);
+
+    return {
+      size: widthOption.token || panel.size,
+      height: heightOption.token || panel.height,
+      gridPlacement: {
+        row: nextRow,
+        col: nextCol
+      }
+    };
+  };
+
+  const getResizeHandlesForPanel = (panel) => {
+    if (panel.area === 'sideLeft' || panel.area === 'sideRight') {
+      return RESIZE_HANDLES.filter((handle) => ['n', 's'].includes(handle.id));
+    }
+    if (panel.area === 'top') {
+      return RESIZE_HANDLES.filter((handle) => ['e', 'w'].includes(handle.id));
+    }
+    return RESIZE_HANDLES;
+  };
+
   const updateLayoutPatch = (panelId, patch) => {
     const panel = normalized.effective.panels[panelId];
     if (!panel) return;
@@ -199,6 +286,63 @@ const SocialDesignStudioModal = ({
             gridPlacement: { row: nextRow, col: nextCol }
           }
         }));
+        return;
+      }
+
+      if (pointerAction.type === 'resize') {
+        const { handle, originRect } = pointerAction;
+        const originRight = originRect.col + originRect.width;
+        const originBottom = originRect.row + originRect.height;
+        let nextCol = originRect.col;
+        let nextRow = originRect.row;
+        let nextWidth = originRect.width;
+        let nextHeight = originRect.height;
+
+        if (handle.includes('e')) {
+          nextWidth = clamp(cell.col - originRect.col + 1, 1, GRID_COLUMNS - originRect.col);
+        }
+
+        if (handle.includes('s')) {
+          nextHeight = clamp(cell.row - originRect.row + 1, 1, GRID_ROWS - originRect.row);
+        }
+
+        if (handle.includes('w')) {
+          nextCol = clamp(cell.col, 0, originRight - 1);
+          nextWidth = originRight - nextCol;
+        }
+
+        if (handle.includes('n')) {
+          nextRow = clamp(cell.row, 0, originBottom - 1);
+          nextHeight = originBottom - nextRow;
+        }
+
+        const snappedPatch = buildSnappedLayoutPatch(panel, {
+          col: nextCol,
+          row: nextRow,
+          width: nextWidth,
+          height: nextHeight
+        });
+        const candidatePanel = {
+          ...panel,
+          size: snappedPatch.size,
+          height: snappedPatch.height,
+          gridPlacement: snappedPatch.gridPlacement
+        };
+        const nextFootprint = getPlacementFootprint(
+          candidatePanel,
+          snappedPatch.gridPlacement.row,
+          snappedPatch.gridPlacement.col,
+          panel.id
+        );
+        if (!nextFootprint.valid) return;
+
+        setLayoutDraftById((prev) => ({
+          ...prev,
+          [panel.id]: {
+            ...(prev[panel.id] || {}),
+            ...snappedPatch
+          }
+        }));
       }
     };
 
@@ -237,25 +381,29 @@ const SocialDesignStudioModal = ({
 
   const handlePanelClick = (panelId) => {
     setActivePanelId(panelId);
+  };
+
+  const handlePanelEditOpen = (panelId) => {
+    setActivePanelId(panelId);
     setEditingPanelId(panelId);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
-      <div className="flex h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-4 pb-6 pt-20 backdrop-blur-sm sm:pt-24">
+      <div className="relative flex h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-[2rem] border border-blue-100 bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-4 text-white">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-blue-100 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-6 py-4 text-white shadow-sm">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-100">Design Studio</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-blue-100">Design Studio</p>
             <h2 className="text-2xl font-semibold">Social Page Customization</h2>
           </div>
           <div className="flex items-center gap-2">
             {hasUnsavedChanges ? <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">Draft</span> : null}
-            <button type="button" onClick={onCancelChanges} className="rounded-full border border-white/20 px-4 py-2 text-sm hover:bg-white/10">Cancel</button>
-            <button type="button" disabled={busy || !hasUnsavedChanges} onClick={onSaveChanges} className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-slate-100">Save</button>
-            <button type="button" onClick={onClose} className="rounded-full border border-white/20 px-4 py-2 text-sm hover:bg-white/10">Close</button>
+            <button type="button" onClick={onCancelChanges} className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-medium hover:bg-white/20">Cancel</button>
+            <button type="button" disabled={busy || !hasUnsavedChanges} onClick={onSaveChanges} className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-blue-50">Save</button>
+            <button type="button" onClick={onClose} className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-medium hover:bg-white/20">Close</button>
           </div>
         </div>
 
@@ -266,7 +414,7 @@ const SocialDesignStudioModal = ({
               <button
                 key={mode}
                 onClick={() => onLayoutModeChange(mode)}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold capitalize ${layoutMode === mode ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold capitalize ${layoutMode === mode ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-blue-50'}`}
               >
                 {mode} View
               </button>
@@ -456,7 +604,7 @@ const SocialDesignStudioModal = ({
               <div className="flex-1 overflow-auto bg-slate-100 p-6">
                 <div className="mb-4 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-slate-900">Live Preview</h3>
-                  <p className="text-xs text-slate-500">Click panels to edit</p>
+                  <p className="text-xs text-slate-500">Drag panels to move, use handles to resize, or click ✎ to edit</p>
                 </div>
                 
                 <div 
@@ -492,6 +640,7 @@ const SocialDesignStudioModal = ({
                         onClick={() => handlePanelClick(panel.id)}
                         onPointerDown={(event) => {
                           if (event.button !== 0) return;
+                          if (event.target.closest('[data-panel-control="true"]')) return;
                           const cell = getCellFromClientPoint(event.clientX, event.clientY);
                           if (!cell) return;
                           event.preventDefault();
@@ -503,7 +652,7 @@ const SocialDesignStudioModal = ({
                             offsetCol: Math.max(0, Math.min(cell.col - panel.gridPlacement.col, width - 1))
                           });
                         }}
-                        className={`absolute cursor-grab rounded-md border-2 p-1 text-[8px] font-bold shadow-sm transition-all ${isSelected ? 'ring-2 ring-blue-500 z-10' : 'border-black/10 hover:border-blue-300'}`}
+                        className={`absolute cursor-grab rounded-md border-2 p-1 text-[8px] font-bold shadow-sm transition-all ${isSelected ? 'z-10 ring-2 ring-blue-500' : 'border-black/10 hover:border-blue-300'}`}
                         style={{
                           left: `${(panel.gridPlacement.col / GRID_COLUMNS) * 100}%`,
                           top: `${(panel.gridPlacement.row / GRID_ROWS) * 100}%`,
@@ -517,7 +666,45 @@ const SocialDesignStudioModal = ({
                             : 'none'
                         }}
                       >
+                        <button
+                          type="button"
+                          data-panel-control="true"
+                          aria-label={`Edit ${SOCIAL_PANEL_LABELS[panel.id] || panel.id}`}
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            handlePanelEditOpen(panel.id);
+                          }}
+                          className="absolute right-1 top-1 z-20 flex h-5 w-5 items-center justify-center rounded-full border border-blue-200 bg-white text-[10px] font-bold text-blue-700 shadow-sm hover:bg-blue-50"
+                        >
+                          ✎
+                        </button>
                         <span className="line-clamp-2 text-center">{SOCIAL_PANEL_LABELS[panel.id] || panel.id}</span>
+                        {isSelected ? getResizeHandlesForPanel(panel).map((handle) => (
+                          <button
+                            key={handle.id}
+                            type="button"
+                            data-panel-control="true"
+                            aria-label={`Resize ${SOCIAL_PANEL_LABELS[panel.id] || panel.id} from ${handle.id}`}
+                            onPointerDown={(event) => {
+                              if (event.button !== 0) return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setActivePanelId(panel.id);
+                              setPointerAction({
+                                type: 'resize',
+                                panelId: panel.id,
+                                handle: handle.id,
+                                originRect: buildPanelRect(panel)
+                              });
+                            }}
+                            className={`absolute z-20 rounded-full border border-blue-200 bg-white shadow ${handle.className}`}
+                          />
+                        )) : null}
                       </div>
                     );
                   })}
@@ -607,13 +794,22 @@ const SocialDesignStudioModal = ({
                   <h3 className="mb-3 text-lg font-semibold text-slate-900">Panels</h3>
                   <div className="space-y-2">
                     {previewPanels.map((panel) => (
-                      <button
-                        key={panel.id}
-                        onClick={() => handlePanelClick(panel.id)}
-                        className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${activePanelId === panel.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`}
-                      >
-                        <span className="font-semibold">{SOCIAL_PANEL_LABELS[panel.id] || panel.id}</span>
-                      </button>
+                      <div key={panel.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${activePanelId === panel.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white'}`}>
+                        <button
+                          type="button"
+                          onClick={() => handlePanelClick(panel.id)}
+                          className="flex-1 text-left"
+                        >
+                          <span className="font-semibold text-slate-800">{SOCIAL_PANEL_LABELS[panel.id] || panel.id}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePanelEditOpen(panel.id)}
+                          className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                        >
+                          Edit
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </section>
