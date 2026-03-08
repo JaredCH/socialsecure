@@ -24,7 +24,8 @@ jest.mock('../utils/api', () => ({
     getProfileThread: jest.fn()
   },
   friendsAPI: {
-    sendRequest: jest.fn()
+    sendRequest: jest.fn(),
+    getFriends: jest.fn()
   },
   moderationAPI: {
     blockUser: jest.fn()
@@ -66,6 +67,7 @@ describe('Chat zip room indicator', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    document.cookie = 'socialsecure_dm_unlock_v1=; Max-Age=0; Path=/';
     chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
     chatAPI.getConversationUsers.mockResolvedValue({ data: { users: [] } });
     chatAPI.getConversationDevices.mockResolvedValue({ data: { devices: [] } });
@@ -136,6 +138,7 @@ describe('Chat zip room indicator', () => {
       algorithms: { encryption: 'AES-256-GCM', wrapping: 'PBKDF2', signing: 'ECDSA', hash: 'SHA-256' }
     });
     friendsAPI.sendRequest.mockResolvedValue({ data: { success: true } });
+    friendsAPI.getFriends.mockResolvedValue({ data: { friends: [] } });
     moderationAPI.blockUser.mockResolvedValue({ data: { success: true } });
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -154,6 +157,7 @@ describe('Chat zip room indicator', () => {
     container = null;
     root = null;
     localStorage.clear();
+    document.cookie = 'socialsecure_dm_unlock_v1=; Max-Age=0; Path=/';
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
@@ -698,6 +702,56 @@ describe('Chat zip room indicator', () => {
     expect(window.location.search).toBe('');
   });
 
+  it('shows every friend in the direct message section and starts a DM from friend list', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    friendsAPI.getFriends.mockResolvedValue({
+      data: {
+        friends: [
+          { _id: 'u2', username: 'buddy' },
+          { _id: 'u3', username: 'pal' }
+        ]
+      }
+    });
+    chatAPI.startDM.mockResolvedValue({
+      data: {
+        conversation: {
+          _id: 'dm-u2',
+          type: 'dm',
+          peer: { _id: 'u2', username: 'buddy' }
+        }
+      }
+    });
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(container.textContent).toContain('@buddy');
+    expect(container.textContent).toContain('@pal');
+    const friendMessageButtons = Array.from(container.querySelectorAll('button')).filter((button) => button.textContent === 'Message');
+    expect(friendMessageButtons.length).toBeGreaterThan(0);
+    await act(async () => {
+      friendMessageButtons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    expect(chatAPI.startDM).toHaveBeenCalledWith('u2');
+  });
+
   it('opens a profile thread when loaded with a social profile deep link target', async () => {
     window.history.replaceState({}, '', '/chat?profile=u2');
 
@@ -727,6 +781,52 @@ describe('Chat zip room indicator', () => {
     expect(chatAPI.getProfileThread).toHaveBeenCalledWith('u2');
     expect(window.location.pathname).toBe('/chat');
     expect(window.location.search).toBe('');
+  });
+
+  it('locks direct messages by default and unlocks after password prompt', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const composer = container.querySelector('textarea');
+    expect(composer.disabled).toBe(true);
+
+    const unlockDmButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock DM');
+    expect(unlockDmButton).not.toBeUndefined();
+    await act(async () => {
+      unlockDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
+    await act(async () => {
+      setInputValue(passwordInput, 'secret-password');
+      await flush();
+    });
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    await act(async () => {
+      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Lock DM')).not.toBeUndefined();
+    expect(container.querySelector('textarea').disabled).toBe(false);
   });
 
   it('uses DM E2EE endpoint for direct message sends', async () => {
@@ -759,17 +859,10 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    const composer = container.querySelector('textarea[placeholder="Type your message"]');
+    const unlockDmButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock DM');
+    expect(unlockDmButton).not.toBeUndefined();
     await act(async () => {
-      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-      valueSetter.call(composer, 'hello dm');
-      composer.dispatchEvent(new Event('input', { bubbles: true }));
-      await flush();
-    });
-
-    const sendButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Send');
-    await act(async () => {
-      sendButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      unlockDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
     const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
@@ -781,6 +874,20 @@ describe('Chat zip room indicator', () => {
     const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
     await act(async () => {
       unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const composer = container.querySelector('textarea[placeholder="Type your message"]');
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      valueSetter.call(composer, 'hello dm');
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      await flush();
+    });
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Send');
+    await act(async () => {
+      sendButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 
@@ -813,10 +920,9 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    const goOfflineButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Go Offline');
-    expect(goOfflineButton).not.toBeUndefined();
+    const unlockDmButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock DM');
     await act(async () => {
-      goOfflineButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      unlockDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
     const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
@@ -828,6 +934,13 @@ describe('Chat zip room indicator', () => {
     const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
     await act(async () => {
       unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const goOfflineButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Go Offline');
+    expect(goOfflineButton).not.toBeUndefined();
+    await act(async () => {
+      goOfflineButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 

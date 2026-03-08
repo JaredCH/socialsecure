@@ -135,6 +135,64 @@ const DEFAULT_CHAT_NAME_COLOR = '#2563eb';
 const LONG_PRESS_DELAY_MS = 550;
 const USER_MENU_WIDTH_PX = 240;
 const USER_MENU_HEIGHT_PX = 220;
+const DM_UNLOCK_COOKIE_NAME = 'socialsecure_dm_unlock_v1';
+const DM_UNLOCK_CACHE_SECONDS = 30 * 60;
+const LOCKED_DM_PLACEHOLDER = '🔒 Conversation locked. Unlock to view encrypted messages.';
+
+const readCookie = (name) => {
+  const source = typeof document?.cookie === 'string' ? document.cookie : '';
+  const prefix = `${name}=`;
+  const entry = source.split(';').find((part) => part.trim().startsWith(prefix));
+  if (!entry) return '';
+  try {
+    return decodeURIComponent(entry.trim().slice(prefix.length));
+  } catch {
+    return '';
+  }
+};
+
+const writeCookie = (name, value, maxAgeSeconds) => {
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${Math.max(0, Number(maxAgeSeconds) || 0)}; SameSite=Strict${secure}`;
+};
+
+const clearCookie = (name) => {
+  writeCookie(name, '', 0);
+};
+
+const readDmUnlockCache = () => {
+  try {
+    const parsed = JSON.parse(readCookie(DM_UNLOCK_COOKIE_NAME) || '{}');
+    const expiresAt = Number(parsed?.expiresAt || 0);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      return { expiresAt: 0, conversationIds: [] };
+    }
+    const conversationIds = Array.isArray(parsed?.conversationIds)
+      ? parsed.conversationIds.map((id) => String(id || '').trim()).filter(Boolean)
+      : [];
+    return { expiresAt, conversationIds };
+  } catch {
+    return { expiresAt: 0, conversationIds: [] };
+  }
+};
+
+const writeDmUnlockCache = (conversationIds) => {
+  const uniqueIds = Array.from(new Set(
+    (Array.isArray(conversationIds) ? conversationIds : [])
+      .map((id) => String(id || '').trim())
+      .filter(Boolean)
+  ));
+  if (uniqueIds.length === 0) {
+    clearCookie(DM_UNLOCK_COOKIE_NAME);
+    return;
+  }
+  const expiresAt = Date.now() + (DM_UNLOCK_CACHE_SECONDS * 1000);
+  writeCookie(
+    DM_UNLOCK_COOKIE_NAME,
+    JSON.stringify({ expiresAt, conversationIds: uniqueIds }),
+    DM_UNLOCK_CACHE_SECONDS
+  );
+};
 
 function Chat() {
   const [profile, setProfile] = useState(null);
@@ -183,6 +241,23 @@ function Chat() {
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [dmOfflineState, setDmOfflineState] = useState('online');
+  const [dmUnlockedByConversation, setDmUnlockedByConversation] = useState({});
+  const [rememberDmUnlock, setRememberDmUnlock] = useState(() => {
+    try {
+      return localStorage.getItem('chatRememberDmUnlock') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [strictDmLockMode, setStrictDmLockMode] = useState(() => {
+    try {
+      return localStorage.getItem('chatStrictDmLockMode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [dmFriends, setDmFriends] = useState([]);
+  const [dmFriendsLoading, setDmFriendsLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(() => navigator.onLine !== false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -258,6 +333,64 @@ function Chat() {
     setDmOfflineState('online');
   }, [activeConversationId, activeConversation?.type]);
 
+  useEffect(() => {
+    if (!profile?._id) return;
+    let cancelled = false;
+    setDmFriendsLoading(true);
+    friendsAPI.getFriends()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setDmFriends(Array.isArray(data?.friends) ? data.friends : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDmFriends([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDmFriendsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?._id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('chatRememberDmUnlock', rememberDmUnlock ? 'true' : 'false');
+    } catch {
+      // ignore localStorage errors
+    }
+    if (!rememberDmUnlock) {
+      clearCookie(DM_UNLOCK_COOKIE_NAME);
+    }
+  }, [rememberDmUnlock]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('chatStrictDmLockMode', strictDmLockMode ? 'true' : 'false');
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [strictDmLockMode]);
+
+  useEffect(() => {
+    if (!activeConversationId || activeConversation?.type !== 'dm') return;
+    const conversationId = String(activeConversationId);
+    const cache = readDmUnlockCache();
+    if (!cache.conversationIds.includes(conversationId)) return;
+    setDmUnlockedByConversation((prev) => ({
+      ...prev,
+      [conversationId]: true
+    }));
+  }, [activeConversation?.type, activeConversationId]);
+
+  useEffect(() => {
+    if (!strictDmLockMode) return;
+    clearCookie(DM_UNLOCK_COOKIE_NAME);
+    setDmUnlockedByConversation({});
+    setDecryptedDmContentById({});
+    e2eeSessionRef.current = null;
+  }, [strictDmLockMode]);
+
   const allRooms = useMemo(() => {
     const withSearchLabel = (room, channel) => {
       const label = getConversationLabel(room);
@@ -289,6 +422,12 @@ function Chat() {
 
   const renderedMessages = useMemo(() => {
     if (activeConversation?.type !== 'dm') return messages;
+    if (!dmUnlockedByConversation[String(activeConversationId || '')]) {
+      return messages.map((message) => ({
+        ...message,
+        content: LOCKED_DM_PLACEHOLDER
+      }));
+    }
     return messages.map((message) => {
       const decrypted = decryptedDmContentById[String(message._id)];
       if (!decrypted) return message;
@@ -297,7 +436,7 @@ function Chat() {
         content: decrypted
       };
     });
-  }, [activeConversation?.type, decryptedDmContentById, messages]);
+  }, [activeConversation?.type, activeConversationId, decryptedDmContentById, dmUnlockedByConversation, messages]);
 
   const sharedMediaSnippets = useMemo(
     () => renderedMessages.filter((message) => /\[[^\]]+\]|https?:\/\//i.test(message.content || '')).slice(-6),
@@ -471,6 +610,19 @@ function Chat() {
     resolver.reject(new Error('Encryption password is required'));
   }, []);
 
+  const persistDmUnlockCache = useCallback((conversationId, shouldCache) => {
+    const normalizedId = String(conversationId || '').trim();
+    if (!normalizedId) return;
+    const existing = readDmUnlockCache();
+    const nextSet = new Set(existing.conversationIds);
+    if (shouldCache) {
+      nextSet.add(normalizedId);
+    } else {
+      nextSet.delete(normalizedId);
+    }
+    writeDmUnlockCache([...nextSet]);
+  }, []);
+
   const hydrateConversationKeys = useCallback(async ({ conversationId, session }) => {
     const { data } = await chatAPI.syncConversationKeyPackages(conversationId, session.deviceId);
     const packages = Array.isArray(data?.packages) ? data.packages : [];
@@ -579,6 +731,53 @@ function Chat() {
       toast.error(error.response?.data?.error || 'Failed to start DM');
     }
   }, [refreshHub]);
+
+  const handleUnlockActiveDM = useCallback(async () => {
+    if (!activeConversationId || activeConversation?.type !== 'dm') return;
+    try {
+      const session = await ensureE2EESession();
+      await hydrateConversationKeys({ conversationId: activeConversationId, session });
+      setDmUnlockedByConversation((prev) => ({
+        ...prev,
+        [String(activeConversationId)]: true
+      }));
+      if (rememberDmUnlock && !strictDmLockMode) {
+        persistDmUnlockCache(activeConversationId, true);
+      }
+      toast.success('Direct message unlocked.');
+    } catch (error) {
+      toast.error(error.response?.data?.error || error.message || 'Failed to unlock direct message');
+    }
+  }, [
+    activeConversation?.type,
+    activeConversationId,
+    ensureE2EESession,
+    hydrateConversationKeys,
+    persistDmUnlockCache,
+    rememberDmUnlock,
+    strictDmLockMode
+  ]);
+
+  const handleLockActiveDM = useCallback(() => {
+    if (!activeConversationId || activeConversation?.type !== 'dm') return;
+    setDmUnlockedByConversation((prev) => ({
+      ...prev,
+      [String(activeConversationId)]: false
+    }));
+    setDecryptedDmContentById({});
+    setDmOfflineState('online');
+    persistDmUnlockCache(activeConversationId, false);
+    e2eeSessionRef.current = null;
+    toast.success('Direct message locked.');
+  }, [activeConversation?.type, activeConversationId, persistDmUnlockCache]);
+
+  const handleClearDmUnlockCache = useCallback(() => {
+    clearCookie(DM_UNLOCK_COOKIE_NAME);
+    setDmUnlockedByConversation({});
+    setDecryptedDmContentById({});
+    e2eeSessionRef.current = null;
+    toast.success('Saved DM unlock access reset.');
+  }, []);
 
   const handleGoOffline = useCallback(async () => {
     if (!activeConversationId || activeConversation?.type !== 'dm') {
@@ -922,6 +1121,34 @@ function Chat() {
             </div>
 
             <div className="space-y-2 border-t pt-3">
+              {activeChannel === 'dm' ? (
+                <>
+                  <p className="text-xs font-semibold">Friends ({dmFriends.length})</p>
+                  {dmFriendsLoading ? (
+                    <p className="text-xs opacity-80">Loading friends...</p>
+                  ) : dmFriends.length === 0 ? (
+                    <p className="text-xs opacity-80">No friends found yet.</p>
+                  ) : (
+                    <ul className={`max-h-40 overflow-auto border rounded divide-y text-xs ${activeTheme.panelGlass}`}>
+                      {dmFriends.map((friend) => (
+                        <li key={String(friend._id)} className="p-2 flex justify-between items-center gap-2">
+                          <span>@{friend.username || friend.realName || 'friend'}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleStartDM(friend._id)}
+                            className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
+                          >
+                            Message
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : null}
+            </div>
+
+            <div className="space-y-2 border-t pt-3">
               <p className="text-xs font-semibold">Rooms in this channel</p>
               {conversationList.length === 0 ? (
                 <p className="text-xs opacity-80">No rooms available in this channel yet.</p>
@@ -1061,8 +1288,18 @@ function Chat() {
                   <div className="inline-flex items-center gap-1">
                     <button
                       type="button"
+                      onClick={dmUnlockedByConversation[String(activeConversationId)] ? handleLockActiveDM : handleUnlockActiveDM}
+                      className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle}`}
+                    >
+                      {dmUnlockedByConversation[String(activeConversationId)] ? 'Lock DM' : 'Unlock DM'}
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleGoOffline}
-                      disabled={dmOfflineState === 'downloading_encrypted' || dmOfflineState !== 'online'}
+                      disabled={
+                        !dmUnlockedByConversation[String(activeConversationId)]
+                        || dmOfflineState !== 'online'
+                      }
                       className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
                     >
                       {dmOfflineState === 'downloading_encrypted' ? 'Downloading…' : 'Go Offline'}
@@ -1070,7 +1307,7 @@ function Chat() {
                     <button
                       type="button"
                       onClick={handleDecryptOfflineMessages}
-                      disabled={isOnline || dmOfflineState !== 'ready_offline'}
+                      disabled={!dmUnlockedByConversation[String(activeConversationId)] || isOnline || dmOfflineState !== 'ready_offline'}
                       className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
                     >
                       Decrypt Offline Messages
@@ -1118,7 +1355,13 @@ function Chat() {
                 composerValue={composerValue}
                 setComposerValue={setComposerValue}
                 onSubmit={handleSend}
-                disabled={!activeConversationId || (activeConversation?.type === 'dm' && dmOfflineState !== 'online')}
+                disabled={
+                  !activeConversationId
+                  || (activeConversation?.type === 'dm' && (
+                    !dmUnlockedByConversation[String(activeConversationId)]
+                    || dmOfflineState !== 'online'
+                  ))
+                }
                 sending={sending}
                 theme={activeTheme}
                 onComposerError={(message) => toast.error(message)}
@@ -1202,6 +1445,35 @@ function Chat() {
                 </ul>
               )}
             </section>
+            {activeConversation?.type === 'dm' ? (
+              <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                <h4 className="text-sm font-semibold">DM Security</h4>
+                <label className="mt-2 flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={rememberDmUnlock}
+                    onChange={(event) => setRememberDmUnlock(event.target.checked)}
+                    disabled={strictDmLockMode}
+                  />
+                  Remember unlock for 30 minutes (cookie cache)
+                </label>
+                <label className="mt-2 flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={strictDmLockMode}
+                    onChange={(event) => setStrictDmLockMode(event.target.checked)}
+                  />
+                  Strict mode (always lock, no cached access)
+                </label>
+                <button
+                  type="button"
+                  onClick={handleClearDmUnlockCache}
+                  className={`mt-3 rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
+                >
+                  Reset cached DM access
+                </button>
+              </section>
+            ) : null}
           </div>
         </aside>
       </div>
