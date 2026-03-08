@@ -74,6 +74,20 @@ const friendshipSchema = new mongoose.Schema({
     type: String,
     enum: ['social', 'secure'],
     default: 'social'
+  },
+  partnerStatus: {
+    type: String,
+    enum: ['none', 'pending', 'accepted'],
+    default: 'none'
+  },
+  partnerRequestedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  partnerRequestedAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true
@@ -119,7 +133,10 @@ friendshipSchema.statics.getFriends = async function(userId) {
       country: friend.country,
       friendshipId: f._id,
       friendsSince: f.acceptedAt,
-      category: (f.requester._id.toString() === userId.toString() ? f.requesterCategory : f.recipientCategory) || 'social'
+      category: (f.requester._id.toString() === userId.toString() ? f.requesterCategory : f.recipientCategory) || 'social',
+      partnerStatus: ['none', 'pending', 'accepted'].includes(f.partnerStatus) ? f.partnerStatus : 'none',
+      partnerRequestedByViewer: String(f.partnerRequestedBy || '') === String(userId || ''),
+      partnerRequestedAt: f.partnerRequestedAt || null
     };
   });
 };

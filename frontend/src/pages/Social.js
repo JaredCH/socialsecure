@@ -39,7 +39,7 @@ const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 const HERO_IMAGE_HISTORY_LIMIT = 3;
 const HERO_RANDOM_BACKGROUND_ROTATION_INTERVAL_MS = 12000;
 const FEED_POLL_INTERVAL_MS = 30000;
-const TOP_FRIENDS_LIMIT = 8;
+const TOP_FRIENDS_LIMIT = 5;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
 const PANEL_WIDTH_UNITS_BY_SIZE = {
@@ -414,6 +414,10 @@ const Social = () => {
   const [profileChatAccess, setProfileChatAccess] = useState({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] });
   const [profileChatAccessDraft, setProfileChatAccessDraft] = useState({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] });
   const [profileChatSavingAccess, setProfileChatSavingAccess] = useState(false);
+  const [partnerActionBusyFriendshipId, setPartnerActionBusyFriendshipId] = useState('');
+  const [partnerActionError, setPartnerActionError] = useState('');
+  const [composerVisible, setComposerVisible] = useState(false);
+  const [showSlimHeader, setShowSlimHeader] = useState(false);
   const localTypingTimeoutsRef = useRef({});
   const remoteTypingTimeoutsRef = useRef({});
   const designDirtyRef = useRef(false);
@@ -712,13 +716,39 @@ const Social = () => {
     discoveryAPI.trackEvent(eventType, metadata).catch(() => {});
   }, [isAuthenticated]);
 
-  const handleSectionClick = useCallback((sectionId) => {
-    trackSocialEvent('social_profile_section_clicked', { sectionId });
-  }, [trackSocialEvent]);
-
   const handleGuestPreviewToggle = (enabled) => {
     setIsGuestPreview(enabled);
     trackSocialEvent('social_guest_preview_toggled', { enabled });
+  };
+
+  const handlePartnerListingAction = async (friendshipId, action) => {
+    const normalizedFriendshipId = String(friendshipId || '').trim();
+    if (!normalizedFriendshipId || !isOwnSocialContext || isGuestPreview) return;
+    setPartnerActionBusyFriendshipId(normalizedFriendshipId);
+    setPartnerActionError('');
+    try {
+      const response = await friendsAPI.updatePartnerStatus(normalizedFriendshipId, action);
+      const partner = response.data?.partner || {};
+      const nextStatus = ['none', 'pending', 'accepted'].includes(partner.status) ? partner.status : 'none';
+      const requestedByViewer = Boolean(partner.requestedByViewer);
+      const requestedAt = partner.requestedAt || null;
+      setFriends((prev) => prev.map((friend) => {
+        if (String(friend.friendshipId || '') !== normalizedFriendshipId) {
+          return friend;
+        }
+        return {
+          ...friend,
+          partnerStatus: nextStatus,
+          partnerRequestedByViewer: requestedByViewer,
+          partnerCanRespond: nextStatus === 'pending' && !requestedByViewer,
+          partnerRequestedAt: requestedAt
+        };
+      }));
+    } catch (error) {
+      setPartnerActionError(error.response?.data?.error || 'Failed to update partner listing.');
+    } finally {
+      setPartnerActionBusyFriendshipId('');
+    }
   };
 
   const setGalleryActionLoading = (imageId, value) => {
@@ -1118,6 +1148,27 @@ const Social = () => {
       setEditorLayoutMode(viewportLayoutMode);
     }
   }, [designStudioOpen, viewportLayoutMode]);
+
+  useEffect(() => {
+    if (isGuestPreview || !isOwnSocialContext || activeHeroTab !== 'main') {
+      setComposerVisible(false);
+    }
+  }, [activeHeroTab, isGuestPreview, isOwnSocialContext]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const shouldShow = window.innerWidth >= 1024 && window.scrollY > 240;
+      setShowSlimHeader((prev) => (prev === shouldShow ? prev : shouldShow));
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
+    handleScroll();
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, []);
 
   const loadDesignData = useCallback(async () => {
     if (!isOwnSocialContext) {
@@ -2822,7 +2873,7 @@ const Social = () => {
           <p className="text-sm text-gray-600">Top friends are private or not set yet.</p>
         ) : (
           <ul className="space-y-3 text-sm text-gray-700">
-            {topFriends.slice(0, 5).map((friend, index) => (
+            {topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend, index) => (
               <li key={friend._id || friend.username} className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -2863,11 +2914,14 @@ const Social = () => {
     borderColor: 'rgba(255, 255, 255, 0.45)',
     fontFamily: `"${hubFontFamily}", sans-serif`
   };
-  const storyUsers = (topFriends.length > 0 ? topFriends : friends).slice(0, TOP_FRIENDS_LIMIT);
   const onlineFriends = friends.filter((friend) => {
     const status = String(friend?.presence?.status || '').toLowerCase();
     return status === 'online' || status === 'active' || friend?.presence?.isOnline;
   });
+  const activePartnerFriend = friends.find((friend) => friend.partnerStatus === 'accepted');
+  const incomingPartnerRequests = friends.filter((friend) => friend.partnerStatus === 'pending' && friend.partnerCanRespond);
+  const outgoingPartnerRequest = friends.find((friend) => friend.partnerStatus === 'pending' && friend.partnerRequestedByViewer);
+  const availablePartnerCandidates = friends.filter((friend) => friend.partnerStatus === 'none');
   const liveTypingCount = Object.values(commentTypingByPostId).reduce((total, entry) => total + Object.keys(entry || {}).length, 0);
   const calendarCountdowns = posts.filter((post) => post?.interaction?.type === 'countdown').slice(0, 5);
 
@@ -2905,34 +2959,6 @@ const Social = () => {
           </div>
         ))}
       </div>
-    </div>
-  );
-
-  const renderStoriesBar = () => (
-    <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {isPrivateGuestLock ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-5 text-sm text-amber-900 backdrop-blur-xl">
-          This profile is private. Stories and Top 8 activity stay hidden from guests.
-        </div>
-      ) : storyUsers.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/40 bg-white/30 px-4 py-5 text-sm text-slate-500 backdrop-blur-xl">
-          Your Top 8 will appear here once you select friends in Stage Settings.
-        </div>
-      ) : storyUsers.map((friend, index) => (
-        <button
-          key={friend._id || friend.username || index}
-          type="button"
-          onClick={() => handleSectionClick('top_friends')}
-          className="flex min-w-[4.5rem] flex-col items-center gap-2"
-        >
-          <div className="rounded-[1.4rem] border border-white/35 bg-white/25 p-1.5 shadow-lg backdrop-blur-xl">
-            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[1rem] bg-slate-200 text-lg font-semibold text-slate-700">
-              {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
-            </div>
-          </div>
-          <span className="max-w-[4.5rem] truncate text-xs font-medium text-slate-600">@{friend.username}</span>
-        </button>
-      ))}
     </div>
   );
 
@@ -3056,9 +3082,37 @@ const Social = () => {
       default:
         return (
           <div className="space-y-6">
-            {ownerEditingEnabled && !isGuestPreview ? renderGlassPanel('Composer', renderPanelBody('composer'), {
-              subtitle: 'Share an update to the center stage'
-            }) : null}
+            {ownerEditingEnabled && !isGuestPreview ? (
+              composerVisible
+                ? renderGlassPanel('Composer', renderPanelBody('composer'), {
+                  subtitle: 'Share an update to the center stage',
+                  action: (
+                    <button
+                      type="button"
+                      onClick={() => setComposerVisible(false)}
+                      className="rounded-2xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white/70"
+                    >
+                      Hide
+                    </button>
+                  )
+                })
+                : renderGlassPanel(
+                  'Composer',
+                  <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-700">
+                    <p>The composer stays tucked away until you need to post.</p>
+                    <button
+                      type="button"
+                      onClick={() => setComposerVisible(true)}
+                      className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      Start a post
+                    </button>
+                  </div>,
+                  {
+                    subtitle: 'Hidden by default for a cleaner stage'
+                  }
+                )
+            ) : null}
             {renderGlassPanel('Feed', renderPanelBody('timeline'), {
               subtitle: (isOwnSocialContext && !isGuestPreview) ? 'Your personalized stream' : 'Public social feed'
             })}
@@ -3075,9 +3129,9 @@ const Social = () => {
       {isPrivateGuestLock ? renderGlassPanel('Access Locked', renderPrivateProfileBody(), {
         subtitle: 'Pulse, live activity, and messaging stay hidden while this profile is private'
       }) : renderGlassPanel(
-        'Pulse',
+        'Top Friends',
         topFriends.length === 0 ? (
-          <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">Top 8 friends are private or not configured yet.</div>
+          <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">Top friends are private or not configured yet.</div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
             {topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend, index) => (
@@ -3091,8 +3145,103 @@ const Social = () => {
             ))}
           </div>
         ),
-        { subtitle: 'Top 8 friends & circles' }
+        { subtitle: 'Top 5 ranking' }
       )}
+
+      {!isPrivateGuestLock ? renderGlassPanel(
+        'Partner / Spouse',
+        (activePartnerFriend || incomingPartnerRequests.length > 0 || outgoingPartnerRequest || availablePartnerCandidates.length > 0) ? (
+          <div className="space-y-3 text-sm text-slate-700">
+            {activePartnerFriend ? (
+              <div className="rounded-2xl bg-emerald-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Listed partner</p>
+                <p className="mt-1 font-semibold text-slate-900">@{activePartnerFriend.username}</p>
+                {isOwnSocialContext && !isGuestPreview ? (
+                  <button
+                    type="button"
+                    onClick={() => handlePartnerListingAction(activePartnerFriend.friendshipId, 'clear')}
+                    disabled={partnerActionBusyFriendshipId === String(activePartnerFriend.friendshipId)}
+                    className="mt-3 rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-60"
+                  >
+                    Remove listing
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            {incomingPartnerRequests.map((friend) => (
+              <div key={`partner-incoming-${friend.friendshipId || friend._id}`} className="rounded-2xl bg-amber-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Incoming request</p>
+                <p className="mt-1 font-semibold text-slate-900">@{friend.username}</p>
+                {isOwnSocialContext && !isGuestPreview ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePartnerListingAction(friend.friendshipId, 'accept')}
+                      disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
+                      className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-60"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePartnerListingAction(friend.friendshipId, 'deny')}
+                      disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
+                      className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-white disabled:opacity-60"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+
+            {!activePartnerFriend && outgoingPartnerRequest ? (
+              <div className="rounded-2xl bg-blue-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Pending request</p>
+                <p className="mt-1 font-semibold text-slate-900">@{outgoingPartnerRequest.username}</p>
+                {isOwnSocialContext && !isGuestPreview ? (
+                  <button
+                    type="button"
+                    onClick={() => handlePartnerListingAction(outgoingPartnerRequest.friendshipId, 'clear')}
+                    disabled={partnerActionBusyFriendshipId === String(outgoingPartnerRequest.friendshipId)}
+                    className="mt-3 rounded-xl border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-white disabled:opacity-60"
+                  >
+                    Cancel request
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            {isOwnSocialContext && !isGuestPreview && !activePartnerFriend ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Send request</p>
+                {availablePartnerCandidates.length === 0 ? (
+                  <p className="rounded-2xl bg-white/55 px-3 py-3 text-xs text-slate-500">No available friends to request right now.</p>
+                ) : availablePartnerCandidates.map((friend) => (
+                  <button
+                    key={`partner-candidate-${friend.friendshipId || friend._id}`}
+                    type="button"
+                    onClick={() => handlePartnerListingAction(friend.friendshipId, 'request')}
+                    disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
+                    className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50/50 disabled:opacity-60"
+                  >
+                    <span>@{friend.username}</span>
+                    <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] uppercase tracking-wide text-blue-700">Request</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {partnerActionError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{partnerActionError}</div> : null}
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">
+            No partner listing activity yet.
+          </div>
+        ),
+        { subtitle: 'Request, accept, or deny relationship listing' }
+      ) : null}
 
       {!isPrivateGuestLock ? renderGlassPanel(
         'Live Activity',
@@ -3129,6 +3278,28 @@ const Social = () => {
       className={`min-h-[calc(100vh-4rem)] w-full pb-8 ${pageThemeClass}`}
       style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor, fontFamily: `"${hubFontFamily}", sans-serif` }}
     >
+      {showSlimHeader ? (
+        <div className="fixed inset-x-0 top-16 z-40 hidden lg:block">
+          <div className="mx-auto max-w-7xl px-6">
+            <div className="flex items-center justify-between gap-4 rounded-b-2xl border border-white/30 bg-slate-950/90 px-4 py-3 text-white shadow-lg backdrop-blur-xl">
+              <p className="truncate text-sm font-semibold">{heroProfile?.name || activeProfile?.realName || activeProfile?.username || 'Social'}</p>
+              <div className="flex items-center gap-1">
+                {SOCIAL_HERO_TABS.map((tab) => (
+                  <button
+                    key={`slim-tab-${tab.id}`}
+                    type="button"
+                    onClick={() => setActiveHeroTab(tab.id)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${activeHeroTab === tab.id ? 'bg-blue-500 text-white' : 'text-slate-200 hover:bg-white/10'}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="w-full">
         <SocialHero
           profile={heroProfile}
@@ -3140,40 +3311,38 @@ const Social = () => {
           onEditClick={() => setDesignStudioOpen(true)}
         />
 
-        <div className={`px-4 sm:px-6 lg:px-8 ${isMobile ? 'pb-24 pt-16' : 'pt-20'}`}>
-          <div className="rounded-[2rem] border border-white/25 bg-white/8 p-4 shadow-[0_30px_90px_rgba(15,23,42,0.16)] backdrop-blur-xl sm:p-6">
-            {isOwnSocialContext ? (
-              <div className="mb-6 rounded-[1.75rem] border border-white/35 bg-white/25 px-5 py-4 shadow-[0_18px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">View mode</p>
-                    <h2 className="mt-1 text-lg font-semibold text-slate-900">{isGuestPreview ? 'Guest preview is on' : 'Owner view is active'}</h2>
-                    <p className="mt-1 text-sm text-slate-600">{isGuestPreview ? 'You are previewing the public-facing experience without edit controls.' : 'Switch to guest view to verify exactly what visitors can see.'}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
-                      className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-sm ${isGuestPreview ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
-                    >
-                      {isGuestPreview ? 'Exit guest view' : 'Preview as guest'}
-                    </button>
-                    {!isGuestPreview ? (
-                      <button
-                        type="button"
-                        onClick={() => setDesignStudioOpen(true)}
-                        className="rounded-2xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-                      >
-                        Open Stage Settings
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
+        {isOwnSocialContext ? (
+          <div className="fixed right-2 top-24 z-30 hidden flex-col gap-2 lg:flex">
+            <button
+              type="button"
+              onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
+              className="rounded-xl border border-white/40 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-white shadow-sm backdrop-blur-xl hover:bg-slate-800/90"
+            >
+              {isGuestPreview ? 'Owner View' : 'Guest View'}
+            </button>
+            {!isGuestPreview ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setComposerVisible((prev) => !prev)}
+                  className="rounded-xl border border-white/40 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-white shadow-sm backdrop-blur-xl hover:bg-slate-800/90"
+                >
+                  {composerVisible ? 'Hide Compose' : 'Compose'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDesignStudioOpen(true)}
+                  className="rounded-xl border border-blue-200 bg-white/90 px-3 py-2 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+                >
+                  Stage Settings
+                </button>
+              </>
             ) : null}
+          </div>
+        ) : null}
 
-            <div className="mb-6">{renderStoriesBar()}</div>
-
+        <div className={`px-4 sm:px-6 lg:px-8 ${isMobile ? 'pb-24 pt-8' : 'pt-8'}`}>
+          <div className="rounded-[2rem] border border-white/25 bg-white/8 p-4 shadow-[0_30px_90px_rgba(15,23,42,0.16)] backdrop-blur-xl sm:p-6">
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(220px,20%)_minmax(0,1fr)_minmax(280px,25%)]">
               {!isMobile ? (
                 <aside className="space-y-6 xl:sticky xl:top-24">

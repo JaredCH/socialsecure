@@ -156,8 +156,8 @@ describe('Friends category and top5 routes', () => {
     expect(response.body.category).toBe('secure');
   });
 
-  it('returns backend top8 validation errors from update route', async () => {
-    const error = new Error('Cannot have more than 8 top friends');
+  it('returns backend top5 validation errors from update route', async () => {
+    const error = new Error('Cannot have more than 5 top friends');
     error.status = 400;
     mockTopFriend.updateOrder.mockRejectedValue(error);
 
@@ -180,6 +180,63 @@ describe('Friends category and top5 routes', () => {
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toMatch(/more than 8/i);
+    expect(response.body.error).toMatch(/more than 5/i);
+  });
+
+  it('creates a partner request for an accepted friendship', async () => {
+    const friendshipDoc = {
+      _id: '507f1f77bcf86cd799439099',
+      requester: { toString: () => '507f1f77bcf86cd799439011' },
+      recipient: { toString: () => '507f1f77bcf86cd799439022' },
+      status: 'accepted',
+      partnerStatus: 'none',
+      partnerRequestedBy: null,
+      partnerRequestedAt: null,
+      save: jest.fn().mockResolvedValue(true)
+    };
+    mockFriendship.findById.mockResolvedValue(friendshipDoc);
+
+    const app = buildApp();
+    const response = await request(app)
+      .patch('/api/friends/507f1f77bcf86cd799439099/partner')
+      .set('Authorization', 'Bearer token')
+      .send({ action: 'request' });
+
+    expect(response.status).toBe(200);
+    expect(friendshipDoc.partnerStatus).toBe('pending');
+    expect(friendshipDoc.partnerRequestedBy).toEqual('507f1f77bcf86cd799439011');
+    expect(response.body.partner).toMatchObject({
+      status: 'pending',
+      requestedByViewer: true,
+      canRespond: false
+    });
+  });
+
+  it('accepts an incoming partner request', async () => {
+    const friendshipDoc = {
+      _id: '507f1f77bcf86cd799439099',
+      requester: { toString: () => '507f1f77bcf86cd799439022' },
+      recipient: { toString: () => '507f1f77bcf86cd799439011' },
+      status: 'accepted',
+      partnerStatus: 'pending',
+      partnerRequestedBy: { toString: () => '507f1f77bcf86cd799439022' },
+      partnerRequestedAt: new Date(),
+      save: jest.fn().mockResolvedValue(true)
+    };
+    mockFriendship.findById.mockResolvedValue(friendshipDoc);
+
+    const app = buildApp();
+    const response = await request(app)
+      .patch('/api/friends/507f1f77bcf86cd799439099/partner')
+      .set('Authorization', 'Bearer token')
+      .send({ action: 'accept' });
+
+    expect(response.status).toBe(200);
+    expect(friendshipDoc.partnerStatus).toBe('accepted');
+    expect(response.body.partner).toMatchObject({
+      status: 'accepted',
+      requestedByViewer: false,
+      canRespond: false
+    });
   });
 });

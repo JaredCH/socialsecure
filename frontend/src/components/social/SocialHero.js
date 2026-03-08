@@ -105,10 +105,10 @@ const SocialHero = ({
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/65 to-slate-950/10" />
       <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/90 to-transparent" />
 
-      <div className="relative z-10 mx-auto flex min-h-[18rem] max-w-7xl items-end px-4 pb-8 pt-20 sm:px-6 lg:min-h-[22rem] lg:px-8">
+      <div className="relative z-10 mx-auto flex min-h-[15rem] max-w-7xl items-end px-4 pb-6 pt-12 sm:px-6 lg:min-h-[18rem] lg:px-8">
         <div className={`flex w-full ${isMobile ? 'flex-col items-center text-center' : 'items-end justify-between gap-8'}`}>
           <div className={`flex ${isMobile ? 'flex-col items-center' : 'items-end gap-6'}`}>
-            <div className="relative flex-shrink-0 translate-y-12 sm:translate-y-14">
+            <div className="relative flex-shrink-0 translate-y-8 sm:translate-y-10">
           <div 
             className="overflow-hidden rounded-[1.75rem] border-4 border-slate-950/80 bg-slate-800 shadow-[0_30px_60px_rgba(15,23,42,0.45)]"
             style={{ 

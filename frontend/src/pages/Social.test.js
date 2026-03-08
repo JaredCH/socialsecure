@@ -156,4 +156,10 @@ describe('Social page hero background rendering', () => {
     expect(links.some((link) => link.getAttribute('href') === '/calendar?user=buddy')).toBe(true);
     expect(links.some((link) => link.getAttribute('href') === '/chat?profile=u-2')).toBe(true);
   });
+
+  it('keeps composer hidden by default with a reveal action', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+    expect(container.textContent).toContain('Start a post');
+    expect(container.textContent).not.toContain('Publish Post');
+  });
 });
