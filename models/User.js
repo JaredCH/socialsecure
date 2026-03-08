@@ -156,6 +156,17 @@ const userSchema = new mongoose.Schema({
       trim: true,
       maxlength: 50
     },
+    relationshipAudience: {
+      type: String,
+      enum: ['social', 'secure'],
+      default: 'social'
+    },
+    profileImageUrl: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 2048
+    },
     members: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'

@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
+const { normalizeRelationshipAudience, RELATIONSHIP_AUDIENCE_VALUES } = require('../utils/relationshipAudience');
 
 const COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
@@ -23,6 +24,16 @@ const authenticateToken = (req, res, next) => {
 };
 
 const normalizeCircleName = (value = '') => value.trim().slice(0, 50);
+const normalizeCircleImageUrl = (value = '') => (typeof value === 'string' ? value.trim().slice(0, 2048) : '');
+const isValidHttpUrl = (value = '') => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(String(value));
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 const findCircleIndex = (circles = [], name = '') => {
   const normalized = normalizeCircleName(name).toLowerCase();
@@ -45,6 +56,8 @@ router.get('/', authenticateToken, async (req, res) => {
       circles: circles.map((circle) => ({
         name: circle.name,
         color: circle.color,
+        relationshipAudience: normalizeRelationshipAudience(circle.relationshipAudience),
+        profileImageUrl: normalizeCircleImageUrl(circle.profileImageUrl),
         memberCount: Array.isArray(circle.members) ? circle.members.length : 0,
         members: (circle.members || [])
           .map((memberId) => memberMap.get(String(memberId)))
@@ -60,7 +73,12 @@ router.get('/', authenticateToken, async (req, res) => {
 router.post('/', [
   authenticateToken,
   body('name').isString().trim().isLength({ min: 1, max: 50 }),
-  body('color').optional().isString().trim().matches(COLOR_REGEX)
+  body('color').optional().isString().trim().matches(COLOR_REGEX),
+  body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES),
+  body('profileImageUrl').optional({ nullable: true }).isString().trim().isLength({ max: 2048 }).custom((value) => (
+    value === ''
+    || isValidHttpUrl(value)
+  ))
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -81,6 +99,8 @@ router.post('/', [
     user.circles.push({
       name,
       color: req.body.color || '#3B82F6',
+      relationshipAudience: normalizeRelationshipAudience(req.body.relationshipAudience),
+      profileImageUrl: normalizeCircleImageUrl(req.body.profileImageUrl),
       members: []
     });
 
@@ -95,7 +115,12 @@ router.post('/', [
 router.put('/:circleName', [
   authenticateToken,
   body('name').optional().isString().trim().isLength({ min: 1, max: 50 }),
-  body('color').optional().isString().trim().matches(COLOR_REGEX)
+  body('color').optional().isString().trim().matches(COLOR_REGEX),
+  body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES),
+  body('profileImageUrl').optional({ nullable: true }).isString().trim().isLength({ max: 2048 }).custom((value) => (
+    value === ''
+    || isValidHttpUrl(value)
+  ))
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -124,6 +149,12 @@ router.put('/:circleName', [
 
     if (req.body.color) {
       user.circles[index].color = req.body.color;
+    }
+    if (req.body.relationshipAudience) {
+      user.circles[index].relationshipAudience = normalizeRelationshipAudience(req.body.relationshipAudience);
+    }
+    if (req.body.profileImageUrl !== undefined) {
+      user.circles[index].profileImageUrl = normalizeCircleImageUrl(req.body.profileImageUrl);
     }
 
     await user.save();

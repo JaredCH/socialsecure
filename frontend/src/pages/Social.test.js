@@ -31,7 +31,8 @@ jest.mock('../utils/api', () => ({
   },
   friendsAPI: {
     getFriends: jest.fn(),
-    getTopFriends: jest.fn()
+    getTopFriends: jest.fn(),
+    getPublicCircles: jest.fn()
   },
   galleryAPI: {
     getGallery: jest.fn()
@@ -107,6 +108,7 @@ describe('Social page hero background rendering', () => {
     circlesAPI.getCircles.mockResolvedValue({ data: { circles: [] } });
     friendsAPI.getFriends.mockResolvedValue({ data: { friends: [] } });
     friendsAPI.getTopFriends.mockResolvedValue({ data: { topFriends: [] } });
+    friendsAPI.getPublicCircles.mockResolvedValue({ data: { circles: [] } });
     moderationAPI.getBlocks.mockResolvedValue({ data: { blockedUsers: [] } });
     moderationAPI.getMutes.mockResolvedValue({ data: { mutedUsers: [] } });
     moderationAPI.getMyReports.mockResolvedValue({ data: { reports: [] } });
