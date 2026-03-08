@@ -43,6 +43,7 @@ const FEED_POLL_INTERVAL_MS = 30000;
 const TOP_FRIENDS_LIMIT = 5;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
+const MAX_UPCOMING_CALENDAR_ITEMS = 6;
 const PANEL_WIDTH_UNITS_BY_SIZE = {
   halfCol: 1,
   oneCol: 2,
@@ -3215,8 +3216,11 @@ const Social = () => {
 
     return [...upcomingEvents, ...upcomingHolidays]
       .sort((left, right) => left.date - right.date)
-      .slice(0, 6);
+      .slice(0, MAX_UPCOMING_CALENDAR_ITEMS);
   }, [calendarPreviewEvents, calendarPreviewHolidays]);
+  const navigateCalendarPreviewMonth = useCallback((monthOffset) => {
+    setCalendarPreviewAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + monthOffset, 1));
+  }, []);
 
   const renderGlassPanel = (title, body, options = {}) => (
     <section
@@ -3363,7 +3367,7 @@ const Social = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setCalendarPreviewAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                    onClick={() => navigateCalendarPreviewMonth(-1)}
                     className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
                     aria-label="Previous month"
                   >
@@ -3374,7 +3378,7 @@ const Social = () => {
                   </p>
                   <button
                     type="button"
-                    onClick={() => setCalendarPreviewAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                    onClick={() => navigateCalendarPreviewMonth(1)}
                     className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
                     aria-label="Next month"
                   >
