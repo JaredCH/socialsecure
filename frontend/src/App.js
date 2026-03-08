@@ -114,6 +114,7 @@ function App() {
   const featuresMenuRef = useRef(null);
   const firstFeatureItemRef = useRef(null);
   const lastFeatureItemRef = useRef(null);
+  const featuresMenuCloseTimeoutRef = useRef(null);
 
   const isAuthenticated = useMemo(() => Boolean(localStorage.getItem('token') && user), [user]);
   const onboardingRequired = isAuthenticated && onboardingStatus.status !== 'completed';
@@ -354,6 +355,12 @@ function App() {
     }
   }, [isFeaturesMenuOpen]);
 
+  useEffect(() => () => {
+    if (featuresMenuCloseTimeoutRef.current) {
+      clearTimeout(featuresMenuCloseTimeoutRef.current);
+    }
+  }, []);
+
   const handleAuthSuccess = (payload) => {
     localStorage.setItem('token', payload.token);
     setUser(payload.user);
@@ -430,12 +437,32 @@ function App() {
     return <div className="min-h-screen grid place-items-center">Loading...</div>;
   }
 
-  const navLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700';
+  const navLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300';
   const navEmphasisLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50';
   const navDangerButtonClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50';
   const closeNavMenus = () => {
+    if (featuresMenuCloseTimeoutRef.current) {
+      clearTimeout(featuresMenuCloseTimeoutRef.current);
+      featuresMenuCloseTimeoutRef.current = null;
+    }
     setIsMobileMenuOpen(false);
     setIsFeaturesMenuOpen(false);
+  };
+  const openFeaturesMenu = () => {
+    if (featuresMenuCloseTimeoutRef.current) {
+      clearTimeout(featuresMenuCloseTimeoutRef.current);
+      featuresMenuCloseTimeoutRef.current = null;
+    }
+    setIsFeaturesMenuOpen(true);
+  };
+  const queueFeaturesMenuClose = () => {
+    if (featuresMenuCloseTimeoutRef.current) {
+      clearTimeout(featuresMenuCloseTimeoutRef.current);
+    }
+    featuresMenuCloseTimeoutRef.current = setTimeout(() => {
+      setIsFeaturesMenuOpen(false);
+      featuresMenuCloseTimeoutRef.current = null;
+    }, 120);
   };
 
   return (
@@ -473,15 +500,12 @@ function App() {
               {!encryptionPasswordRequired && <Link to="/" onClick={closeNavMenus} className={navLinkClass}>Home</Link>}
               {canUseProtectedFeatures && <Link to="/social" onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
               {canUseProtectedFeatures && <Link to="/chat" onClick={closeNavMenus} className={navLinkClass}>Chat</Link>}
-              {canUseProtectedFeatures && <Link to="/market" onClick={closeNavMenus} className={navLinkClass}>Market</Link>}
-              {canUseProtectedFeatures && <Link to="/news" onClick={closeNavMenus} className={navLinkClass}>News</Link>}
-              {canUseProtectedFeatures && <Link to="/maps" onClick={closeNavMenus} className={navLinkClass}>Maps</Link>}
               <div
                 className="relative"
                 data-testid="features-menu"
                 ref={featuresMenuRef}
-                onMouseEnter={() => setIsFeaturesMenuOpen(true)}
-                onMouseLeave={() => setIsFeaturesMenuOpen(false)}
+                onMouseEnter={openFeaturesMenu}
+                onMouseLeave={queueFeaturesMenuClose}
                 onBlur={(event) => {
                   if (!event.currentTarget.contains(event.relatedTarget)) {
                     setIsFeaturesMenuOpen(false);
@@ -512,7 +536,7 @@ function App() {
                       }
                     }
                   }}
-                  className={navLinkClass}
+                  className={`${navLinkClass} inline-flex items-center gap-1`}
                 >
                   Features
                   <span aria-hidden="true">▾</span>
@@ -521,10 +545,10 @@ function App() {
                   <div
                     id="features-menu-panel"
                     role="menu"
-                    className="z-[1310] mt-2 min-w-40 max-w-[calc(100vw-2rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg md:absolute md:right-0 md:top-full"
+                    className="z-[1310] mt-2 min-w-44 max-w-[calc(100vw-2rem)] rounded-xl border border-blue-100 bg-white py-1 shadow-xl md:absolute md:right-0 md:top-full"
                   >
                     {canUseProtectedFeatures && (
-                      <Link ref={firstFeatureItemRef} to="/discover" role="menuitem" onClick={closeNavMenus} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
+                      <Link ref={firstFeatureItemRef} to="/discover" role="menuitem" onClick={closeNavMenus} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 whitespace-nowrap">
                         Discover
                       </Link>
                     )}
@@ -538,18 +562,21 @@ function App() {
                       to="/calendar"
                       role="menuitem"
                       onClick={closeNavMenus}
-                      className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap"
+                      className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 whitespace-nowrap"
                     >
                       Calendar
                     </Link>
                     {canUseProtectedFeatures && (
-                      <Link ref={lastFeatureItemRef} to="/resume" role="menuitem" onClick={closeNavMenus} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap">
+                      <Link ref={lastFeatureItemRef} to="/resume" role="menuitem" onClick={closeNavMenus} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 whitespace-nowrap">
                         Resume
                       </Link>
                     )}
                   </div>
                 ) : null}
               </div>
+              {canUseProtectedFeatures && <Link to="/news" onClick={closeNavMenus} className={navLinkClass}>News</Link>}
+              {canUseProtectedFeatures && <Link to="/market" onClick={closeNavMenus} className={navLinkClass}>Market</Link>}
+              {canUseProtectedFeatures && <Link to="/maps" onClick={closeNavMenus} className={navLinkClass}>Maps</Link>}
               {canUseProtectedFeatures && user?.isAdmin && <Link to="/control-panel" onClick={closeNavMenus} className={navLinkClass}>Control Panel</Link>}
               {canUseProtectedFeatures && <Link to="/refer" onClick={closeNavMenus} className={navLinkClass}>Refer Friend</Link>}
               {isAuthenticated && onboardingRequired && <Link to="/onboarding" onClick={closeNavMenus} className={navEmphasisLinkClass}>Onboarding</Link>}
