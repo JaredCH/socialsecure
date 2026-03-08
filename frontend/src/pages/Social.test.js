@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import Social from './Social';
-import { authAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
+import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import { onFeedInteraction, onFeedPost, onTyping } from '../utils/realtime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -10,6 +10,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 jest.mock('../utils/api', () => ({
   authAPI: {
     getProfile: jest.fn()
+  },
+  calendarAPI: {
+    getMyEvents: jest.fn(),
+    getUserCalendarEvents: jest.fn()
   },
   chatAPI: {
     getProfileThread: jest.fn(),
@@ -111,6 +115,8 @@ describe('Social page hero background rendering', () => {
     galleryAPI.getGallery.mockResolvedValue({ data: { items: [] } });
     socialPageAPI.getConfigs.mockResolvedValue({ data: { configs: [] } });
     socialPageAPI.getSharedByUser.mockResolvedValue({ data: { configs: [] } });
+    calendarAPI.getMyEvents.mockResolvedValue({ data: { events: [] } });
+    calendarAPI.getUserCalendarEvents.mockResolvedValue({ data: { events: [] } });
     chatAPI.getProfileThread.mockResolvedValue({
       data: {
         conversation: {
@@ -185,6 +191,35 @@ describe('Social page hero background rendering', () => {
 
     const locationProbe = container.querySelector('[data-testid="location-probe"]');
     expect(locationProbe?.textContent).toBe('/calendar?user=buddy');
+  });
+
+  it('renders a scaled calendar preview on the calendar tab', async () => {
+    calendarAPI.getMyEvents.mockResolvedValue({
+      data: {
+        events: [
+          {
+            _id: 'event-1',
+            startAt: new Date().toISOString(),
+            endAt: new Date().toISOString()
+          }
+        ]
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const calendarTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Calendar'));
+    expect(calendarTab).toBeDefined();
+
+    await act(async () => {
+      calendarTab.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(calendarAPI.getMyEvents).toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="social-calendar-preview-grid"]')).toBeTruthy();
   });
 
   it('keeps composer hidden by default with a reveal action', async () => {

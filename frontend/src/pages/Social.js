@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
+import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
@@ -255,6 +255,32 @@ const formatRemainingTime = (targetAt, nowMs) => {
   return `${days}d ${hours}h ${minutes}m ${seconds}s`;
 };
 
+const CALENDAR_PREVIEW_WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const getCalendarWeekStart = (date) => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+};
+
+const buildCalendarPreviewMonthGrid = (anchorDate) => {
+  const monthStart = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+  const gridStart = getCalendarWeekStart(monthStart);
+  return Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(gridStart);
+    day.setDate(gridStart.getDate() + index);
+    return day;
+  });
+};
+
+const formatCalendarDayKey = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const normalizePost = (post) => {
   const normalizedLikes = Array.isArray(post.likes)
     ? post.likes.map((like) => (typeof like === 'string' ? like : String(like?._id || like)))
@@ -415,6 +441,9 @@ const Social = () => {
   const [profileChatAccess, setProfileChatAccess] = useState({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] });
   const [profileChatAccessDraft, setProfileChatAccessDraft] = useState({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] });
   const [profileChatSavingAccess, setProfileChatSavingAccess] = useState(false);
+  const [calendarPreviewEvents, setCalendarPreviewEvents] = useState([]);
+  const [calendarPreviewLoading, setCalendarPreviewLoading] = useState(false);
+  const [calendarPreviewError, setCalendarPreviewError] = useState('');
   const [partnerActionBusyFriendshipId, setPartnerActionBusyFriendshipId] = useState('');
   const [partnerActionError, setPartnerActionError] = useState('');
   const [composerVisible, setComposerVisible] = useState(false);
@@ -607,6 +636,56 @@ const Social = () => {
 
     loadProfileChatThread();
   }, [activeProfile?._id]);
+
+  useEffect(() => {
+    const loadCalendarPreview = async () => {
+      if (activeHeroTab !== 'calendar' || isPrivateGuestLock) {
+        return;
+      }
+
+      const calendarUsername = isOwnSocialContext
+        ? currentUser?.username
+        : (activeProfile?.username || requestedProfileIdentifier);
+      if (!calendarUsername) {
+        setCalendarPreviewEvents([]);
+        setCalendarPreviewError('');
+        return;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const monthGrid = buildCalendarPreviewMonthGrid(today);
+      const rangeStart = monthGrid[0];
+      const rangeEnd = new Date(monthGrid[monthGrid.length - 1]);
+      rangeEnd.setDate(rangeEnd.getDate() + 1);
+
+      setCalendarPreviewLoading(true);
+      setCalendarPreviewError('');
+      try {
+        const params = { from: rangeStart.toISOString(), to: rangeEnd.toISOString() };
+        const response = isOwnSocialContext && isAuthenticated
+          ? await calendarAPI.getMyEvents(params)
+          : await calendarAPI.getUserCalendarEvents(calendarUsername, params);
+        const nextEvents = Array.isArray(response.data?.events) ? response.data.events : [];
+        setCalendarPreviewEvents(nextEvents);
+      } catch (error) {
+        setCalendarPreviewEvents([]);
+        setCalendarPreviewError(error.response?.data?.error || 'Unable to load calendar preview.');
+      } finally {
+        setCalendarPreviewLoading(false);
+      }
+    };
+
+    loadCalendarPreview();
+  }, [
+    activeHeroTab,
+    isPrivateGuestLock,
+    isOwnSocialContext,
+    isAuthenticated,
+    currentUser?.username,
+    activeProfile?.username,
+    requestedProfileIdentifier
+  ]);
 
   const handleSendProfileChatMessage = useCallback(async () => {
     const content = profileChatInput.trim();
@@ -2940,6 +3019,35 @@ const Social = () => {
   const availablePartnerCandidates = friends.filter((friend) => friend.partnerStatus === 'none');
   const liveTypingCount = Object.values(commentTypingByPostId).reduce((total, entry) => total + Object.keys(entry || {}).length, 0);
   const calendarCountdowns = posts.filter((post) => post?.interaction?.type === 'countdown').slice(0, 5);
+  const calendarPreviewAnchorDate = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }, []);
+  const calendarPreviewMonthDays = useMemo(
+    () => buildCalendarPreviewMonthGrid(calendarPreviewAnchorDate),
+    [calendarPreviewAnchorDate]
+  );
+  const calendarPreviewEventCountByDay = useMemo(() => {
+    const counts = new Map();
+    calendarPreviewEvents.forEach((event) => {
+      const startAt = new Date(event?.startAt);
+      const endAt = new Date(event?.endAt || event?.startAt);
+      if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) return;
+
+      const cursor = new Date(startAt);
+      cursor.setHours(0, 0, 0, 0);
+      const endDay = new Date(endAt);
+      endDay.setHours(0, 0, 0, 0);
+
+      while (cursor <= endDay) {
+        const key = formatCalendarDayKey(cursor);
+        counts.set(key, (counts.get(key) || 0) + 1);
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    });
+    return counts;
+  }, [calendarPreviewEvents]);
 
   const renderGlassPanel = (title, body, options = {}) => (
     <section
@@ -3079,6 +3187,46 @@ const Social = () => {
                 <p className="mt-1 text-slate-500">Open the full calendar to manage events, reminders, and shared plans.</p>
               </div>
               <Link to={socialCalendarPath} className="rounded-2xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700">Open calendar</Link>
+            </div>
+            <div className="rounded-2xl bg-white/55 p-3">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">
+                  {calendarPreviewAnchorDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                </p>
+                {calendarPreviewLoading ? <span className="text-xs text-slate-500">Loading…</span> : null}
+              </div>
+              {calendarPreviewError ? (
+                <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{calendarPreviewError}</div>
+              ) : null}
+              <div data-testid="social-calendar-preview-grid" className="mt-3">
+                <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {CALENDAR_PREVIEW_WEEKDAY_LABELS.map((label) => (
+                    <span key={label}>{label}</span>
+                  ))}
+                </div>
+                <div className="mt-1 grid grid-cols-7 gap-1">
+                  {calendarPreviewMonthDays.map((day) => {
+                    const inMonth = day.getMonth() === calendarPreviewAnchorDate.getMonth();
+                    const dayKey = formatCalendarDayKey(day);
+                    const eventCount = calendarPreviewEventCountByDay.get(dayKey) || 0;
+                    return (
+                      <div
+                        key={dayKey}
+                        className={`rounded-lg border px-1 py-1 text-center text-xs ${inMonth ? 'border-slate-200 bg-white/80 text-slate-800' : 'border-slate-100 bg-white/40 text-slate-400'}`}
+                      >
+                        <p>{day.getDate()}</p>
+                        {eventCount > 0 ? (
+                          <p className="mt-0.5 text-[10px] font-semibold" style={{ color: accentColor }}>
+                            {eventCount}
+                          </p>
+                        ) : (
+                          <span className="mt-0.5 block h-[12px]" aria-hidden="true" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
             {calendarCountdowns.length === 0 ? (
               <div className="rounded-2xl bg-white/50 px-4 py-4 text-slate-500">No active countdown posts yet.</div>
