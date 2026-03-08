@@ -128,8 +128,38 @@ describe('NotificationCenter corner behavior', () => {
     expect(friendsAPI.getRelationship).toHaveBeenCalledWith('sender-1');
     expect(friendsAPI.acceptRequest).toHaveBeenCalledWith('friendship-1');
     expect(friendsAPI.updateFriendCategory).toHaveBeenCalledWith('friendship-1', 'secure');
+    expect(notificationAPI.markAsRead).toHaveBeenCalledWith('notif-1');
     expect(onUnreadCountChange).toHaveBeenCalled();
+    expect(container.textContent).not.toContain('New follow request');
 
     confirmSpy.mockRestore();
+  });
+
+  it('hides previously handled follow notifications from the dropdown list', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [{
+          _id: 'notif-read-follow',
+          senderId: 'sender-2',
+          type: 'follow',
+          title: 'Old follow request',
+          body: 'Already handled',
+          isRead: true,
+          createdAt: '2026-01-01T00:00:00.000Z'
+        }],
+        pagination: { hasMore: false }
+      }
+    });
+
+    await renderCenter();
+
+    const toggleButton = container.querySelector('button[aria-label="Notifications"]');
+    await act(async () => {
+      toggleButton.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('No notifications yet.');
+    expect(container.textContent).not.toContain('Old follow request');
   });
 });

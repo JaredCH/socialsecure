@@ -4,6 +4,9 @@ import { friendsAPI, notificationAPI } from '../utils/api';
 import NotificationItem from './NotificationItem';
 
 const PAGE_SIZE = 20;
+const isResolvedFriendRequestNotification = (notification) => (
+  notification?.type === 'follow' && notification?.isRead
+);
 
 const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNotification, userDisplayName = 'Account' }) => {
   const navigate = useNavigate();
@@ -143,6 +146,10 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
         await friendsAPI.declineRequest(friendshipId);
       }
 
+      if (!notification?.isRead) {
+        await notificationAPI.markAsRead(notificationId);
+      }
+
       setNotifications((prev) => prev.map((item) => (
         String(item._id) === notificationId
           ? { ...item, isRead: true, readAt: item.readAt || new Date().toISOString() }
@@ -205,6 +212,8 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
     }
   };
 
+  const visibleNotifications = notifications.filter((notification) => !isResolvedFriendRequestNotification(notification));
+
   return (
     <div
       className="relative"
@@ -248,9 +257,9 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
             {friendActionMessage ? (
               <div className="px-3 pt-2 text-xs text-slate-600">{friendActionMessage}</div>
             ) : null}
-            {notifications.length === 0 && !loading ? (
+            {visibleNotifications.length === 0 && !loading ? (
               <div className="p-4 text-sm text-gray-500">No notifications yet.</div>
-            ) : notifications.map((notification) => (
+            ) : visibleNotifications.map((notification) => (
               <NotificationItem
                 key={String(notification._id)}
                 notification={notification}
