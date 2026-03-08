@@ -36,6 +36,8 @@ const COMPOSER_CONTENT_TYPES = ['standard', 'poll', 'quiz', 'countdown'];
 const INTERACTION_MAX_OPTIONS = 6;
 const GALLERY_MAX_ITEMS = 24;
 const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
+const HERO_IMAGE_HISTORY_LIMIT = 3;
+const HERO_RANDOM_BACKGROUND_ROTATION_INTERVAL_MS = 12000;
 const FEED_POLL_INTERVAL_MS = 30000;
 const TOP_FRIENDS_LIMIT = 8;
 const TYPING_TIMEOUT_MS = 900;
@@ -161,6 +163,26 @@ const normalizeMediaUrls = (mediaUrls) => {
   }
 
   return normalized;
+};
+
+const buildRecentImageHistory = (previousValue, nextValue, existing = []) => {
+  const normalizedPrevious = typeof previousValue === 'string' ? previousValue.trim() : '';
+  const normalizedNext = typeof nextValue === 'string' ? nextValue.trim() : '';
+  const seen = new Set();
+  const history = [];
+  const append = (url) => {
+    if (!isRenderableMediaUrl(url)) return;
+    const key = url.toLowerCase();
+    if (key === normalizedNext.toLowerCase() || seen.has(key)) return;
+    seen.add(key);
+    history.push(url);
+  };
+
+  if (normalizedPrevious) {
+    append(normalizedPrevious);
+  }
+  existing.forEach((url) => append(typeof url === 'string' ? url.trim() : ''));
+  return history.slice(0, HERO_IMAGE_HISTORY_LIMIT);
 };
 
 const renderMediaItem = (url, key) => {
@@ -430,6 +452,48 @@ const Social = () => {
   );
   const headerGradientClass = THEME_ACCENT_TO_HEADER_CLASS[socialPreferences.accentColorToken] || THEME_ACCENT_TO_HEADER_CLASS.blue;
   const pageThemeClass = THEME_TO_PAGE_CLASS[socialPreferences.themePreset] || THEME_TO_PAGE_CLASS.default;
+  const galleryImageUrls = useMemo(
+    () => galleryItems.map((item) => item.mediaUrl).filter((url) => isRenderableMediaUrl(url)),
+    [galleryItems]
+  );
+  const isHeroRandomGalleryEnabled = Boolean(socialPreferences.hero?.backgroundImageUseRandomGallery);
+  const resolvedHeroBackgroundImage = useMemo(() => {
+    if (isHeroRandomGalleryEnabled && galleryImageUrls.length > 0) {
+      return heroRandomBackgroundImage || galleryImageUrls[0];
+    }
+    return socialPreferences.hero?.backgroundImage || '';
+  }, [isHeroRandomGalleryEnabled, galleryImageUrls, heroRandomBackgroundImage, socialPreferences.hero?.backgroundImage]);
+  const heroConfig = useMemo(
+    () => ({ ...(socialPreferences.hero || {}), backgroundImage: resolvedHeroBackgroundImage || null }),
+    [socialPreferences.hero, resolvedHeroBackgroundImage]
+  );
+
+  useEffect(() => {
+    if (!isHeroRandomGalleryEnabled || galleryImageUrls.length === 0) {
+      setHeroRandomBackgroundImage('');
+      return undefined;
+    }
+
+    setHeroRandomBackgroundImage((prev) => {
+      if (galleryImageUrls.length === 1) return galleryImageUrls[0];
+      if (galleryImageUrls.includes(prev)) return prev;
+      return galleryImageUrls[Math.floor(Math.random() * galleryImageUrls.length)];
+    });
+
+    const intervalId = window.setInterval(() => {
+      setHeroRandomBackgroundImage((prev) => {
+        if (galleryImageUrls.length === 1) return galleryImageUrls[0];
+        const options = galleryImageUrls.filter((url) => url !== prev);
+        const pool = options.length > 0 ? options : galleryImageUrls;
+        return pool[Math.floor(Math.random() * pool.length)];
+      });
+    }, HERO_RANDOM_BACKGROUND_ROTATION_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isHeroRandomGalleryEnabled, galleryImageUrls]);
+
   const heroProfile = useMemo(() => {
     const profileSource = activeProfile || currentUser || {};
     const locationLabel = [profileSource?.city, profileSource?.state, profileSource?.country]
@@ -439,11 +503,11 @@ const Social = () => {
     return {
       name: profileSource?.realName || profileSource?.name || profileSource?.username || 'User',
       location: locationLabel || profileSource?.location || '',
-      avatarUrl: profileSource?.avatarUrl || '',
+      avatarUrl: socialPreferences.hero?.profileImage || profileSource?.avatarUrl || '',
       isOnline: Boolean(isOwnSocialContext),
       lastActive: profileSource?.lastActive || null
     };
-  }, [activeProfile, currentUser, isOwnSocialContext]);
+  }, [activeProfile, currentUser, isOwnSocialContext, socialPreferences.hero?.profileImage]);
   const isPrivateGuestLock = !isOwnSocialContext && Boolean(activeProfile?.isPrivateProfile);
   const socialCalendarPath = useMemo(() => {
     const calendarUsername = activeProfile?.username || requestedProfileIdentifier;
@@ -1233,6 +1297,58 @@ const Social = () => {
   const updateHeroConfig = useCallback((patch) => {
     patchDraftPreferences((prev) => mergeDesignPatch(prev, { hero: patch }));
   }, [patchDraftPreferences]);
+  const updateHeroMediaPreference = useCallback((field, rawValue) => {
+    const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+    if (value && !isRenderableMediaUrl(value)) {
+      setDesignError('Hero images must use a valid http/https URL.');
+      return;
+    }
+    const historyField = field === 'backgroundImage' ? 'backgroundImageHistory' : 'profileImageHistory';
+    patchDraftPreferences((prev) => {
+      const currentHero = prev?.hero || {};
+      const previousValue = typeof currentHero[field] === 'string' ? currentHero[field].trim() : '';
+      const existingHistory = Array.isArray(currentHero[historyField]) ? currentHero[historyField] : [];
+      return mergeDesignPatch(prev, {
+        hero: {
+          [field]: value || null,
+          [historyField]: buildRecentImageHistory(previousValue, value, existingHistory)
+        }
+      });
+    });
+  }, [patchDraftPreferences]);
+  const uploadHeroMediaPreference = useCallback(async (event, field) => {
+    if (!isOwnSocialContext || !galleryOwnerIdentifier) return;
+    const [file] = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setDesignError('Only image files are supported.');
+      return;
+    }
+
+    if (file.size > GALLERY_MAX_IMAGE_SIZE_BYTES) {
+      setDesignError('Image file is too large (max 3MB).');
+      return;
+    }
+
+    setDesignBusy(true);
+    setDesignError('');
+    try {
+      const response = await galleryAPI.uploadGalleryItem(galleryOwnerIdentifier, file, `Hero ${field === 'backgroundImage' ? 'background' : 'profile'} image`, 'social');
+      const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
+      if (created) {
+        setGalleryItems((prev) => [created, ...prev]);
+        updateHeroMediaPreference(field, created.mediaUrl || '');
+      } else {
+        await loadGallery();
+      }
+    } catch (error) {
+      setDesignError(error.response?.data?.error || 'Failed to upload image.');
+    } finally {
+      setDesignBusy(false);
+    }
+  }, [isOwnSocialContext, galleryOwnerIdentifier, updateHeroMediaPreference, loadGallery]);
   const updateThemePreset = useCallback((themePreset) => {
     const resolvedPreset = SOCIAL_THEME_PRESETS.includes(themePreset) ? themePreset : 'default';
     const themeStylePatch = STAGE_THEME_STYLE_PATCH[resolvedPreset] || STAGE_THEME_STYLE_PATCH.default;
@@ -3015,7 +3131,7 @@ const Social = () => {
       <div className="mx-auto max-w-7xl">
         <SocialHero
           profile={heroProfile}
-          heroConfig={socialPreferences.hero || {}}
+          heroConfig={heroConfig}
           activeTab={activeHeroTab}
           onTabChange={setActiveHeroTab}
           isMobile={isMobile}
@@ -3095,6 +3211,10 @@ const Social = () => {
         error={designError}
         successMessage={designSuccessMessage}
         heroBackgroundImage={socialPreferences.hero?.backgroundImage || ''}
+        heroBackgroundImageHistory={socialPreferences.hero?.backgroundImageHistory || []}
+        heroRandomGalleryEnabled={Boolean(socialPreferences.hero?.backgroundImageUseRandomGallery)}
+        heroProfileImage={socialPreferences.hero?.profileImage || ''}
+        heroProfileImageHistory={socialPreferences.hero?.profileImageHistory || []}
         themePreset={socialPreferences.themePreset || 'default'}
         themeOptions={STAGE_THEME_OPTIONS}
         accentColor={accentColor}
@@ -3103,7 +3223,11 @@ const Social = () => {
         selectedTopFriends={draftTopFriends}
         availableFriends={friends}
         topFriendsLimit={TOP_FRIENDS_LIMIT}
-        onHeroBackgroundImageChange={(value) => updateHeroConfig({ backgroundImage: value })}
+        onHeroBackgroundImageChange={(value) => updateHeroMediaPreference('backgroundImage', value)}
+        onHeroBackgroundImageUpload={(event) => uploadHeroMediaPreference(event, 'backgroundImage')}
+        onHeroProfileImageChange={(value) => updateHeroMediaPreference('profileImage', value)}
+        onHeroProfileImageUpload={(event) => uploadHeroMediaPreference(event, 'profileImage')}
+        onHeroRandomGalleryToggle={(enabled) => updateHeroConfig({ backgroundImageUseRandomGallery: enabled })}
         onThemePresetChange={updateThemePreset}
         onAccentColorChange={(value) => {
           updateHeroConfig({ menuActiveColor: value, locationColor: value });
