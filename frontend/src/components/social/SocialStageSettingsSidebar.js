@@ -1,5 +1,8 @@
 import React from 'react';
 
+const SIDEBAR_OVERLAY_Z_INDEX_CLASS = 'z-[1400]';
+const SIDEBAR_PANEL_SHADOW_CLASS = 'shadow-[0_30px_90px_rgba(15,23,42,0.35)]';
+
 const SocialStageSettingsSidebar = ({
   isOpen,
   onClose,
@@ -26,16 +29,20 @@ const SocialStageSettingsSidebar = ({
   onMoveTopFriend
 }) => {
   if (!isOpen) return null;
+  const themeValues = themeOptions.map((option) => option.value);
+  const resolvedThemePreset = themeValues.includes(themePreset)
+    ? themePreset
+    : (themeValues[0] || 'default');
 
   return (
-    <div className="fixed inset-0 z-[1400] isolate pointer-events-none">
+    <div className={`fixed inset-0 ${SIDEBAR_OVERLAY_Z_INDEX_CLASS} pointer-events-none`}>
       <button
         type="button"
         aria-label="Close stage settings backdrop"
         onClick={onClose}
         className="absolute inset-0 z-0 bg-slate-950/55 backdrop-blur-sm pointer-events-auto"
       />
-      <div className="relative z-10 ml-auto flex h-full w-full max-w-[26rem] flex-col border-l border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)] pointer-events-auto">
+      <div className={`relative z-10 ml-auto flex h-full w-full max-w-[26rem] flex-col border-l border-slate-200 bg-white ${SIDEBAR_PANEL_SHADOW_CLASS} pointer-events-auto`}>
         <div className="flex items-center justify-between border-b border-blue-100 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-5 py-4 text-white">
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-blue-100">Profile Customizer</p>
@@ -60,7 +67,7 @@ const SocialStageSettingsSidebar = ({
               <p className="mt-1 text-xs text-slate-500">Apply a complete color mood for your social page.</p>
             </div>
             <select
-              value={themePreset}
+              value={resolvedThemePreset}
               onChange={(event) => onThemePresetChange(event.target.value)}
               className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             >

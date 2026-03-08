@@ -82,13 +82,17 @@ const THEME_TO_PAGE_CLASS = {
   sunset: 'bg-orange-50 text-gray-900',
   forest: 'bg-emerald-50 text-gray-900'
 };
-const STAGE_THEME_OPTIONS = [
-  { value: 'default', label: 'Default' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'sunset', label: 'Sunset' },
-  { value: 'forest', label: 'Forest' }
-];
+const STAGE_THEME_LABELS = {
+  default: 'Default',
+  light: 'Light',
+  dark: 'Dark',
+  sunset: 'Sunset',
+  forest: 'Forest'
+};
+const STAGE_THEME_OPTIONS = SOCIAL_THEME_PRESETS.map((value) => ({
+  value,
+  label: STAGE_THEME_LABELS[value] || value
+}));
 const STAGE_THEME_STYLE_PATCH = {
   default: {
     accentColorToken: 'blue',
