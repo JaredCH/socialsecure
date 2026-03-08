@@ -135,7 +135,6 @@ describe('Chat zip room indicator', () => {
       wrappedKeyHash: 'hash',
       algorithms: { encryption: 'AES-256-GCM', wrapping: 'PBKDF2', signing: 'ECDSA', hash: 'SHA-256' }
     });
-    window.prompt = jest.fn().mockReturnValue('secret-password');
     friendsAPI.sendRequest.mockResolvedValue({ data: { success: true } });
     moderationAPI.blockUser.mockResolvedValue({ data: { success: true } });
     container = document.createElement('div');
@@ -155,7 +154,6 @@ describe('Chat zip room indicator', () => {
     container = null;
     root = null;
     localStorage.clear();
-    window.prompt = undefined;
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
@@ -774,6 +772,17 @@ describe('Chat zip room indicator', () => {
       sendButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
+    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
+    expect(passwordInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(passwordInput, 'secret-password');
+      await flush();
+    });
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    await act(async () => {
+      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
 
     expect(chatAPI.sendConversationE2EEMessage).toHaveBeenCalledWith('dm1', expect.objectContaining({
       e2ee: expect.any(Object)
@@ -808,6 +817,17 @@ describe('Chat zip room indicator', () => {
     expect(goOfflineButton).not.toBeUndefined();
     await act(async () => {
       goOfflineButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
+    expect(passwordInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(passwordInput, 'secret-password');
+      await flush();
+    });
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    await act(async () => {
+      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 

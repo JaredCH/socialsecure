@@ -109,7 +109,7 @@ const conversationMessageSchema = new mongoose.Schema({
 
 conversationMessageSchema.index({ conversationId: 1, createdAt: -1 });
 conversationMessageSchema.index(
-  { 'e2ee.senderDeviceId': 1, 'e2ee.clientMessageId': 1 },
+  { conversationId: 1, 'e2ee.senderDeviceId': 1, 'e2ee.clientMessageId': 1 },
   {
     unique: true,
     partialFilterExpression: {

@@ -184,6 +184,8 @@ function Chat() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [dmOfflineState, setDmOfflineState] = useState('online');
   const [isOnline, setIsOnline] = useState(() => navigator.onLine !== false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
   const [userContextMenu, setUserContextMenu] = useState({
     open: false,
     x: 0,
@@ -192,6 +194,7 @@ function Chat() {
   });
   const userLongPressTimerRef = useRef(null);
   const e2eeSessionRef = useRef(null);
+  const passwordResolverRef = useRef(null);
 
   const handleThemeChange = useCallback((nextTheme) => {
     if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
@@ -252,10 +255,6 @@ function Chat() {
 
   useEffect(() => {
     setDecryptedDmContentById({});
-    if (activeConversation?.type === 'dm') {
-      setDmOfflineState('online');
-      return;
-    }
     setDmOfflineState('online');
   }, [activeConversationId, activeConversation?.type]);
 
@@ -436,10 +435,11 @@ function Chat() {
       throw new Error('Profile is required to unlock encryption vault');
     }
 
-    const encryptionPassword = window.prompt('Enter your SocialSecure encryption password to unlock DM encryption');
-    if (!encryptionPassword) {
-      throw new Error('Encryption password is required');
-    }
+    const encryptionPassword = await new Promise((resolve, reject) => {
+      passwordResolverRef.current = { resolve, reject };
+      setPasswordInput('');
+      setPasswordModalOpen(true);
+    });
 
     const { session } = await unlockOrCreateVault({
       userId: profile._id,
@@ -450,6 +450,26 @@ function Chat() {
     e2eeSessionRef.current = session;
     return session;
   }, [profile?._id]);
+
+  const handlePasswordUnlock = useCallback(() => {
+    const resolver = passwordResolverRef.current;
+    if (!resolver) return;
+    if (!passwordInput) {
+      toast.error('Encryption password is required');
+      return;
+    }
+    passwordResolverRef.current = null;
+    setPasswordModalOpen(false);
+    resolver.resolve(passwordInput);
+  }, [passwordInput]);
+
+  const handlePasswordCancel = useCallback(() => {
+    const resolver = passwordResolverRef.current;
+    if (!resolver) return;
+    passwordResolverRef.current = null;
+    setPasswordModalOpen(false);
+    resolver.reject(new Error('Encryption password is required'));
+  }, []);
 
   const hydrateConversationKeys = useCallback(async ({ conversationId, session }) => {
     const { data } = await chatAPI.syncConversationKeyPackages(conversationId, session.deviceId);
@@ -771,6 +791,10 @@ function Chat() {
     if (userLongPressTimerRef.current) {
       clearTimeout(userLongPressTimerRef.current);
       userLongPressTimerRef.current = null;
+    }
+    if (passwordResolverRef.current) {
+      passwordResolverRef.current.reject(new Error('Encryption password prompt cancelled'));
+      passwordResolverRef.current = null;
     }
   }, []);
 
@@ -1181,6 +1205,40 @@ function Chat() {
           </div>
         </aside>
       </div>
+      {passwordModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
+          <div className={`w-full max-w-sm rounded border p-3 ${activeTheme.panelGlass}`}>
+            <h3 className="text-sm font-semibold">Unlock DM encryption</h3>
+            <p className="mt-1 text-xs opacity-80">
+              Enter your encryption password to unlock your local vault for DM send/decrypt.
+            </p>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(event) => setPasswordInput(event.target.value)}
+              className={`mt-3 w-full rounded border px-2 py-1.5 text-sm ${activeTheme.input}`}
+              placeholder="Encryption password"
+              aria-label="Encryption password"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handlePasswordCancel}
+                className={`rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handlePasswordUnlock}
+                className={`rounded border px-2 py-1 text-xs ${activeTheme.accent}`}
+              >
+                Unlock
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {userContextMenu.open && userContextMenu.user ? (
         <div
           className={`fixed z-50 w-56 rounded border p-1 shadow-xl ${activeTheme.panelGlass}`}

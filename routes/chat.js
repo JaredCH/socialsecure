@@ -1661,7 +1661,7 @@ router.get('/rooms/:roomId/keys/packages/sync', authenticateToken, async (req, r
         wrappedKeyHash: pkg.wrappedKeyHash,
         algorithms: pkg.algorithms,
         createdAt: pkg.createdAt,
-        deliveredAt: pkg.deliveredAt || new Date()
+        deliveredAt: pkg.deliveredAt || null
       }))
     });
   } catch (error) {
@@ -2453,11 +2453,12 @@ router.get('/conversations/:conversationId/devices', unifiedChatLimiter, authent
   }
 });
 
-router.post('/conversations/:conversationId/keys/packages', [
+router.post(
+  '/conversations/:conversationId/keys/packages',
   unifiedChatLimiter,
   authenticateToken,
-  body('packages').isArray({ min: 1, max: 200 }).withMessage('packages must be an array with at least one package')
-], async (req, res) => {
+  body('packages').isArray({ min: 1, max: 200 }).withMessage('packages must be an array with at least one package'),
+  async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -2564,7 +2565,8 @@ router.post('/conversations/:conversationId/keys/packages', [
     console.error('Error publishing conversation key packages:', error?.message || error);
     return res.status(500).json({ error: 'Failed to publish conversation key packages' });
   }
-});
+  }
+);
 
 router.get('/conversations/:conversationId/keys/packages/sync', unifiedChatLimiter, authenticateToken, async (req, res) => {
   try {
@@ -2645,7 +2647,7 @@ router.get('/conversations/:conversationId/keys/packages/sync', unifiedChatLimit
         wrappedKeyHash: pkg.wrappedKeyHash,
         algorithms: pkg.algorithms,
         createdAt: pkg.createdAt,
-        deliveredAt: pkg.deliveredAt || new Date()
+        deliveredAt: pkg.deliveredAt || null
       }))
     });
   } catch (error) {
@@ -2658,7 +2660,7 @@ router.post(
   '/conversations/:conversationId/messages',
   unifiedChatLimiter,
   authenticateToken,
-  body('content').optional().isString().trim().isLength({ min: 1, max: 2000 }).withMessage('Message content is required and must be <= 2000 chars'),
+  body('content').optional().isString().withMessage('Message content must be a string when provided'),
   body('encryptedContent').not().exists().withMessage('Legacy encryptedContent is not allowed'),
   body('e2ee').optional().custom((value) => {
     const envelopeError = validateE2EEEnvelope(value);
@@ -2685,6 +2687,7 @@ router.post(
   try {
     const { conversationId } = req.params;
     const userId = req.user.userId;
+    const contentProvided = Object.prototype.hasOwnProperty.call(req.body, 'content');
     const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
     const hasContent = content.length > 0;
     const hasE2EEEnvelope = Boolean(req.body.e2ee);
@@ -2693,6 +2696,10 @@ router.post(
     const senderNameColor = typeof req.body.senderNameColor === 'string'
       ? req.body.senderNameColor.trim()
       : null;
+
+    if (contentProvided && (!hasContent || content.length > 2000)) {
+      return res.status(400).json({ error: 'Message content must be between 1 and 2000 chars when provided' });
+    }
 
     const conversation = await ChatConversation.findById(conversationId);
     if (!conversation) {
@@ -2751,7 +2758,7 @@ router.post(
         return res.status(409).json({ error: 'Duplicate clientMessageId for sender device' });
       }
     } else if (!hasContent) {
-      return res.status(400).json({ error: 'Message content is required and must be <= 2000 chars' });
+      return res.status(400).json({ error: 'Message content is required for non-DM conversations' });
     }
 
     const createPayload = {
