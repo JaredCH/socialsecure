@@ -376,6 +376,20 @@ const Social = () => {
   );
   const headerGradientClass = THEME_ACCENT_TO_HEADER_CLASS[socialPreferences.accentColorToken] || THEME_ACCENT_TO_HEADER_CLASS.blue;
   const pageThemeClass = THEME_TO_PAGE_CLASS[socialPreferences.themePreset] || THEME_TO_PAGE_CLASS.default;
+  const heroProfile = useMemo(() => {
+    const profileSource = activeProfile || currentUser || {};
+    const locationLabel = [profileSource?.city, profileSource?.state, profileSource?.country]
+      .filter(Boolean)
+      .join(', ');
+
+    return {
+      name: profileSource?.realName || profileSource?.name || profileSource?.username || 'User',
+      location: locationLabel || profileSource?.location || '',
+      avatarUrl: profileSource?.avatarUrl || '',
+      isOnline: Boolean(isOwnSocialContext),
+      lastActive: profileSource?.lastActive || null
+    };
+  }, [activeProfile, currentUser, isOwnSocialContext]);
 
   const galleryOwnerIdentifier = useMemo(() => {
     // Profile context (/social?user=...) uses target user gallery
@@ -2492,13 +2506,7 @@ const Social = () => {
 
       {/* Hero Section - Tier 1 */}
       <SocialHero
-        profile={{
-          name: currentUser?.name || profile?.name || 'User',
-          location: profile?.location || '',
-          avatarUrl: profile?.avatarUrl || currentUser?.avatarUrl || '',
-          isOnline: true,
-          lastActive: currentUser?.lastActive
-        }}
+        profile={heroProfile}
         heroConfig={socialPreferences.hero || {}}
         activeTab={activeHeroTab}
         onTabChange={setActiveHeroTab}
