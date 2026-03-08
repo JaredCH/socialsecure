@@ -2921,7 +2921,7 @@ const Social = () => {
   const activePartnerFriend = friends.find((friend) => friend.partnerStatus === 'accepted');
   const incomingPartnerRequests = friends.filter((friend) => friend.partnerStatus === 'pending' && friend.partnerCanRespond);
   const outgoingPartnerRequest = friends.find((friend) => friend.partnerStatus === 'pending' && friend.partnerRequestedByViewer);
-  const availablePartnerCandidates = friends.filter((friend) => friend.partnerStatus === 'none').slice(0, TOP_FRIENDS_LIMIT);
+  const availablePartnerCandidates = friends.filter((friend) => friend.partnerStatus === 'none');
   const liveTypingCount = Object.values(commentTypingByPostId).reduce((total, entry) => total + Object.keys(entry || {}).length, 0);
   const calendarCountdowns = posts.filter((post) => post?.interaction?.type === 'countdown').slice(0, 5);
 
