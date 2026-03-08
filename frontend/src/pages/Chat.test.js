@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import Chat from './Chat';
 import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
+import { createWrappedRoomKeyPackage, encryptEnvelope, unlockOrCreateVault } from '../utils/e2ee';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -13,7 +14,12 @@ jest.mock('../utils/api', () => ({
     getConversations: jest.fn(),
     getConversationMessages: jest.fn(),
     getConversationUsers: jest.fn(),
+    getConversationDevices: jest.fn(),
     sendConversationMessage: jest.fn(),
+    sendConversationE2EEMessage: jest.fn(),
+    publishConversationKeyPackages: jest.fn(),
+    syncConversationKeyPackages: jest.fn(),
+    registerDeviceKeys: jest.fn(),
     startDM: jest.fn(),
     getProfileThread: jest.fn()
   },
@@ -26,6 +32,14 @@ jest.mock('../utils/api', () => ({
   userAPI: {
     search: jest.fn()
   }
+}));
+
+jest.mock('../utils/e2ee', () => ({
+  unlockOrCreateVault: jest.fn(),
+  encryptEnvelope: jest.fn(),
+  decryptEnvelope: jest.fn(),
+  createWrappedRoomKeyPackage: jest.fn(),
+  ingestWrappedRoomKeyPackage: jest.fn()
 }));
 
 describe('Chat zip room indicator', () => {
@@ -54,6 +68,10 @@ describe('Chat zip room indicator', () => {
     localStorage.clear();
     chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
     chatAPI.getConversationUsers.mockResolvedValue({ data: { users: [] } });
+    chatAPI.getConversationDevices.mockResolvedValue({ data: { devices: [] } });
+    chatAPI.publishConversationKeyPackages.mockResolvedValue({ data: { success: true } });
+    chatAPI.syncConversationKeyPackages.mockResolvedValue({ data: { packages: [] } });
+    chatAPI.registerDeviceKeys.mockResolvedValue({ data: { success: true } });
     chatAPI.sendConversationMessage.mockResolvedValue({
       data: {
         message: {
@@ -63,6 +81,59 @@ describe('Chat zip room indicator', () => {
           createdAt: new Date().toISOString()
         }
       }
+    });
+    chatAPI.sendConversationE2EEMessage.mockResolvedValue({
+      data: {
+        message: {
+          _id: 'dm-e2ee-1',
+          content: '[Encrypted message]',
+          userId: { _id: 'u1', username: 'alpha' },
+          createdAt: new Date().toISOString(),
+          e2ee: { ciphertext: 'abc' }
+        }
+      }
+    });
+    const session = {
+      deviceId: 'device-1',
+      getRegisterPayload: jest.fn().mockResolvedValue({
+        deviceId: 'device-1',
+        keyVersion: 1,
+        publicEncryptionKey: '{}',
+        publicSigningKey: '{}',
+        algorithms: { encryption: 'ECDH-P256', signing: 'ECDSA-P256-SHA256' }
+      }),
+      getLatestRoomKey: jest.fn().mockReturnValue({
+        keyVersion: 1,
+        keyBytes: new Uint8Array([1, 2, 3, 4])
+      }),
+      createRoomKey: jest.fn().mockReturnValue(new Uint8Array([1, 2, 3, 4])),
+      setRoomKey: jest.fn(),
+      persist: jest.fn().mockResolvedValue(undefined)
+    };
+    unlockOrCreateVault.mockResolvedValue({ session, created: false });
+    encryptEnvelope.mockResolvedValue({
+      version: 1,
+      senderDeviceId: 'device-1',
+      clientMessageId: 'client-1',
+      keyVersion: 1,
+      nonce: 'abc',
+      aad: '',
+      ciphertext: 'cipher',
+      signature: 'sig',
+      ciphertextHash: 'a'.repeat(64),
+      algorithms: { cipher: 'AES-256-GCM', signature: 'ECDSA-P256-SHA256', hash: 'SHA-256' }
+    });
+    createWrappedRoomKeyPackage.mockResolvedValue({
+      senderDeviceId: 'device-1',
+      recipientDeviceId: 'device-2',
+      recipientUserId: 'u2',
+      keyVersion: 1,
+      wrappedRoomKey: 'wrap',
+      nonce: 'nonce',
+      aad: '',
+      signature: 'sig',
+      wrappedKeyHash: 'hash',
+      algorithms: { encryption: 'AES-256-GCM', wrapping: 'PBKDF2', signing: 'ECDSA', hash: 'SHA-256' }
     });
     friendsAPI.sendRequest.mockResolvedValue({ data: { success: true } });
     moderationAPI.blockUser.mockResolvedValue({ data: { success: true } });
@@ -83,6 +154,7 @@ describe('Chat zip room indicator', () => {
     container = null;
     root = null;
     localStorage.clear();
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
   it('shows default zip room from chat hub when profile zip is missing', async () => {
@@ -655,5 +727,125 @@ describe('Chat zip room indicator', () => {
     expect(chatAPI.getProfileThread).toHaveBeenCalledWith('u2');
     expect(window.location.pathname).toBe('/chat');
     expect(window.location.search).toBe('');
+  });
+
+  it('uses DM E2EE endpoint for direct message sends', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationDevices.mockResolvedValue({
+      data: {
+        devices: [
+          { userId: 'u1', deviceId: 'device-1' },
+          { userId: 'u2', deviceId: 'device-2' }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const composer = container.querySelector('textarea[placeholder="Type your message"]');
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      valueSetter.call(composer, 'hello dm');
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      await flush();
+    });
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Send');
+    await act(async () => {
+      sendButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
+    expect(passwordInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(passwordInput, 'secret-password');
+      await flush();
+    });
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    await act(async () => {
+      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(chatAPI.sendConversationE2EEMessage).toHaveBeenCalledWith('dm1', expect.objectContaining({
+      e2ee: expect.any(Object)
+    }));
+    expect(chatAPI.sendConversationMessage).not.toHaveBeenCalledWith('dm1', expect.anything());
+  });
+
+  it('supports DM offline controls state transitions', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const goOfflineButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Go Offline');
+    expect(goOfflineButton).not.toBeUndefined();
+    await act(async () => {
+      goOfflineButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
+    expect(passwordInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(passwordInput, 'secret-password');
+      await flush();
+    });
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    await act(async () => {
+      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    await act(async () => {
+      window.dispatchEvent(new Event('offline'));
+      await flush();
+    });
+
+    const decryptButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Decrypt Offline Messages');
+    expect(decryptButton.disabled).toBe(false);
+
+    await act(async () => {
+      decryptButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const returnOnlineButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Return Online');
+    expect(returnOnlineButton.disabled).toBe(false);
   });
 });

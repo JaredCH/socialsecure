@@ -60,7 +60,7 @@ const getVaultStorageKey = (userId) => `${VAULT_PREFIX}:${userId}`;
 
 const buildDeviceId = () => {
   if (window.crypto.randomUUID) return `web-${window.crypto.randomUUID()}`;
-  return `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `web-${toHex(randomBytes(16))}`;
 };
 
 const importPBKDF2Password = async (password) => {

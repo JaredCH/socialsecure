@@ -7,7 +7,7 @@ jest.mock('jsonwebtoken', () => ({
 
 const mockChatRoom = {};
 const mockChatMessage = {};
-const mockDeviceKey = {};
+const mockDeviceKey = { findOne: jest.fn(), find: jest.fn() };
 const mockSecurityEvent = {};
 const mockBlockList = { findOne: jest.fn() };
 const mockRoomKeyPackage = {};
@@ -23,7 +23,14 @@ const mockChatConversation = {
 const mockConversationMessage = {
   find: jest.fn(),
   countDocuments: jest.fn(),
-  create: jest.fn()
+  create: jest.fn(),
+  findOne: jest.fn(),
+  toPublicMessageShape: jest.fn((message) => message)
+};
+const mockConversationKeyPackage = {
+  findOneAndUpdate: jest.fn(),
+  find: jest.fn(),
+  updateMany: jest.fn()
 };
 
 jest.mock('../models/ChatRoom', () => mockChatRoom);
@@ -36,6 +43,7 @@ jest.mock('../models/User', () => mockUser);
 jest.mock('../models/Friendship', () => mockFriendship);
 jest.mock('../models/ChatConversation', () => mockChatConversation);
 jest.mock('../models/ConversationMessage', () => mockConversationMessage);
+jest.mock('../models/ConversationKeyPackage', () => mockConversationKeyPackage);
 jest.mock('../services/notifications', () => ({ createNotification: jest.fn() }));
 
 const jwt = require('jsonwebtoken');
@@ -58,6 +66,23 @@ const createSelectLean = (value) => ({
   })
 });
 
+const validDmEnvelope = {
+  version: 1,
+  senderDeviceId: 'device-1',
+  clientMessageId: 'client-1',
+  keyVersion: 1,
+  nonce: 'bm9uY2U',
+  aad: '',
+  ciphertext: 'Y2lwaGVydGV4dA',
+  signature: 'c2lnbmF0dXJl',
+  ciphertextHash: 'a'.repeat(64),
+  algorithms: {
+    cipher: 'AES-256-GCM',
+    signature: 'ECDSA-P256-SHA256',
+    hash: 'SHA-256'
+  }
+};
+
 describe('Unified chat hub routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -71,6 +96,18 @@ describe('Unified chat hub routes', () => {
     mockBlockList.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue(null)
+      })
+    });
+    mockDeviceKey.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: 'device-1' })
+      })
+    });
+    mockDeviceKey.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([])
+        })
       })
     });
     mockFriendship.findOne.mockReturnValue({
@@ -372,9 +409,9 @@ describe('Unified chat hub routes', () => {
   it('stores sender name color when posting conversation messages', async () => {
     const app = buildApp();
     const conversationDoc = {
-      _id: 'conv-dm',
-      type: 'dm',
-      participants: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439022'],
+      _id: 'conv-zip',
+      type: 'zip-room',
+      participants: [],
       messageCount: 0,
       save: jest.fn().mockResolvedValue(undefined)
     };
@@ -384,25 +421,113 @@ describe('Unified chat hub routes', () => {
       content: 'hello',
       senderNameColor: '#ff0000',
       userId: { _id: '507f1f77bcf86cd799439011', username: 'alpha' },
-      populate
+      populate,
+      toPublicMessage: jest.fn().mockReturnValue({
+        _id: 'msg-1',
+        content: 'hello',
+        senderNameColor: '#ff0000'
+      })
     };
 
     mockChatConversation.findById.mockResolvedValue(conversationDoc);
     mockConversationMessage.create.mockResolvedValue(createdMessage);
 
     const response = await request(app)
-      .post('/api/chat/conversations/conv-dm/messages')
+      .post('/api/chat/conversations/conv-zip/messages')
       .set('Authorization', 'Bearer token')
       .send({ content: 'hello', senderNameColor: '#ff0000' });
 
     expect(response.status).toBe(201);
     expect(mockConversationMessage.create).toHaveBeenCalledWith({
-      conversationId: 'conv-dm',
+      conversationId: 'conv-zip',
       userId: '507f1f77bcf86cd799439011',
       content: 'hello',
-      senderNameColor: '#ff0000'
+      messageType: 'text',
+      commandData: null,
+      senderNameColor: '#ff0000',
+      e2ee: { enabled: false }
     });
     expect(populate).toHaveBeenCalledWith('userId', '_id username realName');
+  });
+
+  it('rejects plaintext DM message payloads', async () => {
+    const app = buildApp();
+    mockChatConversation.findById.mockResolvedValue({
+      _id: 'conv-dm',
+      type: 'dm',
+      participants: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439022']
+    });
+
+    const response = await request(app)
+      .post('/api/chat/conversations/conv-dm/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'hello' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/Plaintext content is not allowed/);
+  });
+
+  it('accepts E2EE envelope payload for DM messages', async () => {
+    const app = buildApp();
+    const conversationDoc = {
+      _id: 'conv-dm',
+      type: 'dm',
+      participants: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439022'],
+      messageCount: 1,
+      save: jest.fn().mockResolvedValue(undefined)
+    };
+    const createdMessage = {
+      _id: 'dm-msg-1',
+      userId: { _id: '507f1f77bcf86cd799439011', username: 'alpha' },
+      populate: jest.fn().mockResolvedValue(undefined),
+      toPublicMessage: jest.fn().mockReturnValue({
+        _id: 'dm-msg-1',
+        isE2EE: true,
+        content: '[Encrypted message]',
+        e2ee: { senderDeviceId: 'device-1' }
+      })
+    };
+    mockChatConversation.findById.mockResolvedValue(conversationDoc);
+    mockConversationMessage.findOne.mockReturnValue(createSelectLean(null));
+    mockConversationMessage.create.mockResolvedValue(createdMessage);
+
+    const response = await request(app)
+      .post('/api/chat/conversations/conv-dm/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ e2ee: validDmEnvelope, messageType: 'meetup-invite' });
+
+    expect(response.status).toBe(201);
+    expect(mockConversationMessage.create).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: 'conv-dm',
+      userId: '507f1f77bcf86cd799439011',
+      content: null,
+      messageType: 'meetup-invite'
+    }));
+  });
+
+  it('syncs DM key packages only for authenticated active device', async () => {
+    const app = buildApp();
+    mockChatConversation.findById.mockResolvedValue({
+      _id: 'conv-dm',
+      type: 'dm',
+      participants: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439022']
+    });
+    mockConversationKeyPackage.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([])
+        })
+      })
+    });
+    mockConversationKeyPackage.updateMany.mockResolvedValue({ modifiedCount: 0 });
+
+    const response = await request(app)
+      .get('/api/chat/conversations/conv-dm/keys/packages/sync?deviceId=device-1')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.conversationId).toBe('conv-dm');
   });
 
   it('rejects conversation message attachments', async () => {

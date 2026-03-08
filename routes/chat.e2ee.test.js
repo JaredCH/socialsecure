@@ -9,6 +9,9 @@ const mockChatRoom = { findById: jest.fn() };
 const mockDeviceKey = { findOne: jest.fn() };
 const mockUser = { findById: jest.fn() };
 const mockRoomKeyPackage = {};
+const mockChatConversation = {};
+const mockConversationMessage = {};
+const mockConversationKeyPackage = {};
 const mockBlockList = { findOne: jest.fn() };
 
 const createSelectLean = (value) => ({
@@ -44,6 +47,9 @@ jest.mock('../models/ChatRoom', () => mockChatRoom);
 jest.mock('../models/ChatMessage', () => mockChatMessage);
 jest.mock('../models/DeviceKey', () => mockDeviceKey);
 jest.mock('../models/RoomKeyPackage', () => mockRoomKeyPackage);
+jest.mock('../models/ChatConversation', () => mockChatConversation);
+jest.mock('../models/ConversationMessage', () => mockConversationMessage);
+jest.mock('../models/ConversationKeyPackage', () => mockConversationKeyPackage);
 jest.mock('../models/User', () => mockUser);
 jest.mock('../models/BlockList', () => mockBlockList);
 jest.mock('../services/realtime', () => ({

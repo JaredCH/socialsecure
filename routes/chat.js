@@ -15,6 +15,7 @@ const BlockList = require('../models/BlockList');
 const RoomKeyPackage = require('../models/RoomKeyPackage');
 const ChatConversation = require('../models/ChatConversation');
 const ConversationMessage = require('../models/ConversationMessage');
+const ConversationKeyPackage = require('../models/ConversationKeyPackage');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const { createNotification } = require('../services/notifications');
@@ -145,7 +146,7 @@ const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 500;
 const DEFAULT_DISCOVERY_LIMIT = 20;
 const MAX_DISCOVERY_LIMIT = 100;
-const MESSAGE_TYPES = ['text', 'action', 'system', 'command'];
+const MESSAGE_TYPES = ['text', 'action', 'system', 'command', 'meetup-invite'];
 
 const COMMAND_DATA_LIMITS = {
   command: 64,
@@ -260,6 +261,12 @@ const canAccessConversation = (conversation, userId) => {
   if (conversation.type === 'zip-room') return true;
   return isConversationParticipant(conversation, userId);
 };
+
+const getConversationParticipantIds = (conversation) => (
+  Array.isArray(conversation?.participants)
+    ? conversation.participants.map((participantId) => String(participantId))
+    : []
+);
 
 const normalizeProfileThreadRoles = (roles, fallback) => {
   if (!Array.isArray(roles)) return [...fallback];
@@ -1076,9 +1083,11 @@ router.post('/rooms/:roomId/messages', [
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message: savedMessage });
     
     // Broadcast message via WebSocket (handled in server.js)
+    const publicMessage = savedMessage.toPublicMessage();
+
     emitChatMessage({
       userIds: room.members,
-      message: message.toPublicMessage()
+      message: publicMessage
     });
     
     res.status(201).json({
@@ -1363,9 +1372,10 @@ router.post('/rooms/:roomId/messages/e2ee', [
     const senderLabel = user.username || user.realName || 'Someone';
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message: savedMessage });
 
+    const publicMessage = savedMessage.toPublicMessage();
     emitChatMessage({
       userIds: room.members,
-      message: message.toPublicMessage()
+      message: publicMessage
     });
 
     return res.status(201).json({
@@ -1690,7 +1700,7 @@ router.get('/rooms/:roomId/keys/packages/sync', authenticateToken, async (req, r
         wrappedKeyHash: pkg.wrappedKeyHash,
         algorithms: pkg.algorithms,
         createdAt: pkg.createdAt,
-        deliveredAt: pkg.deliveredAt || new Date()
+        deliveredAt: pkg.deliveredAt || null
       }))
     });
   } catch (error) {
@@ -2336,6 +2346,10 @@ router.get('/conversations/:conversationId/messages', unifiedChatLimiter, option
 
     const total = await ConversationMessage.countDocuments({ conversationId });
 
+    const publicMessages = messages.reverse().map((message) => (
+      ConversationMessage.toPublicMessageShape(message, { conversationType: conversation.type })
+    ));
+
     return res.json({
       success: true,
       conversation: {
@@ -2348,7 +2362,7 @@ router.get('/conversations/:conversationId/messages', unifiedChatLimiter, option
           ? normalizeProfileThreadAccess(conversation.profileThreadAccess)
           : undefined
       },
-      messages: messages.reverse(),
+      messages: publicMessages,
       page,
       limit,
       hasMore: skip + messages.length < total
@@ -2434,11 +2448,268 @@ router.get('/conversations/:conversationId/users', unifiedChatLimiter, authentic
   }
 });
 
+router.get('/conversations/:conversationId/devices', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.userId;
+
+    const conversation = await resolveLeanDoc(ChatConversation.findById(conversationId));
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (!canAccessConversation(conversation, userId)) {
+      return res.status(403).json({ error: 'Access denied for this conversation' });
+    }
+
+    const participantIds = getConversationParticipantIds(conversation);
+    const activeDevices = participantIds.length > 0
+      ? await DeviceKey.find({
+        userId: { $in: participantIds },
+        isRevoked: false
+      })
+        .select('userId deviceId keyVersion publicEncryptionKey publicSigningKey algorithms updatedAt')
+        .sort({ updatedAt: -1 })
+        .lean()
+      : [];
+
+    return res.json({
+      success: true,
+      conversationId,
+      devices: activeDevices.map((device) => ({
+        userId: device.userId,
+        deviceId: device.deviceId,
+        keyVersion: device.keyVersion,
+        publicEncryptionKey: device.publicEncryptionKey,
+        publicSigningKey: device.publicSigningKey,
+        algorithms: device.algorithms,
+        updatedAt: device.updatedAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error loading conversation devices:', error?.message || error);
+    return res.status(500).json({ error: 'Failed to load conversation devices' });
+  }
+});
+
+router.post(
+  '/conversations/:conversationId/keys/packages',
+  unifiedChatLimiter,
+  authenticateToken,
+  body('packages').isArray({ min: 1, max: 200 }).withMessage('packages must be an array with at least one package'),
+  async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.userId;
+    const { packages } = req.body;
+
+    const conversation = await resolveLeanDoc(ChatConversation.findById(conversationId));
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    if (conversation.type !== 'dm') {
+      return res.status(400).json({ error: 'Conversation key packages are only supported for DM conversations' });
+    }
+    if (!canAccessConversation(conversation, userId)) {
+      return res.status(403).json({ error: 'Access denied for this conversation' });
+    }
+    const participantIds = getConversationParticipantIds(conversation);
+
+    const validatedPackages = [];
+    for (const payload of packages) {
+      const packageError = validateRoomKeyPackagePayload(payload);
+      if (packageError) {
+        return res.status(400).json({ error: packageError });
+      }
+
+      if (!participantIds.includes(String(payload.recipientUserId))) {
+        return res.status(403).json({ error: `recipientUserId ${payload.recipientUserId} is not a participant in this conversation` });
+      }
+
+      const [senderDevice, recipientDevice] = await Promise.all([
+        DeviceKey.findOne({
+          userId,
+          deviceId: payload.senderDeviceId,
+          isRevoked: false
+        }).select('_id').lean(),
+        DeviceKey.findOne({
+          userId: payload.recipientUserId,
+          deviceId: payload.recipientDeviceId,
+          isRevoked: false
+        }).select('_id').lean()
+      ]);
+
+      if (!senderDevice) {
+        return res.status(403).json({ error: `Sender device ${payload.senderDeviceId} is not active for authenticated user` });
+      }
+      if (!recipientDevice) {
+        return res.status(400).json({ error: `Recipient device ${payload.recipientDeviceId} is not active for recipient user` });
+      }
+
+      validatedPackages.push({
+        conversationId,
+        senderUserId: userId,
+        senderDeviceId: payload.senderDeviceId,
+        recipientUserId: payload.recipientUserId,
+        recipientDeviceId: payload.recipientDeviceId,
+        keyVersion: payload.keyVersion,
+        wrappedRoomKey: payload.wrappedRoomKey,
+        nonce: payload.nonce,
+        aad: payload.aad || '',
+        signature: payload.signature || '',
+        wrappedKeyHash: payload.wrappedKeyHash || '',
+        algorithms: {
+          encryption: payload.algorithms.encryption,
+          wrapping: payload.algorithms.wrapping || '',
+          signing: payload.algorithms.signing || '',
+          hash: payload.algorithms.hash || ''
+        }
+      });
+    }
+
+    const upsertResults = [];
+    for (const packageDoc of validatedPackages) {
+      const savedDoc = await ConversationKeyPackage.findOneAndUpdate(
+        {
+          conversationId: packageDoc.conversationId,
+          senderDeviceId: packageDoc.senderDeviceId,
+          recipientDeviceId: packageDoc.recipientDeviceId,
+          keyVersion: packageDoc.keyVersion
+        },
+        { $set: packageDoc },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean();
+
+      upsertResults.push({
+        id: savedDoc._id,
+        recipientUserId: savedDoc.recipientUserId,
+        recipientDeviceId: savedDoc.recipientDeviceId,
+        keyVersion: savedDoc.keyVersion,
+        createdAt: savedDoc.createdAt
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Conversation key packages stored',
+      count: upsertResults.length,
+      packages: upsertResults
+    });
+  } catch (error) {
+    console.error('Error publishing conversation key packages:', error?.message || error);
+    return res.status(500).json({ error: 'Failed to publish conversation key packages' });
+  }
+  }
+);
+
+router.get('/conversations/:conversationId/keys/packages/sync', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.userId;
+    const { deviceId, since } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+
+    if (!deviceId || typeof deviceId !== 'string' || deviceId.length > E2EE_LIMITS.deviceId) {
+      return res.status(400).json({ error: 'Valid deviceId query parameter is required' });
+    }
+
+    const conversation = await resolveLeanDoc(ChatConversation.findById(conversationId));
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    if (conversation.type !== 'dm') {
+      return res.status(400).json({ error: 'Conversation key sync is only supported for DM conversations' });
+    }
+    if (!canAccessConversation(conversation, userId)) {
+      return res.status(403).json({ error: 'Access denied for this conversation' });
+    }
+
+    const ownedDevice = await DeviceKey.findOne({
+      userId,
+      deviceId,
+      isRevoked: false
+    }).select('_id').lean();
+
+    if (!ownedDevice) {
+      return res.status(403).json({ error: 'Device is not registered for authenticated user or has been revoked' });
+    }
+
+    const filter = {
+      conversationId,
+      recipientUserId: userId,
+      recipientDeviceId: deviceId
+    };
+
+    if (since) {
+      const sinceDate = new Date(since);
+      if (Number.isNaN(sinceDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid since timestamp' });
+      }
+      filter.createdAt = { $gt: sinceDate };
+    }
+
+    const packages = await ConversationKeyPackage.find(filter)
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .lean();
+
+    const packageIds = packages.map((pkg) => pkg._id);
+    if (packageIds.length > 0) {
+      await ConversationKeyPackage.updateMany(
+        { _id: { $in: packageIds }, deliveredAt: null },
+        { $set: { deliveredAt: new Date() } }
+      );
+    }
+
+    return res.json({
+      success: true,
+      conversationId,
+      deviceId,
+      count: packages.length,
+      packages: packages.map((pkg) => ({
+        _id: pkg._id,
+        conversationId: pkg.conversationId,
+        senderUserId: pkg.senderUserId,
+        senderDeviceId: pkg.senderDeviceId,
+        recipientUserId: pkg.recipientUserId,
+        recipientDeviceId: pkg.recipientDeviceId,
+        keyVersion: pkg.keyVersion,
+        wrappedRoomKey: pkg.wrappedRoomKey,
+        nonce: pkg.nonce,
+        aad: pkg.aad,
+        signature: pkg.signature,
+        wrappedKeyHash: pkg.wrappedKeyHash,
+        algorithms: pkg.algorithms,
+        createdAt: pkg.createdAt,
+        deliveredAt: pkg.deliveredAt || null
+      }))
+    });
+  } catch (error) {
+    console.error('Error syncing conversation key packages:', error?.message || error);
+    return res.status(500).json({ error: 'Failed to sync conversation key packages' });
+  }
+});
+
 router.post(
   '/conversations/:conversationId/messages',
   unifiedChatLimiter,
   authenticateToken,
-  body('content').trim().notEmpty().isLength({ max: 2000 }).withMessage('Message content is required and must be <= 2000 chars'),
+  body('content').optional().isString().withMessage('Message content must be a string when provided'),
+  body('encryptedContent').not().exists().withMessage('Legacy encryptedContent is not allowed'),
+  body('e2ee').optional().custom((value) => {
+    const envelopeError = validateE2EEEnvelope(value);
+    if (envelopeError) {
+      throw new Error(envelopeError);
+    }
+    return true;
+  }),
+  body('messageType').optional().isIn(MESSAGE_TYPES).withMessage('Invalid messageType'),
+  body('commandData').optional().isObject().withMessage('commandData must be an object'),
   body('senderNameColor')
     .optional({ nullable: true })
     .isString()
@@ -2455,10 +2726,19 @@ router.post(
   try {
     const { conversationId } = req.params;
     const userId = req.user.userId;
-    const content = req.body.content.trim();
+    const contentProvided = Object.prototype.hasOwnProperty.call(req.body, 'content');
+    const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
+    const hasContent = content.length > 0;
+    const hasE2EEEnvelope = Boolean(req.body.e2ee);
+    const messageType = normalizeMessageType(req.body.messageType);
+    const commandData = sanitizeCommandData(req.body.commandData);
     const senderNameColor = typeof req.body.senderNameColor === 'string'
       ? req.body.senderNameColor.trim()
       : null;
+
+    if (contentProvided && (!hasContent || content.length > 2000)) {
+      return res.status(400).json({ error: 'Message content must be between 1 and 2000 chars when provided' });
+    }
 
     const conversation = await ChatConversation.findById(conversationId);
     if (!conversation) {
@@ -2474,8 +2754,8 @@ router.post(
       return res.status(403).json({ error: 'Access denied for this conversation' });
     }
 
+    const participantIds = getConversationParticipantIds(conversation);
     if (conversation.type !== 'zip-room') {
-      const participantIds = (conversation.participants || []).map((participantId) => String(participantId));
       const blockedRelation = await BlockList.findOne({
         $or: [
           { userId, blockedUserId: { $in: participantIds } },
@@ -2487,12 +2767,74 @@ router.post(
       }
     }
 
-    const message = await ConversationMessage.create({
+    if (conversation.type === 'dm') {
+      if (hasContent) {
+        return res.status(400).json({ error: 'Plaintext content is not allowed for DM E2EE messages' });
+      }
+      if (!hasE2EEEnvelope) {
+        return res.status(400).json({ error: 'e2ee envelope is required for DM messages' });
+      }
+
+      const { e2ee } = req.body;
+      const ownedDevice = await DeviceKey.findOne({
+        userId,
+        deviceId: e2ee.senderDeviceId,
+        isRevoked: false
+      }).select('_id').lean();
+
+      if (!ownedDevice) {
+        return res.status(403).json({ error: 'Sender device is not registered for this user or has been revoked' });
+      }
+
+      const duplicateMessage = await ConversationMessage.findOne({
+        conversationId: conversation._id,
+        'e2ee.enabled': true,
+        'e2ee.senderDeviceId': e2ee.senderDeviceId,
+        'e2ee.clientMessageId': e2ee.clientMessageId
+      }).select('_id').lean();
+
+      if (duplicateMessage) {
+        return res.status(409).json({ error: 'Duplicate clientMessageId for sender device' });
+      }
+    } else if (!hasContent) {
+      return res.status(400).json({ error: 'Message content is required for non-DM conversations' });
+    }
+
+    const createPayload = {
       conversationId: conversation._id,
       userId,
-      content,
-      senderNameColor: senderNameColor || null
-    });
+      messageType,
+      commandData
+    };
+
+    if (conversation.type === 'dm') {
+      const { e2ee } = req.body;
+      createPayload.content = null;
+      createPayload.senderNameColor = null;
+      createPayload.e2ee = {
+        enabled: true,
+        version: e2ee.version,
+        senderDeviceId: e2ee.senderDeviceId,
+        clientMessageId: e2ee.clientMessageId,
+        keyVersion: e2ee.keyVersion,
+        nonce: e2ee.nonce,
+        aad: e2ee.aad || '',
+        ciphertext: e2ee.ciphertext,
+        signature: e2ee.signature,
+        ciphertextHash: e2ee.ciphertextHash,
+        algorithms: {
+          cipher: e2ee.algorithms.cipher,
+          signature: e2ee.algorithms.signature,
+          hash: e2ee.algorithms.hash
+        }
+      };
+    } else {
+      createPayload.content = content;
+      createPayload.senderNameColor = senderNameColor || null;
+      createPayload.e2ee = { enabled: false };
+    }
+
+    const message = await ConversationMessage.create(createPayload);
 
     conversation.lastMessageAt = new Date();
     conversation.messageCount = (conversation.messageCount || 0) + 1;
@@ -2501,9 +2843,12 @@ router.post(
 
     return res.status(201).json({
       success: true,
-      message
+      message: message.toPublicMessage({ conversationType: conversation.type })
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ error: 'Duplicate clientMessageId for sender device' });
+    }
     console.error('Error sending conversation message:', error);
     return res.status(500).json({ error: 'Failed to send conversation message' });
   }
