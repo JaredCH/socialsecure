@@ -8,6 +8,7 @@ import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
 import SocialEditablePanel from '../components/social/SocialEditablePanel';
 import SocialDesignStudioModal from '../components/social/SocialDesignStudioModal';
+import SocialHero from '../components/social/SocialHero';
 import {
   getFontSizeClass,
   getPanelsByArea,
@@ -15,7 +16,8 @@ import {
   normalizeSocialPreferences as normalizePageDesign,
   SOCIAL_DESIGN_TEMPLATES,
   SOCIAL_LAYOUT_PRESETS,
-  SOCIAL_PANEL_LABELS
+  SOCIAL_PANEL_LABELS,
+  SOCIAL_HERO_TABS
 } from '../utils/socialPagePreferences';
 import {
   emitTypingStart,
@@ -319,6 +321,8 @@ const Social = () => {
   const [commentTypingByPostId, setCommentTypingByPostId] = useState({});
   const [designStudioOpen, setDesignStudioOpen] = useState(false);
   const [inlineEditingPanelId, setInlineEditingPanelId] = useState('');
+  const [activeHeroTab, setActiveHeroTab] = useState('main');
+  const [heroEditingOpen, setHeroEditingOpen] = useState(false);
   const [draftSocialPreferences, setDraftSocialPreferences] = useState(null);
   const [socialConfigs, setSocialConfigs] = useState([]);
   const [favoriteDesigns, setFavoriteDesigns] = useState([]);
@@ -947,6 +951,10 @@ const Social = () => {
 
   const updateGlobalStyles = useCallback((patch) => {
     patchDraftPreferences((prev) => mergeDesignPatch(prev, { globalStyles: patch }));
+  }, [patchDraftPreferences]);
+
+  const updateHeroConfig = useCallback((patch) => {
+    patchDraftPreferences((prev) => mergeDesignPatch(prev, { hero: patch }));
   }, [patchDraftPreferences]);
 
   const updatePanelPreferences = useCallback((panelId, patch, mode) => {
@@ -2418,9 +2426,58 @@ const Social = () => {
     );
   };
 
+  // Render content based on active tab
+  const renderTabContent = () => {
+    switch (activeHeroTab) {
+      case 'main':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(240px,0.95fr)_minmax(0,2fr)_minmax(240px,0.95fr)]">
+              <div className="space-y-6">{panelsByArea.sideLeft.map(renderPanel)}</div>
+              <div className="grid grid-cols-1 gap-6 md:auto-rows-[5.5rem] md:grid-cols-12">{panelsByArea.main.map(renderPanel)}</div>
+              <div className="space-y-6">{panelsByArea.sideRight.map(renderPanel)}</div>
+            </div>
+          </div>
+        );
+      case 'chat':
+        return (
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold mb-4">Chat Room</h2>
+            <p className="text-gray-500">Chat functionality - Coming soon</p>
+          </div>
+        );
+      case 'calendar':
+        return (
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold mb-4">Calendar</h2>
+            <p className="text-gray-500">Calendar view - Coming soon</p>
+          </div>
+        );
+      case 'resume':
+        return (
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold mb-4">Resume Builder</h2>
+            <p className="text-gray-500">Resume builder - Coming soon</p>
+          </div>
+        );
+      case 'blog':
+        return (
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold mb-4">Blog</h2>
+            <p className="text-gray-500">Blog posts - Coming soon</p>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Check if mobile
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   return (
     <div
-      className={`min-h-[calc(100vh-9rem)] w-full space-y-6 px-3 py-4 sm:px-4 ${pageThemeClass}`}
+      className={`min-h-[calc(100vh-9rem)] w-full space-y-0 px-0 py-0 ${pageThemeClass}`}
       style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor }}
     >
       {ownerEditingEnabled ? (
@@ -2433,14 +2490,26 @@ const Social = () => {
         </button>
       ) : null}
 
-      <div className="space-y-6">
-        {panelsByArea.top.map(renderPanel)}
+      {/* Hero Section - Tier 1 */}
+      <SocialHero
+        profile={{
+          name: currentUser?.name || profile?.name || 'User',
+          location: profile?.location || '',
+          avatarUrl: profile?.avatarUrl || currentUser?.avatarUrl || '',
+          isOnline: true,
+          lastActive: currentUser?.lastActive
+        }}
+        heroConfig={socialPreferences.hero || {}}
+        activeTab={activeHeroTab}
+        onTabChange={setActiveHeroTab}
+        isMobile={isMobile}
+        isEditing={ownerEditingEnabled}
+        onEditClick={() => setDesignStudioOpen(true)}
+      />
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(240px,0.95fr)_minmax(0,2fr)_minmax(240px,0.95fr)]">
-          <div className="space-y-6">{panelsByArea.sideLeft.map(renderPanel)}</div>
-          <div className="grid grid-cols-1 gap-6 md:auto-rows-[5.5rem] md:grid-cols-12">{panelsByArea.main.map(renderPanel)}</div>
-          <div className="space-y-6">{panelsByArea.sideRight.map(renderPanel)}</div>
-        </div>
+      {/* Content Area - Tier 2 */}
+      <div className={`px-3 py-4 sm:px-4 ${isMobile ? 'pb-20' : ''}`}>
+        {renderTabContent()}
       </div>
 
       <SocialDesignStudioModal
@@ -2455,6 +2524,7 @@ const Social = () => {
         onApplyTemplate={applyTemplate}
         onApplyLayoutPreset={(preset) => applyLayoutPreset(preset, editorLayoutMode)}
         onGlobalStylesChange={updateGlobalStyles}
+        onHeroConfigChange={updateHeroConfig}
         onPanelOverrideToggle={(panelId, enabled) => updatePanelPreferences(panelId, buildPanelOverridePatch(enabled), editorLayoutMode)}
         onPanelStyleChange={(panelId, patch) => updatePanelPreferences(panelId, { useCustomStyles: true, styles: patch }, editorLayoutMode)}
         onPanelLayoutChange={(panelId, patch) => updatePanelPreferences(panelId, patch, editorLayoutMode)}

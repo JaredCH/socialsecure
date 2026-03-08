@@ -17,7 +17,6 @@ export const SOCIAL_PANEL_SHAPE_MASKS = {
   'z-shape': [[1, 1, 0], [0, 1, 1]]
 };
 export const SOCIAL_PANEL_IDS = [
-  'profile_header',
   'guest_preview_notice',
   'shortcuts',
   'snapshot',
@@ -32,8 +31,24 @@ export const SOCIAL_PANEL_IDS = [
   'community_notes'
 ];
 
+// Hero sub-page tabs
+export const SOCIAL_HERO_TABS = [
+  { id: 'main', label: 'Main', icon: 'home' },
+  { id: 'chat', label: 'Chat', icon: 'chat' },
+  { id: 'calendar', label: 'Calendar', icon: 'calendar' },
+  { id: 'resume', label: 'Resume', icon: 'document' },
+  { id: 'blog', label: 'Blog', icon: 'newspaper' }
+];
+
+export const SOCIAL_HERO_TAB_LABELS = {
+  main: 'Main',
+  chat: 'Chat',
+  calendar: 'Calendar',
+  resume: 'Resume',
+  blog: 'Blog'
+};
+
 export const SOCIAL_PANEL_LABELS = {
-  profile_header: 'Profile Header',
   guest_preview_notice: 'Guest Preview Notice',
   shortcuts: 'Shortcuts',
   snapshot: 'Social Snapshot',
@@ -47,6 +62,37 @@ export const SOCIAL_PANEL_LABELS = {
   top_friends: 'Top Friends',
   community_notes: 'Community Notes'
 };
+
+// Hero configuration defaults
+export const DEFAULT_HERO_CONFIG = {
+  backgroundColor: '#1e293b',
+  backgroundImage: null,
+  textColor: '#ffffff',
+  nameColor: '#ffffff',
+  locationColor: '#94a3b8',
+  menuTextColor: '#e2e8f0',
+  menuActiveColor: '#3b82f6',
+  fontFamily: 'Inter',
+  avatarSize: 'lg',
+  showLocation: true,
+  showOnlineStatus: true,
+  showNavigation: true,
+  activeTab: 'main',
+  layout: 'standard' // 'standard' | 'compact' | 'expanded'
+};
+
+export const HERO_AVATAR_SIZES = {
+  sm: { desktop: 64, mobile: 48 },
+  md: { desktop: 80, mobile: 56 },
+  lg: { desktop: 96, mobile: 64 },
+  xl: { desktop: 120, mobile: 80 }
+};
+
+export const HERO_LAYOUTS = [
+  { id: 'standard', name: 'Standard', description: 'Balanced layout with avatar and info side by side' },
+  { id: 'compact', name: 'Compact', description: 'Smaller avatar, more space for content' },
+  { id: 'expanded', name: 'Expanded', description: 'Large avatar with more profile details' }
+];
 
 export const SOCIAL_AREA_LABELS = {
   top: 'Top',
@@ -93,8 +139,7 @@ export const SOCIAL_LAYOUT_PRESETS = [
       snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', height: 'fullRow', order: 1, gridPlacement: { row: 4, col: 8 }, visible: true },
       chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, gridPlacement: { row: 0, col: 10 }, visible: true },
       top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, gridPlacement: { row: 2, col: 10 }, visible: true },
-      community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, gridPlacement: { row: 6, col: 10 }, visible: true },
-      profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, gridPlacement: { row: 15, col: 0 }, visible: true }
+      community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, gridPlacement: { row: 6, col: 10 }, visible: true }
     }
   },
   {
@@ -113,8 +158,7 @@ export const SOCIAL_LAYOUT_PRESETS = [
       snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', height: 'fullRow', order: 1, gridPlacement: { row: 4, col: 8 }, visible: true },
       chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, gridPlacement: { row: 0, col: 10 }, visible: true },
       top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, gridPlacement: { row: 2, col: 10 }, visible: true },
-      community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, gridPlacement: { row: 6, col: 10 }, visible: true },
-      profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, gridPlacement: { row: 15, col: 0 }, visible: true }
+      community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, gridPlacement: { row: 6, col: 10 }, visible: true }
     }
   },
   {
@@ -133,8 +177,7 @@ export const SOCIAL_LAYOUT_PRESETS = [
       snapshot: { area: 'sideLeft', size: 'sidePanelHalfHeight', height: 'fullRow', order: 1, gridPlacement: { row: 4, col: 8 }, visible: true },
       chat_panel: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 0, gridPlacement: { row: 0, col: 10 }, visible: true },
       top_friends: { area: 'sideRight', size: 'sidePanelFull', height: 'twoRows', order: 1, gridPlacement: { row: 2, col: 10 }, visible: true },
-      community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, gridPlacement: { row: 6, col: 10 }, visible: true },
-      profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, gridPlacement: { row: 15, col: 0 }, visible: true }
+      community_notes: { area: 'sideRight', size: 'sidePanelHalfHeight', height: 'fullRow', order: 2, gridPlacement: { row: 6, col: 10 }, visible: true }
     }
   }
 ];
@@ -239,19 +282,18 @@ const BALANCED_LAYOUT_PRESET = SOCIAL_LAYOUT_PRESETS.find((preset) => preset.id 
 
 export const DEFAULT_PANEL_LAYOUTS = BALANCED_LAYOUT_PRESET.panels;
 export const DEFAULT_MOBILE_PANEL_LAYOUTS = {
-  profile_header: { area: 'top', size: 'fullTile', height: 'fullRow', order: 0, visible: true, gridPlacement: { row: 0, col: 0 } },
-  guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 1, visible: true, gridPlacement: { row: 1, col: 0 } },
-  composer: { area: 'main', size: 'fourCols', height: 'fullRow', order: 2, visible: true, gridPlacement: { row: 2, col: 0 } },
-  timeline: { area: 'main', size: 'fourCols', height: 'threeRows', order: 3, visible: true, gridPlacement: { row: 4, col: 0 } },
-  gallery: { area: 'main', size: 'fourCols', height: 'twoRows', order: 4, visible: true, gridPlacement: { row: 10, col: 0 } },
-  chat_panel: { area: 'main', size: 'fourCols', height: 'fullRow', order: 5, visible: true, gridPlacement: { row: 14, col: 0 } },
-  top_friends: { area: 'main', size: 'twoCols', height: 'fullRow', order: 6, visible: true, gridPlacement: { row: 16, col: 0 } },
-  snapshot: { area: 'main', size: 'twoCols', height: 'fullRow', order: 7, visible: true, gridPlacement: { row: 16, col: 6 } },
-  circles: { area: 'main', size: 'fourCols', height: 'fullRow', order: 8, visible: true, gridPlacement: { row: 18, col: 0 } },
-  guest_lookup: { area: 'main', size: 'twoCols', height: 'fullRow', order: 9, visible: true, gridPlacement: { row: 17, col: 0 } },
-  moderation_status: { area: 'main', size: 'twoCols', height: 'fullRow', order: 10, visible: true, gridPlacement: { row: 17, col: 6 } },
-  community_notes: { area: 'main', size: 'fourCols', height: 'halfRow', order: 11, visible: true, gridPlacement: { row: 19, col: 0 } },
-  shortcuts: { area: 'main', size: 'fourCols', height: 'halfRow', order: 12, visible: true, gridPlacement: { row: 19, col: 6 } }
+  guest_preview_notice: { area: 'main', size: 'fourCols', height: 'halfRow', order: 0, visible: true, gridPlacement: { row: 0, col: 0 } },
+  composer: { area: 'main', size: 'fourCols', height: 'fullRow', order: 1, visible: true, gridPlacement: { row: 1, col: 0 } },
+  timeline: { area: 'main', size: 'fourCols', height: 'threeRows', order: 2, visible: true, gridPlacement: { row: 3, col: 0 } },
+  gallery: { area: 'main', size: 'fourCols', height: 'twoRows', order: 3, visible: true, gridPlacement: { row: 9, col: 0 } },
+  chat_panel: { area: 'main', size: 'fourCols', height: 'fullRow', order: 4, visible: true, gridPlacement: { row: 13, col: 0 } },
+  top_friends: { area: 'main', size: 'twoCols', height: 'fullRow', order: 5, visible: true, gridPlacement: { row: 15, col: 0 } },
+  snapshot: { area: 'main', size: 'twoCols', height: 'fullRow', order: 6, visible: true, gridPlacement: { row: 15, col: 6 } },
+  circles: { area: 'main', size: 'fourCols', height: 'fullRow', order: 7, visible: true, gridPlacement: { row: 17, col: 0 } },
+  guest_lookup: { area: 'main', size: 'twoCols', height: 'fullRow', order: 8, visible: true, gridPlacement: { row: 16, col: 0 } },
+  moderation_status: { area: 'main', size: 'twoCols', height: 'fullRow', order: 9, visible: true, gridPlacement: { row: 16, col: 6 } },
+  community_notes: { area: 'main', size: 'fourCols', height: 'halfRow', order: 10, visible: true, gridPlacement: { row: 18, col: 0 } },
+  shortcuts: { area: 'main', size: 'fourCols', height: 'halfRow', order: 11, visible: true, gridPlacement: { row: 18, col: 6 } }
 };
 
 export const SOCIAL_DESIGN_TEMPLATES = [
@@ -381,6 +423,30 @@ const normalizeGridPlacement = (gridPlacement, fallback) => {
   return { row: Math.floor(row), col: Math.floor(col) };
 };
 
+const normalizeHeroConfig = (heroInput, fallback) => {
+  const isHexColor = (value) => typeof value === 'string' && /^#([0-9a-fA-F]{3,8})$/.test(value.trim());
+  const isValidFont = (value) => SOCIAL_FONT_FAMILIES.includes(value);
+  const isValidSize = (value) => ['sm', 'md', 'lg', 'xl'].includes(value);
+  const isValidLayout = (value) => ['standard', 'compact', 'expanded'].includes(value);
+  
+  return {
+    backgroundColor: isHexColor(heroInput?.backgroundColor) ? heroInput.backgroundColor : fallback.backgroundColor,
+    backgroundImage: heroInput?.backgroundImage || fallback.backgroundImage,
+    textColor: isHexColor(heroInput?.textColor) ? heroInput.textColor : fallback.textColor,
+    nameColor: isHexColor(heroInput?.nameColor) ? heroInput.nameColor : fallback.nameColor,
+    locationColor: isHexColor(heroInput?.locationColor) ? heroInput.locationColor : fallback.locationColor,
+    menuTextColor: isHexColor(heroInput?.menuTextColor) ? heroInput.menuTextColor : fallback.menuTextColor,
+    menuActiveColor: isHexColor(heroInput?.menuActiveColor) ? heroInput.menuActiveColor : fallback.menuActiveColor,
+    fontFamily: isValidFont(heroInput?.fontFamily) ? heroInput.fontFamily : fallback.fontFamily,
+    avatarSize: isValidSize(heroInput?.avatarSize) ? heroInput.avatarSize : fallback.avatarSize,
+    showLocation: heroInput?.showLocation !== undefined ? Boolean(heroInput.showLocation) : fallback.showLocation,
+    showOnlineStatus: heroInput?.showOnlineStatus !== undefined ? Boolean(heroInput.showOnlineStatus) : fallback.showOnlineStatus,
+    showNavigation: heroInput?.showNavigation !== undefined ? Boolean(heroInput.showNavigation) : fallback.showNavigation,
+    activeTab: SOCIAL_HERO_TABS.some(t => t.id === heroInput?.activeTab) ? heroInput.activeTab : fallback.activeTab,
+    layout: isValidLayout(heroInput?.layout) ? heroInput.layout : fallback.layout
+  };
+};
+
 export const buildDefaultSocialPreferences = (profileTheme = 'default') => ({
   themePreset: SOCIAL_THEME_PRESETS.includes(profileTheme) ? profileTheme : 'default',
   accentColorToken: THEME_TO_DEFAULT_ACCENT[profileTheme] || THEME_TO_DEFAULT_ACCENT.default,
@@ -391,6 +457,7 @@ export const buildDefaultSocialPreferences = (profileTheme = 'default') => ({
     ...DEFAULT_GLOBAL_STYLES,
     fontSizes: { ...DEFAULT_GLOBAL_STYLES.fontSizes }
   },
+  hero: { ...DEFAULT_HERO_CONFIG },
   panels: SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
     const panelDefaults = DEFAULT_PANEL_LAYOUTS[panelId];
     acc[panelId] = {
@@ -488,12 +555,16 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default', requ
     : (SOCIAL_LAYOUT_MODES.includes(requestedLayoutMode) ? requestedLayoutMode : 'desktop');
   const panels = activeLayoutMode === 'mobile' ? mobilePanels : desktopPanels;
   const orderedPanels = [...SOCIAL_PANEL_IDS].sort((a, b) => (panels[a]?.order || 0) - (panels[b]?.order || 0));
+  // Normalize hero configuration
+  const hero = normalizeHeroConfig(raw.hero, defaults.hero || DEFAULT_HERO_CONFIG);
+  
   return {
     ...defaults,
     ...raw,
     themePreset,
     accentColorToken,
     globalStyles,
+    hero,
     layouts: {
       desktop: { panels: desktopPanels },
       mobile: { panels: mobilePanels },
@@ -507,6 +578,7 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default', requ
       sectionOrder: orderedPanels,
       visibleSections: orderedPanels.filter((panelId) => panels[panelId]?.visible !== false),
       visibleModules: SOCIAL_MODULE_IDS.filter((id) => !(raw.hiddenModules || []).includes(id)),
+      hero,
       panels: orderedPanels.reduce((acc, panelId) => {
         const panel = panels[panelId];
         acc[panelId] = {
@@ -536,6 +608,10 @@ export const mergeDesignPatch = (base, patch = {}) => {
         ...((base.globalStyles && base.globalStyles.fontSizes) || {}),
         ...((patch.globalStyles && patch.globalStyles.fontSizes) || {})
       }
+    },
+    hero: {
+      ...(base.hero || DEFAULT_HERO_CONFIG),
+      ...(patch.hero || {})
     },
     panels: { ...(base.panels || {}) },
     layouts: {

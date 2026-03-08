@@ -11,9 +11,13 @@ import {
   SOCIAL_THEME_STYLE_PRESETS,
   SOCIAL_PANEL_SHAPES,
   SOCIAL_PANEL_SHAPE_MASKS,
+  HERO_LAYOUTS,
+  HERO_AVATAR_SIZES,
+  SOCIAL_FONT_FAMILIES,
   normalizeSocialPreferences
 } from '../../utils/socialPagePreferences';
 import AdvancedColorPicker from './AdvancedColorPicker';
+import { SocialHeroPreview } from './SocialHero';
 
 const GRID_COLUMNS = 12;
 const GRID_ROWS = 20;
@@ -64,6 +68,7 @@ const SocialDesignStudioModal = ({
   onApplyTemplate,
   onApplyLayoutPreset,
   onGlobalStylesChange,
+  onHeroConfigChange,
   onPanelOverrideToggle,
   onPanelStyleChange,
   onPanelLayoutChange,
@@ -88,6 +93,7 @@ const SocialDesignStudioModal = ({
   const [pointerAction, setPointerAction] = useState(null);
   const [editingPanelId, setEditingPanelId] = useState(null);
   const [expandedThemes, setExpandedThemes] = useState({});
+  const [activeDesignTab, setActiveDesignTab] = useState('layout'); // 'layout' | 'hero'
   const gridRef = useRef(null);
 
   const normalized = useMemo(() => normalizeSocialPreferences(preferences, 'default', layoutMode), [preferences, layoutMode]);
@@ -255,7 +261,7 @@ const SocialDesignStudioModal = ({
         </div>
 
         {/* Viewport Switcher */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-6 py-2">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-2">
           <div className="flex gap-2">
             {SOCIAL_LAYOUT_MODES.map((mode) => (
               <button
@@ -267,11 +273,185 @@ const SocialDesignStudioModal = ({
               </button>
             ))}
           </div>
+          
+          {/* Design Tab Switcher */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveDesignTab('layout')}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold ${activeDesignTab === 'layout' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+            >
+              Layout
+            </button>
+            <button
+              onClick={() => setActiveDesignTab('hero')}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold ${activeDesignTab === 'hero' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+            >
+              Hero
+            </button>
+          </div>
         </div>
 
         {/* Content Area */}
         <div className="flex flex-1 overflow-hidden">
-          {layoutMode === 'desktop' ? (
+          {activeDesignTab === 'hero' ? (
+            // Hero Customization Panel
+            <div className="flex flex-1 overflow-hidden">
+              <div className="flex-1 overflow-auto bg-slate-100 p-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Hero Preview</h3>
+                  <p className="text-xs text-slate-500">Customize your profile header</p>
+                </div>
+                
+                {/* Hero Preview */}
+                <div className="mx-auto max-w-2xl overflow-hidden rounded-xl shadow-lg">
+                  <SocialHeroPreview
+                    heroConfig={normalized.hero || {}}
+                    isMobile={layoutMode === 'mobile'}
+                  />
+                </div>
+                
+                {/* Hero Customization Options */}
+                <div className="mt-6 space-y-6">
+                  {/* Background Color */}
+                  <div className="rounded-xl bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 font-semibold text-slate-900">Background</h4>
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <label className="mb-1 block text-xs text-slate-500">Background Color</label>
+                        <AdvancedColorPicker
+                          value={normalized.hero?.backgroundColor || '#1e293b'}
+                          onChange={(color) => onHeroConfigChange?.({ backgroundColor: color })}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="mb-1 block text-xs text-slate-500">Background Image URL</label>
+                        <input
+                          type="text"
+                          value={normalized.hero?.backgroundImage || ''}
+                          onChange={(e) => onHeroConfigChange?.({ backgroundImage: e.target.value })}
+                          placeholder="https://..."
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Text Colors */}
+                  <div className="rounded-xl bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 font-semibold text-slate-900">Text Colors</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="mb-1 block text-xs text-slate-500">Name Color</label>
+                        <AdvancedColorPicker
+                          value={normalized.hero?.nameColor || '#ffffff'}
+                          onChange={(color) => onHeroConfigChange?.({ nameColor: color })}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-slate-500">Location Color</label>
+                        <AdvancedColorPicker
+                          value={normalized.hero?.locationColor || '#94a3b8'}
+                          onChange={(color) => onHeroConfigChange?.({ locationColor: color })}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-slate-500">Menu Text Color</label>
+                        <AdvancedColorPicker
+                          value={normalized.hero?.menuTextColor || '#e2e8f0'}
+                          onChange={(color) => onHeroConfigChange?.({ menuTextColor: color })}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-slate-500">Menu Active Color</label>
+                        <AdvancedColorPicker
+                          value={normalized.hero?.menuActiveColor || '#3b82f6'}
+                          onChange={(color) => onHeroConfigChange?.({ menuActiveColor: color })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Layout Options */}
+                  <div className="rounded-xl bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 font-semibold text-slate-900">Layout & Display</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="mb-1 block text-xs text-slate-500">Avatar Size</label>
+                        <select
+                          value={normalized.hero?.avatarSize || 'lg'}
+                          onChange={(e) => onHeroConfigChange?.({ avatarSize: e.target.value })}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        >
+                          <option value="sm">Small</option>
+                          <option value="md">Medium</option>
+                          <option value="lg">Large</option>
+                          <option value="xl">Extra Large</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-slate-500">Layout Style</label>
+                        <select
+                          value={normalized.hero?.layout || 'standard'}
+                          onChange={(e) => onHeroConfigChange?.({ layout: e.target.value })}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        >
+                          {HERO_LAYOUTS.map((layout) => (
+                            <option key={layout.id} value={layout.id}>{layout.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-slate-500">Font Family</label>
+                        <select
+                          value={normalized.hero?.fontFamily || 'Inter'}
+                          onChange={(e) => onHeroConfigChange?.({ fontFamily: e.target.value })}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        >
+                          {SOCIAL_FONT_FAMILIES.map((font) => (
+                            <option key={font} value={font}>{font}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Visibility Toggles */}
+                  <div className="rounded-xl bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 font-semibold text-slate-900">Visibility</h4>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={normalized.hero?.showLocation !== false}
+                          onChange={(e) => onHeroConfigChange?.({ showLocation: e.target.checked })}
+                          className="rounded border-slate-300"
+                        />
+                        <span className="text-sm text-slate-700">Show Location</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={normalized.hero?.showOnlineStatus !== false}
+                          onChange={(e) => onHeroConfigChange?.({ showOnlineStatus: e.target.checked })}
+                          className="rounded border-slate-300"
+                        />
+                        <span className="text-sm text-slate-700">Show Online Status</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={normalized.hero?.showNavigation !== false}
+                          onChange={(e) => onHeroConfigChange?.({ showNavigation: e.target.checked })}
+                          className="rounded border-slate-300"
+                        />
+                        <span className="text-sm text-slate-700">Show Navigation Menu</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : layoutMode === 'desktop' ? (
             <div className="flex flex-1 overflow-hidden">
               {/* Left: Miniature Representation */}
               <div className="flex-1 overflow-auto bg-slate-100 p-6">
