@@ -78,7 +78,11 @@ export const DEFAULT_HERO_CONFIG = {
   showOnlineStatus: true,
   showNavigation: true,
   activeTab: 'main',
-  layout: 'standard' // 'standard' | 'compact' | 'expanded'
+  layout: 'standard', // 'standard' | 'compact' | 'expanded'
+  backgroundImageUseRandomGallery: false,
+  backgroundImageHistory: [],
+  profileImage: null,
+  profileImageHistory: []
 };
 
 export const HERO_AVATAR_SIZES = {
@@ -370,6 +374,8 @@ const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.
 const isHex = (value) => typeof value === 'string' && /^#([0-9a-fA-F]{3,8})$/.test(value.trim());
 const LAYOUT_GRID_COLUMNS = 12;
 const LAYOUT_GRID_ROWS = 20;
+const MEDIA_URL_MAX_LENGTH = 2048;
+const HERO_IMAGE_HISTORY_LIMIT = 3;
 
 const normalizeFontSizes = (value = {}, fallback = DEFAULT_GLOBAL_STYLES.fontSizes) => ({
   header: SOCIAL_FONT_SIZE_TOKENS.includes(value.header) ? value.header : fallback.header,
@@ -428,10 +434,40 @@ const normalizeHeroConfig = (heroInput, fallback) => {
   const isValidFont = (value) => SOCIAL_FONT_FAMILIES.includes(value);
   const isValidSize = (value) => ['sm', 'md', 'lg', 'xl'].includes(value);
   const isValidLayout = (value) => ['standard', 'compact', 'expanded'].includes(value);
+  const normalizeMediaUrl = (value, valueFallback = null) => {
+    if (typeof value !== 'string') return valueFallback;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > MEDIA_URL_MAX_LENGTH) return valueFallback;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return valueFallback;
+      return parsed.toString();
+    } catch {
+      return valueFallback;
+    }
+  };
+  const normalizeHistory = (history, currentValue) => {
+    if (!Array.isArray(history)) return [];
+    const seen = new Set();
+    const normalized = [];
+    const currentKey = typeof currentValue === 'string' ? currentValue.toLowerCase() : '';
+    for (const item of history) {
+      const normalizedUrl = normalizeMediaUrl(item, null);
+      if (!normalizedUrl) continue;
+      const dedupeKey = normalizedUrl.toLowerCase();
+      if (dedupeKey === currentKey || seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      normalized.push(normalizedUrl);
+      if (normalized.length >= HERO_IMAGE_HISTORY_LIMIT) break;
+    }
+    return normalized;
+  };
+  const backgroundImage = normalizeMediaUrl(heroInput?.backgroundImage, fallback.backgroundImage);
+  const profileImage = normalizeMediaUrl(heroInput?.profileImage, fallback.profileImage);
   
   return {
     backgroundColor: isHexColor(heroInput?.backgroundColor) ? heroInput.backgroundColor : fallback.backgroundColor,
-    backgroundImage: heroInput?.backgroundImage || fallback.backgroundImage,
+    backgroundImage,
     textColor: isHexColor(heroInput?.textColor) ? heroInput.textColor : fallback.textColor,
     nameColor: isHexColor(heroInput?.nameColor) ? heroInput.nameColor : fallback.nameColor,
     locationColor: isHexColor(heroInput?.locationColor) ? heroInput.locationColor : fallback.locationColor,
@@ -443,7 +479,13 @@ const normalizeHeroConfig = (heroInput, fallback) => {
     showOnlineStatus: heroInput?.showOnlineStatus !== undefined ? Boolean(heroInput.showOnlineStatus) : fallback.showOnlineStatus,
     showNavigation: heroInput?.showNavigation !== undefined ? Boolean(heroInput.showNavigation) : fallback.showNavigation,
     activeTab: SOCIAL_HERO_TABS.some(t => t.id === heroInput?.activeTab) ? heroInput.activeTab : fallback.activeTab,
-    layout: isValidLayout(heroInput?.layout) ? heroInput.layout : fallback.layout
+    layout: isValidLayout(heroInput?.layout) ? heroInput.layout : fallback.layout,
+    backgroundImageUseRandomGallery: heroInput?.backgroundImageUseRandomGallery !== undefined
+      ? Boolean(heroInput.backgroundImageUseRandomGallery)
+      : Boolean(fallback.backgroundImageUseRandomGallery),
+    backgroundImageHistory: normalizeHistory(heroInput?.backgroundImageHistory, backgroundImage),
+    profileImage,
+    profileImageHistory: normalizeHistory(heroInput?.profileImageHistory, profileImage)
   };
 };
 
@@ -457,7 +499,11 @@ export const buildDefaultSocialPreferences = (profileTheme = 'default') => ({
     ...DEFAULT_GLOBAL_STYLES,
     fontSizes: { ...DEFAULT_GLOBAL_STYLES.fontSizes }
   },
-  hero: { ...DEFAULT_HERO_CONFIG },
+  hero: {
+    ...DEFAULT_HERO_CONFIG,
+    backgroundImageHistory: [...DEFAULT_HERO_CONFIG.backgroundImageHistory],
+    profileImageHistory: [...DEFAULT_HERO_CONFIG.profileImageHistory]
+  },
   panels: SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
     const panelDefaults = DEFAULT_PANEL_LAYOUTS[panelId];
     acc[panelId] = {

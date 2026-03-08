@@ -62,4 +62,42 @@ describe('SocialStageSettingsSidebar', () => {
     expect(overlay).toBeTruthy();
     expect(overlay.className).toContain('z-[1400]');
   });
+
+  it('applies hero background URL, history revert, and random gallery toggle', async () => {
+    const onHeroBackgroundImageChange = jest.fn();
+    const onHeroRandomGalleryToggle = jest.fn();
+    await act(async () => {
+      root.render(
+        <SocialStageSettingsSidebar
+          isOpen
+          heroBackgroundImage="https://example.com/new-hero.jpg"
+          heroBackgroundImageHistory={['https://example.com/old-hero.jpg']}
+          onHeroBackgroundImageChange={onHeroBackgroundImageChange}
+          onHeroRandomGalleryToggle={onHeroRandomGalleryToggle}
+        />
+      );
+    });
+
+    const urlInput = container.querySelector('input[placeholder="https://example.com/hero-image.jpg"]');
+    expect(urlInput).toBeTruthy();
+    expect(urlInput.value).toBe('https://example.com/new-hero.jpg');
+
+    const setUrlButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Set URL');
+    await act(async () => {
+      setUrlButton.click();
+    });
+    expect(onHeroBackgroundImageChange).toHaveBeenCalledWith('https://example.com/new-hero.jpg');
+
+    const historyButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Use recent 1');
+    await act(async () => {
+      historyButton.click();
+    });
+    expect(onHeroBackgroundImageChange).toHaveBeenCalledWith('https://example.com/old-hero.jpg');
+
+    const randomizeToggle = container.querySelector('input[type="checkbox"]');
+    await act(async () => {
+      randomizeToggle.click();
+    });
+    expect(onHeroRandomGalleryToggle).toHaveBeenCalledWith(true);
+  });
 });

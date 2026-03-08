@@ -28,6 +28,8 @@ const SOCIAL_DEFAULT_SECTION_ORDER = [...SOCIAL_PANEL_IDS];
 const SOCIAL_PREFERENCES_VERSION = 2;
 const LAYOUT_GRID_COLUMNS = 12;
 const LAYOUT_GRID_ROWS = 20;
+const MEDIA_URL_MAX_LENGTH = 2048;
+const HERO_IMAGE_HISTORY_LIMIT = 3;
 
 const LEGACY_SECTION_ID_ALIASES = {
   header: 'profile_header',
@@ -71,6 +73,26 @@ const DEFAULT_GLOBAL_STYLES = Object.freeze({
     regular: 'base',
     small: 'sm'
   }
+});
+const DEFAULT_HERO_CONFIG = Object.freeze({
+  backgroundColor: '#1e293b',
+  backgroundImage: null,
+  textColor: '#ffffff',
+  nameColor: '#ffffff',
+  locationColor: '#94a3b8',
+  menuTextColor: '#e2e8f0',
+  menuActiveColor: '#3b82f6',
+  fontFamily: 'Inter',
+  avatarSize: 'lg',
+  showLocation: true,
+  showOnlineStatus: true,
+  showNavigation: true,
+  activeTab: 'main',
+  layout: 'standard',
+  backgroundImageUseRandomGallery: false,
+  backgroundImageHistory: [],
+  profileImage: null,
+  profileImageHistory: []
 });
 
 const DEFAULT_PANEL_LAYOUTS = Object.freeze({
@@ -350,6 +372,11 @@ const buildDefaultSocialPagePreferences = (profileTheme = 'default') => {
       ...DEFAULT_GLOBAL_STYLES,
       fontSizes: { ...DEFAULT_GLOBAL_STYLES.fontSizes }
     },
+    hero: {
+      ...DEFAULT_HERO_CONFIG,
+      backgroundImageHistory: [...DEFAULT_HERO_CONFIG.backgroundImageHistory],
+      profileImageHistory: [...DEFAULT_HERO_CONFIG.profileImageHistory]
+    },
     panels: desktopPanels,
     layouts: {
       desktop: { panels: desktopPanels },
@@ -372,6 +399,10 @@ const mergeDesignPatch = (base, patch = {}) => {
         ...((base.globalStyles && base.globalStyles.fontSizes) || {}),
         ...((patch.globalStyles && patch.globalStyles.fontSizes) || {})
       }
+    },
+    hero: {
+      ...(base.hero || {}),
+      ...(patch.hero || {})
     },
     panels: { ...(base.panels || {}) },
     layouts: {
@@ -472,6 +503,65 @@ const normalizePanelEntry = (rawPanel = {}, defaults, globalStyles = DEFAULT_GLO
     gridPlacement: normalizeGridPlacement(rawPanel.gridPlacement, defaults.gridPlacement),
     useCustomStyles: Boolean(rawPanel.useCustomStyles),
     styles: normalizePanelStyles(rawPanel.styles || {}, globalStyles)
+  };
+};
+
+const normalizeMediaUrl = (value, fallback = null) => {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MEDIA_URL_MAX_LENGTH) return fallback;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return fallback;
+    }
+    return parsed.toString();
+  } catch {
+    return fallback;
+  }
+};
+
+const normalizeHeroImageHistory = (value, currentValue) => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const normalized = [];
+  const normalizedCurrent = typeof currentValue === 'string' ? currentValue.toLowerCase() : '';
+  for (const item of value) {
+    const normalizedUrl = normalizeMediaUrl(item, null);
+    if (!normalizedUrl) continue;
+    const dedupeKey = normalizedUrl.toLowerCase();
+    if (dedupeKey === normalizedCurrent || seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    normalized.push(normalizedUrl);
+    if (normalized.length >= HERO_IMAGE_HISTORY_LIMIT) break;
+  }
+  return normalized;
+};
+
+const normalizeHeroConfig = (value = {}, fallback = DEFAULT_HERO_CONFIG) => {
+  const backgroundImage = normalizeMediaUrl(value.backgroundImage, fallback.backgroundImage);
+  const profileImage = normalizeMediaUrl(value.profileImage, fallback.profileImage);
+  return {
+    backgroundColor: normalizeHexColor(value.backgroundColor, fallback.backgroundColor),
+    backgroundImage,
+    textColor: normalizeHexColor(value.textColor, fallback.textColor),
+    nameColor: normalizeHexColor(value.nameColor, fallback.nameColor),
+    locationColor: normalizeHexColor(value.locationColor, fallback.locationColor),
+    menuTextColor: normalizeHexColor(value.menuTextColor, fallback.menuTextColor),
+    menuActiveColor: normalizeHexColor(value.menuActiveColor, fallback.menuActiveColor),
+    fontFamily: normalizeFontFamily(value.fontFamily, fallback.fontFamily),
+    avatarSize: ['sm', 'md', 'lg', 'xl'].includes(value.avatarSize) ? value.avatarSize : fallback.avatarSize,
+    showLocation: value.showLocation !== undefined ? Boolean(value.showLocation) : fallback.showLocation,
+    showOnlineStatus: value.showOnlineStatus !== undefined ? Boolean(value.showOnlineStatus) : fallback.showOnlineStatus,
+    showNavigation: value.showNavigation !== undefined ? Boolean(value.showNavigation) : fallback.showNavigation,
+    activeTab: ['main', 'friends', 'gallery', 'chat', 'calendar'].includes(value.activeTab) ? value.activeTab : fallback.activeTab,
+    layout: ['standard', 'compact', 'expanded'].includes(value.layout) ? value.layout : fallback.layout,
+    backgroundImageUseRandomGallery: value.backgroundImageUseRandomGallery !== undefined
+      ? Boolean(value.backgroundImageUseRandomGallery)
+      : fallback.backgroundImageUseRandomGallery,
+    backgroundImageHistory: normalizeHeroImageHistory(value.backgroundImageHistory, backgroundImage),
+    profileImage,
+    profileImageHistory: normalizeHeroImageHistory(value.profileImageHistory, profileImage)
   };
 };
 
@@ -589,6 +679,7 @@ const normalizeSocialPagePreferences = (input, {
     pageBackgroundColor: normalizeHexColor(raw.globalStyles?.pageBackgroundColor, DEFAULT_GLOBAL_STYLES.pageBackgroundColor),
     fontSizes: normalizeFontSizeMap(raw.globalStyles?.fontSizes, DEFAULT_GLOBAL_STYLES.fontSizes)
   };
+  const hero = normalizeHeroConfig(raw.hero, defaults.hero || DEFAULT_HERO_CONFIG);
 
   const requestedMode = SOCIAL_LAYOUT_MODES.includes(layoutMode) ? layoutMode : 'desktop';
   const activeLayoutMode = SOCIAL_LAYOUT_MODES.includes(raw.layouts?.activeMode)
@@ -626,6 +717,7 @@ const normalizeSocialPagePreferences = (input, {
     hiddenSections,
     hiddenModules,
     globalStyles,
+    hero,
     panels: effectivePanels,
     layouts: {
       desktop: { panels: desktopResolvedPanels },
@@ -672,6 +764,7 @@ module.exports = {
   THEME_TO_DEFAULT_ACCENT,
   SOCIAL_DESIGN_TEMPLATES,
   DEFAULT_GLOBAL_STYLES,
+  DEFAULT_HERO_CONFIG,
   DEFAULT_PANEL_LAYOUTS,
   buildDefaultSocialPagePreferences,
   mergeDesignPatch,
