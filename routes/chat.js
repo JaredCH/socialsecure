@@ -80,6 +80,40 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+const optionalAuthenticateToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  return jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', async (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+
+    try {
+      const user = await User.findById(decoded.userId).select('onboardingStatus');
+      if (!user) {
+        return res.status(401).json({ error: 'User not found' });
+      }
+
+      if (user.onboardingStatus !== 'completed') {
+        return res.status(403).json({
+          error: 'Complete onboarding before using chat features',
+          code: 'ONBOARDING_REQUIRED'
+        });
+      }
+
+      req.user = decoded;
+      return next();
+    } catch (lookupError) {
+      return res.status(500).json({ error: 'Authentication failed' });
+    }
+  });
+};
+
 const E2EE_LIMITS = {
   deviceId: 128,
   clientMessageId: 128,
@@ -260,8 +294,14 @@ const resolveProfileThreadPermissions = async (conversation, viewerId) => {
   }
 
   const normalizedViewerId = String(viewerId || '');
+  const access = normalizeProfileThreadAccess(conversation?.profileThreadAccess);
   if (!normalizedViewerId) {
-    return { canRead: false, canWrite: false, access: normalizeProfileThreadAccess(conversation?.profileThreadAccess), isOwner: false };
+    return {
+      canRead: access.readRoles.includes('guests'),
+      canWrite: access.writeRoles.includes('guests'),
+      access,
+      isOwner: false
+    };
   }
 
   if (normalizedViewerId === profileUserId) {
@@ -279,7 +319,6 @@ const resolveProfileThreadPermissions = async (conversation, viewerId) => {
     User.findById(profileUserId).select('_id circles.members').lean()
   ]);
 
-  const access = normalizeProfileThreadAccess(conversation?.profileThreadAccess);
   const circleMemberIds = new Set();
   if (Array.isArray(profileUser?.circles)) {
     for (const circle of profileUser.circles) {
@@ -2266,10 +2305,10 @@ router.get('/conversations', unifiedChatLimiter, authenticateToken, async (req, 
   }
 });
 
-router.get('/conversations/:conversationId/messages', unifiedChatLimiter, authenticateToken, async (req, res) => {
+router.get('/conversations/:conversationId/messages', unifiedChatLimiter, optionalAuthenticateToken, async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const userId = req.user.userId;
+    const userId = req.user?.userId || null;
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
     const skip = (page - 1) * limit;
@@ -2536,9 +2575,9 @@ router.post(
   }
 );
 
-router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, async (req, res) => {
+router.get('/profile/:userId/thread', unifiedChatLimiter, optionalAuthenticateToken, async (req, res) => {
   try {
-    const viewerId = String(req.user.userId);
+    const viewerId = req.user?.userId ? String(req.user.userId) : '';
     const profileUserId = String(req.params.userId);
 
     const profileUser = await User.findById(profileUserId).select('_id username realName circles.members').lean();
@@ -2546,12 +2585,14 @@ router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, asy
       return res.status(404).json({ error: 'Profile user not found' });
     }
 
-    const blockedRelation = await BlockList.findOne({
-      $or: [
-        { userId: viewerId, blockedUserId: profileUserId },
-        { userId: profileUserId, blockedUserId: viewerId }
-      ]
-    }).select('_id').lean();
+    const blockedRelation = viewerId
+      ? await BlockList.findOne({
+        $or: [
+          { userId: viewerId, blockedUserId: profileUserId },
+          { userId: profileUserId, blockedUserId: viewerId }
+        ]
+      }).select('_id').lean()
+      : null;
     if (blockedRelation) {
       return res.status(404).json({ error: 'Profile thread is unavailable' });
     }
@@ -2577,7 +2618,7 @@ router.get('/profile/:userId/thread', unifiedChatLimiter, authenticateToken, asy
     const participantIds = Array.isArray(thread.participants)
       ? thread.participants.map((participantId) => String(participantId))
       : [];
-    const shouldAddViewerAsParticipant = !participantIds.includes(viewerId);
+    const shouldAddViewerAsParticipant = Boolean(viewerId) && !participantIds.includes(viewerId);
     if (shouldAddViewerAsParticipant) {
       thread.participants = [...participantIds, viewerId];
       await thread.save();
