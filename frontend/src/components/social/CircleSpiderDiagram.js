@@ -12,6 +12,7 @@ const polarToCartesian = (radius, angleRadians) => ({
 
 function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor = '#3B82F6' }) {
   const [activeKey, setActiveKey] = useState('');
+  const ownerLabel = String(profileLabel || 'User').replace(/^@/, '').slice(0, 8) || 'User';
 
   const { circleNodes, memberNodes, edges, mutualCount } = useMemo(() => {
     const safeCircles = Array.isArray(circles) ? circles : [];
@@ -115,7 +116,7 @@ function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor 
 
           <g onMouseEnter={() => setActiveKey('owner')} onMouseLeave={() => setActiveKey('')}>
             <circle cx={CENTER_X} cy={CENTER_Y} r="20" fill={accentColor} />
-            <text x={CENTER_X} y={CENTER_Y + 4} textAnchor="middle" className="fill-white text-[10px] font-semibold">You</text>
+            <text x={CENTER_X} y={CENTER_Y + 4} textAnchor="middle" className="fill-white text-[10px] font-semibold">{ownerLabel}</text>
           </g>
 
           {circleNodes.map((circle) => (

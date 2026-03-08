@@ -2653,7 +2653,7 @@ const Social = () => {
                 {circles.map((circle) => (
                   <div key={circle.name} className="rounded-2xl border border-slate-200 bg-white/80 p-4">
                     <div className="flex items-center gap-3">
-                      {circle.profileImageUrl ? <img src={circle.profileImageUrl} alt={circle.name} className="h-10 w-10 rounded-full object-cover" /> : <span className="h-3 w-3 rounded-full" style={{ backgroundColor: circle.color || accentColor }} />}
+                      {isRenderableMediaUrl(circle.profileImageUrl) ? <img src={circle.profileImageUrl} alt={circle.name} className="h-10 w-10 rounded-full object-cover" /> : <span className="h-3 w-3 rounded-full" style={{ backgroundColor: circle.color || accentColor }} />}
                       <div>
                         <p className="font-semibold text-slate-900">{circle.name}</p>
                         <p className="text-xs text-slate-500">{circle.memberCount || 0} members</p>

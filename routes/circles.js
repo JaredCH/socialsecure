@@ -25,6 +25,15 @@ const authenticateToken = (req, res, next) => {
 
 const normalizeCircleName = (value = '') => value.trim().slice(0, 50);
 const normalizeCircleImageUrl = (value = '') => (typeof value === 'string' ? value.trim().slice(0, 2048) : '');
+const isValidHttpUrl = (value = '') => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(String(value));
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 const findCircleIndex = (circles = [], name = '') => {
   const normalized = normalizeCircleName(name).toLowerCase();
@@ -68,7 +77,7 @@ router.post('/', [
   body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES),
   body('profileImageUrl').optional({ nullable: true }).isString().trim().isLength({ max: 2048 }).custom((value) => (
     value === ''
-    || /^https?:\/\/\S+$/i.test(value)
+    || isValidHttpUrl(value)
   ))
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -110,7 +119,7 @@ router.put('/:circleName', [
   body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES),
   body('profileImageUrl').optional({ nullable: true }).isString().trim().isLength({ max: 2048 }).custom((value) => (
     value === ''
-    || /^https?:\/\/\S+$/i.test(value)
+    || isValidHttpUrl(value)
   ))
 ], async (req, res) => {
   const errors = validationResult(req);

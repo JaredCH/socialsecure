@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
 
+const isRenderableCircleImage = (value = '') => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 function CircleManager({ circles, friends, onCreateCircle, onDeleteCircle, onAddMember, onRemoveMember }) {
   const [circleName, setCircleName] = useState('');
   const [circleColor, setCircleColor] = useState('#3B82F6');
@@ -10,11 +20,12 @@ function CircleManager({ circles, friends, onCreateCircle, onDeleteCircle, onAdd
     event.preventDefault();
     const name = circleName.trim();
     if (!name) return;
+    const normalizedProfileImageUrl = circleProfileImageUrl.trim();
     onCreateCircle({
       name,
       color: circleColor,
       relationshipAudience: circleAudience,
-      profileImageUrl: circleProfileImageUrl.trim()
+      profileImageUrl: isRenderableCircleImage(normalizedProfileImageUrl) ? normalizedProfileImageUrl : ''
     });
     setCircleName('');
     setCircleProfileImageUrl('');
@@ -66,7 +77,7 @@ function CircleManager({ circles, friends, onCreateCircle, onDeleteCircle, onAdd
             <div className="flex justify-between items-center mb-2">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full" style={{ backgroundColor: circle.color || '#3B82F6' }} />
-                {circle.profileImageUrl ? <img src={circle.profileImageUrl} alt="" className="h-6 w-6 rounded-full object-cover" /> : null}
+                {isRenderableCircleImage(circle.profileImageUrl) ? <img src={circle.profileImageUrl} alt="" className="h-6 w-6 rounded-full object-cover" /> : null}
                 <span className="font-medium text-gray-900">{circle.name}</span>
                 <span className="text-sm text-gray-500">({circle.memberCount || 0})</span>
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${circle.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
