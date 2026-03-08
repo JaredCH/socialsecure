@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const SIDEBAR_OVERLAY_Z_INDEX_CLASS = 'z-[1400]';
 const SIDEBAR_PANEL_SHADOW_CLASS = 'shadow-[0_30px_90px_rgba(15,23,42,0.35)]';
@@ -13,6 +13,10 @@ const SocialStageSettingsSidebar = ({
   error,
   successMessage,
   heroBackgroundImage,
+  heroBackgroundImageHistory,
+  heroRandomGalleryEnabled,
+  heroProfileImage,
+  heroProfileImageHistory,
   themePreset,
   themeOptions,
   accentColor,
@@ -22,6 +26,10 @@ const SocialStageSettingsSidebar = ({
   availableFriends,
   topFriendsLimit,
   onHeroBackgroundImageChange,
+  onHeroBackgroundImageUpload,
+  onHeroProfileImageChange,
+  onHeroProfileImageUpload,
+  onHeroRandomGalleryToggle,
   onThemePresetChange,
   onAccentColorChange,
   onFontFamilyChange,
@@ -33,6 +41,18 @@ const SocialStageSettingsSidebar = ({
   const resolvedThemePreset = themeValues.includes(themePreset)
     ? themePreset
     : (themeValues[0] || 'default');
+  const backgroundFileInputRef = useRef(null);
+  const profileFileInputRef = useRef(null);
+  const [heroBackgroundDraft, setHeroBackgroundDraft] = useState(heroBackgroundImage);
+  const [heroProfileDraft, setHeroProfileDraft] = useState(heroProfileImage);
+
+  useEffect(() => {
+    setHeroBackgroundDraft(heroBackgroundImage);
+  }, [heroBackgroundImage]);
+
+  useEffect(() => {
+    setHeroProfileDraft(heroProfileImage);
+  }, [heroProfileImage]);
 
   return (
     <div className={`fixed inset-0 ${SIDEBAR_OVERLAY_Z_INDEX_CLASS} pointer-events-none`}>
@@ -80,15 +100,120 @@ const SocialStageSettingsSidebar = ({
           <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Hero Background Image</h3>
-              <p className="mt-1 text-xs text-slate-500">Use a cinematic image URL for the profile header.</p>
+              <p className="mt-1 text-xs text-slate-500">Use a URL or upload, then optionally randomize from your gallery.</p>
             </div>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={heroBackgroundDraft}
+                onChange={(event) => setHeroBackgroundDraft(event.target.value)}
+                placeholder="https://example.com/hero-image.jpg"
+                className="flex-1 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+              <button
+                type="button"
+                onClick={() => onHeroBackgroundImageChange(heroBackgroundDraft)}
+                className="rounded-2xl border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+              >
+                Set URL
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => backgroundFileInputRef.current?.click()}
+                className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Upload image
+              </button>
+              <input
+                ref={backgroundFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => onHeroBackgroundImageUpload(event)}
+              />
+              <label className="inline-flex items-center gap-2 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={heroRandomGalleryEnabled}
+                  onChange={(event) => onHeroRandomGalleryToggle(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                Randomize using gallery images
+              </label>
+            </div>
+            {heroBackgroundImageHistory.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent hero backgrounds</p>
+                <div className="flex flex-wrap gap-2">
+                  {heroBackgroundImageHistory.map((url, index) => (
+                    <button
+                      key={`hero-background-history-${index}`}
+                      type="button"
+                      onClick={() => onHeroBackgroundImageChange(url)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      Use recent {index + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Hero Profile Picture</h3>
+              <p className="mt-1 text-xs text-slate-500">Override the hero avatar with a URL or uploaded image.</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={heroProfileDraft}
+                onChange={(event) => setHeroProfileDraft(event.target.value)}
+                placeholder="https://example.com/profile-image.jpg"
+                className="flex-1 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+              <button
+                type="button"
+                onClick={() => onHeroProfileImageChange(heroProfileDraft)}
+                className="rounded-2xl border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+              >
+                Set URL
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => profileFileInputRef.current?.click()}
+              className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Upload profile image
+            </button>
             <input
-              type="url"
-              value={heroBackgroundImage}
-              onChange={(event) => onHeroBackgroundImageChange(event.target.value)}
-              placeholder="https://example.com/hero-image.jpg"
-              className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              ref={profileFileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => onHeroProfileImageUpload(event)}
             />
+            {heroProfileImageHistory.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent profile images</p>
+                <div className="flex flex-wrap gap-2">
+                  {heroProfileImageHistory.map((url, index) => (
+                    <button
+                      key={`hero-profile-history-${index}`}
+                      type="button"
+                      onClick={() => onHeroProfileImageChange(url)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      Use recent {index + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
@@ -214,6 +339,10 @@ const SocialStageSettingsSidebar = ({
 
 SocialStageSettingsSidebar.defaultProps = {
   heroBackgroundImage: '',
+  heroBackgroundImageHistory: [],
+  heroRandomGalleryEnabled: false,
+  heroProfileImage: '',
+  heroProfileImageHistory: [],
   themePreset: 'default',
   themeOptions: [],
   accentColor: '#3b82f6',
@@ -230,6 +359,10 @@ SocialStageSettingsSidebar.defaultProps = {
   onSaveChanges: () => {},
   onCancelChanges: () => {},
   onHeroBackgroundImageChange: () => {},
+  onHeroBackgroundImageUpload: () => {},
+  onHeroProfileImageChange: () => {},
+  onHeroProfileImageUpload: () => {},
+  onHeroRandomGalleryToggle: () => {},
   onThemePresetChange: () => {},
   onAccentColorChange: () => {},
   onFontFamilyChange: () => {},

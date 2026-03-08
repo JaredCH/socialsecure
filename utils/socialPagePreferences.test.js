@@ -15,6 +15,7 @@ describe('socialPagePreferences utility', () => {
     expect(prefs.panels.shortcuts.size).toBe('sidePanelFull');
     expect(prefs.panels.timeline.height).toBe('twoRows');
     expect(prefs.panels.timeline.gridPlacement).toEqual({ row: 5, col: 0 });
+    expect(prefs.hero.backgroundImageUseRandomGallery).toBe(false);
   });
 
   it('rejects unknown legacy section ids in strict mode', () => {
@@ -79,5 +80,30 @@ describe('socialPagePreferences utility', () => {
     expect(merged.panels.timeline.useCustomStyles).toBe(true);
     expect(merged.panels.timeline.styles.headerColor).toBe('#123456');
     expect(merged.panels.gallery.area).toBe('main');
+  });
+
+  it('normalizes and persists hero media settings including image history', () => {
+    const normalized = normalizeSocialPagePreferences({
+      hero: {
+        backgroundImage: 'https://example.com/hero.jpg',
+        profileImage: 'https://example.com/profile.jpg',
+        backgroundImageUseRandomGallery: true,
+        backgroundImageHistory: [
+          'https://example.com/old-1.jpg',
+          'https://example.com/old-2.jpg',
+          'https://example.com/old-3.jpg',
+          'https://example.com/old-4.jpg'
+        ]
+      }
+    });
+
+    expect(normalized.value.hero.backgroundImage).toBe('https://example.com/hero.jpg');
+    expect(normalized.value.hero.profileImage).toBe('https://example.com/profile.jpg');
+    expect(normalized.value.hero.backgroundImageUseRandomGallery).toBe(true);
+    expect(normalized.value.hero.backgroundImageHistory).toEqual([
+      'https://example.com/old-1.jpg',
+      'https://example.com/old-2.jpg',
+      'https://example.com/old-3.jpg'
+    ]);
   });
 });
