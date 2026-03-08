@@ -137,13 +137,18 @@ const USER_MENU_WIDTH_PX = 240;
 const USER_MENU_HEIGHT_PX = 220;
 const DM_UNLOCK_COOKIE_NAME = 'socialsecure_dm_unlock_v1';
 const DM_UNLOCK_CACHE_SECONDS = 30 * 60;
+const LOCKED_DM_PLACEHOLDER = '🔒 Conversation locked. Unlock to view encrypted messages.';
 
 const readCookie = (name) => {
   const source = typeof document?.cookie === 'string' ? document.cookie : '';
   const prefix = `${name}=`;
   const entry = source.split(';').find((part) => part.trim().startsWith(prefix));
   if (!entry) return '';
-  return decodeURIComponent(entry.trim().slice(prefix.length));
+  try {
+    return decodeURIComponent(entry.trim().slice(prefix.length));
+  } catch {
+    return '';
+  }
 };
 
 const writeCookie = (name, value, maxAgeSeconds) => {
@@ -420,7 +425,7 @@ function Chat() {
     if (!dmUnlockedByConversation[String(activeConversationId || '')]) {
       return messages.map((message) => ({
         ...message,
-        content: '🔒 Conversation locked. Unlock to view encrypted messages.'
+        content: LOCKED_DM_PLACEHOLDER
       }));
     }
     return messages.map((message) => {
@@ -1293,7 +1298,6 @@ function Chat() {
                       onClick={handleGoOffline}
                       disabled={
                         !dmUnlockedByConversation[String(activeConversationId)]
-                        || dmOfflineState === 'downloading_encrypted'
                         || dmOfflineState !== 'online'
                       }
                       className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
