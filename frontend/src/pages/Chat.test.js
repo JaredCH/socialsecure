@@ -625,4 +625,35 @@ describe('Chat zip room indicator', () => {
     expect(window.location.pathname).toBe('/chat');
     expect(window.location.search).toBe('');
   });
+
+  it('opens a profile thread when loaded with a social profile deep link target', async () => {
+    window.history.replaceState({}, '', '/chat?profile=u2');
+
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: [{ _id: 'pt-u2', type: 'profile-thread', profileUser: { _id: 'u2', username: 'buddy' } }]
+        }
+      }
+    });
+    chatAPI.getProfileThread.mockResolvedValue({
+      data: {
+        conversation: {
+          _id: 'pt-u2',
+          type: 'profile-thread'
+        }
+      }
+    });
+
+    await renderChat();
+
+    expect(chatAPI.getProfileThread).toHaveBeenCalledWith('u2');
+    expect(window.location.pathname).toBe('/chat');
+    expect(window.location.search).toBe('');
+  });
 });

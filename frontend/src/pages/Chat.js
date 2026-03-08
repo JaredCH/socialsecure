@@ -418,7 +418,7 @@ function Chat() {
     }
   };
 
-  const handleStartDM = async (targetUserId) => {
+  const handleStartDM = useCallback(async (targetUserId) => {
     try {
       const { data } = await chatAPI.startDM(targetUserId);
       await refreshHub('dm');
@@ -430,20 +430,44 @@ function Chat() {
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to start DM');
     }
-  };
+  }, [refreshHub]);
+
+  const handleOpenProfileThread = useCallback(async (targetUserId) => {
+    try {
+      const { data } = await chatAPI.getProfileThread(targetUserId);
+      const conversationId = data?.conversation?._id ? String(data.conversation._id) : '';
+      await refreshHub('profile');
+      setActiveChannel('profile');
+      if (conversationId) {
+        setActiveConversationId(conversationId);
+      }
+      setMobileWorkspaceOpen(true);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to open profile thread');
+    }
+  }, [refreshHub]);
 
   useEffect(() => {
     if (!profile?._id) return;
 
     const params = new URLSearchParams(window.location.search);
+    const profileThreadTarget = params.get('profile');
     const directMessageTarget = params.get('dm');
+    if (profileThreadTarget && String(profileThreadTarget) !== String(profile._id)) {
+      handleOpenProfileThread(profileThreadTarget).finally(() => {
+        window.history.replaceState({}, '', '/chat');
+      });
+      return;
+    }
+
     if (!directMessageTarget || String(directMessageTarget) === String(profile._id)) {
       return;
     }
 
-    handleStartDM(directMessageTarget);
-    window.history.replaceState({}, '', '/chat');
-  }, [profile?._id]);
+    handleStartDM(directMessageTarget).finally(() => {
+      window.history.replaceState({}, '', '/chat');
+    });
+  }, [profile?._id, handleOpenProfileThread, handleStartDM]);
 
   const openUserContextMenu = (event, user, point) => {
     if (event?.preventDefault) event.preventDefault();
