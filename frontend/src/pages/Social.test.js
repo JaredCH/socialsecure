@@ -13,6 +13,7 @@ jest.mock('../utils/api', () => ({
   },
   calendarAPI: {
     getMyEvents: jest.fn(),
+    getUserCalendar: jest.fn(),
     getUserCalendarEvents: jest.fn()
   },
   chatAPI: {
@@ -118,6 +119,12 @@ describe('Social page hero background rendering', () => {
     socialPageAPI.getConfigs.mockResolvedValue({ data: { configs: [] } });
     socialPageAPI.getSharedByUser.mockResolvedValue({ data: { configs: [] } });
     calendarAPI.getMyEvents.mockResolvedValue({ data: { events: [] } });
+    calendarAPI.getUserCalendar.mockResolvedValue({
+      data: {
+        isOwner: false,
+        calendar: { guestVisibility: 'public_readonly' }
+      }
+    });
     calendarAPI.getUserCalendarEvents.mockResolvedValue({ data: { events: [] } });
     chatAPI.getProfileThread.mockResolvedValue({
       data: {
@@ -222,6 +229,34 @@ describe('Social page hero background rendering', () => {
 
     expect(calendarAPI.getMyEvents).toHaveBeenCalled();
     expect(container.querySelector('[data-testid="social-calendar-preview-grid"]')).toBeTruthy();
+    expect(container.textContent).toContain('Upcoming');
+    expect(container.textContent).toContain('US:');
+  });
+
+  it('respects owner visibility settings when profile calendar access is restricted', async () => {
+    localStorage.clear();
+    window.history.replaceState({}, '', '/social?user=buddy&tab=calendar');
+    feedAPI.getPublicUserFeed.mockResolvedValue({
+      data: {
+        posts: [],
+        user: { _id: 'u-2', username: 'buddy' }
+      }
+    });
+    calendarAPI.getUserCalendar.mockRejectedValue({
+      response: {
+        status: 403,
+        data: { error: 'This calendar is private.' }
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(calendarAPI.getUserCalendar).toHaveBeenCalledWith('buddy');
+    expect(calendarAPI.getUserCalendarEvents).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('This owner has hidden calendar events for your current access level.');
   });
 
   it('keeps composer hidden by default with a reveal action', async () => {
