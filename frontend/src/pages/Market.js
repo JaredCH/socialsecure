@@ -981,6 +981,7 @@ function Market() {
   const [useLocation, setUseLocation] = useState(false);
   const [userCoords, setUserCoords] = useState(null);
   const [locationError, setLocationError] = useState('');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // My listings state
   const [myListings, setMyListings] = useState([]);
@@ -1194,6 +1195,8 @@ function Market() {
     setUseLocation(false);
   };
 
+  const hasActiveFilters = Boolean(appliedSearch || selectedCategory || priceMin || priceMax || useLocation);
+
   const pendingAsBuyer = transactions.filter(t =>
     t.status === 'pending' && String((t.buyerId && (t.buyerId._id || t.buyerId))) === String(currentUser && currentUser._id)
   );
@@ -1209,38 +1212,40 @@ function Market() {
           {currentUser && (
             <button
               onClick={() => setShowCreateForm(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 flex-shrink-0"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 flex-shrink-0 w-full sm:w-auto"
             >
               + Add a Listing
             </button>
           )}
         </div>
 
-        <div className="flex gap-1 mt-4 border-b border-gray-200">
-          {[
-            { id: 'browse', label: 'Browse' },
-            ...(currentUser ? [{ id: 'myListings', label: 'My Listings' }] : []),
-            ...(currentUser ? [{ id: 'transactions', label: 'Transactions' + (pendingAsBuyer.length > 0 ? ' (' + pendingAsBuyer.length + ')' : '') }] : []),
-            { id: 'tradeHistory', label: 'Trade History' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => switchTab(tab.id)}
-              className={'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ' + (
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="mt-4 border-b border-gray-200 overflow-x-auto">
+          <div className="flex gap-1 min-w-max">
+            {[
+              { id: 'browse', label: 'Browse' },
+              ...(currentUser ? [{ id: 'myListings', label: 'My Listings' }] : []),
+              ...(currentUser ? [{ id: 'transactions', label: 'Transactions' + (pendingAsBuyer.length > 0 ? ' (' + pendingAsBuyer.length + ')' : '') }] : []),
+              { id: 'tradeHistory', label: 'Trade History' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => switchTab(tab.id)}
+                className={'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ' + (
+                  activeTab === tab.id
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {activeTab === 'browse' && (
-        <div className="flex gap-4">
-          <div className="w-56 flex-shrink-0 space-y-4">
+        <div className="lg:flex lg:gap-4">
+          <div className="hidden lg:block w-56 flex-shrink-0 space-y-4">
             <CategorySidebar
               selected={selectedCategory}
               onSelect={setSelectedCategory}
@@ -1307,8 +1312,8 @@ function Market() {
             </div>
           </div>
 
-          <div className="flex-1">
-            <form onSubmit={handleSearchSubmit} className="flex gap-2 mb-4">
+          <div className="flex-1 mt-4 lg:mt-0">
+            <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-2 mb-4">
               <input
                 type="text"
                 value={searchInput}
@@ -1316,19 +1321,99 @@ function Market() {
                 placeholder="Search listings by title or description..."
                 className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
+              <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 w-full sm:w-auto">
                 Search
               </button>
-              {(appliedSearch || selectedCategory || priceMin || priceMax || useLocation) && (
+              {hasActiveFilters && (
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-300"
+                  className="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-300 w-full sm:w-auto"
                 >
                   Clear
                 </button>
               )}
             </form>
+
+            <div className="lg:hidden mb-4">
+              <button
+                type="button"
+                onClick={() => setShowMobileFilters(prev => !prev)}
+                className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 shadow-sm"
+              >
+                {showMobileFilters ? 'Hide Filters' : 'Show Filters'}
+                {hasActiveFilters ? ' • Active' : ''}
+              </button>
+
+              {showMobileFilters && (
+                <div className="space-y-4 mt-3">
+                  <CategorySidebar
+                    selected={selectedCategory}
+                    onSelect={setSelectedCategory}
+                    expandedCats={expandedCats}
+                    onToggle={(id) => setExpandedCats(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id])}
+                  />
+
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3">Price Range</h3>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        min="0"
+                        value={priceMin}
+                        onChange={e => setPriceMin(e.target.value)}
+                        placeholder="Min"
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <span className="text-gray-400 text-sm">-</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={priceMax}
+                        onChange={e => setPriceMax(e.target.value)}
+                        placeholder="Max"
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3">Location Filter</h3>
+                    <button
+                      onClick={handleToggleLocation}
+                      className={'w-full py-1.5 px-3 rounded text-sm font-medium transition-colors ' + (
+                        useLocation
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      )}
+                    >
+                      {useLocation ? 'Location On' : 'Enable Location'}
+                    </button>
+                    {locationError && <p className="text-red-500 text-xs mt-1">{locationError}</p>}
+                    {useLocation && (
+                      <div className="mt-3">
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Max Distance: <strong>{maxDistance} miles</strong>
+                        </label>
+                        <input
+                          type="range"
+                          min="5"
+                          max="200"
+                          step="5"
+                          value={maxDistance}
+                          onChange={e => setMaxDistance(parseInt(e.target.value))}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>5mi</span>
+                          <span>200mi</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {(appliedSearch || selectedCategory) && (
               <div className="flex flex-wrap gap-2 mb-3">
