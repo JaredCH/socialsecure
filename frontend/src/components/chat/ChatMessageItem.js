@@ -75,38 +75,39 @@ function ChatMessageItem({ message, isOwnMessage, theme }) {
 
   return (
     <article className={`group flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-      <div className={`flex max-w-[92%] items-end gap-1 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex max-w-[94%] items-end gap-0.5 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
         {profileLink ? (
           <a
             href={profileLink}
-            className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 ${theme.subtle}`}
+            className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 ${theme.subtle}`}
             aria-label={isOwnMessage ? 'View your social profile' : `View @${author} social profile`}
           >
             {(isOwnMessage ? 'Y' : author).slice(0, 1).toUpperCase()}
           </a>
         ) : (
-          <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${theme.subtle}`}>
+          <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${theme.subtle}`}>
             {(isOwnMessage ? 'Y' : author).slice(0, 1).toUpperCase()}
           </span>
         )}
         <div
+          tabIndex={0}
           className={[
-            'rounded-2xl border px-2 py-1 shadow-sm transition-all duration-200',
+            'relative rounded-xl border px-1.5 py-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1',
             isOwnMessage ? theme.messageOwn : theme.messageOther
           ].join(' ')}
         >
-          <header className="mb-0.5 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide">
+          <header className="mb-0 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-normal">
             <span className="truncate" style={senderNameColor ? { color: senderNameColor } : undefined}>
               {isOwnMessage ? 'You' : `@${author}`}
             </span>
-            <span className="font-mono text-[9px] opacity-75">{timestamp}</span>
+            <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
           </header>
-          <p className="whitespace-pre-wrap break-words text-sm leading-5">{renderMessageContent(message.content)}</p>
-          <div className="mt-0.5 flex items-center justify-between text-[10px] opacity-0 transition-opacity duration-200 group-hover:opacity-80">
+          <p className="whitespace-pre-wrap break-words text-[13px] leading-4">{renderMessageContent(message.content)}</p>
+          <div className={`absolute right-1 top-full z-10 mt-0.5 hidden items-center gap-2 rounded border px-1 py-0.5 text-[10px] opacity-95 shadow-sm group-hover:flex group-focus-within:flex ${theme.subtle}`}>
             <span className="font-mono">{fullTimestamp}</span>
             <button
               type="button"
-              className="rounded border px-1 leading-4 font-mono disabled:opacity-60"
+              className="rounded border px-1 leading-3 font-mono disabled:opacity-60"
               aria-label="React with thumbs up"
               disabled
               title="Reactions coming soon"

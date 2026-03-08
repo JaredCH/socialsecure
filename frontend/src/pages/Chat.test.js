@@ -487,5 +487,19 @@ describe('Chat zip room indicator', () => {
     );
     expect(profileLinks.length).toBeGreaterThan(0);
     expect(profileLinks.some((link) => link.getAttribute('href') === '/social/buddy')).toBe(true);
+    expect(profileLinks[0].className).toContain('h-5');
+    expect(profileLinks[0].className).toContain('w-5');
+
+    const messageText = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'hello');
+    expect(messageText).not.toBeUndefined();
+    expect(messageText.className).toContain('leading-4');
+    const messageBubble = messageText.closest('div[class*="rounded"]');
+    expect(messageBubble).not.toBeNull();
+    expect(messageBubble.className).toContain('px-1.5');
+    expect(messageBubble.className).toContain('py-0.5');
+
+    const messageViewport = messageText.closest('div.overflow-y-auto');
+    expect(messageViewport).not.toBeNull();
+    expect(messageViewport.className).toContain('space-y-1');
   });
 });
