@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const BlockList = require('../models/BlockList');
@@ -13,6 +14,28 @@ const buildContainsRegex = (value = '') => {
   if (!normalized) return null;
   return new RegExp(escapeRegex(normalized), 'i');
 };
+
+const SCORE_WEIGHTS = {
+  QUERY_TEXT: 2.2,
+  FIRST_NAME: 2,
+  LAST_NAME: 2,
+  CITY: 1.5,
+  STATE: 1.5,
+  ZIP: 1.5,
+  COUNTY: 1.5,
+  PHONE: 1,
+  FRIEND_OF_USER: 2,
+  WORKS_AT: 2,
+  HOBBIES: 1
+};
+
+const userSearchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many user search requests. Please try again shortly.' }
+});
 
 const hasBlockRelationship = async (viewerId, targetId) => {
   const record = await BlockList.findOne({
@@ -43,33 +66,73 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Search users (returns public profiles)
-router.get('/search', async (req, res) => {
+// Search users by query (legacy GET endpoint)
+router.get('/search', userSearchLimiter, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q || q.length < 2) {
+      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+    }
+
+    const searchRegex = buildContainsRegex(q);
+    const users = await User.find({
+      $or: [
+        { username: searchRegex },
+        { realName: searchRegex }
+      ],
+      registrationStatus: 'active'
+    })
+      .select('username realName city state country pgpPublicKey')
+      .limit(20)
+      .lean();
+
+    return res.json({
+      success: true,
+      users: users.map((user) => ({
+        _id: user._id,
+        username: user.username,
+        realName: user.realName,
+        city: user.city,
+        state: user.state,
+        country: user.country,
+        hasPGP: !!user.pgpPublicKey
+      }))
+    });
+  } catch (error) {
+    console.error('Error searching users:', error);
+    return res.status(500).json({ error: 'Failed to search users', details: error.message });
+  }
+});
+
+// Search users with optional multi-criteria ranking
+router.post('/search', userSearchLimiter, async (req, res) => {
   try {
     const criteria = {
-      q: String(req.query.q || '').trim(),
-      firstName: String(req.query.firstName || '').trim(),
-      lastName: String(req.query.lastName || '').trim(),
-      city: String(req.query.city || '').trim(),
-      state: String(req.query.state || '').trim(),
-      zip: String(req.query.zip || '').trim(),
-      county: String(req.query.county || '').trim(),
-      phone: String(req.query.phone || '').trim(),
-      streetAddress: String(req.query.streetAddress || '').trim(),
-      friendsOfUser: String(req.query.friendsOfUser || '').trim(),
-      worksAt: String(req.query.worksAt || '').trim(),
-      hobbies: String(req.query.hobbies || '').trim(),
-      ageFilters: String(req.query.ageFilters || '').trim(),
-      sex: String(req.query.sex || '').trim(),
-      race: String(req.query.race || '').trim()
+      q: String(req.body.q || '').trim(),
+      firstName: String(req.body.firstName || '').trim(),
+      lastName: String(req.body.lastName || '').trim(),
+      city: String(req.body.city || '').trim(),
+      state: String(req.body.state || '').trim(),
+      zip: String(req.body.zip || '').trim(),
+      county: String(req.body.county || '').trim(),
+      phone: String(req.body.phone || '').trim(),
+      streetAddress: String(req.body.streetAddress || '').trim(),
+      friendsOfUser: String(req.body.friendsOfUser || '').trim(),
+      worksAt: String(req.body.worksAt || '').trim(),
+      hobbies: String(req.body.hobbies || '').trim(),
+      ageFilters: String(req.body.ageFilters || '').trim(),
+      sex: String(req.body.sex || '').trim(),
+      race: String(req.body.race || '').trim()
     };
 
     const hasAnyCriteria = Object.values(criteria).some((value) => value.length > 0);
     if (!hasAnyCriteria) {
       return res.status(400).json({ error: 'At least one search criteria value is required' });
     }
+    const unsupportedCriteria = ['streetAddress', 'ageFilters', 'sex', 'race']
+      .filter((key) => criteria[key]);
 
-    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const requestedLimit = Number.parseInt(req.body.limit, 10);
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 50) : 20;
 
     const userFilter = {
@@ -133,6 +196,18 @@ router.get('/search', async (req, res) => {
       .map((user) => {
         const resume = resumeByOwnerId.get(String(user._id));
         const names = buildNameMatchers(user.realName);
+        const matchers = {
+          q: criteria.q.length >= 2 ? buildContainsRegex(criteria.q) : null,
+          firstName: buildContainsRegex(criteria.firstName),
+          lastName: buildContainsRegex(criteria.lastName),
+          city: buildContainsRegex(criteria.city),
+          state: buildContainsRegex(criteria.state),
+          zip: buildContainsRegex(criteria.zip),
+          county: buildContainsRegex(criteria.county),
+          phone: buildContainsRegex(criteria.phone),
+          worksAt: buildContainsRegex(criteria.worksAt),
+          hobbies: buildContainsRegex(criteria.hobbies)
+        };
         const searchableProfileText = [
           user.bio || '',
           resume?.summary || '',
@@ -150,31 +225,26 @@ router.get('/search', async (req, res) => {
 
         if (criteria.q.length >= 2) {
           scoreRule(
-            buildContainsRegex(criteria.q)?.test(user.username || '')
-            || buildContainsRegex(criteria.q)?.test(user.realName || ''),
-            2.2
+            matchers.q?.test(user.username || '')
+            || matchers.q?.test(user.realName || ''),
+            SCORE_WEIGHTS.QUERY_TEXT
           );
         }
 
-        if (criteria.firstName) scoreRule(buildContainsRegex(criteria.firstName)?.test(names.first), 2);
-        if (criteria.lastName) scoreRule(buildContainsRegex(criteria.lastName)?.test(names.last), 2);
-        if (criteria.city) scoreRule(buildContainsRegex(criteria.city)?.test(user.city || ''), 1.5);
-        if (criteria.state) scoreRule(buildContainsRegex(criteria.state)?.test(user.state || ''), 1.5);
-        if (criteria.zip) scoreRule(buildContainsRegex(criteria.zip)?.test(user.zipCode || ''), 1.5);
-        if (criteria.county) scoreRule(buildContainsRegex(criteria.county)?.test(user.county || ''), 1.5);
-        if (criteria.phone) scoreRule(buildContainsRegex(criteria.phone)?.test(user.phone || ''), 1);
-        if (criteria.friendsOfUser) scoreRule(friendSet ? friendSet.has(String(user._id)) : false, 2);
+        if (criteria.firstName) scoreRule(matchers.firstName?.test(names.first), SCORE_WEIGHTS.FIRST_NAME);
+        if (criteria.lastName) scoreRule(matchers.lastName?.test(names.last), SCORE_WEIGHTS.LAST_NAME);
+        if (criteria.city) scoreRule(matchers.city?.test(user.city || ''), SCORE_WEIGHTS.CITY);
+        if (criteria.state) scoreRule(matchers.state?.test(user.state || ''), SCORE_WEIGHTS.STATE);
+        if (criteria.zip) scoreRule(matchers.zip?.test(user.zipCode || ''), SCORE_WEIGHTS.ZIP);
+        if (criteria.county) scoreRule(matchers.county?.test(user.county || ''), SCORE_WEIGHTS.COUNTY);
+        if (criteria.phone) scoreRule(matchers.phone?.test(user.phone || ''), SCORE_WEIGHTS.PHONE);
+        if (criteria.friendsOfUser) scoreRule(friendSet ? friendSet.has(String(user._id)) : false, SCORE_WEIGHTS.FRIEND_OF_USER);
 
         if (criteria.worksAt) {
-          const worksAtMatcher = buildContainsRegex(criteria.worksAt);
-          scoreRule(workHistory.some((entry) => worksAtMatcher?.test(entry?.employer || '')), 2);
+          scoreRule(workHistory.some((entry) => matchers.worksAt?.test(entry?.employer || '')), SCORE_WEIGHTS.WORKS_AT);
         }
 
-        if (criteria.hobbies) scoreRule(buildContainsRegex(criteria.hobbies)?.test(searchableProfileText), 1);
-        if (criteria.streetAddress) scoreRule(buildContainsRegex(criteria.streetAddress)?.test(searchableProfileText), 0.7);
-        if (criteria.ageFilters) scoreRule(buildContainsRegex(criteria.ageFilters)?.test(searchableProfileText), 0.6);
-        if (criteria.sex) scoreRule(buildContainsRegex(criteria.sex)?.test(searchableProfileText), 0.6);
-        if (criteria.race) scoreRule(buildContainsRegex(criteria.race)?.test(searchableProfileText), 0.6);
+        if (criteria.hobbies) scoreRule(matchers.hobbies?.test(searchableProfileText), SCORE_WEIGHTS.HOBBIES);
 
         const normalizedScore = maxScore > 0 ? score / maxScore : 0;
 
@@ -197,7 +267,8 @@ router.get('/search', async (req, res) => {
 
     res.json({
       success: true,
-      users: scoredUsers
+      users: scoredUsers,
+      unsupportedCriteria
     });
   } catch (error) {
     console.error('Error searching users:', error);

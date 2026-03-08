@@ -131,14 +131,7 @@ export const userAPI = {
     if (typeof queryOrCriteria === 'string') {
       return api.get(`/users/search?q=${encodeURIComponent(queryOrCriteria)}`);
     }
-    const params = new URLSearchParams();
-    Object.entries(queryOrCriteria || {}).forEach(([key, value]) => {
-      const normalized = typeof value === 'string' ? value.trim() : value;
-      if (normalized) {
-        params.append(key, normalized);
-      }
-    });
-    return api.get(`/users/search?${params.toString()}`);
+    return api.post('/users/search', queryOrCriteria || {});
   },
   getByUsername: (username) => api.get(`/users/username/${username}`),
   getById: (userId) => api.get(`/users/${userId}`),

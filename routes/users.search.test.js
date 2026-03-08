@@ -32,14 +32,14 @@ const buildApp = () => {
   return app;
 };
 
-describe('GET /api/users/search', () => {
+describe('User search routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('requires at least one search criteria field', async () => {
+  it('requires at least one search criteria field for multi-criteria session search', async () => {
     const app = buildApp();
-    const response = await request(app).get('/api/users/search');
+    const response = await request(app).post('/api/users/search').send({});
 
     expect(response.status).toBe(400);
     expect(response.body.error).toMatch(/at least one search criteria/i);
@@ -122,7 +122,7 @@ describe('GET /api/users/search', () => {
       })
     });
 
-    const response = await request(app).get('/api/users/search').query({
+    const response = await request(app).post('/api/users/search').send({
       firstName: 'Ali',
       city: 'Austin',
       worksAt: 'Acme',
@@ -139,5 +139,34 @@ describe('GET /api/users/search', () => {
       hasPGP: true
     });
     expect(response.body.users[0].rankingScore).toBeGreaterThan(0);
+  });
+
+  it('keeps legacy GET search working for q-based lookups', async () => {
+    const app = buildApp();
+
+    mockUser.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              _id: 'u-legacy',
+              username: 'legacy',
+              realName: 'Legacy User',
+              city: 'Austin',
+              state: 'TX',
+              country: 'US',
+              pgpPublicKey: null
+            }
+          ])
+        })
+      })
+    });
+
+    const response = await request(app).get('/api/users/search').query({ q: 'leg' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.users).toHaveLength(1);
+    expect(response.body.users[0].username).toBe('legacy');
   });
 });

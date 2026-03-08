@@ -5,6 +5,7 @@ import { userAPI } from '../utils/api';
 function Home({ isAuthenticated = false }) {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [searchNotice, setSearchNotice] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchForm, setSearchForm] = useState({
     firstName: '',
@@ -31,6 +32,7 @@ function Home({ isAuthenticated = false }) {
   const handleSearch = async (event) => {
     event.preventDefault();
     setSearchError('');
+    setSearchNotice('');
 
     const hasAnyCriteria = Object.values(searchForm).some((value) => value.trim().length > 0);
     if (!hasAnyCriteria) {
@@ -43,6 +45,9 @@ function Home({ isAuthenticated = false }) {
     try {
       const { data } = await userAPI.search(searchForm);
       setSearchResults(Array.isArray(data?.users) ? data.users : []);
+      if (Array.isArray(data?.unsupportedCriteria) && data.unsupportedCriteria.length > 0) {
+        setSearchNotice(`Some criteria are accepted but not yet directly rankable: ${data.unsupportedCriteria.join(', ')}.`);
+      }
     } catch (error) {
       setSearchError(error.response?.data?.error || 'Search session failed. Please try again.');
       setSearchResults([]);
@@ -273,7 +278,7 @@ function Home({ isAuthenticated = false }) {
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Age Filters</span>
-              <input name="ageFilters" value={searchForm.ageFilters} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" placeholder="Example: 28 or 30-40" />
+              <input name="ageFilters" value={searchForm.ageFilters} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" placeholder="Optional age detail" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Sex</span>
@@ -290,6 +295,7 @@ function Home({ isAuthenticated = false }) {
               {searching ? 'Searching…' : 'Search'}
             </button>
             {searchError ? <p className="text-sm text-red-600">{searchError}</p> : null}
+            {!searchError && searchNotice ? <p className="text-sm text-amber-700">{searchNotice}</p> : null}
           </div>
         </form>
 
