@@ -561,7 +561,7 @@ const Social = () => {
 
   useEffect(() => {
     const loadProfileChatThread = async () => {
-      if (!isAuthenticated || !activeProfile?._id) {
+      if (!activeProfile?._id) {
         setProfileChatThreadId('');
         setProfileChatMessages([]);
         setProfileChatPermissions({ isOwner: false, canRead: false, canWrite: false });
@@ -606,7 +606,7 @@ const Social = () => {
     };
 
     loadProfileChatThread();
-  }, [isAuthenticated, activeProfile?._id]);
+  }, [activeProfile?._id]);
 
   const handleSendProfileChatMessage = useCallback(async () => {
     const content = profileChatInput.trim();
@@ -2782,54 +2782,61 @@ const Social = () => {
           </div>
         );
       case 'chat_panel':
-        return (
-          <div className="space-y-3">
-            <div className="rounded-xl border bg-white/70 p-3 text-xs text-slate-600">
-              <p><span className="font-semibold text-slate-800">Read:</span> {profileChatAccessSummary.read}</p>
-              <p><span className="font-semibold text-slate-800">Write:</span> {profileChatAccessSummary.write}</p>
-            </div>
-            {!isAuthenticated ? (
-              <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-600">
-                Sign in to join this profile chat room.
+        {
+          const canPostToProfileThread = isAuthenticated && profileChatPermissions.canWrite;
+          return (
+            <div className="space-y-3">
+              <div className="rounded-xl border bg-white/70 p-3 text-xs text-slate-600">
+                <p><span className="font-semibold text-slate-800">Read:</span> {profileChatAccessSummary.read}</p>
+                <p><span className="font-semibold text-slate-800">Write:</span> {profileChatAccessSummary.write}</p>
               </div>
-            ) : profileChatLoading ? (
-              <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">Loading chat room…</div>
-            ) : profileChatPermissions.canRead ? (
-              <>
-                <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border bg-white p-3">
-                  {profileChatMessages.length === 0 ? (
-                    <p className="text-sm text-slate-500">No messages yet. Start the conversation.</p>
-                  ) : profileChatMessages.map((message) => (
-                    <div key={message._id} className="rounded-lg bg-slate-50 px-3 py-2">
-                      <p className="text-xs font-semibold text-slate-700">@{message?.userId?.username || 'user'}</p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{message?.content || ''}</p>
+              {profileChatLoading ? (
+                <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">Loading chat room…</div>
+              ) : profileChatPermissions.canRead ? (
+                <>
+                  <div className="overflow-hidden rounded-xl border-2 border-slate-400 bg-[#d4d0c8] shadow-inner">
+                    <div className="flex items-center justify-between bg-gradient-to-r from-[#0a2f8b] to-[#2f6adf] px-3 py-1.5 text-xs font-semibold text-white">
+                      <span>{activeProfile?.username ? `@${activeProfile.username}` : 'Profile'} chat room</span>
+                      <span className="text-[10px] uppercase tracking-wide text-white/80">Live</span>
                     </div>
-                  ))}
+                    <div className="max-h-64 space-y-2 overflow-y-auto bg-white p-3">
+                      {profileChatMessages.length === 0 ? (
+                        <p className="text-sm text-slate-500">No messages yet. Start the conversation.</p>
+                      ) : profileChatMessages.map((message) => (
+                        <div key={message._id} className="rounded border border-slate-300 bg-[#f6f6f6] px-3 py-2 shadow-sm">
+                          <p className="text-xs font-semibold text-slate-700">@{message?.userId?.username || 'user'}</p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{message?.content || ''}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <textarea
+                      value={profileChatInput}
+                      onChange={(event) => setProfileChatInput(event.target.value)}
+                      placeholder={canPostToProfileThread ? 'Write a message…' : (isAuthenticated ? 'You do not have write access' : 'Sign in to send messages')}
+                      disabled={!canPostToProfileThread || profileChatSending}
+                      rows={3}
+                      className="w-full rounded border border-slate-400 bg-[#f8f8f8] px-3 py-2 text-sm disabled:bg-slate-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendProfileChatMessage}
+                      disabled={!canPostToProfileThread || profileChatSending || !profileChatInput.trim()}
+                      className="w-full rounded border border-slate-500 bg-[#e5e5e5] px-4 py-2 text-sm text-slate-800 hover:bg-[#f1f1f1] disabled:opacity-60"
+                    >
+                      {profileChatSending ? 'Sending…' : 'Send'}
+                    </button>
+                    {!isAuthenticated ? (
+                      <p className="text-xs text-slate-600">Sign in to post in this chat room.</p>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-600">
+                  This profile chat room is limited by the owner&apos;s access settings.
                 </div>
-                <div className="space-y-2">
-                  <textarea
-                    value={profileChatInput}
-                    onChange={(event) => setProfileChatInput(event.target.value)}
-                    placeholder={profileChatPermissions.canWrite ? 'Write a message…' : 'You do not have write access'}
-                    disabled={!profileChatPermissions.canWrite || profileChatSending}
-                    rows={3}
-                    className="w-full rounded-xl border px-3 py-2 text-sm disabled:bg-slate-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSendProfileChatMessage}
-                    disabled={!profileChatPermissions.canWrite || profileChatSending || !profileChatInput.trim()}
-                    className="w-full rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-60"
-                  >
-                    {profileChatSending ? 'Sending…' : 'Send'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-600">
-                This profile chat room is limited by the owner&apos;s access settings.
-              </div>
-            )}
+              )}
             {profileChatPermissions.isOwner ? (
               <div className="space-y-3 rounded-xl border bg-slate-50 p-3">
                 <div>
@@ -2874,8 +2881,9 @@ const Social = () => {
             ) : null}
             {profileChatError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{profileChatError}</div> : null}
             <Link to={socialChatPath} className="inline-flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800">{socialChatLabel}</Link>
-          </div>
-        );
+            </div>
+          );
+        }
       case 'top_friends':
         return topFriends.length === 0 ? (
           <p className="text-sm text-gray-600">Top friends are private or not set yet.</p>
@@ -3320,7 +3328,7 @@ const Social = () => {
         />
 
         {isOwnSocialContext ? (
-          <div className="fixed right-2 top-24 z-30 hidden flex-col gap-2 lg:flex">
+          <div className="fixed right-4 top-36 z-[70] hidden flex-col gap-2 lg:flex">
             <button
               type="button"
               onClick={() => handleGuestPreviewToggle(!isGuestPreview)}

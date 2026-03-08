@@ -200,6 +200,34 @@ describe('Unified chat hub routes', () => {
     expect(response.body.conversation.profileThreadAccess.readRoles).toEqual(['friends', 'circles']);
   });
 
+  it('allows guests to load profile threads when guest read access is enabled', async () => {
+    const app = buildApp();
+    mockUser.findById.mockImplementation(() => createSelectLean({
+      _id: '507f1f77bcf86cd799439022',
+      username: 'profileOwner',
+      realName: 'Profile Owner',
+      circles: []
+    }));
+
+    mockChatConversation.findOne.mockResolvedValue({
+      _id: 'profile-thread-guest',
+      type: 'profile-thread',
+      title: 'Profile thread: @profileOwner',
+      profileUserId: '507f1f77bcf86cd799439022',
+      profileThreadAccess: { readRoles: ['guests'], writeRoles: ['friends'] },
+      participants: ['507f1f77bcf86cd799439022'],
+      lastMessageAt: new Date('2024-01-04T00:00:00.000Z'),
+      messageCount: 3
+    });
+
+    const response = await request(app)
+      .get('/api/chat/profile/507f1f77bcf86cd799439022/thread');
+
+    expect(response.status).toBe(200);
+    expect(response.body.conversation.permissions.canRead).toBe(true);
+    expect(response.body.conversation.permissions.canWrite).toBe(false);
+  });
+
   it('denies profile thread reads when viewer is outside configured access roles', async () => {
     const app = buildApp();
     mockUser.findById
@@ -237,6 +265,43 @@ describe('Unified chat hub routes', () => {
 
     expect(response.status).toBe(403);
     expect(response.body.error).toMatch(/unavailable/i);
+  });
+
+  it('returns profile thread messages to guests when guest read access is enabled', async () => {
+    const app = buildApp();
+    mockChatConversation.findById.mockResolvedValue({
+      _id: 'profile-thread-2',
+      type: 'profile-thread',
+      title: 'Profile thread: @profileOwner',
+      profileUserId: '507f1f77bcf86cd799439022',
+      profileThreadAccess: { readRoles: ['guests'], writeRoles: ['friends'] },
+      participants: ['507f1f77bcf86cd799439022']
+    });
+    mockConversationMessage.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        skip: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            populate: jest.fn().mockReturnValue({
+              lean: jest.fn().mockResolvedValue([
+                {
+                  _id: 'msg-guest-1',
+                  content: 'hello world',
+                  userId: { _id: '507f1f77bcf86cd799439022', username: 'profileOwner' }
+                }
+              ])
+            })
+          })
+        })
+      })
+    });
+    mockConversationMessage.countDocuments.mockResolvedValue(1);
+
+    const response = await request(app)
+      .get('/api/chat/conversations/profile-thread-2/messages');
+
+    expect(response.status).toBe(200);
+    expect(response.body.messages).toHaveLength(1);
+    expect(response.body.messages[0].content).toBe('hello world');
   });
 
   it('allows profile owners to update profile thread access settings', async () => {

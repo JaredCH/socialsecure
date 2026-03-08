@@ -12,7 +12,8 @@ jest.mock('../utils/api', () => ({
     getProfile: jest.fn()
   },
   chatAPI: {
-    getProfileThread: jest.fn()
+    getProfileThread: jest.fn(),
+    getConversationMessages: jest.fn()
   },
   circlesAPI: {
     getCircles: jest.fn()
@@ -119,6 +120,7 @@ describe('Social page hero background rendering', () => {
         }
       }
     });
+    chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
     onFeedPost.mockImplementation(() => () => {});
     onFeedInteraction.mockImplementation(() => () => {});
     onTyping.mockImplementation(() => () => {});
@@ -189,5 +191,45 @@ describe('Social page hero background rendering', () => {
     await expect(renderPage()).resolves.toBeUndefined();
     expect(container.textContent).toContain('Start a post');
     expect(container.textContent).not.toContain('Publish Post');
+  });
+
+  it('positions owner floating controls with elevated stacking context', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+    const guestViewButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Guest View');
+    expect(guestViewButton).toBeTruthy();
+    expect(guestViewButton.closest('div').className).toContain('top-36');
+    expect(guestViewButton.closest('div').className).toContain('z-[70]');
+  });
+
+  it('loads profile chat thread/messages for guest viewers when read access allows guests', async () => {
+    localStorage.clear();
+    window.history.replaceState({}, '', '/social?user=buddy');
+    feedAPI.getPublicUserFeed.mockResolvedValue({
+      data: {
+        posts: [],
+        user: { _id: 'u-2', username: 'buddy' }
+      }
+    });
+    chatAPI.getProfileThread.mockResolvedValue({
+      data: {
+        conversation: {
+          _id: 'thread-guest',
+          permissions: { isOwner: false, canRead: true, canWrite: false },
+          profileThreadAccess: { readRoles: ['guests'], writeRoles: ['friends'] }
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({
+      data: {
+        messages: [{ _id: 'm1', content: 'guest-readable', userId: { username: 'buddy' } }]
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    expect(chatAPI.getProfileThread).toHaveBeenCalledWith('u-2');
+    expect(chatAPI.getConversationMessages).toHaveBeenCalledWith('thread-guest', 1, 25);
+    expect(container.textContent).toContain('guest-readable');
+    expect(container.textContent).toContain('Sign in to post in this chat room.');
   });
 });
