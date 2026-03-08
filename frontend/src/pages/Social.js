@@ -8,6 +8,7 @@ import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
 import SocialHero from '../components/social/SocialHero';
 import SocialStageSettingsSidebar from '../components/social/SocialStageSettingsSidebar';
+import CircleSpiderDiagram from '../components/social/CircleSpiderDiagram';
 import {
   getFontSizeClass,
   mergeDesignPatch,
@@ -307,6 +308,17 @@ const normalizeGalleryItem = (item) => ({
   relationshipAudience: item?.relationshipAudience === 'secure' ? 'secure' : 'social',
 });
 
+const resolveInitialHeroTab = (pathname = '', search = '') => {
+  const requestedTab = new URLSearchParams(search).get('tab');
+  if (SOCIAL_HERO_TABS.some((tab) => tab.id === requestedTab)) {
+    return requestedTab;
+  }
+  if (pathname === '/friends') {
+    return 'friends';
+  }
+  return 'main';
+};
+
 const Social = () => {
   const initialGuestUser = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
@@ -389,7 +401,7 @@ const Social = () => {
   const [designStudioOpen, setDesignStudioOpen] = useState(false);
   const [draftTopFriendIds, setDraftTopFriendIds] = useState([]);
   const [inlineEditingPanelId, setInlineEditingPanelId] = useState('');
-  const [activeHeroTab, setActiveHeroTab] = useState('main');
+  const [activeHeroTab, setActiveHeroTab] = useState(() => resolveInitialHeroTab(window.location.pathname, window.location.search));
   const [heroEditingOpen, setHeroEditingOpen] = useState(false);
   const [draftSocialPreferences, setDraftSocialPreferences] = useState(null);
   const [socialConfigs, setSocialConfigs] = useState([]);
@@ -527,6 +539,13 @@ const Social = () => {
     }
     return '/chat';
   }, [isAuthenticated, isOwnSocialContext, activeProfile?._id]);
+  const socialFriendsPath = useMemo(() => {
+    const friendsUsername = activeProfile?.username || requestedProfileIdentifier;
+    if (!friendsUsername || isOwnSocialContext) {
+      return '/friends';
+    }
+    return `/friends?user=${encodeURIComponent(friendsUsername)}`;
+  }, [activeProfile?.username, requestedProfileIdentifier, isOwnSocialContext]);
   const socialChatLabel = !isOwnSocialContext && activeProfile?.username
     ? `Message @${activeProfile.username}`
     : 'Open chat';
@@ -887,14 +906,21 @@ const Social = () => {
       setPosts([]);
       setGuestProfile(null);
       setOwnerResumeMeta(null);
+      setCircles([]);
+      setFriends([]);
       setFeedError('Enter a username or user ID in Guest mode to view a public feed.');
       return;
     }
 
-    const response = await feedAPI.getPublicUserFeed(guestUser.trim());
+    const [response, circlesResponse] = await Promise.all([
+      feedAPI.getPublicUserFeed(guestUser.trim()),
+      friendsAPI.getPublicCircles(guestUser.trim()).catch(() => ({ data: { circles: [] } }))
+    ]);
     const publicPosts = Array.isArray(response.data?.posts) ? response.data.posts : [];
     setPosts(publicPosts.map(normalizePost));
     setGuestProfile(response.data?.user || null);
+    setCircles(Array.isArray(circlesResponse.data?.circles) ? circlesResponse.data.circles : []);
+    setFriends([]);
     setOwnerResumeMeta(null);
   }, [guestUser]);
 
@@ -2615,7 +2641,33 @@ const Social = () => {
       case 'circles':
         return isOwnSocialContext && !isGuestPreview ? (
           <CircleManager circles={circles} friends={friends} onCreateCircle={handleCreateCircle} onDeleteCircle={handleDeleteCircle} onAddMember={handleAddCircleMember} onRemoveMember={handleRemoveCircleMember} />
-        ) : <p className="text-sm text-slate-500">Circles are visible only while managing your own social page.</p>;
+        ) : (
+          <div className="space-y-4">
+            <CircleSpiderDiagram
+              circles={circles}
+              profileLabel={activeProfile?.username || requestedProfileIdentifier || 'user'}
+              accentColor={accentColor}
+            />
+            {circles.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {circles.map((circle) => (
+                  <div key={circle.name} className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+                    <div className="flex items-center gap-3">
+                      {circle.profileImageUrl ? <img src={circle.profileImageUrl} alt={circle.name} className="h-10 w-10 rounded-full object-cover" /> : <span className="h-3 w-3 rounded-full" style={{ backgroundColor: circle.color || accentColor }} />}
+                      <div>
+                        <p className="font-semibold text-slate-900">{circle.name}</p>
+                        <p className="text-xs text-slate-500">{circle.memberCount || 0} members</p>
+                      </div>
+                      <span className={`ml-auto rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${circle.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
+                        {RELATIONSHIP_AUDIENCE_LABELS[circle.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
       case 'timeline':
         return (
           <div className="space-y-4">
@@ -2967,6 +3019,7 @@ const Social = () => {
     <div className="space-y-5 text-sm text-slate-700">
       <ul className="space-y-2">
         <li><Link to="/social" className="flex items-center justify-between rounded-2xl bg-blue-50 px-3 py-2 font-semibold text-blue-700"><span>Social Hub</span><span aria-hidden="true">↗</span></Link></li>
+        <li><Link to={socialFriendsPath} className="block rounded-2xl px-3 py-2 hover:bg-white/60">Friends Circles</Link></li>
         {isModuleVisible('marketplaceShortcut') ? <li><Link to="/market" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Marketplace</Link></li> : null}
         {isModuleVisible('calendarShortcut') ? <li><Link to={socialCalendarPath} className="block rounded-2xl px-3 py-2 hover:bg-white/60">Calendar</Link></li> : null}
         {isModuleVisible('settingsShortcut') ? <li><Link to="/settings" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Settings</Link></li> : null}

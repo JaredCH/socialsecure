@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Post = require('../models/Post');
 const BlockList = require('../models/BlockList');
 const Resume = require('../models/Resume');
+const Friendship = require('../models/Friendship');
 const { toPublicSocialPagePreferences } = require('../utils/socialPagePreferences');
 const { normalizeRelationshipAudience, socialOrUnsetAudienceQuery } = require('../utils/relationshipAudience');
 
@@ -140,7 +141,7 @@ const hasBlockRelationship = async (viewerId, targetId) => {
   return !!record;
 };
 
-const findUserByIdOrUsername = async (identifier) => {
+const findUserByIdOrUsername = async (identifier, projection = publicUserProjection) => {
   const normalizedIdentifier = String(identifier || '').trim().toLowerCase();
 
   if (!normalizedIdentifier) return null;
@@ -150,7 +151,28 @@ const findUserByIdOrUsername = async (identifier) => {
     lookupQuery.push({ _id: identifier });
   }
 
-  return User.findOne({ $or: lookupQuery }).select(publicUserProjection).lean();
+  return User.findOne({ $or: lookupQuery }).select(projection).lean();
+};
+
+const getViewerFriendIds = async (viewerId) => {
+  const normalizedViewerId = String(viewerId || '').trim();
+  if (!normalizedViewerId) return new Set();
+
+  const friendships = await Friendship.find({
+    status: 'accepted',
+    $or: [
+      { requester: normalizedViewerId },
+      { recipient: normalizedViewerId }
+    ]
+  }).select('requester recipient').lean();
+
+  return friendships.reduce((acc, friendship) => {
+    const requesterId = String(friendship.requester || '');
+    const recipientId = String(friendship.recipient || '');
+    const friendId = requesterId === normalizedViewerId ? recipientId : requesterId;
+    if (friendId) acc.add(friendId);
+    return acc;
+  }, new Set());
 };
 
 const publicPostQuery = (userId) => ({
@@ -428,6 +450,82 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
   } catch (error) {
     console.error('Error fetching public user feed:', error);
     return res.status(500).json({ error: 'Failed to fetch public feed' });
+  }
+});
+
+// GET /api/public/users/:username/friends/circles
+router.get('/users/:username/friends/circles', publicReadLimiter, async (req, res) => {
+  try {
+    const user = await findUserByIdOrUsername(req.params.username, `${publicUserProjection} circles`);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const viewerId = getViewerIdFromAuthHeader(req);
+    const blocked = await hasBlockRelationship(viewerId, user._id);
+    const isOwner = viewerId && String(viewerId) === String(user._id);
+    const privateProfile = isPrivateProfile(user) && !isOwner;
+    if (blocked) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (privateProfile) {
+      return res.json({
+        success: true,
+        restrictedContent: true,
+        circles: [],
+        mutualFriendCount: 0
+      });
+    }
+
+    const circles = Array.isArray(user.circles) ? user.circles : [];
+    const allMemberIds = [...new Set(circles.flatMap((circle) => (circle.members || []).map((member) => String(member))))];
+    const [memberUsers, viewerFriendIds] = await Promise.all([
+      allMemberIds.length > 0
+        ? User.find({ _id: { $in: allMemberIds } }).select('_id username realName avatarUrl').lean()
+        : [],
+      getViewerFriendIds(viewerId)
+    ]);
+    const memberMap = new Map(memberUsers.map((member) => [String(member._id), member]));
+    const mutualIds = new Set();
+
+    const normalizedCircles = circles.map((circle) => {
+      const members = (circle.members || [])
+        .map((memberId) => memberMap.get(String(memberId)))
+        .filter(Boolean)
+        .map((member) => {
+          const normalizedMemberId = String(member._id);
+          const isMutual = viewerFriendIds.has(normalizedMemberId);
+          if (isMutual) {
+            mutualIds.add(normalizedMemberId);
+          }
+          return {
+            _id: member._id,
+            username: member.username,
+            realName: member.realName,
+            avatarUrl: member.avatarUrl || '',
+            isMutual
+          };
+        });
+
+      return {
+        name: circle.name,
+        color: circle.color || '#3B82F6',
+        relationshipAudience: normalizeRelationshipAudience(circle.relationshipAudience),
+        profileImageUrl: typeof circle.profileImageUrl === 'string' ? circle.profileImageUrl.trim() : '',
+        memberCount: members.length,
+        members
+      };
+    });
+
+    return res.json({
+      success: true,
+      circles: normalizedCircles,
+      mutualFriendCount: mutualIds.size
+    });
+  } catch (error) {
+    console.error('Error fetching public circles:', error);
+    return res.status(500).json({ error: 'Failed to fetch circles' });
   }
 });
 

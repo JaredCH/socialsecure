@@ -3,26 +3,51 @@ import React, { useState } from 'react';
 function CircleManager({ circles, friends, onCreateCircle, onDeleteCircle, onAddMember, onRemoveMember }) {
   const [circleName, setCircleName] = useState('');
   const [circleColor, setCircleColor] = useState('#3B82F6');
+  const [circleAudience, setCircleAudience] = useState('social');
+  const [circleProfileImageUrl, setCircleProfileImageUrl] = useState('');
 
   const handleCreate = (event) => {
     event.preventDefault();
     const name = circleName.trim();
     if (!name) return;
-    onCreateCircle({ name, color: circleColor });
+    onCreateCircle({
+      name,
+      color: circleColor,
+      relationshipAudience: circleAudience,
+      profileImageUrl: circleProfileImageUrl.trim()
+    });
     setCircleName('');
+    setCircleProfileImageUrl('');
+    setCircleAudience('social');
   };
 
   return (
     <div className="bg-white rounded-xl shadow p-6 border border-gray-100 space-y-4">
       <h3 className="text-lg font-semibold text-gray-900">Circle Manager</h3>
 
-      <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-3 gap-2">
+      <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-5 gap-2">
         <input
           value={circleName}
           onChange={(event) => setCircleName(event.target.value)}
           className="border rounded p-2"
           placeholder="Circle name"
           maxLength={50}
+        />
+        <select
+          value={circleAudience}
+          onChange={(event) => setCircleAudience(event.target.value)}
+          className="border rounded p-2 bg-white"
+          aria-label="Circle audience"
+        >
+          <option value="social">Social circle</option>
+          <option value="secure">Secure circle</option>
+        </select>
+        <input
+          value={circleProfileImageUrl}
+          onChange={(event) => setCircleProfileImageUrl(event.target.value)}
+          className="border rounded p-2"
+          placeholder="Profile image URL (optional)"
+          maxLength={2048}
         />
         <input
           type="color"
@@ -41,8 +66,12 @@ function CircleManager({ circles, friends, onCreateCircle, onDeleteCircle, onAdd
             <div className="flex justify-between items-center mb-2">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full" style={{ backgroundColor: circle.color || '#3B82F6' }} />
+                {circle.profileImageUrl ? <img src={circle.profileImageUrl} alt="" className="h-6 w-6 rounded-full object-cover" /> : null}
                 <span className="font-medium text-gray-900">{circle.name}</span>
                 <span className="text-sm text-gray-500">({circle.memberCount || 0})</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${circle.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
+                  {circle.relationshipAudience === 'secure' ? 'Secure' : 'Social'}
+                </span>
               </div>
               <button
                 type="button"

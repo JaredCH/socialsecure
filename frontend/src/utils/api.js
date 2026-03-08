@@ -386,6 +386,7 @@ export const friendsAPI = {
   updatePrivacySettings: (data) => api.put('/friends/privacy', data),
   // Get relationship status
   getRelationship: (userId) => api.get(`/friends/relationship/${userId}`),
+  getPublicCircles: (userIdOrUsername) => api.get(`/public/users/${encodeURIComponent(userIdOrUsername)}/friends/circles`),
 };
 
 export const circlesAPI = {

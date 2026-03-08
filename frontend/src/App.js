@@ -56,7 +56,7 @@ const RouteMain = ({ children }) => {
   const location = useLocation();
   const isChatRoute = location.pathname === '/chat';
   const isMapsRoute = location.pathname === '/maps';
-  const isSocialRoute = location.pathname === '/social';
+  const isSocialRoute = location.pathname === '/social' || location.pathname === '/friends';
   const isCalendarRoute = location.pathname === '/calendar';
 
   return (
@@ -748,6 +748,19 @@ function App() {
             />
             <Route
               path="/social"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
+                >
+                  <Social />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/friends"
               element={(
                 <ProtectedRoute
                   isAuthenticated={isAuthenticated}
