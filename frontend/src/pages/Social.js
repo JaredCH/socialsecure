@@ -519,7 +519,7 @@ const Social = () => {
   }, [activeProfile?.username, requestedProfileIdentifier, isOwnSocialContext]);
   const socialChatPath = useMemo(() => {
     if (isAuthenticated && !isOwnSocialContext && activeProfile?._id) {
-      return `/chat?dm=${encodeURIComponent(String(activeProfile._id))}`;
+      return `/chat?profile=${encodeURIComponent(String(activeProfile._id))}`;
     }
     return '/chat';
   }, [isAuthenticated, isOwnSocialContext, activeProfile?._id]);
@@ -2423,7 +2423,7 @@ const Social = () => {
           <ul className="space-y-2 text-sm">
             <li><Link to="/social" className="block rounded-xl bg-blue-50 px-3 py-2 font-medium text-blue-700">Social Stream</Link></li>
             {isModuleVisible('marketplaceShortcut') ? <li><Link to="/market" className="block rounded-xl px-3 py-2 hover:bg-slate-50">Marketplace</Link></li> : null}
-            {isModuleVisible('calendarShortcut') ? <li><Link to="/calendar" className="block rounded-xl px-3 py-2 hover:bg-slate-50">Calendar</Link></li> : null}
+            {isModuleVisible('calendarShortcut') ? <li><Link to={socialCalendarPath} className="block rounded-xl px-3 py-2 hover:bg-slate-50">Calendar</Link></li> : null}
             {isModuleVisible('settingsShortcut') ? <li><Link to="/settings" className="block rounded-xl px-3 py-2 hover:bg-slate-50">User Settings</Link></li> : null}
             {isModuleVisible('referShortcut') ? <li><Link to="/refer" className="block rounded-xl px-3 py-2 hover:bg-slate-50">Refer Friend</Link></li> : null}
           </ul>
@@ -3129,7 +3129,7 @@ const Social = () => {
       className={`min-h-[calc(100vh-4rem)] w-full pb-8 ${pageThemeClass}`}
       style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor, fontFamily: `"${hubFontFamily}", sans-serif` }}
     >
-      <div className="mx-auto max-w-7xl">
+      <div className="w-full">
         <SocialHero
           profile={heroProfile}
           heroConfig={heroConfig}
