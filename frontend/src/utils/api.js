@@ -257,6 +257,8 @@ export const chatAPI = {
   },
   startDM: (targetUserId) => api.post('/chat/dm/start', { targetUserId }),
   getProfileThread: (userId) => api.get(`/chat/profile/${encodeURIComponent(userId)}/thread`),
+  updateProfileThreadSettings: (userId, payload) =>
+    api.put(`/chat/profile/${encodeURIComponent(userId)}/thread/settings`, payload),
 };
 
 // Location API

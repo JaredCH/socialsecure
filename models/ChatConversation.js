@@ -29,6 +29,17 @@ const chatConversationSchema = new mongoose.Schema({
     default: null,
     index: true
   },
+  profileThreadAccess: {
+    readRoles: [{
+      type: String,
+      enum: ['friends', 'circles', 'guests']
+    }],
+    writeRoles: [{
+      type: String,
+      enum: ['friends', 'circles', 'guests']
+    }],
+    default: () => ({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] })
+  },
   lastMessageAt: {
     type: Date,
     default: Date.now,

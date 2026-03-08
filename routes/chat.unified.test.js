@@ -12,6 +12,7 @@ const mockSecurityEvent = {};
 const mockBlockList = { findOne: jest.fn() };
 const mockRoomKeyPackage = {};
 const mockUser = { findById: jest.fn(), find: jest.fn() };
+const mockFriendship = { findOne: jest.fn() };
 const mockChatConversation = {
   findOneAndUpdate: jest.fn(),
   find: jest.fn(),
@@ -32,6 +33,7 @@ jest.mock('../models/SecurityEvent', () => mockSecurityEvent);
 jest.mock('../models/BlockList', () => mockBlockList);
 jest.mock('../models/RoomKeyPackage', () => mockRoomKeyPackage);
 jest.mock('../models/User', () => mockUser);
+jest.mock('../models/Friendship', () => mockFriendship);
 jest.mock('../models/ChatConversation', () => mockChatConversation);
 jest.mock('../models/ConversationMessage', () => mockConversationMessage);
 jest.mock('../services/notifications', () => ({ createNotification: jest.fn() }));
@@ -69,6 +71,11 @@ describe('Unified chat hub routes', () => {
     mockBlockList.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue(null)
+      })
+    });
+    mockFriendship.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: 'friendship-1' })
       })
     });
   });
@@ -166,6 +173,10 @@ describe('Unified chat hub routes', () => {
         _id: '507f1f77bcf86cd799439022',
         username: 'profileOwner',
         realName: 'Profile Owner'
+      }))
+      .mockImplementationOnce(() => createSelectLean({
+        _id: '507f1f77bcf86cd799439022',
+        circles: []
       }));
 
     mockChatConversation.findOne.mockResolvedValue(null);
@@ -186,6 +197,76 @@ describe('Unified chat hub routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.conversation.type).toBe('profile-thread');
     expect(response.body.conversation._id).toBe('profile-thread-1');
+    expect(response.body.conversation.profileThreadAccess.readRoles).toEqual(['friends', 'circles']);
+  });
+
+  it('denies profile thread reads when viewer is outside configured access roles', async () => {
+    const app = buildApp();
+    mockUser.findById
+      .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
+      .mockImplementationOnce(() => createSelectLean({
+        _id: '507f1f77bcf86cd799439022',
+        username: 'profileOwner',
+        realName: 'Profile Owner',
+        circles: []
+      }))
+      .mockImplementationOnce(() => createSelectLean({
+        _id: '507f1f77bcf86cd799439022',
+        circles: []
+      }));
+
+    mockFriendship.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null)
+      })
+    });
+    mockChatConversation.findOne.mockResolvedValue({
+      _id: 'profile-thread-2',
+      type: 'profile-thread',
+      title: 'Profile thread: @profileOwner',
+      profileUserId: '507f1f77bcf86cd799439022',
+      profileThreadAccess: { readRoles: ['friends'], writeRoles: ['friends'] },
+      participants: ['507f1f77bcf86cd799439022'],
+      lastMessageAt: new Date('2024-01-04T00:00:00.000Z'),
+      messageCount: 0
+    });
+
+    const response = await request(app)
+      .get('/api/chat/profile/507f1f77bcf86cd799439022/thread')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toMatch(/unavailable/i);
+  });
+
+  it('allows profile owners to update profile thread access settings', async () => {
+    const app = buildApp();
+    jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: '507f1f77bcf86cd799439022' }));
+    mockUser.findById
+      .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
+      .mockImplementationOnce(() => createSelectLean({
+        _id: '507f1f77bcf86cd799439022',
+        username: 'profileOwner'
+      }));
+
+    const save = jest.fn().mockResolvedValue(undefined);
+    mockChatConversation.findOne.mockResolvedValue({
+      _id: 'profile-thread-3',
+      type: 'profile-thread',
+      profileUserId: '507f1f77bcf86cd799439022',
+      participants: ['507f1f77bcf86cd799439022'],
+      profileThreadAccess: { readRoles: ['friends'], writeRoles: ['friends'] },
+      save
+    });
+
+    const response = await request(app)
+      .put('/api/chat/profile/507f1f77bcf86cd799439022/thread/settings')
+      .set('Authorization', 'Bearer token')
+      .send({ readRoles: ['friends', 'guests'], writeRoles: ['friends'] });
+
+    expect(response.status).toBe(200);
+    expect(save).toHaveBeenCalled();
+    expect(response.body.conversation.profileThreadAccess.readRoles).toEqual(['friends', 'guests']);
   });
 
   it('lists users for an accessible zip conversation', async () => {
