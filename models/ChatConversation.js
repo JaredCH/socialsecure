@@ -30,14 +30,16 @@ const chatConversationSchema = new mongoose.Schema({
     index: true
   },
   profileThreadAccess: {
-    readRoles: [{
-      type: String,
-      enum: ['friends', 'circles', 'guests']
-    }],
-    writeRoles: [{
-      type: String,
-      enum: ['friends', 'circles', 'guests']
-    }],
+    type: new mongoose.Schema({
+      readRoles: [{
+        type: String,
+        enum: ['friends', 'circles', 'guests']
+      }],
+      writeRoles: [{
+        type: String,
+        enum: ['friends', 'circles', 'guests']
+      }]
+    }, { _id: false }),
     default: () => ({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] })
   },
   lastMessageAt: {
