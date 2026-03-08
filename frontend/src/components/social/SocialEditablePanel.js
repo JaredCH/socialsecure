@@ -7,6 +7,8 @@ import {
   SOCIAL_HEIGHT_LABELS,
   SOCIAL_LAYOUT_SIZES,
   SOCIAL_PANEL_LABELS,
+  SOCIAL_PANEL_SHAPES,
+  SOCIAL_PANEL_SHAPE_MASKS,
   SOCIAL_SIZE_LABELS,
   getFontSizeClass,
   getPanelSpanClass
@@ -43,6 +45,42 @@ const getHeaderTextColor = (hex) => {
   return brightness > 160 ? '#0f172a' : '#ffffff';
 };
 
+const getShapeClipPath = (shape) => {
+  const mask = SOCIAL_PANEL_SHAPE_MASKS[shape];
+  if (!mask || shape === 'rectangle' || shape === 'square' || shape === 'wide' || shape === 'tall') {
+    return 'none';
+  }
+
+  // Generate polygon points from mask
+  // mask is array of rows (y), each row is array of cols (x)
+  // 1 means filled
+  
+  let points = [];
+  const rows = mask.length;
+  const cols = mask[0].length;
+
+  // Simple approach: trace the outline
+  // This is a simplified trace for L, T, Z shapes
+  // For more complex shapes, we might need a more robust algorithm
+  
+  if (shape === 'l-shape') {
+    // [[1, 0], [1, 0], [1, 1]]
+    return 'polygon(0% 0%, 33.3% 0%, 33.3% 66.6%, 100% 66.6%, 100% 100%, 0% 100%)';
+  }
+  
+  if (shape === 't-shape') {
+    // [[1, 1, 1], [0, 1, 0]]
+    return 'polygon(0% 0%, 100% 0%, 100% 50%, 66.6% 50%, 66.6% 100%, 33.3% 100%, 33.3% 50%, 0% 50%)';
+  }
+  
+  if (shape === 'z-shape') {
+    // [[1, 1, 0], [0, 1, 1]]
+    return 'polygon(0% 0%, 66.6% 0%, 66.6% 50%, 100% 50%, 100% 100%, 33.3% 100%, 33.3% 50%, 0% 50%)';
+  }
+
+  return 'none';
+};
+
 const StyleControl = ({ label, children }) => (
   <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
     <span>{label}</span>
@@ -70,6 +108,8 @@ const SocialEditablePanel = ({
   const availableSizes = getAvailableSizes(panel?.area);
   const availableHeights = getAvailableHeights(panel?.area);
 
+  const shapeClipPath = getShapeClipPath(panel?.shape);
+
   return (
     <section
       className={`overflow-hidden rounded-2xl border border-slate-200 shadow-sm transition-all ${className}`}
@@ -78,6 +118,7 @@ const SocialEditablePanel = ({
         backgroundColor: resolvedStyles.panelColor,
         color: resolvedStyles.fontColor,
         fontFamily: resolvedStyles.fontFamily,
+        clipPath: shapeClipPath !== 'none' ? shapeClipPath : undefined,
       }}
       data-social-panel={panelId}
     >

@@ -6,6 +6,16 @@ export const SOCIAL_LAYOUT_AREAS = ['top', 'sideLeft', 'main', 'sideRight'];
 export const SOCIAL_LAYOUT_SIZES = ['sidePanelFull', 'sidePanelHalfHeight', 'quarterTile', 'halfTile', 'fullTile', 'halfCol', 'oneCol', 'twoCols', 'threeCols', 'fourCols'];
 export const SOCIAL_LAYOUT_HEIGHTS = ['halfRow', 'fullRow', 'twoRows', 'threeRows', 'fourRows'];
 export const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
+export const SOCIAL_PANEL_SHAPES = ['rectangle', 'square', 'wide', 'tall', 'l-shape', 't-shape', 'z-shape'];
+export const SOCIAL_PANEL_SHAPE_MASKS = {
+  rectangle: [[1, 1], [1, 1]],
+  square: [[1, 1], [1, 1]],
+  wide: [[1, 1, 1], [1, 1, 1]],
+  tall: [[1, 1], [1, 1], [1, 1]],
+  'l-shape': [[1, 0], [1, 0], [1, 1]],
+  't-shape': [[1, 1, 1], [0, 1, 0]],
+  'z-shape': [[1, 1, 0], [0, 1, 1]]
+};
 export const SOCIAL_PANEL_IDS = [
   'profile_header',
   'guest_preview_notice',
@@ -451,6 +461,7 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default', requ
         size: normalizeSizeForArea(panelRaw.size, area, panelFallback.size),
         height: normalizeHeightForArea(panelRaw.height, area, panelFallback.height, panelRaw.size),
         gridPlacement: normalizeGridPlacement(panelRaw.gridPlacement, panelFallback.gridPlacement),
+        shape: SOCIAL_PANEL_SHAPES.includes(panelRaw.shape) ? panelRaw.shape : (panelFallback.shape || 'rectangle'),
         useCustomStyles: Boolean(panelRaw.useCustomStyles),
         styles: {
           panelColor: isHex(panelRaw.styles?.panelColor || '') ? panelRaw.styles.panelColor : globalStyles.panelColor,
