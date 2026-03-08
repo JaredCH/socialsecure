@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 const QUICK_EMOJIS = ['😀', '🔥', '✨', '❤️', '👏'];
+const MAX_LINK_LABEL_LENGTH = 80;
 
 function ChatComposerBar({
   composerValue,
@@ -37,7 +38,7 @@ function ChatComposerBar({
     try {
       const parsed = new URL(trimmedUrl);
       if (!/^https?:$/i.test(parsed.protocol)) {
-        throw new Error('Only HTTP(S) links are supported');
+        throw new Error('Only http:// or https:// links are supported');
       }
       normalizedUrl = parsed.toString();
     } catch {
@@ -47,7 +48,7 @@ function ChatComposerBar({
       return;
     }
 
-    const shortName = linkLabel.trim().replace(/[\[\]()]/g, '').slice(0, 80);
+    const shortName = linkLabel.trim().replace(/[\[\]()]/g, '').slice(0, MAX_LINK_LABEL_LENGTH);
     const linkToken = shortName ? `[${shortName}](${normalizedUrl})` : normalizedUrl;
     setComposerValue((value) => {
       const prefix = value && !/\s$/.test(value) ? `${value} ` : value;
@@ -139,7 +140,7 @@ function ChatComposerBar({
             onChange={(event) => setLinkLabel(event.target.value)}
             placeholder="Reference"
             className={`mb-2 w-full rounded border px-2 py-1 ${theme.input}`}
-            maxLength={80}
+            maxLength={MAX_LINK_LABEL_LENGTH}
           />
           <button
             type="button"

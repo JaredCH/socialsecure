@@ -10,7 +10,8 @@ function ChatMessageList({
   loading,
   profile,
   theme,
-  onOpenUserMenu
+  onOpenUserMenu,
+  longPressDelayMs
 }) {
   const scrollRef = useRef(null);
   const [renderCount, setRenderCount] = useState(INITIAL_RENDER_COUNT);
@@ -58,6 +59,7 @@ function ChatMessageList({
               isOwnMessage={String(message.userId?._id) === String(profile?._id)}
               theme={theme}
               onOpenUserMenu={onOpenUserMenu}
+              longPressDelayMs={longPressDelayMs}
             />
           ))
         )}

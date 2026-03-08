@@ -1,14 +1,15 @@
 import React, { memo, useEffect, useRef } from 'react';
 
 const LINK_REGEX = /(https?:\/\/[^\s]+)/gi;
-const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi;
 const TRAILING_PUNCTUATION_REGEX = /[),.!?;:]+$/;
 const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+const DEFAULT_LONG_PRESS_DELAY_MS = 550;
+const LINK_PREVIEW_PERCENTAGE = 0.25;
 
 const getLinkPreview = (href) => {
   const mainUrl = String(href || '').replace(/^https?:\/\//i, '');
   if (!mainUrl) return '';
-  const previewLength = Math.max(1, Math.ceil(mainUrl.length * 0.25));
+  const previewLength = Math.max(1, Math.ceil(mainUrl.length * LINK_PREVIEW_PERCENTAGE));
   return mainUrl.slice(0, previewLength);
 };
 
@@ -74,12 +75,12 @@ const renderMessageContent = (content) => {
   const text = String(content || '');
   if (!text) return null;
 
-  MARKDOWN_LINK_REGEX.lastIndex = 0;
+  const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi;
   const rendered = [];
   let lastIndex = 0;
   let match;
   let matchIndex = 0;
-  while ((match = MARKDOWN_LINK_REGEX.exec(text)) !== null) {
+  while ((match = markdownLinkRegex.exec(text)) !== null) {
     const [full, shortName, href] = match;
     const start = match.index;
     if (start > lastIndex) {
@@ -114,9 +115,10 @@ const renderMessageContent = (content) => {
   return rendered;
 };
 
-function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu }) {
+function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu, longPressDelayMs = DEFAULT_LONG_PRESS_DELAY_MS }) {
   const author = message.userId?.username || message.userId?.realName || 'user';
-  const profileLink = message.userId?.username ? `/social?user=${encodeURIComponent(message.userId.username)}` : null;
+  const usernameForProfileLink = typeof message.userId?.username === 'string' ? message.userId.username.trim() : '';
+  const profileLink = usernameForProfileLink ? `/social?user=${encodeURIComponent(usernameForProfileLink)}` : null;
   const createdAt = message.createdAt ? new Date(message.createdAt) : null;
   const timestamp = createdAt ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const fullTimestamp = createdAt ? createdAt.toLocaleString() : '';
@@ -139,7 +141,7 @@ function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu }) {
 
   const triggerUserMenu = (event, point) => {
     if (!menuUser || typeof onOpenUserMenu !== 'function') return;
-    if (event?.target?.closest && event.target.closest('a')) return;
+    if (event?.target?.closest('a')) return;
     onOpenUserMenu(event, menuUser, point);
   };
 
@@ -155,7 +157,7 @@ function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu }) {
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = setTimeout(() => {
           triggerUserMenu(event, { x: touch.clientX, y: touch.clientY });
-        }, 550);
+        }, longPressDelayMs);
       }}
       onTouchEnd={() => {
         if (longPressTimerRef.current) {

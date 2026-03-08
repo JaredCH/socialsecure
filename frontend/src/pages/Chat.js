@@ -125,6 +125,9 @@ const getPresenceState = (lastActiveAt) => {
 
 const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const DEFAULT_CHAT_NAME_COLOR = '#2563eb';
+const LONG_PRESS_DELAY_MS = 550;
+const USER_MENU_WIDTH_PX = 240;
+const USER_MENU_HEIGHT_PX = 220;
 
 function Chat() {
   const [profile, setProfile] = useState(null);
@@ -444,8 +447,8 @@ function Chat() {
         : (fallbackRect?.top || 0) + ((fallbackRect?.height || 0) / 2);
     setUserContextMenu({
       open: true,
-      x: Math.max(8, Math.min(window.innerWidth - 240, x)),
-      y: Math.max(8, Math.min(window.innerHeight - 220, y)),
+      x: Math.max(8, Math.min(window.innerWidth - USER_MENU_WIDTH_PX, x)),
+      y: Math.max(8, Math.min(window.innerHeight - USER_MENU_HEIGHT_PX, y)),
       user
     });
   };
@@ -752,7 +755,7 @@ function Chat() {
                   </button>
                   {themeMenuOpen ? (
                     <div
-                      className={`absolute right-0 top-9 z-[100] min-w-40 rounded border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}
+                      className={`absolute right-0 top-9 z-50 min-w-40 rounded border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}
                       onClick={(event) => event.stopPropagation()}
                     >
                       {CHAT_THEMES.map((themeOption) => (
@@ -824,6 +827,7 @@ function Chat() {
             profile={profile}
             theme={activeTheme}
             onOpenUserMenu={openUserContextMenu}
+            longPressDelayMs={LONG_PRESS_DELAY_MS}
           />
 
           <div className="mt-1 space-y-1">
@@ -889,7 +893,7 @@ function Chat() {
                             if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
                             userLongPressTimerRef.current = setTimeout(() => {
                               openUserContextMenu(event, user, { x: touch.clientX, y: touch.clientY });
-                            }, 550);
+                            }, LONG_PRESS_DELAY_MS);
                           }}
                           onTouchEnd={() => {
                             if (userLongPressTimerRef.current) {
