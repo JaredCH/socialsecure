@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
@@ -308,6 +308,7 @@ const normalizeGalleryItem = (item) => ({
 });
 
 const Social = () => {
+  const navigate = useNavigate();
   const initialGuestUser = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('user') || '';
@@ -521,6 +522,13 @@ const Social = () => {
     }
     return `/calendar?user=${encodeURIComponent(calendarUsername)}`;
   }, [activeProfile?.username, requestedProfileIdentifier, isOwnSocialContext]);
+  const handleHeroTabChange = useCallback((tabId) => {
+    if (tabId === 'calendar' && !isOwnSocialContext) {
+      navigate(socialCalendarPath);
+      return;
+    }
+    setActiveHeroTab(tabId);
+  }, [isOwnSocialContext, navigate, socialCalendarPath]);
   const socialChatPath = useMemo(() => {
     if (isAuthenticated && !isOwnSocialContext && activeProfile?._id) {
       return `/chat?profile=${encodeURIComponent(String(activeProfile._id))}`;
@@ -3288,7 +3296,7 @@ const Social = () => {
                   <button
                     key={`slim-tab-${tab.id}`}
                     type="button"
-                    onClick={() => setActiveHeroTab(tab.id)}
+                    onClick={() => handleHeroTabChange(tab.id)}
                     className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${activeHeroTab === tab.id ? 'bg-blue-500 text-white' : 'text-slate-200 hover:bg-white/10'}`}
                   >
                     {tab.label}
@@ -3305,7 +3313,7 @@ const Social = () => {
           profile={heroProfile}
           heroConfig={heroConfig}
           activeTab={activeHeroTab}
-          onTabChange={setActiveHeroTab}
+          onTabChange={handleHeroTabChange}
           isMobile={isMobile}
           isEditing={ownerEditingEnabled}
           onEditClick={() => setDesignStudioOpen(true)}

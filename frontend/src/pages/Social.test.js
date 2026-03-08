@@ -1,6 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import Social from './Social';
 import { authAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import { onFeedInteraction, onFeedPost, onTyping } from '../utils/realtime';
@@ -61,9 +61,15 @@ describe('Social page hero background rendering', () => {
   let root;
 
   const renderPage = async () => {
+    const LocationProbe = () => {
+      const location = useLocation();
+      return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+    };
+
     await act(async () => {
       root.render(
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[`${window.location.pathname}${window.location.search}`]}>
+          <LocationProbe />
           <Social />
         </MemoryRouter>
       );
@@ -155,6 +161,28 @@ describe('Social page hero background rendering', () => {
     const links = Array.from(container.querySelectorAll('a'));
     expect(links.some((link) => link.getAttribute('href') === '/calendar?user=buddy')).toBe(true);
     expect(links.some((link) => link.getAttribute('href') === '/chat?profile=u-2')).toBe(true);
+  });
+
+  it('navigates to the selected profile calendar when guest clicks the calendar tab', async () => {
+    window.history.replaceState({}, '', '/social?user=buddy');
+    feedAPI.getPublicUserFeed.mockResolvedValue({
+      data: {
+        posts: [],
+        user: { _id: 'u-2', username: 'buddy' }
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const calendarTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Calendar'));
+    expect(calendarTab).toBeDefined();
+
+    await act(async () => {
+      calendarTab.click();
+    });
+
+    const locationProbe = container.querySelector('[data-testid="location-probe"]');
+    expect(locationProbe?.textContent).toBe('/calendar?user=buddy');
   });
 
   it('keeps composer hidden by default with a reveal action', async () => {
