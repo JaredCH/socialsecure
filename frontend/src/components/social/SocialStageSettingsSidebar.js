@@ -1,5 +1,8 @@
 import React from 'react';
 
+const SIDEBAR_OVERLAY_Z_INDEX_CLASS = 'z-[1400]';
+const SIDEBAR_PANEL_SHADOW_CLASS = 'shadow-[0_30px_90px_rgba(15,23,42,0.35)]';
+
 const SocialStageSettingsSidebar = ({
   isOpen,
   onClose,
@@ -10,6 +13,8 @@ const SocialStageSettingsSidebar = ({
   error,
   successMessage,
   heroBackgroundImage,
+  themePreset,
+  themeOptions,
   accentColor,
   fontFamily,
   fontOptions,
@@ -17,22 +22,27 @@ const SocialStageSettingsSidebar = ({
   availableFriends,
   topFriendsLimit,
   onHeroBackgroundImageChange,
+  onThemePresetChange,
   onAccentColorChange,
   onFontFamilyChange,
   onToggleTopFriend,
   onMoveTopFriend
 }) => {
   if (!isOpen) return null;
+  const themeValues = themeOptions.map((option) => option.value);
+  const resolvedThemePreset = themeValues.includes(themePreset)
+    ? themePreset
+    : (themeValues[0] || 'default');
 
   return (
-    <div className="fixed inset-0 z-[320] pointer-events-none">
+    <div className={`fixed inset-0 ${SIDEBAR_OVERLAY_Z_INDEX_CLASS} pointer-events-none`}>
       <button
         type="button"
         aria-label="Close stage settings backdrop"
         onClick={onClose}
-        className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm pointer-events-auto"
+        className="absolute inset-0 z-0 bg-slate-950/55 backdrop-blur-sm pointer-events-auto"
       />
-      <div className="relative ml-auto flex h-full w-full max-w-md flex-col border-l border-blue-100 bg-white shadow-2xl pointer-events-auto">
+      <div className={`relative z-10 ml-auto flex h-full w-full max-w-[26rem] flex-col border-l border-slate-200 bg-white ${SIDEBAR_PANEL_SHADOW_CLASS} pointer-events-auto`}>
         <div className="flex items-center justify-between border-b border-blue-100 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-5 py-4 text-white">
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-blue-100">Profile Customizer</p>
@@ -47,11 +57,27 @@ const SocialStageSettingsSidebar = ({
           </button>
         </div>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
+        <div className="flex-1 space-y-5 overflow-y-auto bg-slate-50 px-5 py-5">
           {error ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
           {successMessage ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{successMessage}</div> : null}
 
-          <section className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Theme Selector</h3>
+              <p className="mt-1 text-xs text-slate-500">Apply a complete color mood for your social page.</p>
+            </div>
+            <select
+              value={resolvedThemePreset}
+              onChange={(event) => onThemePresetChange(event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            >
+              {themeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </section>
+
+          <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Hero Background Image</h3>
               <p className="mt-1 text-xs text-slate-500">Use a cinematic image URL for the profile header.</p>
@@ -65,7 +91,7 @@ const SocialStageSettingsSidebar = ({
             />
           </section>
 
-          <section className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Accent Color</h3>
               <p className="mt-1 text-xs text-slate-500">Updates links, icons, and primary highlights across the hub.</p>
@@ -86,7 +112,7 @@ const SocialStageSettingsSidebar = ({
             </div>
           </section>
 
-          <section className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Global Font</h3>
               <p className="mt-1 text-xs text-slate-500">Applies to the hero, stage cards, and supporting rails.</p>
@@ -102,7 +128,7 @@ const SocialStageSettingsSidebar = ({
             </select>
           </section>
 
-          <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <section className="space-y-4 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Top 8 Friends</h3>
               <p className="mt-1 text-xs text-slate-500">Select up to {topFriendsLimit} friends for the Pulse rail and hero story bar.</p>
@@ -188,6 +214,8 @@ const SocialStageSettingsSidebar = ({
 
 SocialStageSettingsSidebar.defaultProps = {
   heroBackgroundImage: '',
+  themePreset: 'default',
+  themeOptions: [],
   accentColor: '#3b82f6',
   fontFamily: 'Inter',
   fontOptions: [],
@@ -202,6 +230,7 @@ SocialStageSettingsSidebar.defaultProps = {
   onSaveChanges: () => {},
   onCancelChanges: () => {},
   onHeroBackgroundImageChange: () => {},
+  onThemePresetChange: () => {},
   onAccentColorChange: () => {},
   onFontFamilyChange: () => {},
   onToggleTopFriend: () => {},
