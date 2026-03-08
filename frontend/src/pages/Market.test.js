@@ -88,6 +88,16 @@ describe('Market listing creation affordance', () => {
     expect(container.textContent).toContain('Add a Listing');
   });
 
+  it('allows toggling mobile filter controls in browse view', async () => {
+    await renderMarket();
+
+    expect(container.textContent).toContain('Show Filters');
+    await clickByText('Show Filters');
+    expect(container.textContent).toContain('Hide Filters');
+    await clickByText('Hide Filters');
+    expect(container.textContent).toContain('Show Filters');
+  });
+
   it('requires condition and category-specific details before creating for-sale listings', async () => {
     await renderMarket();
     await clickByText('Add a Listing');
