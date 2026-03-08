@@ -432,6 +432,19 @@ function Chat() {
     }
   };
 
+  useEffect(() => {
+    if (!profile?._id) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const directMessageTarget = params.get('dm');
+    if (!directMessageTarget || String(directMessageTarget) === String(profile._id)) {
+      return;
+    }
+
+    handleStartDM(directMessageTarget);
+    window.history.replaceState({}, '', '/chat');
+  }, [profile?._id]);
+
   const openUserContextMenu = (event, user, point) => {
     if (event?.preventDefault) event.preventDefault();
     const fallbackRect = event?.currentTarget?.getBoundingClientRect?.();

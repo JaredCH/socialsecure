@@ -145,8 +145,13 @@ const findOwnerByIdentifier = async (identifier) => {
     query.push({ _id: rawIdentifier });
   }
 
-  return User.findOne({ $or: query }).select('_id username').lean();
+  return User.findOne({ $or: query }).select('_id username friendListPrivacy topFriendsPrivacy').lean();
 };
+
+const isPrivateProfile = (ownerDoc) => (
+  ownerDoc?.friendListPrivacy === 'private'
+  && ownerDoc?.topFriendsPrivacy === 'private'
+);
 
 const toGalleryItem = (image, viewerId) => {
   const { likesCount, dislikesCount } = image.getReactionCounts();
@@ -230,6 +235,24 @@ router.get('/:ownerId', optionalAuthenticateToken, async (req, res) => {
 
     const viewerId = req.user?.userId ? String(req.user.userId) : null;
     const viewerContext = await getGalleryViewerContext(owner._id, viewerId);
+    if (isPrivateProfile(owner) && !viewerContext.isOwner) {
+      return res.json({
+        success: true,
+        owner: {
+          _id: owner._id,
+          username: owner.username,
+          isPrivateProfile: true
+        },
+        items: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0
+        }
+      });
+    }
+
     const query = {
       ownerId: owner._id,
       ...(!viewerContext.isOwner && !viewerContext.isSecureFriend

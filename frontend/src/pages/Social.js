@@ -390,6 +390,23 @@ const Social = () => {
       lastActive: profileSource?.lastActive || null
     };
   }, [activeProfile, currentUser, isOwnSocialContext]);
+  const isPrivateGuestLock = !isOwnSocialContext && Boolean(activeProfile?.isPrivateProfile);
+  const socialCalendarPath = useMemo(() => {
+    const calendarUsername = activeProfile?.username || requestedProfileIdentifier;
+    if (!calendarUsername || isOwnSocialContext) {
+      return '/calendar';
+    }
+    return `/calendar?user=${encodeURIComponent(calendarUsername)}`;
+  }, [activeProfile?.username, requestedProfileIdentifier, isOwnSocialContext]);
+  const socialChatPath = useMemo(() => {
+    if (isAuthenticated && !isOwnSocialContext && activeProfile?._id) {
+      return `/chat?dm=${encodeURIComponent(String(activeProfile._id))}`;
+    }
+    return '/chat';
+  }, [isAuthenticated, isOwnSocialContext, activeProfile?._id]);
+  const socialChatLabel = !isOwnSocialContext && activeProfile?.username
+    ? `Message @${activeProfile.username}`
+    : 'Open chat';
 
   const galleryOwnerIdentifier = useMemo(() => {
     // Profile context (/social?user=...) uses target user gallery
@@ -487,6 +504,12 @@ const Social = () => {
       return;
     }
 
+    if (isPrivateGuestLock) {
+      setGalleryItems([]);
+      setGalleryError('');
+      return;
+    }
+
     setGalleryLoading(true);
     setGalleryError('');
     try {
@@ -499,7 +522,7 @@ const Social = () => {
     } finally {
       setGalleryLoading(false);
     }
-  }, [galleryOwnerIdentifier]);
+  }, [galleryOwnerIdentifier, isPrivateGuestLock]);
 
   const setPostActionLoading = (postId, value) => {
     setActionLoadingByPost((prev) => {
@@ -687,7 +710,7 @@ const Social = () => {
   }, [loadGallery]);
 
   useEffect(() => {
-    if (!isAuthenticated || !galleryOwnerIdentifier) {
+    if (!isAuthenticated || !galleryOwnerIdentifier || isPrivateGuestLock) {
       setTopFriends([]);
       return;
     }
@@ -699,7 +722,7 @@ const Social = () => {
       .catch(() => {
         setTopFriends([]);
       });
-  }, [isAuthenticated, galleryOwnerIdentifier]);
+  }, [isAuthenticated, galleryOwnerIdentifier, isPrivateGuestLock]);
 
   useEffect(() => {
     if (!isAuthenticated || !galleryOwnerIdentifier) return;
@@ -2403,7 +2426,7 @@ const Social = () => {
         return (
           <div className="space-y-3">
             <p className="text-sm text-gray-700">Jump into direct or room conversations without leaving the social experience.</p>
-            <Link to="/chat" className="inline-flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800">Open Chat</Link>
+            <Link to={socialChatPath} className="inline-flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800">{socialChatLabel}</Link>
           </div>
         );
       case 'top_friends':
@@ -2478,9 +2501,32 @@ const Social = () => {
     </section>
   );
 
+  const renderPrivateProfileBody = () => (
+    <div className="space-y-4 text-sm text-slate-700">
+      <div className="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-900 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Private profile</p>
+        <p className="mt-2 text-base font-semibold">Only limited identity details are visible to visitors.</p>
+        <p className="mt-2 text-sm text-amber-800">Posts, gallery media, calendar activity, and network panels stay locked until the owner decides to share more.</p>
+      </div>
+      <div className="space-y-3 rounded-3xl border border-slate-200 bg-white/70 px-4 py-4">
+        {[0, 1, 2].map((index) => (
+          <div key={index} className="rounded-2xl border border-slate-200 bg-slate-100/80 px-4 py-4">
+            <div className="h-3 w-24 rounded-full bg-slate-200" />
+            <div className="mt-3 h-3 w-full rounded-full bg-slate-200" />
+            <div className="mt-2 h-3 w-3/4 rounded-full bg-slate-200" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   const renderStoriesBar = () => (
     <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {storyUsers.length === 0 ? (
+      {isPrivateGuestLock ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-5 text-sm text-amber-900 backdrop-blur-xl">
+          This profile is private. Stories and Top 8 activity stay hidden from guests.
+        </div>
+      ) : storyUsers.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/40 bg-white/30 px-4 py-5 text-sm text-slate-500 backdrop-blur-xl">
           Your Top 8 will appear here once you select friends in Stage Settings.
         </div>
@@ -2508,7 +2554,7 @@ const Social = () => {
       <ul className="space-y-2">
         <li><Link to="/social" className="flex items-center justify-between rounded-2xl bg-blue-50 px-3 py-2 font-semibold text-blue-700"><span>Social Hub</span><span aria-hidden="true">↗</span></Link></li>
         {isModuleVisible('marketplaceShortcut') ? <li><Link to="/market" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Marketplace</Link></li> : null}
-        {isModuleVisible('calendarShortcut') ? <li><Link to="/calendar" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Calendar</Link></li> : null}
+        {isModuleVisible('calendarShortcut') ? <li><Link to={socialCalendarPath} className="block rounded-2xl px-3 py-2 hover:bg-white/60">Calendar</Link></li> : null}
         {isModuleVisible('settingsShortcut') ? <li><Link to="/settings" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Settings</Link></li> : null}
         {isModuleVisible('referShortcut') ? <li><Link to="/refer" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Refer a Friend</Link></li> : null}
       </ul>
@@ -2574,6 +2620,12 @@ const Social = () => {
     : null;
 
   const renderCenterStage = () => {
+    if (isPrivateGuestLock) {
+      return renderGlassPanel('Private Stage', renderPrivateProfileBody(), {
+        subtitle: 'Guest access is limited by this account\'s privacy settings'
+      });
+    }
+
     switch (activeHeroTab) {
       case 'friends':
         return renderGlassPanel('Circles', renderPanelBody('circles'), {
@@ -2596,7 +2648,7 @@ const Social = () => {
                 <p className="font-semibold text-slate-900">Coordinate upcoming events</p>
                 <p className="mt-1 text-slate-500">Open the full calendar to manage events, reminders, and shared plans.</p>
               </div>
-              <Link to="/calendar" className="rounded-2xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700">Open calendar</Link>
+              <Link to={socialCalendarPath} className="rounded-2xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700">Open calendar</Link>
             </div>
             {calendarCountdowns.length === 0 ? (
               <div className="rounded-2xl bg-white/50 px-4 py-4 text-slate-500">No active countdown posts yet.</div>
@@ -2632,7 +2684,9 @@ const Social = () => {
 
   const renderPulseRail = () => (
     <div className="space-y-6">
-      {renderGlassPanel(
+      {isPrivateGuestLock ? renderGlassPanel('Access Locked', renderPrivateProfileBody(), {
+        subtitle: 'Pulse, live activity, and messaging stay hidden while this profile is private'
+      }) : renderGlassPanel(
         'Pulse',
         topFriends.length === 0 ? (
           <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">Top 8 friends are private or not configured yet.</div>
@@ -2652,7 +2706,7 @@ const Social = () => {
         { subtitle: 'Top 8 friends & circles' }
       )}
 
-      {renderGlassPanel(
+      {!isPrivateGuestLock ? renderGlassPanel(
         'Live Activity',
         <div className="grid grid-cols-2 gap-3 text-sm text-slate-700">
           {[
@@ -2668,13 +2722,13 @@ const Social = () => {
           ))}
         </div>,
         { subtitle: 'Signals from your network' }
-      )}
+      ) : null}
 
-      {renderGlassPanel('Chat', renderPanelBody('chat_panel'), {
+      {!isPrivateGuestLock ? renderGlassPanel('Chat', renderPanelBody('chat_panel'), {
         subtitle: 'Stay responsive without leaving the hub'
-      })}
+      }) : null}
 
-      {isAuthenticated && !isGuestPreview ? renderGlassPanel('Moderation', renderPanelBody('moderation_status'), {
+      {isAuthenticated && !isGuestPreview && !isPrivateGuestLock ? renderGlassPanel('Moderation', renderPanelBody('moderation_status'), {
         subtitle: 'Recent trust & safety signals'
       }) : null}
     </div>
@@ -2700,16 +2754,48 @@ const Social = () => {
 
         <div className={`px-4 sm:px-6 lg:px-8 ${isMobile ? 'pb-24 pt-16' : 'pt-20'}`}>
           <div className="rounded-[2rem] border border-white/25 bg-white/8 p-4 shadow-[0_30px_90px_rgba(15,23,42,0.16)] backdrop-blur-xl sm:p-6">
+            {isOwnSocialContext ? (
+              <div className="mb-6 rounded-[1.75rem] border border-white/35 bg-white/25 px-5 py-4 shadow-[0_18px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">View mode</p>
+                    <h2 className="mt-1 text-lg font-semibold text-slate-900">{isGuestPreview ? 'Guest preview is on' : 'Owner view is active'}</h2>
+                    <p className="mt-1 text-sm text-slate-600">{isGuestPreview ? 'You are previewing the public-facing experience without edit controls.' : 'Switch to guest view to verify exactly what visitors can see.'}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
+                      className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-sm ${isGuestPreview ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+                    >
+                      {isGuestPreview ? 'Exit guest view' : 'Preview as guest'}
+                    </button>
+                    {!isGuestPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => setDesignStudioOpen(true)}
+                        className="rounded-2xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                      >
+                        Open Stage Settings
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="mb-6">{renderStoriesBar()}</div>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(220px,20%)_minmax(0,1fr)_minmax(280px,25%)]">
               {!isMobile ? (
                 <aside className="space-y-6 xl:sticky xl:top-24">
                   {renderNavigationDiscovery()}
-                  {renderGlassPanel('Profile Snapshot', renderPanelBody('snapshot'), {
+                  {isPrivateGuestLock ? renderGlassPanel('Profile Privacy', renderPrivateProfileBody(), {
+                    subtitle: 'Limited details are available while this account is private'
+                  }) : renderGlassPanel('Profile Snapshot', renderPanelBody('snapshot'), {
                     subtitle: 'Identity, resume, and quick stats'
                   })}
-                  {renderSharedDesignCard}
+                  {!isPrivateGuestLock ? renderSharedDesignCard : null}
                 </aside>
               ) : null}
 

@@ -166,4 +166,27 @@ describe('Public resume routes', () => {
     expect(response.body.user.hasPublicResume).toBe(false);
     expect(response.body.user.resumeUrl).toBeUndefined();
   });
+
+  it('returns only limited data for private profiles on the public feed route', async () => {
+    const app = buildApp();
+    mockUser.findOne.mockReturnValue(resolvedQuery({
+      ...targetUser,
+      friendListPrivacy: 'private',
+      topFriendsPrivacy: 'private'
+    }));
+    mockResume.findOne.mockReturnValueOnce(resolvedQuery({
+      visibility: 'public',
+      basics: { headline: 'Should stay hidden' }
+    }));
+
+    const response = await request(app).get('/api/public/users/alice/feed');
+
+    expect(response.status).toBe(200);
+    expect(response.body.user.isPrivateProfile).toBe(true);
+    expect(response.body.user.hasPublicResume).toBe(false);
+    expect(response.body.user.resumeUrl).toBeUndefined();
+    expect(response.body.user.restrictedContent).toBe(true);
+    expect(response.body.posts).toEqual([]);
+    expect(response.body.pagination.total).toBe(0);
+  });
 });

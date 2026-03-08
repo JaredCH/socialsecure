@@ -14,7 +14,8 @@ jest.mock('../utils/api', () => ({
     getConversationMessages: jest.fn(),
     getConversationUsers: jest.fn(),
     sendConversationMessage: jest.fn(),
-    startDM: jest.fn()
+    startDM: jest.fn(),
+    getProfileThread: jest.fn()
   },
   friendsAPI: {
     sendRequest: jest.fn()
@@ -591,5 +592,37 @@ describe('Chat zip room indicator', () => {
 
     expect(container.textContent).toContain('Send direct message');
     expect(container.textContent).toContain('View user social');
+  });
+
+  it('opens a direct message when loaded with a social deep link target', async () => {
+    window.history.replaceState({}, '', '/chat?dm=u2');
+
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.startDM.mockResolvedValue({
+      data: {
+        conversation: {
+          _id: 'dm-u2',
+          type: 'dm',
+          peer: { _id: 'u2', username: 'buddy' }
+        }
+      }
+    });
+
+    await renderChat();
+
+    expect(chatAPI.startDM).toHaveBeenCalledWith('u2');
+    expect(window.location.pathname).toBe('/chat');
+    expect(window.location.search).toBe('');
   });
 });

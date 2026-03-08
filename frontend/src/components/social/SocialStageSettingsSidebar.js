@@ -25,8 +25,14 @@ const SocialStageSettingsSidebar = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] bg-slate-950/50 backdrop-blur-sm">
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-blue-100 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[320] pointer-events-none">
+      <button
+        type="button"
+        aria-label="Close stage settings backdrop"
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm pointer-events-auto"
+      />
+      <div className="relative ml-auto flex h-full w-full max-w-md flex-col border-l border-blue-100 bg-white shadow-2xl pointer-events-auto">
         <div className="flex items-center justify-between border-b border-blue-100 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-5 py-4 text-white">
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-blue-100">Profile Customizer</p>

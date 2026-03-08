@@ -6,7 +6,9 @@ const router = express.Router();
 const User = require('../models/User');
 const Post = require('../models/Post');
 const BlockList = require('../models/BlockList');
+const Resume = require('../models/Resume');
 const { toPublicSocialPagePreferences } = require('../utils/socialPagePreferences');
+const { normalizeRelationshipAudience, socialOrUnsetAudienceQuery } = require('../utils/relationshipAudience');
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -51,7 +53,12 @@ const parsePagination = (query) => {
   };
 };
 
-const publicUserProjection = '_id username realName city state country registrationStatus pgpPublicKey createdAt profileTheme socialPagePreferences';
+const publicUserProjection = '_id username realName city state country registrationStatus pgpPublicKey createdAt profileTheme socialPagePreferences friendListPrivacy topFriendsPrivacy';
+
+const isPrivateProfile = (userDoc) => (
+  userDoc?.friendListPrivacy === 'private'
+  && userDoc?.topFriendsPrivacy === 'private'
+);
 
 const toPublicUserProfile = (userDoc) => {
   if (!userDoc) return null;
@@ -65,6 +72,7 @@ const toPublicUserProfile = (userDoc) => {
     country: userDoc.country || null,
     registrationStatus: userDoc.registrationStatus,
     hasPGP: !!userDoc.pgpPublicKey,
+    isPrivateProfile: isPrivateProfile(userDoc),
     socialPagePreferences: toPublicSocialPagePreferences(userDoc.socialPagePreferences, {
       profileTheme: userDoc.profileTheme || 'default'
     }),
@@ -222,6 +230,8 @@ router.get('/users/:username', publicReadLimiter, async (req, res) => {
 
     const viewerId = getViewerIdFromAuthHeader(req);
     const blocked = await hasBlockRelationship(viewerId, user._id);
+    const isOwner = viewerId && String(viewerId) === String(user._id);
+    const privateProfile = isPrivateProfile(user) && !isOwner;
     if (blocked) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -235,7 +245,7 @@ router.get('/users/:username', publicReadLimiter, async (req, res) => {
       success: true,
       user: {
         ...toPublicUserProfile(user),
-        ...(resumeMeta || { hasPublicResume: false })
+        ...(!privateProfile ? (resumeMeta || { hasPublicResume: false }) : { hasPublicResume: false })
       }
     });
   } catch (error) {
@@ -353,20 +363,41 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
 
     const viewerId = getViewerIdFromAuthHeader(req);
     const blocked = await hasBlockRelationship(viewerId, user._id);
+    const isOwner = viewerId && String(viewerId) === String(user._id);
+    const privateProfile = isPrivateProfile(user) && !isOwner;
     if (blocked) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    const resume = await Resume.findOne({ userId: user._id })
-      .select('visibility basics.headline updatedAt')
-      .lean();
-    const resumeMeta = toDiscoverableResumeMeta(user, resume);
 
     const pagination = parsePagination(req.query);
     if (pagination.error) {
       return res.status(400).json({ error: pagination.error });
     }
     const { page, limit, skip } = pagination;
+
+    const resume = await Resume.findOne({ userId: user._id })
+      .select('visibility basics.headline updatedAt')
+      .lean();
+    const resumeMeta = toDiscoverableResumeMeta(user, resume);
+
+    if (privateProfile) {
+      return res.json({
+        success: true,
+        user: {
+          ...toPublicUserProfile(user),
+          hasPublicResume: false,
+          restrictedContent: true
+        },
+        posts: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0
+        }
+      });
+    }
+
     const query = publicPostQuery(user._id);
 
     const [posts, total] = await Promise.all([
@@ -415,9 +446,30 @@ router.get('/users/:userId/gallery', async (req, res) => {
     const { page, limit, skip } = pagination;
     const viewerId = getViewerIdFromAuthHeader(req);
     const blocked = await hasBlockRelationship(viewerId, user._id);
+    const isOwner = viewerId && String(viewerId) === String(user._id);
+    const privateProfile = isPrivateProfile(user) && !isOwner;
     if (blocked) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    if (privateProfile) {
+      return res.json({
+        success: true,
+        user: {
+          ...toPublicUserProfile(user),
+          hasPublicResume: false,
+          restrictedContent: true
+        },
+        items: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0
+        }
+      });
+    }
+
     const query = {
       ...publicPostQuery(user._id),
       mediaUrls: { $exists: true, $ne: [] }
