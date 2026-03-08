@@ -127,7 +127,19 @@ export const resumeAPI = {
 
 // User API
 export const userAPI = {
-  search: (query) => api.get(`/users/search?q=${query}`),
+  search: (queryOrCriteria) => {
+    if (typeof queryOrCriteria === 'string') {
+      return api.get(`/users/search?q=${encodeURIComponent(queryOrCriteria)}`);
+    }
+    const params = new URLSearchParams();
+    Object.entries(queryOrCriteria || {}).forEach(([key, value]) => {
+      const normalized = typeof value === 'string' ? value.trim() : value;
+      if (normalized) {
+        params.append(key, normalized);
+      }
+    });
+    return api.get(`/users/search?${params.toString()}`);
+  },
   getByUsername: (username) => api.get(`/users/username/${username}`),
   getById: (userId) => api.get(`/users/${userId}`),
 };
