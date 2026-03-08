@@ -13,7 +13,6 @@ import {
   SOCIAL_PANEL_SHAPE_MASKS,
   HERO_LAYOUTS,
   HERO_AVATAR_SIZES,
-  SOCIAL_FONT_FAMILIES,
   normalizeSocialPreferences
 } from '../../utils/socialPagePreferences';
 import AdvancedColorPicker from './AdvancedColorPicker';
