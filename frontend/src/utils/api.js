@@ -249,11 +249,27 @@ export const chatAPI = {
     api.get(`/chat/conversations/${conversationId}/messages?page=${page}&limit=${limit}`),
   getConversationUsers: (conversationId) =>
     api.get(`/chat/conversations/${conversationId}/users`),
+  getConversationDevices: (conversationId) =>
+    api.get(`/chat/conversations/${conversationId}/devices`),
   sendConversationMessage: (conversationId, payload) => {
     if (typeof payload === 'string') {
       return api.post(`/chat/conversations/${conversationId}/messages`, { content: payload });
     }
     return api.post(`/chat/conversations/${conversationId}/messages`, payload);
+  },
+  sendConversationE2EEMessage: (conversationId, payload) =>
+    api.post(`/chat/conversations/${conversationId}/messages`, payload),
+  publishConversationKeyPackages: (conversationId, packages) =>
+    api.post(`/chat/conversations/${conversationId}/keys/packages`, { packages }),
+  syncConversationKeyPackages: (conversationId, deviceId, since, limit = 100) => {
+    const params = new URLSearchParams({
+      deviceId,
+      limit: String(limit)
+    });
+    if (since) {
+      params.append('since', since);
+    }
+    return api.get(`/chat/conversations/${conversationId}/keys/packages/sync?${params.toString()}`);
   },
   startDM: (targetUserId) => api.post('/chat/dm/start', { targetUserId }),
   getProfileThread: (userId) => api.get(`/chat/profile/${encodeURIComponent(userId)}/thread`),

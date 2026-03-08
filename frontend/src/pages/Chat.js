@@ -4,6 +4,13 @@ import ChatComposerBar from '../components/chat/ChatComposerBar';
 import ChatMessageList from '../components/chat/ChatMessageList';
 import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
 import { parseSlashCommand, runSlashCommand } from '../utils/chatCommands';
+import {
+  createWrappedRoomKeyPackage,
+  decryptEnvelope,
+  encryptEnvelope,
+  ingestWrappedRoomKeyPackage,
+  unlockOrCreateVault
+} from '../utils/e2ee';
 
 const CHANNELS = [
   { key: 'zip', label: 'Zip Rooms' },
@@ -141,6 +148,7 @@ function Chat() {
   const [activeConversationId, setActiveConversationId] = useState('');
 
   const [messages, setMessages] = useState([]);
+  const [decryptedDmContentById, setDecryptedDmContentById] = useState({});
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState('');
   const [composerValue, setComposerValue] = useState('');
@@ -174,6 +182,8 @@ function Chat() {
   const [roomUsersLoading, setRoomUsersLoading] = useState(false);
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [dmOfflineState, setDmOfflineState] = useState('online');
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine !== false);
   const [userContextMenu, setUserContextMenu] = useState({
     open: false,
     x: 0,
@@ -181,6 +191,7 @@ function Chat() {
     user: null
   });
   const userLongPressTimerRef = useRef(null);
+  const e2eeSessionRef = useRef(null);
 
   const handleThemeChange = useCallback((nextTheme) => {
     if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
@@ -224,6 +235,30 @@ function Chat() {
     [conversationList, activeConversationId]
   );
 
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setDmOfflineState('online');
+      setDecryptedDmContentById({});
+    };
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    setDecryptedDmContentById({});
+    if (activeConversation?.type === 'dm') {
+      setDmOfflineState('online');
+      return;
+    }
+    setDmOfflineState('online');
+  }, [activeConversationId, activeConversation?.type]);
+
   const allRooms = useMemo(() => {
     const withSearchLabel = (room, channel) => {
       const label = getConversationLabel(room);
@@ -253,9 +288,21 @@ function Chat() {
     [profile, hubData]
   );
 
+  const renderedMessages = useMemo(() => {
+    if (activeConversation?.type !== 'dm') return messages;
+    return messages.map((message) => {
+      const decrypted = decryptedDmContentById[String(message._id)];
+      if (!decrypted) return message;
+      return {
+        ...message,
+        content: decrypted
+      };
+    });
+  }, [activeConversation?.type, decryptedDmContentById, messages]);
+
   const sharedMediaSnippets = useMemo(
-    () => messages.filter((message) => /\[[^\]]+\]|https?:\/\//i.test(message.content || '')).slice(-6),
-    [messages]
+    () => renderedMessages.filter((message) => /\[[^\]]+\]|https?:\/\//i.test(message.content || '')).slice(-6),
+    [renderedMessages]
   );
 
   const applyDefaultConversationSelection = (channelKey, data) => {
@@ -381,6 +428,40 @@ function Chat() {
     return () => clearTimeout(timer);
   }, [composerValue]);
 
+  const ensureE2EESession = useCallback(async () => {
+    if (e2eeSessionRef.current) {
+      return e2eeSessionRef.current;
+    }
+    if (!profile?._id) {
+      throw new Error('Profile is required to unlock encryption vault');
+    }
+
+    const encryptionPassword = window.prompt('Enter your SocialSecure encryption password to unlock DM encryption');
+    if (!encryptionPassword) {
+      throw new Error('Encryption password is required');
+    }
+
+    const { session } = await unlockOrCreateVault({
+      userId: profile._id,
+      password: encryptionPassword
+    });
+    const registerPayload = await session.getRegisterPayload();
+    await chatAPI.registerDeviceKeys(registerPayload);
+    e2eeSessionRef.current = session;
+    return session;
+  }, [profile?._id]);
+
+  const hydrateConversationKeys = useCallback(async ({ conversationId, session }) => {
+    const { data } = await chatAPI.syncConversationKeyPackages(conversationId, session.deviceId);
+    const packages = Array.isArray(data?.packages) ? data.packages : [];
+    for (const pkg of packages) {
+      await ingestWrappedRoomKeyPackage({ session, pkg });
+    }
+    if (packages.length > 0) {
+      await session.persist();
+    }
+  }, []);
+
   const handleSend = async (event) => {
     event.preventDefault();
     const trimmed = composerValue.trim();
@@ -403,10 +484,57 @@ function Chat() {
 
     setSending(true);
     try {
-      const { data } = await chatAPI.sendConversationMessage(activeConversationId, {
-        content: contentToSend,
-        senderNameColor: nameColor
-      });
+      let data;
+      if (activeConversation?.type === 'dm') {
+        const session = await ensureE2EESession();
+        await hydrateConversationKeys({ conversationId: activeConversationId, session });
+        const existingKey = session.getLatestRoomKey(activeConversationId);
+        const keyVersion = existingKey?.keyVersion || 1;
+        const roomKey = existingKey?.keyBytes || session.createRoomKey();
+        if (!existingKey) {
+          session.setRoomKey(activeConversationId, keyVersion, roomKey);
+        }
+
+        const envelope = await encryptEnvelope({
+          session,
+          roomId: activeConversationId,
+          keyVersion,
+          roomKey,
+          plaintext: contentToSend
+        });
+
+        const devicesResponse = await chatAPI.getConversationDevices(activeConversationId);
+        const allDevices = Array.isArray(devicesResponse?.data?.devices) ? devicesResponse.data.devices : [];
+        const targetDevices = allDevices.filter((device) => (
+          !(String(device.userId) === String(profile?._id) && String(device.deviceId) === String(session.deviceId))
+        ));
+
+        if (targetDevices.length > 0) {
+          const packages = await Promise.all(targetDevices.map((device) => createWrappedRoomKeyPackage({
+            session,
+            roomId: activeConversationId,
+            keyVersion,
+            roomKey,
+            recipientUserId: String(device.userId),
+            recipientDeviceId: String(device.deviceId)
+          })));
+          await chatAPI.publishConversationKeyPackages(activeConversationId, packages);
+        }
+
+        const response = await chatAPI.sendConversationE2EEMessage(activeConversationId, {
+          e2ee: envelope,
+          messageType: 'text'
+        });
+        data = response.data;
+        await session.persist();
+      } else {
+        const response = await chatAPI.sendConversationMessage(activeConversationId, {
+          content: contentToSend,
+          senderNameColor: nameColor
+        });
+        data = response.data;
+      }
+
       setMessages((prev) => [...prev, data.message]);
       setComposerValue('');
       setLocalTyping(false);
@@ -431,6 +559,62 @@ function Chat() {
       toast.error(error.response?.data?.error || 'Failed to start DM');
     }
   }, [refreshHub]);
+
+  const handleGoOffline = useCallback(async () => {
+    if (!activeConversationId || activeConversation?.type !== 'dm') {
+      return;
+    }
+    setDmOfflineState('downloading_encrypted');
+    try {
+      await chatAPI.getConversationMessages(activeConversationId, 1, 100);
+      if (isOnline) {
+        const session = await ensureE2EESession();
+        await hydrateConversationKeys({ conversationId: activeConversationId, session });
+      }
+      setDmOfflineState('ready_offline');
+      toast.success('Encrypted DM data downloaded for offline decrypt.');
+    } catch (error) {
+      setDmOfflineState('online');
+      toast.error(error.response?.data?.error || error.message || 'Failed to prepare offline DM data');
+    }
+  }, [activeConversation?.type, activeConversationId, ensureE2EESession, hydrateConversationKeys, isOnline]);
+
+  const handleDecryptOfflineMessages = useCallback(async () => {
+    if (activeConversation?.type !== 'dm') return;
+    if (isOnline || dmOfflineState !== 'ready_offline') return;
+    try {
+      const session = await ensureE2EESession();
+      const decryptedEntries = {};
+      for (const message of messages) {
+        if (!message?.e2ee?.ciphertext) continue;
+        try {
+          decryptedEntries[String(message._id)] = await decryptEnvelope({
+            session,
+            roomId: activeConversationId,
+            envelope: message.e2ee
+          });
+        } catch {
+          // keep encrypted placeholder when key is unavailable
+        }
+      }
+      setDecryptedDmContentById(decryptedEntries);
+      setDmOfflineState('decrypted_offline');
+      toast.success('Offline DM decrypt complete.');
+    } catch (error) {
+      toast.error(error.message || 'Failed to decrypt offline messages');
+    }
+  }, [activeConversation?.type, activeConversationId, dmOfflineState, ensureE2EESession, isOnline, messages]);
+
+  const handleReturnOnline = useCallback(() => {
+    setDmOfflineState('online');
+    setDecryptedDmContentById({});
+    e2eeSessionRef.current = null;
+    if (!isOnline) {
+      toast('Reconnect to network to resume live DM sync.');
+    } else {
+      toast.success('Returned online and wiped decrypted offline DM state.');
+    }
+  }, [isOnline]);
 
   const handleOpenProfileThread = useCallback(async (targetUserId) => {
     try {
@@ -849,6 +1033,34 @@ function Chat() {
                     {conversationPresence.label}
                   </span>
                 ) : null}
+                {activeConversation?.type === 'dm' ? (
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handleGoOffline}
+                      disabled={dmOfflineState === 'downloading_encrypted' || dmOfflineState !== 'online'}
+                      className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
+                    >
+                      {dmOfflineState === 'downloading_encrypted' ? 'Downloading…' : 'Go Offline'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDecryptOfflineMessages}
+                      disabled={isOnline || dmOfflineState !== 'ready_offline'}
+                      className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
+                    >
+                      Decrypt Offline Messages
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleReturnOnline}
+                      disabled={dmOfflineState === 'online'}
+                      className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
+                    >
+                      Return Online
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
           </header>
@@ -859,7 +1071,7 @@ function Chat() {
 
           <ChatMessageList
             conversationId={activeConversationId}
-            messages={messages}
+            messages={renderedMessages}
             loading={messagesLoading}
             profile={profile}
             theme={activeTheme}
@@ -882,7 +1094,7 @@ function Chat() {
                 composerValue={composerValue}
                 setComposerValue={setComposerValue}
                 onSubmit={handleSend}
-                disabled={!activeConversationId}
+                disabled={!activeConversationId || (activeConversation?.type === 'dm' && dmOfflineState !== 'online')}
                 sending={sending}
                 theme={activeTheme}
                 onComposerError={(message) => toast.error(message)}
