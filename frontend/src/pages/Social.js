@@ -16,7 +16,8 @@ import {
   SOCIAL_LAYOUT_PRESETS,
   SOCIAL_PANEL_LABELS,
   SOCIAL_HERO_TABS,
-  SOCIAL_FONT_FAMILIES
+  SOCIAL_FONT_FAMILIES,
+  SOCIAL_THEME_PRESETS
 } from '../utils/socialPagePreferences';
 import {
   emitTypingStart,
@@ -80,6 +81,40 @@ const THEME_TO_PAGE_CLASS = {
   dark: 'bg-slate-900 text-slate-100',
   sunset: 'bg-orange-50 text-gray-900',
   forest: 'bg-emerald-50 text-gray-900'
+};
+const STAGE_THEME_OPTIONS = [
+  { value: 'default', label: 'Default' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'sunset', label: 'Sunset' },
+  { value: 'forest', label: 'Forest' }
+];
+const STAGE_THEME_STYLE_PATCH = {
+  default: {
+    accentColorToken: 'blue',
+    globalStyles: { pageBackgroundColor: '#f8fafc', panelColor: '#ffffff', fontColor: '#0f172a', headerColor: '#1d4ed8' },
+    heroColor: '#2563eb'
+  },
+  light: {
+    accentColorToken: 'blue',
+    globalStyles: { pageBackgroundColor: '#ffffff', panelColor: '#ffffff', fontColor: '#0f172a', headerColor: '#2563eb' },
+    heroColor: '#3b82f6'
+  },
+  dark: {
+    accentColorToken: 'emerald',
+    globalStyles: { pageBackgroundColor: '#020617', panelColor: '#0f172a', fontColor: '#e2e8f0', headerColor: '#10b981' },
+    heroColor: '#10b981'
+  },
+  sunset: {
+    accentColorToken: 'rose',
+    globalStyles: { pageBackgroundColor: '#fff7ed', panelColor: '#ffedd5', fontColor: '#7c2d12', headerColor: '#f97316' },
+    heroColor: '#f97316'
+  },
+  forest: {
+    accentColorToken: 'emerald',
+    globalStyles: { pageBackgroundColor: '#ecfdf5', panelColor: '#d1fae5', fontColor: '#14532d', headerColor: '#059669' },
+    heroColor: '#059669'
+  }
 };
 
 const normalizeSocialPreferences = (input, profileTheme = 'default') => normalizePageDesign(input, profileTheme);
@@ -1062,6 +1097,19 @@ const Social = () => {
 
   const updateHeroConfig = useCallback((patch) => {
     patchDraftPreferences((prev) => mergeDesignPatch(prev, { hero: patch }));
+  }, [patchDraftPreferences]);
+  const updateThemePreset = useCallback((themePreset) => {
+    const resolvedPreset = SOCIAL_THEME_PRESETS.includes(themePreset) ? themePreset : 'default';
+    const themeStylePatch = STAGE_THEME_STYLE_PATCH[resolvedPreset] || STAGE_THEME_STYLE_PATCH.default;
+    patchDraftPreferences((prev) => mergeDesignPatch(prev, {
+      themePreset: resolvedPreset,
+      accentColorToken: themeStylePatch.accentColorToken,
+      globalStyles: themeStylePatch.globalStyles,
+      hero: {
+        menuActiveColor: themeStylePatch.heroColor,
+        locationColor: themeStylePatch.heroColor
+      }
+    }));
   }, [patchDraftPreferences]);
 
   const updatePanelPreferences = useCallback((panelId, patch, mode) => {
@@ -2824,6 +2872,8 @@ const Social = () => {
         error={designError}
         successMessage={designSuccessMessage}
         heroBackgroundImage={socialPreferences.hero?.backgroundImage || ''}
+        themePreset={socialPreferences.themePreset || 'default'}
+        themeOptions={STAGE_THEME_OPTIONS}
         accentColor={accentColor}
         fontFamily={socialPreferences.globalStyles?.fontFamily || 'Inter'}
         fontOptions={SOCIAL_FONT_FAMILIES}
@@ -2831,6 +2881,7 @@ const Social = () => {
         availableFriends={friends}
         topFriendsLimit={TOP_FRIENDS_LIMIT}
         onHeroBackgroundImageChange={(value) => updateHeroConfig({ backgroundImage: value })}
+        onThemePresetChange={updateThemePreset}
         onAccentColorChange={(value) => {
           updateHeroConfig({ menuActiveColor: value, locationColor: value });
           updateGlobalStyles({ headerColor: value });
