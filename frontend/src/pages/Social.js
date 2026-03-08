@@ -6,18 +6,17 @@ import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
-import SocialEditablePanel from '../components/social/SocialEditablePanel';
-import SocialDesignStudioModal from '../components/social/SocialDesignStudioModal';
 import SocialHero from '../components/social/SocialHero';
+import SocialStageSettingsSidebar from '../components/social/SocialStageSettingsSidebar';
 import {
   getFontSizeClass,
-  getPanelsByArea,
   mergeDesignPatch,
   normalizeSocialPreferences as normalizePageDesign,
   SOCIAL_DESIGN_TEMPLATES,
   SOCIAL_LAYOUT_PRESETS,
   SOCIAL_PANEL_LABELS,
-  SOCIAL_HERO_TABS
+  SOCIAL_HERO_TABS,
+  SOCIAL_FONT_FAMILIES
 } from '../utils/socialPagePreferences';
 import {
   emitTypingStart,
@@ -37,6 +36,7 @@ const INTERACTION_MAX_OPTIONS = 6;
 const GALLERY_MAX_ITEMS = 24;
 const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 const FEED_POLL_INTERVAL_MS = 30000;
+const TOP_FRIENDS_LIMIT = 8;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
 const PANEL_WIDTH_UNITS_BY_SIZE = {
@@ -320,6 +320,7 @@ const Social = () => {
   });
   const [commentTypingByPostId, setCommentTypingByPostId] = useState({});
   const [designStudioOpen, setDesignStudioOpen] = useState(false);
+  const [draftTopFriendIds, setDraftTopFriendIds] = useState([]);
   const [inlineEditingPanelId, setInlineEditingPanelId] = useState('');
   const [activeHeroTab, setActiveHeroTab] = useState('main');
   const [heroEditingOpen, setHeroEditingOpen] = useState(false);
@@ -365,7 +366,6 @@ const Social = () => {
     ),
     [draftSocialPreferences, activeProfile?.socialPagePreferences, activeProfile?.profileTheme, activeLayoutMode]
   );
-  const panelsByArea = useMemo(() => getPanelsByArea(socialPreferences), [socialPreferences]);
   const isSectionVisible = useCallback(
     (sectionId) => socialPreferences.effective?.panels?.[sectionId]?.visible !== false,
     [socialPreferences]
@@ -439,6 +439,21 @@ const Social = () => {
     () => new Set(topFriends.map((friend) => String(friend._id))),
     [topFriends]
   );
+  const draftTopFriends = useMemo(() => {
+    const lookup = new Map();
+    [...topFriends, ...friends].forEach((friend) => {
+      if (friend?._id) {
+        lookup.set(String(friend._id), friend);
+      }
+    });
+    return draftTopFriendIds
+      .map((friendId) => lookup.get(String(friendId)))
+      .filter(Boolean);
+  }, [draftTopFriendIds, topFriends, friends]);
+
+  useEffect(() => {
+    setDraftTopFriendIds(topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend) => String(friend._id)));
+  }, [topFriends]);
 
   const trackSocialEvent = useCallback((eventType, metadata = {}) => {
     if (!isAuthenticated) return;
@@ -920,23 +935,75 @@ const Social = () => {
     setHasUnsavedDesignChanges(true);
   }, [socialPreferences, currentUser?.profileTheme, activeProfile?.profileTheme, activeLayoutMode]);
 
+  const markCustomizerDirty = useCallback(() => {
+    setDesignError('');
+    setDesignSuccessMessage('');
+    designDirtyRef.current = true;
+    setHasUnsavedDesignChanges(true);
+  }, []);
+
+  const toggleDraftTopFriend = useCallback((friendId) => {
+    const normalizedId = String(friendId || '');
+    if (!normalizedId) return;
+
+    setDraftTopFriendIds((prev) => {
+      if (prev.includes(normalizedId)) {
+        markCustomizerDirty();
+        return prev.filter((id) => id !== normalizedId);
+      }
+      if (prev.length >= TOP_FRIENDS_LIMIT) {
+        setDesignError(`Select up to ${TOP_FRIENDS_LIMIT} Top Friends.`);
+        return prev;
+      }
+      markCustomizerDirty();
+      return [...prev, normalizedId];
+    });
+  }, [markCustomizerDirty]);
+
+  const moveDraftTopFriend = useCallback((index, direction) => {
+    setDraftTopFriendIds((prev) => {
+      const next = [...prev];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (index < 0 || index >= next.length || targetIndex < 0 || targetIndex >= next.length) {
+        return prev;
+      }
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      markCustomizerDirty();
+      return next;
+    });
+  }, [markCustomizerDirty]);
+
   const saveDraftPreferences = useCallback(async () => {
-    if (!isOwnSocialContext || !draftSocialPreferences || !designDirtyRef.current) return;
+    if (!isOwnSocialContext || !designDirtyRef.current) return;
+    const currentTopFriendIds = topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend) => String(friend._id));
+    const topFriendsChanged = JSON.stringify(currentTopFriendIds) !== JSON.stringify(draftTopFriendIds);
+    if (!draftSocialPreferences && !topFriendsChanged) return;
     setDesignBusy(true);
     setDesignError('');
     try {
-      const response = await socialPageAPI.savePreferences(draftSocialPreferences, true);
-      const savedPreferences = normalizeSocialPreferences(
-        response.data?.preferences || draftSocialPreferences,
-        currentUser?.profileTheme || activeProfile?.profileTheme || 'default',
-        activeLayoutMode
-      );
-      setCurrentUser((prev) => (prev ? { ...prev, socialPagePreferences: savedPreferences } : prev));
-      setDraftSocialPreferences(savedPreferences);
-      setActiveDesignConfigId(savedPreferences.activeConfigId || null);
-      setDesignSuccessMessage('Layout saved');
+      let savedPreferences = draftSocialPreferences;
+
+      if (draftSocialPreferences) {
+        const response = await socialPageAPI.savePreferences(draftSocialPreferences, true);
+        savedPreferences = normalizeSocialPreferences(
+          response.data?.preferences || draftSocialPreferences,
+          currentUser?.profileTheme || activeProfile?.profileTheme || 'default',
+          activeLayoutMode
+        );
+        setCurrentUser((prev) => (prev ? { ...prev, socialPagePreferences: savedPreferences } : prev));
+        setDraftSocialPreferences(savedPreferences);
+        setActiveDesignConfigId(savedPreferences.activeConfigId || null);
+      }
+
+      if (topFriendsChanged) {
+        const topFriendsResponse = await friendsAPI.updateTopFriends(draftTopFriendIds);
+        setTopFriends(Array.isArray(topFriendsResponse.data?.topFriends) ? topFriendsResponse.data.topFriends : []);
+      }
+
+      setDesignSuccessMessage('Stage settings saved');
       designDirtyRef.current = false;
       setHasUnsavedDesignChanges(false);
+      setDesignStudioOpen(false);
     } catch (error) {
       setDesignError(error.response?.data?.error || 'Failed to save social page customization.');
     } finally {
@@ -945,6 +1012,8 @@ const Social = () => {
   }, [
     isOwnSocialContext,
     draftSocialPreferences,
+    draftTopFriendIds,
+    topFriends,
     currentUser?.profileTheme,
     activeProfile?.profileTheme,
     activeLayoutMode
@@ -957,11 +1026,12 @@ const Social = () => {
       activeLayoutMode
     );
     setDraftSocialPreferences(restored);
+    setDraftTopFriendIds(topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend) => String(friend._id)));
     setDesignError('');
     setDesignSuccessMessage('Draft changes discarded');
     designDirtyRef.current = false;
     setHasUnsavedDesignChanges(false);
-  }, [activeProfile?.socialPagePreferences, activeProfile?.profileTheme, activeLayoutMode]);
+  }, [activeProfile?.socialPagePreferences, activeProfile?.profileTheme, activeLayoutMode, topFriends]);
 
   const updateGlobalStyles = useCallback((patch) => {
     patchDraftPreferences((prev) => mergeDesignPatch(prev, { globalStyles: patch }));
@@ -2375,182 +2445,316 @@ const Social = () => {
     }
   };
 
-  const renderPanel = (panel) => {
-    if (!panel) return null;
-    const normalizedSize = panel.size === 'quarterTile'
-      ? 'halfCol'
-      : panel.size === 'halfTile'
-        ? 'oneCol'
-        : panel.size === 'fullTile'
-          ? 'twoCols'
-          : panel.size;
-    const widthUnits = PANEL_WIDTH_UNITS_BY_SIZE[normalizedSize] || 8;
-    const heightUnits = PANEL_HEIGHT_UNITS_BY_SIZE[panel.height] || 2;
-    const hasMainGridPlacement = panel.area === 'main'
-      && Number.isFinite(Number(panel.gridPlacement?.row))
-      && Number.isFinite(Number(panel.gridPlacement?.col));
-    const rowSpan = panel.height === 'halfRow'
-      ? 'md:[grid-row:span_1/span_1]'
-      : panel.height === 'twoRows'
-        ? 'md:[grid-row:span_4/span_4]'
-        : panel.height === 'threeRows'
-          ? 'md:[grid-row:span_6/span_6]'
-          : panel.height === 'fourRows'
-            ? 'md:[grid-row:span_8/span_8]'
-            : 'md:[grid-row:span_2/span_2]';
-    const sideHeightClass = panel.height === 'halfRow'
-      ? 'min-h-[7rem]'
-      : panel.height === 'twoRows'
-        ? 'min-h-[16rem]'
-        : panel.height === 'fourRows'
-          ? 'min-h-[30rem]'
-          : 'min-h-[11rem]';
-    const className = panel.area === 'main'
-      ? hasMainGridPlacement
-        ? 'md:[grid-column:var(--panel-col)_/_span_var(--panel-width)] md:[grid-row:var(--panel-row)_/_span_var(--panel-height)]'
-        : `${normalizedSize === 'halfCol' ? 'md:col-span-1' : normalizedSize === 'oneCol' ? 'md:col-span-2' : normalizedSize === 'twoCols' ? 'md:col-span-4' : normalizedSize === 'threeCols' ? 'md:col-span-6' : 'md:col-span-8'} ${rowSpan}`
-      : panel.area === 'sideLeft' || panel.area === 'sideRight'
-        ? sideHeightClass
-        : '';
-    const style = hasMainGridPlacement
-      ? {
-        '--panel-col': Number(panel.gridPlacement.col) + 1,
-        '--panel-row': Number(panel.gridPlacement.row) + 1,
-        '--panel-width': widthUnits,
-        '--panel-height': heightUnits
-      }
-      : {};
-
-    return (
-      <SocialEditablePanel
-        key={panel.id}
-        panelId={panel.id}
-        title={SOCIAL_PANEL_LABELS[panel.id] || panel.id}
-        panel={panel}
-        isOwnerEditing={ownerEditingEnabled}
-        isInlineEditing={inlineEditingPanelId === panel.id}
-        onToggleInlineEdit={() => setInlineEditingPanelId((prev) => (prev === panel.id ? '' : panel.id))}
-        onPanelChange={(patch) => updatePanelPreferences(panel.id, patch)}
-        onMove={(direction) => movePanel(panel.id, direction, activeLayoutMode)}
-        className={className}
-        style={style}
-      >
-        {renderPanelBody(panel.id)}
-      </SocialEditablePanel>
-    );
+  const accentColor = socialPreferences.hero?.menuActiveColor || socialPreferences.globalStyles?.headerColor || '#3b82f6';
+  const hubFontFamily = socialPreferences.globalStyles?.fontFamily || socialPreferences.hero?.fontFamily || 'Inter';
+  const hubSurfaceStyle = {
+    backgroundColor: 'rgba(255, 255, 255, 0.64)',
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+    fontFamily: `"${hubFontFamily}", sans-serif`
   };
+  const storyUsers = (topFriends.length > 0 ? topFriends : friends).slice(0, TOP_FRIENDS_LIMIT);
+  const onlineFriends = friends.filter((friend) => {
+    const status = String(friend?.presence?.status || '').toLowerCase();
+    return status === 'online' || status === 'active' || friend?.presence?.isOnline;
+  });
+  const liveTypingCount = Object.values(commentTypingByPostId).reduce((total, entry) => total + Object.keys(entry || {}).length, 0);
+  const calendarCountdowns = posts.filter((post) => post?.interaction?.type === 'countdown').slice(0, 5);
 
-  // Render content based on active tab
-  const renderTabContent = () => {
-    switch (activeHeroTab) {
-      case 'main':
-        return (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(240px,0.95fr)_minmax(0,2fr)_minmax(240px,0.95fr)]">
-              <div className="space-y-6">{panelsByArea.sideLeft.map(renderPanel)}</div>
-              <div className="grid grid-cols-1 gap-6 md:auto-rows-[5.5rem] md:grid-cols-12">{panelsByArea.main.map(renderPanel)}</div>
-              <div className="space-y-6">{panelsByArea.sideRight.map(renderPanel)}</div>
+  const renderGlassPanel = (title, body, options = {}) => (
+    <section
+      className={`overflow-hidden rounded-[1.75rem] border shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur-xl ${options.className || ''}`}
+      style={{ ...hubSurfaceStyle, ...(options.style || {}) }}
+    >
+      <div className="border-b border-white/30 px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">{title}</h2>
+            {options.subtitle ? <p className="mt-1 text-sm text-slate-500">{options.subtitle}</p> : null}
+          </div>
+          {options.action}
+        </div>
+      </div>
+      <div className="px-5 py-5">{body}</div>
+    </section>
+  );
+
+  const renderStoriesBar = () => (
+    <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {storyUsers.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-white/40 bg-white/30 px-4 py-5 text-sm text-slate-500 backdrop-blur-xl">
+          Your Top 8 will appear here once you select friends in Stage Settings.
+        </div>
+      ) : storyUsers.map((friend, index) => (
+        <button
+          key={friend._id || friend.username || index}
+          type="button"
+          onClick={() => handleSectionClick('top_friends')}
+          className="flex min-w-[4.5rem] flex-col items-center gap-2"
+        >
+          <div className="rounded-[1.4rem] border border-white/35 bg-white/25 p-1.5 shadow-lg backdrop-blur-xl">
+            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[1rem] bg-slate-200 text-lg font-semibold text-slate-700">
+              {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
             </div>
           </div>
-        );
+          <span className="max-w-[4.5rem] truncate text-xs font-medium text-slate-600">@{friend.username}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderNavigationDiscovery = () => renderGlassPanel(
+    'Navigation',
+    <div className="space-y-5 text-sm text-slate-700">
+      <ul className="space-y-2">
+        <li><Link to="/social" className="flex items-center justify-between rounded-2xl bg-blue-50 px-3 py-2 font-semibold text-blue-700"><span>Social Hub</span><span aria-hidden="true">↗</span></Link></li>
+        {isModuleVisible('marketplaceShortcut') ? <li><Link to="/market" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Marketplace</Link></li> : null}
+        {isModuleVisible('calendarShortcut') ? <li><Link to="/calendar" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Calendar</Link></li> : null}
+        {isModuleVisible('settingsShortcut') ? <li><Link to="/settings" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Settings</Link></li> : null}
+        {isModuleVisible('referShortcut') ? <li><Link to="/refer" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Refer a Friend</Link></li> : null}
+      </ul>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">My Groups</p>
+        <div className="space-y-2">
+          {circles.length === 0 ? (
+            <div className="rounded-2xl bg-white/50 px-3 py-3 text-sm text-slate-500">No circles yet. Create one from the Friends tab.</div>
+          ) : circles.slice(0, 6).map((circle) => (
+            <div key={circle._id || circle.name} className="flex items-center gap-3 rounded-2xl bg-white/55 px-3 py-2.5">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: circle.color || accentColor }} />
+              <div>
+                <p className="font-medium text-slate-800">{circle.name}</p>
+                <p className="text-xs text-slate-500">{Array.isArray(circle.members) ? circle.members.length : 0} members</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Communities</p>
+        <div className="space-y-2">
+          {[
+            { name: 'Local Discovery', meta: 'Places, events, and neighborhood updates' },
+            { name: 'Secure Circle', meta: 'Private coordination for trusted contacts' },
+            { name: 'Creator Lounge', meta: 'Share projects, updates, and media drops' }
+          ].map((community) => (
+            <div key={community.name} className="rounded-2xl bg-white/55 px-3 py-3">
+              <p className="font-semibold text-slate-800">{community.name}</p>
+              <p className="mt-1 text-xs text-slate-500">{community.meta}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    {
+      subtitle: 'Navigation & Discovery',
+      action: ownerEditingEnabled && !isGuestPreview ? (
+        <button
+          type="button"
+          onClick={() => setDesignStudioOpen(true)}
+          className="rounded-2xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+        >
+          Customize
+        </button>
+      ) : null
+    }
+  );
+
+  const renderSharedDesignCard = !isOwnSocialContext && isAuthenticated && sharedDesigns.length > 0
+    ? renderGlassPanel(
+      'Shared Design',
+      <div className="space-y-3 text-sm text-slate-700">
+        <p>@{requestedProfileIdentifier} shared a public style pack.</p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => toggleFavoriteSharedDesign(sharedDesigns[0])} className="rounded-2xl border border-violet-200 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50">{sharedDesigns[0]?.isFavorite ? 'Unfavorite' : 'Favorite'}</button>
+          <button type="button" onClick={() => cloneSharedDesign(sharedDesigns[0], `${sharedDesigns[0]?.name || 'Shared design'} Clone`, false)} className="rounded-2xl border border-violet-200 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50">Clone</button>
+        </div>
+      </div>
+    )
+    : null;
+
+  const renderCenterStage = () => {
+    switch (activeHeroTab) {
+      case 'friends':
+        return renderGlassPanel('Circles', renderPanelBody('circles'), {
+          subtitle: 'Expanded circles and trusted groups'
+        });
+      case 'gallery':
+        return renderGlassPanel('Gallery', renderPanelBody('gallery'), {
+          subtitle: 'Media, moments, and social proof'
+        });
       case 'chat':
-        return (
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">Chat Room</h2>
-            <p className="text-gray-500">Chat functionality - Coming soon</p>
-          </div>
-        );
+        return renderGlassPanel('Chat', renderPanelBody('chat_panel'), {
+          subtitle: 'Jump into direct or room conversations'
+        });
       case 'calendar':
-        return (
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">Calendar</h2>
-            <p className="text-gray-500">Calendar view - Coming soon</p>
-          </div>
+        return renderGlassPanel(
+          'Calendar',
+          <div className="space-y-4 text-sm text-slate-700">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/55 px-4 py-4">
+              <div>
+                <p className="font-semibold text-slate-900">Coordinate upcoming events</p>
+                <p className="mt-1 text-slate-500">Open the full calendar to manage events, reminders, and shared plans.</p>
+              </div>
+              <Link to="/calendar" className="rounded-2xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700">Open calendar</Link>
+            </div>
+            {calendarCountdowns.length === 0 ? (
+              <div className="rounded-2xl bg-white/50 px-4 py-4 text-slate-500">No active countdown posts yet.</div>
+            ) : (
+              calendarCountdowns.map((post) => (
+                <div key={post._id} className="rounded-2xl bg-white/55 px-4 py-4">
+                  <p className="font-semibold text-slate-900">{post.interaction?.countdown?.label || 'Countdown event'}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatDate(post.interaction?.countdown?.targetAt)}</p>
+                  <p className="mt-3 text-lg font-semibold" style={{ color: accentColor }}>{formatRemainingTime(post.interaction?.countdown?.targetAt, nowMs)}</p>
+                </div>
+              ))
+            )}
+          </div>,
+          { subtitle: 'Schedules and countdown-driven moments' }
         );
-      case 'resume':
-        return (
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">Resume Builder</h2>
-            <p className="text-gray-500">Resume builder - Coming soon</p>
-          </div>
-        );
-      case 'blog':
-        return (
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">Blog</h2>
-            <p className="text-gray-500">Blog posts - Coming soon</p>
-          </div>
-        );
+      case 'main':
       default:
-        return null;
+        return (
+          <div className="space-y-6">
+            {ownerEditingEnabled && !isGuestPreview ? renderGlassPanel('Composer', renderPanelBody('composer'), {
+              subtitle: 'Share an update to the center stage'
+            }) : null}
+            {renderGlassPanel('Feed', renderPanelBody('timeline'), {
+              subtitle: (isOwnSocialContext && !isGuestPreview) ? 'Your personalized stream' : 'Public social feed'
+            })}
+            {renderGlassPanel('Gallery', renderPanelBody('gallery'), {
+              subtitle: 'Pinned visuals and recent uploads'
+            })}
+          </div>
+        );
     }
   };
 
-  // Check if mobile
+  const renderPulseRail = () => (
+    <div className="space-y-6">
+      {renderGlassPanel(
+        'Pulse',
+        topFriends.length === 0 ? (
+          <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">Top 8 friends are private or not configured yet.</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
+            {topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend, index) => (
+              <div key={friend._id || friend.username} className="rounded-2xl bg-white/55 p-3 text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center overflow-hidden rounded-[1.1rem] bg-slate-200 text-lg font-semibold text-slate-700">
+                  {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
+                </div>
+                <p className="mt-2 truncate text-sm font-semibold text-slate-900">@{friend.username}</p>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">Top {index + 1}</p>
+              </div>
+            ))}
+          </div>
+        ),
+        { subtitle: 'Top 8 friends & circles' }
+      )}
+
+      {renderGlassPanel(
+        'Live Activity',
+        <div className="grid grid-cols-2 gap-3 text-sm text-slate-700">
+          {[
+            { label: 'Realtime', value: realtimeEnabled ? 'On' : 'Polling' },
+            { label: 'Online Friends', value: onlineFriends.length },
+            { label: 'Live Typing', value: liveTypingCount },
+            { label: 'Gallery Items', value: galleryItems.length }
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl bg-white/55 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{item.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900" style={item.label === 'Realtime' ? { color: accentColor } : undefined}>{item.value}</p>
+            </div>
+          ))}
+        </div>,
+        { subtitle: 'Signals from your network' }
+      )}
+
+      {renderGlassPanel('Chat', renderPanelBody('chat_panel'), {
+        subtitle: 'Stay responsive without leaving the hub'
+      })}
+
+      {isAuthenticated && !isGuestPreview ? renderGlassPanel('Moderation', renderPanelBody('moderation_status'), {
+        subtitle: 'Recent trust & safety signals'
+      }) : null}
+    </div>
+  );
+
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
   return (
     <div
-      className={`min-h-[calc(100vh-9rem)] w-full space-y-0 px-0 py-0 ${pageThemeClass}`}
-      style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor }}
+      className={`min-h-[calc(100vh-4rem)] w-full pb-8 ${pageThemeClass}`}
+      style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor, fontFamily: `"${hubFontFamily}", sans-serif` }}
     >
-      {ownerEditingEnabled ? (
-        <button
-          type="button"
-          onClick={() => setDesignStudioOpen(true)}
-          className="fixed right-4 top-1/2 z-30 -translate-y-1/2 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-xl hover:bg-slate-800"
-        >
-          ✎ Edit
-        </button>
-      ) : null}
+      <div className="mx-auto max-w-7xl">
+        <SocialHero
+          profile={heroProfile}
+          heroConfig={socialPreferences.hero || {}}
+          activeTab={activeHeroTab}
+          onTabChange={setActiveHeroTab}
+          isMobile={isMobile}
+          isEditing={ownerEditingEnabled}
+          onEditClick={() => setDesignStudioOpen(true)}
+        />
 
-      {/* Hero Section - Tier 1 */}
-      <SocialHero
-        profile={heroProfile}
-        heroConfig={socialPreferences.hero || {}}
-        activeTab={activeHeroTab}
-        onTabChange={setActiveHeroTab}
-        isMobile={isMobile}
-        isEditing={ownerEditingEnabled}
-        onEditClick={() => setDesignStudioOpen(true)}
-      />
+        <div className={`px-4 sm:px-6 lg:px-8 ${isMobile ? 'pb-24 pt-16' : 'pt-20'}`}>
+          <div className="rounded-[2rem] border border-white/25 bg-white/8 p-4 shadow-[0_30px_90px_rgba(15,23,42,0.16)] backdrop-blur-xl sm:p-6">
+            <div className="mb-6">{renderStoriesBar()}</div>
 
-      {/* Content Area - Tier 2 */}
-      <div className={`px-3 py-4 sm:px-4 ${isMobile ? 'pb-20' : ''}`}>
-        {renderTabContent()}
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(220px,20%)_minmax(0,1fr)_minmax(280px,25%)]">
+              {!isMobile ? (
+                <aside className="space-y-6 xl:sticky xl:top-24">
+                  {renderNavigationDiscovery()}
+                  {renderGlassPanel('Profile Snapshot', renderPanelBody('snapshot'), {
+                    subtitle: 'Identity, resume, and quick stats'
+                  })}
+                  {renderSharedDesignCard}
+                </aside>
+              ) : null}
+
+              <main className="space-y-6">
+                {!isAuthenticated ? renderGlassPanel('Guest Access', renderPanelBody('guest_lookup'), {
+                  subtitle: 'Load a public profile by username or user ID'
+                }) : null}
+                {renderCenterStage()}
+              </main>
+
+              <aside className="space-y-6 xl:sticky xl:top-24">
+                {renderPulseRail()}
+              </aside>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <SocialDesignStudioModal
+      <SocialStageSettingsSidebar
         isOpen={designStudioOpen}
         onClose={() => setDesignStudioOpen(false)}
-        preferences={socialPreferences}
-        configs={socialConfigs}
-        activeConfigId={activeDesignConfigId}
-        sharedDesigns={sharedDesigns}
-        favoriteDesigns={favoriteDesigns}
-        layoutPresets={layoutPresets}
-        onApplyTemplate={applyTemplate}
-        onApplyLayoutPreset={(preset) => applyLayoutPreset(preset, editorLayoutMode)}
-        onGlobalStylesChange={updateGlobalStyles}
-        onHeroConfigChange={updateHeroConfig}
-        onPanelOverrideToggle={(panelId, enabled) => updatePanelPreferences(panelId, buildPanelOverridePatch(enabled), editorLayoutMode)}
-        onPanelStyleChange={(panelId, patch) => updatePanelPreferences(panelId, { useCustomStyles: true, styles: patch }, editorLayoutMode)}
-        onPanelLayoutChange={(panelId, patch) => updatePanelPreferences(panelId, patch, editorLayoutMode)}
-        layoutMode={editorLayoutMode}
-        onLayoutModeChange={(mode) => setEditorLayoutMode(mode)}
+        hasUnsavedChanges={hasUnsavedDesignChanges}
         onSaveChanges={saveDraftPreferences}
         onCancelChanges={cancelDraftPreferences}
-        hasUnsavedChanges={hasUnsavedDesignChanges}
-        onCreateConfig={saveNewConfig}
-        onUpdateConfig={saveConfigUpdate}
-        onApplyConfig={applySavedConfig}
-        onDuplicateConfig={duplicateConfig}
-        onDeleteConfig={deleteConfig}
-        onFavoriteShared={toggleFavoriteSharedDesign}
-        onCloneShared={cloneSharedDesign}
         busy={designBusy}
         error={designError}
         successMessage={designSuccessMessage}
+        heroBackgroundImage={socialPreferences.hero?.backgroundImage || ''}
+        accentColor={accentColor}
+        fontFamily={socialPreferences.globalStyles?.fontFamily || 'Inter'}
+        fontOptions={SOCIAL_FONT_FAMILIES}
+        selectedTopFriends={draftTopFriends}
+        availableFriends={friends}
+        topFriendsLimit={TOP_FRIENDS_LIMIT}
+        onHeroBackgroundImageChange={(value) => updateHeroConfig({ backgroundImage: value })}
+        onAccentColorChange={(value) => {
+          updateHeroConfig({ menuActiveColor: value, locationColor: value });
+          updateGlobalStyles({ headerColor: value });
+        }}
+        onFontFamilyChange={(value) => {
+          updateGlobalStyles({ fontFamily: value });
+          updateHeroConfig({ fontFamily: value });
+        }}
+        onToggleTopFriend={toggleDraftTopFriend}
+        onMoveTopFriend={moveDraftTopFriend}
       />
 
       <ReportModal

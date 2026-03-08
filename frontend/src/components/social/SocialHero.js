@@ -1,5 +1,5 @@
 import React from 'react';
-import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS, HERO_AVATAR_SIZES } from '../../utils/socialPagePreferences';
+import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
 
 // Simple icon components for the tabs
 const TabIcon = ({ icon, className }) => {
@@ -19,14 +19,14 @@ const TabIcon = ({ icon, className }) => {
         <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     ),
-    document: (
+    users: (
       <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-1a4 4 0 00-5.356-3.77M17 20H7m10 0v-1c0-.653-.126-1.278-.356-1.85M7 20H2v-1a4 4 0 015.356-3.77M7 20v-1c0-.653.126-1.278.356-1.85m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
       </svg>
     ),
-    newspaper: (
+    photo: (
       <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16l4-4a3 3 0 014.243 0L16 16m-2-2l1-1a3 3 0 014.243 0L21 14m-6-8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     )
   };
@@ -53,39 +53,16 @@ const SocialHero = ({
   const {
     backgroundColor = '#1e293b',
     backgroundImage = null,
-    textColor = '#ffffff',
     nameColor = '#ffffff',
     locationColor = '#94a3b8',
     menuTextColor = '#e2e8f0',
     menuActiveColor = '#3b82f6',
     fontFamily = 'Inter',
-    avatarSize = 'lg',
     showLocation = true,
     showOnlineStatus = true,
-    showNavigation = true,
-    layout = 'standard'
+    showNavigation = true
   } = heroConfig;
-
-  const avatarDimensions = HERO_AVATAR_SIZES[avatarSize] || HERO_AVATAR_SIZES.lg;
-  const currentAvatarSize = isMobile ? avatarDimensions.mobile : avatarDimensions.desktop;
-
-  const getLayoutClasses = () => {
-    switch (layout) {
-      case 'compact':
-        return isMobile 
-          ? 'flex-col items-center text-center py-4' 
-          : 'items-center gap-4 py-6';
-      case 'expanded':
-        return isMobile 
-          ? 'flex-col items-center text-center py-6' 
-          : 'items-start gap-6 py-8';
-      case 'standard':
-      default:
-        return isMobile 
-          ? 'flex-col items-center text-center py-4' 
-          : 'items-center gap-6 py-6';
-    }
-  };
+  const currentAvatarSize = isMobile ? 88 : 128;
 
   const getNavItemClasses = (tabId) => {
     const isActive = activeTab === tabId;
@@ -122,22 +99,18 @@ const SocialHero = ({
 
   return (
     <div 
-      className="w-full relative"
+      className="relative w-full overflow-visible"
       style={containerStyle}
     >
-      {/* Gradient overlay for readability if background image */}
-      {backgroundImage && (
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/65 to-slate-950/10" />
+      <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/90 to-transparent" />
 
-      <div className={`
-        relative z-10 max-w-7xl mx-auto px-4 sm:px-6
-        flex ${getLayoutClasses()}
-      `}>
-        {/* Avatar Section */}
-        <div className="relative flex-shrink-0">
+      <div className="relative z-10 mx-auto flex min-h-[18rem] max-w-7xl items-end px-4 pb-8 pt-20 sm:px-6 lg:min-h-[22rem] lg:px-8">
+        <div className={`flex w-full ${isMobile ? 'flex-col items-center text-center' : 'items-end justify-between gap-8'}`}>
+          <div className={`flex ${isMobile ? 'flex-col items-center' : 'items-end gap-6'}`}>
+            <div className="relative flex-shrink-0 translate-y-12 sm:translate-y-14">
           <div 
-            className="rounded-full overflow-hidden border-4 border-white/20 shadow-lg"
+            className="overflow-hidden rounded-[1.75rem] border-4 border-slate-950/80 bg-slate-800 shadow-[0_30px_60px_rgba(15,23,42,0.45)]"
             style={{ 
               width: currentAvatarSize, 
               height: currentAvatarSize,
@@ -165,9 +138,9 @@ const SocialHero = ({
           
           {/* Online Status Indicator */}
           {showOnlineStatus && (
-            <div className="absolute bottom-1 right-1">
+            <div className="absolute bottom-2 right-2">
               <div 
-                className={`w-4 h-4 rounded-full border-2 border-white ${
+                className={`h-4 w-4 rounded-full border-2 border-white ${
                   isOnline ? 'bg-green-500' : 'bg-slate-400'
                 }`}
                 title={isOnline ? 'Online' : formatLastActive(lastActive)}
@@ -177,9 +150,9 @@ const SocialHero = ({
         </div>
 
         {/* Profile Info Section */}
-        <div className="flex flex-col">
+        <div className={`flex flex-col ${isMobile ? 'mt-16 items-center' : 'pb-2'}`}>
           <h1 
-            className="text-2xl sm:text-3xl font-bold"
+            className="text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl"
             style={nameStyle}
           >
             {name}
@@ -187,7 +160,7 @@ const SocialHero = ({
           
           {showLocation && location && (
             <div 
-              className="flex items-center gap-1 mt-1 text-sm"
+              className="mt-2 flex items-center gap-2 text-sm sm:text-base"
               style={locationStyle}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -203,19 +176,20 @@ const SocialHero = ({
             <button
               type="button"
               onClick={onEditClick}
-              className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white"
+              className="mt-4 inline-flex items-center gap-1 rounded-2xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/20"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
-              Customize Hero
+              Customize stage
             </button>
           )}
         </div>
+          </div>
 
         {/* Navigation Menu - Desktop */}
         {showNavigation && !isMobile && (
-          <nav className="ml-auto flex items-center gap-1">
+          <nav className="flex items-center gap-2 rounded-2xl border border-white/15 bg-slate-950/35 p-2 backdrop-blur-xl">
             {SOCIAL_HERO_TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -232,11 +206,12 @@ const SocialHero = ({
             ))}
           </nav>
         )}
+        </div>
       </div>
 
       {/* Mobile Navigation - Bottom Tabs */}
       {showNavigation && isMobile && (
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 z-50">
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-700 bg-slate-950/95 backdrop-blur-xl">
           <nav className="flex justify-around py-2">
             {SOCIAL_HERO_TABS.map((tab) => (
               <button

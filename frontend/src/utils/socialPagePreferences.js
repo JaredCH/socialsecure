@@ -34,18 +34,18 @@ export const SOCIAL_PANEL_IDS = [
 // Hero sub-page tabs
 export const SOCIAL_HERO_TABS = [
   { id: 'main', label: 'Main', icon: 'home' },
+  { id: 'friends', label: 'Friends', icon: 'users' },
+  { id: 'gallery', label: 'Gallery', icon: 'photo' },
   { id: 'chat', label: 'Chat', icon: 'chat' },
-  { id: 'calendar', label: 'Calendar', icon: 'calendar' },
-  { id: 'resume', label: 'Resume', icon: 'document' },
-  { id: 'blog', label: 'Blog', icon: 'newspaper' }
+  { id: 'calendar', label: 'Calendar', icon: 'calendar' }
 ];
 
 export const SOCIAL_HERO_TAB_LABELS = {
   main: 'Main',
+  friends: 'Friends',
+  gallery: 'Gallery',
   chat: 'Chat',
-  calendar: 'Calendar',
-  resume: 'Resume',
-  blog: 'Blog'
+  calendar: 'Calendar'
 };
 
 export const SOCIAL_PANEL_LABELS = {

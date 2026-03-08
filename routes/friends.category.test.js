@@ -156,8 +156,8 @@ describe('Friends category and top5 routes', () => {
     expect(response.body.category).toBe('secure');
   });
 
-  it('returns backend top5 validation errors from update route', async () => {
-    const error = new Error('Cannot have more than 5 top friends');
+  it('returns backend top8 validation errors from update route', async () => {
+    const error = new Error('Cannot have more than 8 top friends');
     error.status = 400;
     mockTopFriend.updateOrder.mockRejectedValue(error);
 
@@ -172,11 +172,14 @@ describe('Friends category and top5 routes', () => {
           '507f1f77bcf86cd799439023',
           '507f1f77bcf86cd799439024',
           '507f1f77bcf86cd799439025',
-          '507f1f77bcf86cd799439026'
+          '507f1f77bcf86cd799439026',
+          '507f1f77bcf86cd799439027',
+          '507f1f77bcf86cd799439028',
+          '507f1f77bcf86cd799439029'
         ]
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toMatch(/more than 5/i);
+    expect(response.body.error).toMatch(/more than 8/i);
   });
 });

@@ -12,6 +12,7 @@ const { buildPresencePayload, getPresenceMapForUsers } = require('../services/re
 const { RELATIONSHIP_AUDIENCE_VALUES, normalizeRelationshipAudience } = require('../utils/relationshipAudience');
 
 const VALID_FRIEND_CATEGORIES = [...RELATIONSHIP_AUDIENCE_VALUES];
+const TOP_FRIENDS_LIMIT = 8;
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -355,7 +356,7 @@ router.delete('/:id', friendMutationLimiter, authenticateToken, async (req, res)
       );
       if ((requesterTopRemoval?.modifiedCount || 0) > 0 || (recipientTopRemoval?.modifiedCount || 0) > 0) {
         logFriendEvent({
-          eventType: 'top5_entry_removed',
+          eventType: 'top8_entry_removed',
           userId: req.user._id,
           metadata: {
             friendshipId: friendship._id.toString(),
@@ -433,7 +434,7 @@ router.post('/:id/block', friendMutationLimiter, authenticateToken, async (req, 
       );
       if ((requesterTopRemoval?.modifiedCount || 0) > 0 || (recipientTopRemoval?.modifiedCount || 0) > 0) {
         logFriendEvent({
-          eventType: 'top5_entry_removed',
+          eventType: 'top8_entry_removed',
           userId: req.user._id,
           metadata: {
             friendshipId: friendship._id.toString(),
@@ -733,7 +734,7 @@ router.put('/top', friendMutationLimiter, authenticateToken, async (req, res) =>
 
     if (topFriend.friends.length < previousCount) {
       logFriendEvent({
-        eventType: 'top5_entry_removed',
+        eventType: 'top8_entry_removed',
         userId: req.user._id,
         metadata: {
           removedCount: previousCount - topFriend.friends.length,
@@ -744,7 +745,7 @@ router.put('/top', friendMutationLimiter, authenticateToken, async (req, res) =>
     }
 
     logFriendEvent({
-      eventType: 'top5_updated',
+      eventType: 'top8_updated',
       userId: req.user._id,
       metadata: {
         count: topFriend.friends.length
