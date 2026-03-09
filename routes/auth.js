@@ -36,6 +36,13 @@ const passwordChangeLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many password change attempts. Please try again later.' }
 });
+const usernameAvailabilityLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { available: false, error: 'Too many username availability checks. Please try again shortly.' }
+});
 
 const isSafeHttpUrl = (value) => {
   try {
@@ -68,6 +75,7 @@ const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().rep
 const isValidZipCode = (zipCode) => /^(?:\d{5}(?:-\d{4})?|[A-Z]\d[A-Z]\d[A-Z]\d)$/.test(zipCode);
 const normalizeLocationValue = (value) => (typeof value === 'string' ? value.trim() : '');
 const normalizeProfileOptionalValue = (value) => (typeof value === 'string' ? value.trim() : '');
+const generateTemporaryPassword = () => crypto.randomBytes(24).toString('base64url');
 const normalizeHobbies = (value) => {
   if (Array.isArray(value)) {
     return value
@@ -287,8 +295,28 @@ const buildCompletedSteps = (status, onboardingStep) => {
 };
 
 // Register new user
+router.get('/username-availability', usernameAvailabilityLimiter, async (req, res) => {
+  const username = String(req.query.username || '').trim().toLowerCase();
+  if (username.length < 3 || username.length > 30 || !/^[a-zA-Z0-9_.]+$/.test(username)) {
+    return res.status(400).json({
+      available: false,
+      error: 'Username must be 3-30 characters and only include letters, numbers, underscores, or dots'
+    });
+  }
+
+  try {
+    const existingUser = await User.findOne({ username });
+    return res.json({ available: !existingUser });
+  } catch (error) {
+    console.error('Username availability check failed:', error);
+    return res.status(500).json({ available: false, error: 'Failed to check username availability' });
+  }
+});
+
 router.post('/register', [
-  body('realName').trim().notEmpty().withMessage('Real name is required'),
+  body('realName').optional({ checkFalsy: true }).trim(),
+  body('firstName').optional({ checkFalsy: true }).trim().isLength({ max: 50 }).withMessage('First name must be at most 50 characters'),
+  body('lastName').optional({ checkFalsy: true }).trim().isLength({ max: 50 }).withMessage('Last name must be at most 50 characters'),
   body('username')
     .trim()
     .isLength({ min: 3, max: 30 })
@@ -297,15 +325,15 @@ router.post('/register', [
     .withMessage('Username can only contain letters, numbers, underscores, and dots'),
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password')
+    .optional({ checkFalsy: true })
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
   body('countryCode')
+    .optional({ checkFalsy: true })
     .trim()
     .customSanitizer((value) => String(value || '').toUpperCase())
-    .notEmpty()
-    .withMessage('Country is required')
     .matches(/^[A-Z]{2}$/)
     .withMessage('Please select a country from the list'),
   body('county')
@@ -314,9 +342,8 @@ router.post('/register', [
     .isLength({ max: 100 })
     .withMessage('County must be at most 100 characters'),
   body('zipCode')
+    .optional({ checkFalsy: true })
     .trim()
-    .notEmpty()
-    .withMessage('Zip Code is required')
     .custom((value) => {
       if (!isValidZipCode(normalizeZipCode(value))) {
         throw new Error('Zip Code must be a valid US ZIP (12345 or 12345-6789) or postal format');
@@ -353,6 +380,8 @@ router.post('/register', [
   try {
     const {
       realName,
+      firstName,
+      lastName,
       username,
       email,
       password,
@@ -368,6 +397,14 @@ router.post('/register', [
       profileFieldVisibility,
       referralCode
     } = req.body;
+    const normalizedFirstName = normalizeProfileOptionalValue(firstName);
+    const normalizedLastName = normalizeProfileOptionalValue(lastName);
+    const derivedRealName = normalizeProfileOptionalValue(
+      realName || [normalizedFirstName, normalizedLastName].filter(Boolean).join(' ')
+    );
+    if (!derivedRealName) {
+      return res.status(400).json({ error: 'A name is required' });
+    }
     const normalizedCounty = county?.trim();
     const normalizedProfileFieldVisibility = normalizeProfileFieldVisibility(profileFieldVisibility);
 
@@ -385,13 +422,13 @@ router.post('/register', [
     // Create new user
     const user = new User({
       universalId,
-      realName,
+      realName: derivedRealName,
       username,
       email,
-      passwordHash: password, // Will be hashed by pre-save middleware
-      country: countryCode,
+      passwordHash: password || generateTemporaryPassword(), // Will be hashed by pre-save middleware
+      country: countryCode || undefined,
       county: normalizedCounty || undefined,
-      zipCode: normalizeZipCode(zipCode),
+      zipCode: zipCode ? normalizeZipCode(zipCode) : undefined,
       streetAddress: normalizeProfileOptionalValue(streetAddress),
       worksAt: normalizeProfileOptionalValue(worksAt),
       hobbies: normalizeHobbies(hobbies),
@@ -401,6 +438,7 @@ router.post('/register', [
       profileFieldVisibility: normalizedProfileFieldVisibility,
       locationLastUpdatedAt: new Date(),
       registrationStatus: 'active',
+      mustResetPassword: !password,
       referralCode: referralCode || require('crypto').randomBytes(4).toString('hex')
     });
 

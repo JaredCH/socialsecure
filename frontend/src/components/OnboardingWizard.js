@@ -12,6 +12,7 @@ const PGP_PUBLIC_KEY_BEGIN = '-----BEGIN PGP PUBLIC KEY BLOCK-----';
 const PGP_PUBLIC_KEY_END = '-----END PGP PUBLIC KEY BLOCK-----';
 const PGP_PRIVATE_KEY_BEGIN = '-----BEGIN PGP PRIVATE KEY BLOCK-----';
 const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
+const ADDITIONAL_INFO_PREVIEW_MAX_LENGTH = 44;
 const STEP_LABELS = [
   'Encryption & PGP Setup',
   'Recovery Kit Seed Phrase',
@@ -25,6 +26,14 @@ const DEFAULT_SECURITY_PREFERENCES = {
 export const INFO_VISIBILITY_OPTIONS = [
   { value: 'social', label: 'Social level' },
   { value: 'secure', label: 'Secure level' }
+];
+const ADDITIONAL_INFO_FIELDS = [
+  { key: 'streetAddress', label: 'Home address', type: 'text', placeholder: '123 Main St' },
+  { key: 'phone', label: 'Phone number', type: 'tel', placeholder: '+1 555-123-4567' },
+  { key: 'ageGroup', label: 'Age', type: 'text', placeholder: '25-34' },
+  { key: 'sex', label: 'Sex', type: 'text', placeholder: 'Optional' },
+  { key: 'race', label: 'Race', type: 'text', placeholder: 'Optional' },
+  { key: 'hobbies', label: 'Hobbies', type: 'text', placeholder: 'Music, travel, cooking' }
 ];
 const SEED_WORD_BANK = [
   'amber', 'anchor', 'apex', 'apple', 'arrow', 'atlas', 'aurora', 'autumn', 'badge', 'bamboo', 'beacon', 'binary',
@@ -69,6 +78,16 @@ const randomSeedWord = () => {
 };
 
 const generateSeedPhrase = () => Array.from({ length: 12 }, randomSeedWord).join(' ');
+const shortenPreviewValue = (value, maxLength = ADDITIONAL_INFO_PREVIEW_MAX_LENGTH) => {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return 'Not provided';
+  }
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 1)}…`;
+};
 
 export const resolveInitialStep = (currentStep) => {
   const parsedStep = Number.isInteger(currentStep) ? currentStep : 1;
@@ -532,37 +551,9 @@ function OnboardingWizard({
             the public will not have access, and SocialSecure will not use it for anything &apos;Shitty&apos;.
           </p>
 
-          <div className="grid gap-2 sm:grid-cols-[2fr_1fr] sm:items-end">
-            <div className="block text-sm">
-              Email (from your account)
-              <p className="w-full border rounded p-2 mt-1 bg-gray-50 text-gray-700">{additionalInfo.email || 'No email on file'}</p>
-            </div>
-            <label className="block text-sm">
-              Visibility
-              <select
-                value={additionalInfo.profileFieldVisibility.email}
-                onChange={(event) => handleAdditionalInfoVisibilityChange('email', event.target.value)}
-                className="w-full border rounded p-2 mt-1"
-              >
-                {INFO_VISIBILITY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {[
-            { key: 'streetAddress', label: 'Home address', type: 'text', placeholder: '123 Main St' },
-            { key: 'phone', label: 'Phone number', type: 'tel', placeholder: '+1 555-123-4567' },
-            { key: 'ageGroup', label: 'Age', type: 'text', placeholder: '25-34' },
-            { key: 'sex', label: 'Sex', type: 'text', placeholder: 'Optional' },
-            { key: 'race', label: 'Race', type: 'text', placeholder: 'Optional' },
-            { key: 'hobbies', label: 'Hobbies', type: 'text', placeholder: 'Music, travel, cooking' }
-          ].map((field) => (
-            <div key={field.key} className="grid gap-2 sm:grid-cols-[2fr_1fr] sm:items-end">
-              <label className="block text-sm">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {ADDITIONAL_INFO_FIELDS.map((field) => (
+              <label key={field.key} className="block text-sm">
                 {field.label}
                 <input
                   type={field.type}
@@ -575,22 +566,52 @@ function OnboardingWizard({
                   <p className="mt-1 text-xs text-gray-500">Use commas between hobbies (up to 10).</p>
                 )}
               </label>
-              <label className="block text-sm">
-                Visibility
-                <select
-                  value={additionalInfo.profileFieldVisibility[field.key]}
-                  onChange={(event) => handleAdditionalInfoVisibilityChange(field.key, event.target.value)}
-                  className="w-full border rounded p-2 mt-1"
-                >
-                  {INFO_VISIBILITY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-gray-200 overflow-hidden" data-testid="additional-info-visibility-matrix">
+            <div className="grid grid-cols-[1.2fr_1.5fr_0.6fr_0.6fr] bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600">
+              <p className="px-3 py-2">Category</p>
+              <p className="px-3 py-2">What you entered</p>
+              <p className="px-3 py-2 text-center">Social</p>
+              <p className="px-3 py-2 text-center">Secure</p>
             </div>
-          ))}
+            {[{
+              key: 'email',
+              label: 'Email',
+              value: additionalInfo.email || user?.email || ''
+            }, ...ADDITIONAL_INFO_FIELDS.map((field) => ({
+              key: field.key,
+              label: field.label,
+              value: additionalInfo[field.key]
+            }))].map((row) => {
+              const visibility = additionalInfo.profileFieldVisibility[row.key] || 'social';
+              return (
+                <div key={row.key} className="grid grid-cols-[1.2fr_1.5fr_0.6fr_0.6fr] border-t border-gray-100 text-sm">
+                  <p className="px-3 py-2 text-gray-800">{row.label}</p>
+                  <p className="px-3 py-2 text-gray-600" title={String(row.value || '').trim()}>
+                    {shortenPreviewValue(row.value)}
+                  </p>
+                  <label className="flex items-center justify-center px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={visibility === 'social'}
+                      onChange={() => handleAdditionalInfoVisibilityChange(row.key, 'social')}
+                      aria-label={`${row.label} social visibility`}
+                    />
+                  </label>
+                  <label className="flex items-center justify-center px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={visibility === 'secure'}
+                      onChange={() => handleAdditionalInfoVisibilityChange(row.key, 'secure')}
+                      aria-label={`${row.label} secure visibility`}
+                    />
+                  </label>
+                </div>
+              );
+            })}
+          </div>
 
           <button type="submit" disabled={submitting} className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50">
             {submitting ? 'Completing...' : 'Complete Onboarding'}

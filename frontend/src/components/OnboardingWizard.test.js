@@ -21,11 +21,16 @@ jest.mock('../utils/pgp', () => ({
   validatePublicKey: jest.fn()
 }));
 
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import {
   createRecoveryPhraseQrCodeDataUrl,
   INFO_VISIBILITY_OPTIONS,
   resolveInitialStep,
 } from './OnboardingWizard';
+import OnboardingWizard from './OnboardingWizard';
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('OnboardingWizard helpers', () => {
   it('resolves initial step within supported onboarding bounds', () => {
@@ -48,5 +53,34 @@ describe('OnboardingWizard helpers', () => {
       { value: 'social', label: 'Social level' },
       { value: 'secure', label: 'Secure level' }
     ]);
+  });
+
+  it('renders additional info visibility as a category/value social-secure matrix', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <OnboardingWizard
+          user={{ _id: 'u1', email: 'user@example.com' }}
+          onboarding={{ currentStep: 3 }}
+          onProgressSaved={jest.fn().mockResolvedValue(undefined)}
+          onCompleted={jest.fn().mockResolvedValue(undefined)}
+          refreshEncryptionPasswordStatus={jest.fn().mockResolvedValue(undefined)}
+        />
+      );
+    });
+
+    const matrix = container.querySelector('[data-testid="additional-info-visibility-matrix"]');
+    expect(matrix).not.toBeNull();
+    expect(matrix.textContent).toContain('Category');
+    expect(matrix.textContent).toContain('What you entered');
+    expect(matrix.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThanOrEqual(14);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
   });
 });
