@@ -34,6 +34,7 @@ import {
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const COMPOSER_CONTENT_TYPES = ['standard', 'poll', 'quiz', 'countdown'];
+const COMPOSER_EDITOR_MODES = ['design', 'code'];
 const INTERACTION_MAX_OPTIONS = 6;
 const GALLERY_MAX_ITEMS = 24;
 const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
@@ -45,6 +46,20 @@ const MAX_HOBBIES = 10;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
 const MAX_UPCOMING_CALENDAR_ITEMS = 6;
+const CODE_MODE_SNIPPETS = [
+  { label: 'Bold', value: '**bold**' },
+  { label: 'Italic', value: '*italic*' },
+  { label: 'Code', value: '`inline code`' },
+  { label: 'Heading', value: '# Heading' },
+  { label: 'Sub heading', value: '## Sub heading' },
+  { label: 'List', value: '- List item' },
+  { label: 'Link', value: '[SocialSecure](https://example.com)' },
+  { label: 'Image', value: '![Alt text](https://example.com/image.jpg)' },
+  { label: 'Quote', value: '> Quoted text' },
+  { label: 'Text color', value: '[color=red]Red text[/color]' },
+  { label: 'Highlight', value: '[bg=yellow]Highlighted[/bg]' },
+  { label: 'Vertical line', value: '[vline=4]Callout text[/vline]' }
+];
 const PANEL_WIDTH_UNITS_BY_SIZE = {
   halfCol: 1,
   oneCol: 2,
@@ -160,6 +175,12 @@ const isRenderableMediaUrl = (value) => {
   }
 };
 
+const SAFE_COLOR_REGEX = /^(#[0-9a-f]{3,8}|[a-z]{3,20}|rgba?\((\s*\d+\s*,){2,3}\s*[\d.]+\s*\)|hsla?\([\d.\s,%]+\))$/i;
+const sanitizeStyleColor = (value) => {
+  const candidate = String(value || '').trim();
+  return SAFE_COLOR_REGEX.test(candidate) ? candidate : '';
+};
+
 const normalizeMediaUrls = (mediaUrls) => {
   if (!Array.isArray(mediaUrls)) return [];
 
@@ -180,6 +201,78 @@ const normalizeMediaUrls = (mediaUrls) => {
   }
 
   return normalized;
+};
+
+const parseInlineFormat = (text, keyPrefix) => {
+  const source = String(text || '');
+  const regex = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[color=([a-z0-9#(),.%\s-]+)\]([\s\S]*?)\[\/color\]|\[bg=([a-z0-9#(),.%\s-]+)\]([\s\S]*?)\[\/bg\]|\[vline=(\d|10)\]([\s\S]*?)\[\/vline\]/gi;
+  const nodes = [];
+  let cursor = 0;
+  let index = 0;
+  let match;
+
+  while ((match = regex.exec(source)) !== null) {
+    const [full] = match;
+    if (match.index > cursor) {
+      nodes.push(<React.Fragment key={`${keyPrefix}-text-${index}`}>{source.slice(cursor, match.index)}</React.Fragment>);
+      index += 1;
+    }
+    if (match[1] && match[2]) {
+      const imageUrl = String(match[2]).trim();
+      if (isRenderableMediaUrl(imageUrl)) {
+        const altText = String(match[1] || '').trim() || 'User uploaded image';
+        nodes.push(<img key={`${keyPrefix}-img-${index}`} src={imageUrl} alt={altText} className="my-1 max-h-64 rounded-xl border object-cover" />);
+      } else {
+        nodes.push(<React.Fragment key={`${keyPrefix}-img-fallback-${index}`}>{full}</React.Fragment>);
+      }
+    } else if (match[3] && match[4]) {
+      const linkUrl = String(match[4]).trim();
+      if (isRenderableMediaUrl(linkUrl)) {
+        nodes.push(<a key={`${keyPrefix}-link-${index}`} href={linkUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">{match[3]}</a>);
+      } else {
+        nodes.push(<React.Fragment key={`${keyPrefix}-link-fallback-${index}`}>{full}</React.Fragment>);
+      }
+    } else if (match[5]) {
+      nodes.push(<strong key={`${keyPrefix}-strong-${index}`}>{match[5]}</strong>);
+    } else if (match[6]) {
+      nodes.push(<em key={`${keyPrefix}-em-${index}`}>{match[6]}</em>);
+    } else if (match[7]) {
+      nodes.push(<code key={`${keyPrefix}-code-${index}`} className="rounded bg-slate-100 px-1">{match[7]}</code>);
+    } else if (match[8] && match[9]) {
+      const colorValue = sanitizeStyleColor(match[8]);
+      nodes.push(<span key={`${keyPrefix}-color-${index}`} style={colorValue ? { color: colorValue } : undefined}>{match[9]}</span>);
+    } else if (match[10] && match[11]) {
+      const bgColorValue = sanitizeStyleColor(match[10]);
+      nodes.push(<span key={`${keyPrefix}-bg-${index}`} style={bgColorValue ? { backgroundColor: bgColorValue } : undefined}>{match[11]}</span>);
+    } else if (match[12] !== undefined && match[13] !== undefined) {
+      const thickness = Math.min(10, Math.max(0, Number(match[12])));
+      nodes.push(
+        <span key={`${keyPrefix}-vline-${index}`} className="my-1 inline-flex items-stretch gap-2 align-middle">
+          <span className="rounded bg-slate-500" style={{ width: `${Math.max(1, thickness)}px` }} />
+          <span>{match[13]}</span>
+        </span>
+      );
+    }
+    index += 1;
+    cursor = match.index + full.length;
+  }
+  if (cursor < source.length) {
+    nodes.push(<React.Fragment key={`${keyPrefix}-tail`}>{source.slice(cursor)}</React.Fragment>);
+  }
+  return nodes.length > 0 ? nodes : source;
+};
+
+const renderFormattedPostContent = (content) => {
+  const lines = String(content || '').split('\n');
+  return lines.map((line, lineIndex) => {
+    if (/^###\s+/.test(line)) return <h3 key={`line-${lineIndex}`} className="text-base font-semibold">{parseInlineFormat(line.replace(/^###\s+/, ''), `h3-${lineIndex}`)}</h3>;
+    if (/^##\s+/.test(line)) return <h2 key={`line-${lineIndex}`} className="text-lg font-semibold">{parseInlineFormat(line.replace(/^##\s+/, ''), `h2-${lineIndex}`)}</h2>;
+    if (/^#\s+/.test(line)) return <h1 key={`line-${lineIndex}`} className="text-xl font-bold">{parseInlineFormat(line.replace(/^#\s+/, ''), `h1-${lineIndex}`)}</h1>;
+    if (/^>\s+/.test(line)) return <blockquote key={`line-${lineIndex}`} className="border-l-4 border-slate-300 pl-3 italic text-slate-700">{parseInlineFormat(line.replace(/^>\s+/, ''), `quote-${lineIndex}`)}</blockquote>;
+    if (/^[-*]\s+/.test(line)) return <p key={`line-${lineIndex}`} className="ml-4">{'\u2022 '}{parseInlineFormat(line.replace(/^[-*]\s+/, ''), `ul-${lineIndex}`)}</p>;
+    if (/^\d+\.\s+/.test(line)) return <p key={`line-${lineIndex}`} className="ml-4">{parseInlineFormat(line, `ol-${lineIndex}`)}</p>;
+    return <p key={`line-${lineIndex}`} className="whitespace-pre-wrap">{parseInlineFormat(line, `p-${lineIndex}`)}</p>;
+  });
 };
 
 const buildRecentImageHistory = (previousValue, nextValue, existing = []) => {
@@ -436,6 +529,8 @@ const Social = () => {
   const [submittingPost, setSubmittingPost] = useState(false);
   const [postForm, setPostForm] = useState({
     content: '',
+    codeContent: '',
+    editorMode: 'design',
     mediaUrlInput: '',
     mediaUrls: [],
     visibility: 'public',
@@ -468,6 +563,13 @@ const Social = () => {
       },
     },
   });
+  const [composerPanels, setComposerPanels] = useState({
+    media: false,
+    formatting: false,
+    privacy: false,
+    interaction: false
+  });
+  const [composerImageUploading, setComposerImageUploading] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
   const [circles, setCircles] = useState([]);
   const [friends, setFriends] = useState([]);
@@ -546,6 +648,8 @@ const Social = () => {
   const localTypingTimeoutsRef = useRef({});
   const remoteTypingTimeoutsRef = useRef({});
   const designDirtyRef = useRef(false);
+  const composerDesignTextareaRef = useRef(null);
+  const composerCodeTextareaRef = useRef(null);
 
   const realtimeEnabled = currentUser?.realtimePreferences?.enabled !== false;
 
@@ -1936,25 +2040,25 @@ const Social = () => {
     }, TYPING_TIMEOUT_MS);
   };
 
-  const handleAddMediaUrl = () => {
-    const value = postForm.mediaUrlInput.trim();
-    if (!value) return;
+  const appendMediaUrl = useCallback((rawValue) => {
+    const value = String(rawValue || '').trim();
+    if (!value) return true;
     if (!isRenderableMediaUrl(value)) {
       setFeedError('Media URL must be a valid http/https URL.');
-      return;
+      return false;
     }
     if (value.length > MEDIA_URL_MAX_LENGTH) {
       setFeedError(`Media URL exceeds max length (${MEDIA_URL_MAX_LENGTH}).`);
-      return;
+      return false;
     }
     if (postForm.mediaUrls.length >= MEDIA_URL_MAX_ITEMS) {
       setFeedError(`You can attach up to ${MEDIA_URL_MAX_ITEMS} media URLs per post.`);
       setPostForm((prev) => ({ ...prev, mediaUrlInput: '' }));
-      return;
+      return false;
     }
     if (postForm.mediaUrls.includes(value)) {
       setPostForm((prev) => ({ ...prev, mediaUrlInput: '' }));
-      return;
+      return true;
     }
 
     setPostForm((prev) => ({
@@ -1963,6 +2067,39 @@ const Social = () => {
       mediaUrlInput: '',
     }));
     setFeedError('');
+    return true;
+  }, [postForm.mediaUrls]);
+
+  const handleAddMediaUrl = () => {
+    appendMediaUrl(postForm.mediaUrlInput);
+  };
+
+  const handleComposerImageUpload = async (event) => {
+    if (!currentUser?._id) return;
+    const [file] = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setFeedError('Only image files are supported.');
+      return;
+    }
+    if (file.size > GALLERY_MAX_IMAGE_SIZE_BYTES) {
+      setFeedError('Image file is too large (max 3MB).');
+      return;
+    }
+    setComposerImageUploading(true);
+    setFeedError('');
+    try {
+      const response = await galleryAPI.uploadGalleryItem(currentUser._id, file, 'Post image', 'social');
+      const uploadedUrl = response.data?.item?.mediaUrl;
+      if (!appendMediaUrl(uploadedUrl)) {
+        setFeedError('Image uploaded but could not be attached to post.');
+      }
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to upload image.');
+    } finally {
+      setComposerImageUploading(false);
+    }
   };
 
   const handleRemoveMediaUrl = (index) => {
@@ -2041,7 +2178,24 @@ const Social = () => {
   };
 
   const handlePostFormField = (field, value) => {
-    setPostForm((prev) => ({ ...prev, [field]: value }));
+    setPostForm((prev) => {
+      if (field === 'relationshipAudience') {
+        const relationshipAudience = value === 'secure' ? 'secure' : 'social';
+        return {
+          ...prev,
+          relationshipAudience,
+          visibility: relationshipAudience === 'secure' ? 'friends' : prev.visibility,
+        };
+      }
+      if (field === 'visibility') {
+        return {
+          ...prev,
+          visibility: value,
+          relationshipAudience: value === 'public' || value === 'circles' ? 'social' : prev.relationshipAudience,
+        };
+      }
+      return { ...prev, [field]: value };
+    });
   };
 
   const toggleStringInArray = (list, value) => {
@@ -2058,18 +2212,55 @@ const Social = () => {
     }));
   };
 
-  const handleToggleVisibleUser = (userId) => {
+  const handleAddExcludeUser = (userId) => {
     setPostForm((prev) => ({
       ...prev,
-      visibleToUsers: toggleStringInArray(prev.visibleToUsers, userId)
+      excludeUsers: prev.excludeUsers.includes(userId)
+        ? prev.excludeUsers
+        : [...prev.excludeUsers, userId]
     }));
   };
 
-  const handleToggleExcludeUser = (userId) => {
+  const handleRemoveExcludeUser = (userId) => {
     setPostForm((prev) => ({
       ...prev,
-      excludeUsers: toggleStringInArray(prev.excludeUsers, userId)
+      excludeUsers: prev.excludeUsers.filter((entry) => entry !== userId)
     }));
+  };
+
+  const applyComposerSnippet = (snippet) => {
+    const mode = postForm.editorMode || 'design';
+    const targetRef = mode === 'code' ? composerCodeTextareaRef.current : composerDesignTextareaRef.current;
+    const key = mode === 'code' ? 'codeContent' : 'content';
+    const currentValue = postForm[key] || '';
+    const start = targetRef?.selectionStart ?? currentValue.length;
+    const end = targetRef?.selectionEnd ?? currentValue.length;
+    const nextValue = `${currentValue.slice(0, start)}${snippet}${currentValue.slice(end)}`;
+    setPostForm((prev) => ({ ...prev, [key]: nextValue }));
+    window.setTimeout(() => {
+      if (!targetRef) return;
+      const cursor = start + snippet.length;
+      targetRef.focus();
+      targetRef.selectionStart = cursor;
+      targetRef.selectionEnd = cursor;
+    }, 0);
+  };
+
+  const applyDesignWrapper = (prefix, suffix = prefix, placeholder = 'text') => {
+    const targetRef = composerDesignTextareaRef.current;
+    const currentValue = postForm.content || '';
+    const start = targetRef?.selectionStart ?? currentValue.length;
+    const end = targetRef?.selectionEnd ?? currentValue.length;
+    const selectedText = currentValue.slice(start, end) || placeholder;
+    const wrapped = `${prefix}${selectedText}${suffix}`;
+    const nextValue = `${currentValue.slice(0, start)}${wrapped}${currentValue.slice(end)}`;
+    setPostForm((prev) => ({ ...prev, content: nextValue }));
+    window.setTimeout(() => {
+      if (!targetRef) return;
+      targetRef.focus();
+      targetRef.selectionStart = start + prefix.length;
+      targetRef.selectionEnd = start + prefix.length + selectedText.length;
+    }, 0);
   };
 
   const refreshCircles = async () => {
@@ -2214,13 +2405,14 @@ const Social = () => {
     event.preventDefault();
     if (!currentUser?._id) return;
 
-    const content = postForm.content.trim();
+    const editorMode = postForm.editorMode === 'code' ? 'code' : 'design';
+    const content = (editorMode === 'code' ? postForm.codeContent : postForm.content).trim();
     const contentType = postForm.contentType;
     const hasStandardContent = content || postForm.mediaUrls.length > 0;
     let interactionPayload = null;
 
     if (contentType === 'standard' && !hasStandardContent) {
-      setFeedError('Add post content or at least one media URL before publishing.');
+      setFeedError('Add post content or at least one image/link before publishing.');
       return;
     }
     if ((postForm.relationshipAudience || 'social') === 'secure' && postForm.visibility !== 'friends') {
@@ -2348,6 +2540,8 @@ const Social = () => {
 
       setPostForm({
         content: '',
+        codeContent: '',
+        editorMode: 'design',
         mediaUrlInput: '',
         mediaUrls: [],
         visibility: 'public',
@@ -2825,37 +3019,103 @@ const Social = () => {
         );
       case 'composer':
         return isOwnSocialContext && !isGuestPreview ? (
-          <form onSubmit={handleSubmitPost} className="space-y-4">
-            <textarea value={postForm.content} onChange={(event) => setPostForm((prev) => ({ ...prev, content: event.target.value }))} placeholder="What's on your mind?" className="min-h-28 w-full rounded-xl border px-3 py-2" maxLength={5000} />
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Post Type</label>
-              <select value={postForm.contentType} onChange={(event) => setPostForm((prev) => ({ ...prev, contentType: event.target.value }))} className="rounded-xl border px-3 py-2">
-                {COMPOSER_CONTENT_TYPES.map((option) => <option key={option} value={option}>{option.charAt(0).toUpperCase() + option.slice(1)}</option>)}
-              </select>
+          <form onSubmit={handleSubmitPost} className="space-y-3 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              {COMPOSER_EDITOR_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => handlePostFormField('editorMode', mode)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${postForm.editorMode === mode ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100'}`}
+                >
+                  {mode === 'design' ? 'Design Studio' : 'Code Mode'}
+                </button>
+              ))}
+              <span className="ml-auto text-xs text-slate-500">Text + image by default, everything else optional.</span>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">Media URLs</label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input type="url" value={postForm.mediaUrlInput} onChange={(event) => setPostForm((prev) => ({ ...prev, mediaUrlInput: event.target.value }))} placeholder="https://example.com/image.jpg" className="flex-1 rounded-xl border px-3 py-2" />
-                <button type="button" onClick={handleAddMediaUrl} className="rounded-xl border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50">Add URL</button>
+            {postForm.editorMode === 'code' ? (
+              <textarea ref={composerCodeTextareaRef} value={postForm.codeContent} onChange={(event) => setPostForm((prev) => ({ ...prev, codeContent: event.target.value }))} placeholder="Use markdown + blocks. Example: [color=red]hello[/color]" className="min-h-28 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" maxLength={5000} />
+            ) : (
+              <textarea ref={composerDesignTextareaRef} value={postForm.content} onChange={(event) => setPostForm((prev) => ({ ...prev, content: event.target.value }))} placeholder="What's on your mind?" className="min-h-28 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" maxLength={5000} />
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100">
+                <input type="file" accept="image/*" className="hidden" onChange={handleComposerImageUpload} />
+                {composerImageUploading ? 'Uploading image…' : 'Upload image'}
+              </label>
+              <span className="text-xs text-slate-500">{postForm.mediaUrls.length} attachment{postForm.mediaUrls.length === 1 ? '' : 's'}</span>
+            </div>
+
+            {postForm.mediaUrls.length > 0 ? (
+              <ul className="space-y-1">
+                {postForm.mediaUrls.map((url, index) => (
+                  <li key={`${url}-${index}`} className="flex items-center justify-between rounded-xl border bg-slate-50 px-3 py-2 text-sm">
+                    <span className="truncate pr-2">{url}</span>
+                    <button type="button" onClick={() => handleRemoveMediaUrl(index)} className="text-red-600 hover:text-red-700">Remove</button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, formatting: !prev.formatting }))} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">Formatting</button>
+              <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, media: !prev.media }))} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">Links & media</button>
+              <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, privacy: !prev.privacy }))} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">Audience</button>
+              <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, interaction: !prev.interaction }))} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">Advanced post type</button>
+            </div>
+
+            {composerPanels.formatting ? (
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{postForm.editorMode === 'code' ? 'Code Mode snippets' : 'Design Studio tools'}</p>
+                <div className="flex flex-wrap gap-2">
+                  {postForm.editorMode === 'code' ? CODE_MODE_SNIPPETS.map((snippet) => (
+                    <button key={snippet.label} type="button" onClick={() => applyComposerSnippet(snippet.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100">{snippet.label}</button>
+                  )) : (
+                    <>
+                      <button type="button" onClick={() => applyDesignWrapper('**')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Bold</button>
+                      <button type="button" onClick={() => applyDesignWrapper('*')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Italic</button>
+                      <button type="button" onClick={() => applyDesignWrapper('`')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Code</button>
+                      <button type="button" onClick={() => applyDesignWrapper('[color=red]', '[/color]')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Color</button>
+                      <button type="button" onClick={() => applyDesignWrapper('[bg=yellow]', '[/bg]')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Highlight</button>
+                      <button type="button" onClick={() => applyDesignWrapper('[vline=4]', '[/vline]')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Vertical line</button>
+                      <button type="button" onClick={() => applyComposerSnippet('\n# Heading\n')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Heading</button>
+                      <button type="button" onClick={() => applyComposerSnippet('\n## Sub heading\n')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Sub heading</button>
+                      <button type="button" onClick={() => applyComposerSnippet('\n- List item\n')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">List</button>
+                      <button type="button" onClick={() => applyComposerSnippet('\n> Quote\n')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Quote</button>
+                      <button type="button" onClick={() => applyComposerSnippet('[Label](https://example.com)')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Link</button>
+                      <button type="button" onClick={() => applyComposerSnippet('![Alt text](https://example.com/image.jpg)')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Image</button>
+                    </>
+                  )}
+                </div>
               </div>
-              {postForm.mediaUrls.length > 0 ? (
-                <ul className="space-y-1">
-                  {postForm.mediaUrls.map((url, index) => (
-                    <li key={`${url}-${index}`} className="flex items-center justify-between rounded-xl border bg-slate-50 px-3 py-2 text-sm">
-                      <span className="truncate pr-2">{url}</span>
-                      <button type="button" onClick={() => handleRemoveMediaUrl(index)} className="text-red-600 hover:text-red-700">Remove</button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
+            ) : null}
 
-            <PrivacySelector form={postForm} circles={circles} friends={friends} onChange={handlePostFormField} onToggleCircle={handleToggleCircle} onToggleVisibleUser={handleToggleVisibleUser} onToggleExcludeUser={handleToggleExcludeUser} />
+            {composerPanels.media ? (
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                <label className="block text-sm font-medium text-gray-700">Optional link / media URL</label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input type="url" value={postForm.mediaUrlInput} onChange={(event) => setPostForm((prev) => ({ ...prev, mediaUrlInput: event.target.value }))} placeholder="https://example.com/image.jpg" className="flex-1 rounded-xl border border-slate-300 px-3 py-2" />
+                  <button type="button" onClick={handleAddMediaUrl} className="rounded-xl border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50">Add URL</button>
+                </div>
+              </div>
+            ) : null}
 
-            {postForm.contentType === 'poll' ? (
+            {composerPanels.privacy ? (
+              <PrivacySelector form={postForm} circles={circles} friends={friends} onChange={handlePostFormField} onToggleCircle={handleToggleCircle} onAddExcludeUser={handleAddExcludeUser} onRemoveExcludeUser={handleRemoveExcludeUser} />
+            ) : null}
+
+            {composerPanels.interaction ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Post Type</label>
+                <select value={postForm.contentType} onChange={(event) => setPostForm((prev) => ({ ...prev, contentType: event.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                  {COMPOSER_CONTENT_TYPES.map((option) => <option key={option} value={option}>{option.charAt(0).toUpperCase() + option.slice(1)}</option>)}
+                </select>
+              </div>
+            ) : null}
+
+            {composerPanels.interaction && postForm.contentType === 'poll' ? (
               <div className="space-y-3 rounded-xl border bg-blue-50/40 p-3">
                 <h4 className="text-sm font-semibold text-gray-700">Poll Settings</h4>
                 <input type="text" value={postForm.interaction.poll.question} onChange={(event) => updateInteractionField('poll', 'question', event.target.value)} placeholder="Poll question" className="w-full rounded-xl border px-3 py-2 text-sm" />
@@ -2875,7 +3135,7 @@ const Social = () => {
               </div>
             ) : null}
 
-            {postForm.contentType === 'quiz' ? (
+            {composerPanels.interaction && postForm.contentType === 'quiz' ? (
               <div className="space-y-3 rounded-xl border bg-violet-50/40 p-3">
                 <h4 className="text-sm font-semibold text-gray-700">Quiz Settings</h4>
                 <input type="text" value={postForm.interaction.quiz.question} onChange={(event) => updateInteractionField('quiz', 'question', event.target.value)} placeholder="Quiz question" className="w-full rounded-xl border px-3 py-2 text-sm" />
@@ -2898,7 +3158,7 @@ const Social = () => {
               </div>
             ) : null}
 
-            {postForm.contentType === 'countdown' ? (
+            {composerPanels.interaction && postForm.contentType === 'countdown' ? (
               <div className="space-y-3 rounded-xl border bg-emerald-50/40 p-3">
                 <h4 className="text-sm font-semibold text-gray-700">Countdown Settings</h4>
                 <input type="text" value={postForm.interaction.countdown.label} onChange={(event) => updateInteractionField('countdown', 'label', event.target.value)} placeholder="Countdown label" className="w-full rounded-xl border px-3 py-2 text-sm" />
@@ -2910,7 +3170,11 @@ const Social = () => {
               </div>
             ) : null}
 
-            <button type="submit" disabled={submittingPost} className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60">{submittingPost ? 'Publishing…' : 'Publish Post'}</button>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              {renderFormattedPostContent(postForm.editorMode === 'code' ? postForm.codeContent : postForm.content)}
+            </div>
+
+            <button type="submit" disabled={submittingPost || composerImageUploading} className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60">{composerImageUploading ? 'Uploading image…' : submittingPost ? 'Publishing…' : 'Publish Post'}</button>
           </form>
         ) : <p className="text-sm text-slate-500">Post publishing is available only in owner view.</p>;
       case 'circles':
@@ -2980,7 +3244,7 @@ const Social = () => {
                     {post.locationRadius ? <span className="rounded-full bg-gray-100 px-2 py-1">Radius: {post.locationRadius} mi</span> : null}
                     {post.expiresAt ? <span className="rounded-full bg-gray-100 px-2 py-1">Expires: {formatDate(post.expiresAt)}</span> : null}
                   </div>
-                  {post.content ? <p className="whitespace-pre-wrap text-gray-800">{post.content}</p> : null}
+                  {post.content ? <div className="space-y-1 text-gray-800">{renderFormattedPostContent(post.content)}</div> : null}
                   {post.mediaUrls.length > 0 ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{post.mediaUrls.map((url, index) => renderMediaItem(url, `${post._id}-media-${index}`))}</div> : null}
                   {interaction?.type === 'poll' ? <div className="rounded-xl border bg-slate-50 p-3"><p className="font-medium text-sm">{interaction.poll?.question}</p><p className="text-xs text-gray-500">Poll status: <span className="font-medium">{interactionStatus}</span></p></div> : null}
                   {interaction?.type === 'quiz' ? <div className="rounded-xl border bg-violet-50/40 p-3"><p className="font-medium text-sm">{interaction.quiz?.question}</p><p className="text-xs text-gray-500">Quiz status: <span className="font-medium">{interactionStatus}</span></p></div> : null}
