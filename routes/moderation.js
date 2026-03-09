@@ -157,6 +157,10 @@ const buildNewsIngestionLocationFilter = async (locationQuery = '') => {
   const matchedZipCodes = toUniqueStrings(matchedEntries.map((entry) => normalizeZipCode(entry.zipCode)).filter(Boolean));
   const matchedCities = toUniqueStrings(matchedEntries.map((entry) => normalizeLocationToken(entry.city)).filter(Boolean));
   const matchedCounties = toUniqueStrings(matchedEntries.map((entry) => normalizeLocationToken(entry.county)).filter(Boolean));
+  const matchedStates = toUniqueStrings(matchedEntries.flatMap((entry) => [
+    normalizeLocationToken(entry.state),
+    normalizeLocationToken(entry.stateCode)
+  ]).filter(Boolean));
 
   const locationOrClauses = [];
   if (matchedZipCodes.length > 0) {
@@ -170,6 +174,9 @@ const buildNewsIngestionLocationFilter = async (locationQuery = '') => {
   }
   if (matchedCounties.length > 0) {
     locationOrClauses.push({ 'normalized.locationTags.counties': { $in: matchedCounties } });
+  }
+  if (matchedStates.length > 0) {
+    locationOrClauses.push({ 'normalized.locationTags.states': { $in: matchedStates } });
   }
 
   if (locationOrClauses.length === 0) {

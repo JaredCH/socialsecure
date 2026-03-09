@@ -211,6 +211,33 @@ const COUNTRY_NAMES = new Set([
   'pakistan','bangladesh','ukraine','chile','peru','venezuela'
 ]);
 
+const US_STATE_CAPITALS = [
+  ['montgomery', 'alabama', 'al'], ['juneau', 'alaska', 'ak'], ['phoenix', 'arizona', 'az'],
+  ['little rock', 'arkansas', 'ar'], ['sacramento', 'california', 'ca'], ['denver', 'colorado', 'co'],
+  ['hartford', 'connecticut', 'ct'], ['dover', 'delaware', 'de'], ['tallahassee', 'florida', 'fl'],
+  ['atlanta', 'georgia', 'ga'], ['honolulu', 'hawaii', 'hi'], ['boise', 'idaho', 'id'],
+  ['springfield', 'illinois', 'il'], ['indianapolis', 'indiana', 'in'], ['des moines', 'iowa', 'ia'],
+  ['topeka', 'kansas', 'ks'], ['frankfort', 'kentucky', 'ky'], ['baton rouge', 'louisiana', 'la'],
+  ['augusta', 'maine', 'me'], ['annapolis', 'maryland', 'md'], ['boston', 'massachusetts', 'ma'],
+  ['lansing', 'michigan', 'mi'], ['saint paul', 'minnesota', 'mn'], ['jackson', 'mississippi', 'ms'],
+  ['jefferson city', 'missouri', 'mo'], ['helena', 'montana', 'mt'], ['lincoln', 'nebraska', 'ne'],
+  ['carson city', 'nevada', 'nv'], ['concord', 'new hampshire', 'nh'], ['trenton', 'new jersey', 'nj'],
+  ['santa fe', 'new mexico', 'nm'], ['albany', 'new york', 'ny'], ['raleigh', 'north carolina', 'nc'],
+  ['bismarck', 'north dakota', 'nd'], ['columbus', 'ohio', 'oh'], ['oklahoma city', 'oklahoma', 'ok'],
+  ['salem', 'oregon', 'or'], ['harrisburg', 'pennsylvania', 'pa'], ['providence', 'rhode island', 'ri'],
+  ['columbia', 'south carolina', 'sc'], ['pierre', 'south dakota', 'sd'], ['nashville', 'tennessee', 'tn'],
+  ['austin', 'texas', 'tx'], ['salt lake city', 'utah', 'ut'], ['montpelier', 'vermont', 'vt'],
+  ['richmond', 'virginia', 'va'], ['olympia', 'washington', 'wa'], ['charleston', 'west virginia', 'wv'],
+  ['madison', 'wisconsin', 'wi'], ['cheyenne', 'wyoming', 'wy'], ['washington', 'district of columbia', 'dc']
+];
+
+const LOCAL_STORY_SIGNAL_PATTERNS = [
+  /\bcity council\b/, /\bcounty\b/, /\bparish\b/, /\bmayor\b/, /\bgovernor\b/, /\bsheriff\b/,
+  /\bpolice\b/, /\bfire department\b/, /\bschool district\b/, /\bresidents?\b/,
+  /\bcommunity\b/, /\bdowntown\b/, /\broadwork\b/, /\broad closure\b/, /\btransit\b/,
+  /\bmunicipal\b/, /\bplanning commission\b/, /\bzoning\b/, /\bpublic safety\b/
+];
+
 const SUPPORTED_RSS_PROVIDERS = [
   { id: 'google-news', label: 'Google News', hostPatterns: ['news.google.com'] },
   { id: 'reuters', label: 'Reuters', hostPatterns: ['reuters.com'] },
@@ -229,6 +256,16 @@ const normalizeTopicToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 const normalizeUsZipCode = (value) => normalizeZipCode(value).split('-')[0];
 const geocodeContextCache = new Map();
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const CAPITAL_CITY_MATCHERS = US_STATE_CAPITALS.map(([capitalCity, stateName, stateAbbrev]) => ({
+  capitalCity,
+  stateName,
+  stateAbbrev,
+  cityPattern: new RegExp(`\\b${escapeRegex(capitalCity)}\\b`, 'i'),
+  stateNamePattern: new RegExp(`\\b${escapeRegex(stateName)}\\b`, 'i'),
+  stateAbbrevPattern: new RegExp(`\\b${escapeRegex(stateAbbrev)}\\b`, 'i')
+}));
 
 const toUniqueNonEmptyStrings = (values = []) => [...new Set(values
   .map((value) => String(value || '').trim())
@@ -276,6 +313,7 @@ const inferLocationTokensFromText = (input = '') => {
   const text = String(input || '');
   const lower = text.toLowerCase();
   const tokens = [];
+  const hasLocalStorySignal = LOCAL_STORY_SIGNAL_PATTERNS.some((pattern) => pattern.test(lower));
 
   // Match US and Canadian zip codes
   const usZipMatches = text.match(/\b\d{5}(?:-\d{4})?\b/g) || [];
@@ -319,6 +357,19 @@ const inferLocationTokensFromText = (input = '') => {
         }
       }
     }
+  }
+
+  for (const {
+    capitalCity, stateName, stateAbbrev, cityPattern, stateNamePattern, stateAbbrevPattern
+  } of CAPITAL_CITY_MATCHERS) {
+    if (!cityPattern.test(text)) continue;
+    const hasExplicitStateHint = stateNamePattern.test(text) || stateAbbrevPattern.test(text);
+    if (!hasExplicitStateHint) {
+      if (!hasLocalStorySignal) continue;
+      tokens.push(capitalCity);
+      continue;
+    }
+    tokens.push(capitalCity, stateName, stateAbbrev);
   }
 
   // Match country names mentioned in text
