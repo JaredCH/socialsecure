@@ -1,9 +1,29 @@
 {
+  "id": "/",
   "short_name": "SocialSecure",
-  "name": "SocialSecure",
-  "icons": [],
-  "start_url": ".",
+  "name": "SocialSecure Network",
+  "description": "Secure social networking with encrypted messaging and real-time notifications.",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#1d4ed8",
+  "background_color": "#f8fafc"
 }
