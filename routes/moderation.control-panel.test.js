@@ -360,9 +360,14 @@ describe('Moderation control panel admin actions', () => {
     expect(query.$and).toBeTruthy();
     const locationClause = query.$and.find((entry) => Array.isArray(entry.$or));
     expect(locationClause).toBeTruthy();
-    expect(JSON.stringify(locationClause)).toContain('round rock');
-    expect(JSON.stringify(locationClause)).toContain('san marcos');
-    expect(JSON.stringify(locationClause)).not.toContain('dallas');
+    const cityClause = locationClause.$or.find((entry) => entry['normalized.locationTags.cities']);
+    const countyClause = locationClause.$or.find((entry) => entry['normalized.locationTags.counties']);
+    const zipClause = locationClause.$or.find((entry) => entry['normalized.locationTags.zipCodes']);
+    expect(cityClause['normalized.locationTags.cities'].$in).toEqual(expect.arrayContaining(['austin', 'round rock', 'san marcos']));
+    expect(cityClause['normalized.locationTags.cities'].$in).not.toContain('dallas');
+    expect(countyClause['normalized.locationTags.counties'].$in).toEqual(expect.arrayContaining(['travis county', 'williamson county', 'hays county']));
+    expect(zipClause['normalized.locationTags.zipCodes'].$in).toEqual(expect.arrayContaining(['78701', '78664', '78666']));
+    expect(zipClause['normalized.locationTags.zipCodes'].$in).not.toContain('75201');
   });
 
   it('returns reports details with reporter and target user info', async () => {
