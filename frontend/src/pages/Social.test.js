@@ -203,13 +203,16 @@ describe('Social page hero background rendering', () => {
   });
 
   it('renders a scaled calendar preview on the calendar tab', async () => {
+    const eventStart = new Date(Date.now() + 2 * 60 * 60 * 1000);
     calendarAPI.getMyEvents.mockResolvedValue({
       data: {
         events: [
           {
             _id: 'event-1',
-            startAt: new Date().toISOString(),
-            endAt: new Date().toISOString()
+            title: 'Team sync for launch planning and execution',
+            location: 'North Campus Conference Center - Main Hall',
+            startAt: eventStart.toISOString(),
+            endAt: new Date(eventStart.getTime() + 30 * 60 * 1000).toISOString()
           }
         ]
       }
@@ -231,6 +234,13 @@ describe('Social page hero background rendering', () => {
     expect(container.querySelector('[data-testid="social-calendar-preview-grid"]')).toBeTruthy();
     expect(container.textContent).toContain('Upcoming');
     expect(container.textContent).toContain('US:');
+    const upcomingEventLink = container.querySelector('[data-testid="social-upcoming-event-event-event-1"]');
+    expect(upcomingEventLink).toBeTruthy();
+    expect(upcomingEventLink.getAttribute('href')).toBe('/calendar');
+    expect(upcomingEventLink.textContent).toContain('Team sync for launch planning and execution');
+    expect(upcomingEventLink.textContent).toContain('North Campus Conference Center - Main Hall');
+    expect(upcomingEventLink.textContent).toContain(eventStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+    expect(upcomingEventLink.textContent).toContain(eventStart.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
   });
 
   it('respects owner visibility settings when profile calendar access is restricted', async () => {
