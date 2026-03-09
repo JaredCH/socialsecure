@@ -76,7 +76,7 @@ function Home({ isAuthenticated = false }) {
     setSearchForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const runSearch = async (criteria, { showEmptyCriteriaError = false } = {}) => {
+  const runSearch = async (criteria) => {
     setSearchError('');
     setSearchNotice('');
 
@@ -84,18 +84,6 @@ function Home({ isAuthenticated = false }) {
       acc[key] = String(value || '').trim();
       return acc;
     }, {});
-    const hasAnyCriteria = Object.values(normalizedCriteria).some((value) => value.length > 0);
-
-    if (!hasAnyCriteria) {
-      activeSearchRequestRef.current += 1;
-      if (showEmptyCriteriaError) {
-        setSearchError('Add at least one optional search value to start a search session.');
-      }
-      setSearchNotice('');
-      setSearchResults([]);
-      setSearching(false);
-      return;
-    }
 
     const requestId = activeSearchRequestRef.current + 1;
     activeSearchRequestRef.current = requestId;
@@ -127,17 +115,13 @@ function Home({ isAuthenticated = false }) {
 
   const handleSearch = (event) => {
     event.preventDefault();
-    runSearch(searchForm, { showEmptyCriteriaError: true });
+    runSearch(searchForm);
   };
 
   useEffect(() => {
     const hasAnyCriteria = Object.values(searchForm).some((value) => value.trim().length > 0);
     if (!hasAnyCriteria) {
-      activeSearchRequestRef.current += 1;
-      setSearching(false);
-      setSearchError('');
-      setSearchNotice('');
-      setSearchResults([]);
+      runSearch(searchForm);
       return undefined;
     }
 
@@ -496,7 +480,7 @@ function Home({ isAuthenticated = false }) {
               ))}
               </ul>
             ) : (
-              <p className="text-sm text-slate-500">Start typing in any optional filter to stream matching profiles here.</p>
+              <p className="text-sm text-slate-500">No profiles available yet.</p>
             )}
           </div>
         </div>

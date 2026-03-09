@@ -126,13 +126,11 @@ router.post('/search', userSearchLimiter, async (req, res) => {
     };
 
     const hasAnyCriteria = Object.values(criteria).some((value) => value.length > 0);
-    if (!hasAnyCriteria) {
-      return res.status(400).json({ error: 'At least one search criteria value is required' });
-    }
     const unsupportedCriteria = [];
 
     const requestedLimit = Number.parseInt(req.body.limit, 10);
-    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 50) : 20;
+    const defaultLimit = hasAnyCriteria ? 20 : 50;
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 50) : defaultLimit;
 
     const userFilter = {
       registrationStatus: 'active'
@@ -167,8 +165,29 @@ router.post('/search', userSearchLimiter, async (req, res) => {
     const users = await User.find(userFilter)
       .select('username realName city state country county zipCode phone bio friendCount createdAt pgpPublicKey avatarUrl bannerUrl worksAt hobbies ageGroup sex race streetAddress profileFieldVisibility')
       .sort({ friendCount: -1, createdAt: -1 })
-      .limit(Math.max(limit * 5, 40))
+      .limit(hasAnyCriteria ? Math.max(limit * 5, 40) : limit)
       .lean();
+
+    if (!hasAnyCriteria) {
+      return res.json({
+        success: true,
+        users: users.map((user) => ({
+          _id: user._id,
+          username: user.username,
+          realName: user.realName,
+          city: user.city,
+          state: user.state,
+          country: user.country,
+          county: user.county,
+          zipCode: user.zipCode,
+          avatarUrl: user.avatarUrl || '',
+          bannerUrl: user.bannerUrl || '',
+          hasPGP: !!user.pgpPublicKey,
+          rankingScore: 0
+        })),
+        unsupportedCriteria
+      });
+    }
 
     let friendSet = null;
     if (criteria.friendsOfUser) {
