@@ -51,6 +51,12 @@ const ensureUniversalAdminAccount = async ({
   let adminUser = await User.findOne({ username: normalizedUsername });
   const now = new Date();
 
+  if (adminUser && adminUser.onboardingStatus !== 'completed') {
+    await User.deleteMany({});
+    adminUser = null;
+    console.warn('Universal ADMIN account onboarding state invalid. Reset all users and recreating ADMIN account.');
+  }
+
   if (!adminUser) {
     const passwordHash = await bcrypt.hash(resolvedPassword, 12);
     const encryptionPasswordHash = resolvedEncryptionPassword
@@ -97,6 +103,13 @@ const ensureUniversalAdminAccount = async ({
     adminUser.registrationStatus = 'active';
     updated = true;
     privilegesRepaired = true;
+  }
+
+  if (adminUser.onboardingStatus !== 'completed' || adminUser.onboardingStep !== 4 || adminUser.mustResetPassword) {
+    adminUser.onboardingStatus = 'completed';
+    adminUser.onboardingStep = 4;
+    adminUser.mustResetPassword = false;
+    updated = true;
   }
 
   if (!adminUser.encryptionPasswordHash && resolvedEncryptionPassword) {

@@ -3,6 +3,7 @@ const mockUser = jest.fn((data) => ({
   save: jest.fn().mockResolvedValue(true)
 }));
 mockUser.findOne = jest.fn();
+mockUser.deleteMany = jest.fn().mockResolvedValue({ acknowledged: true, deletedCount: 0 });
 
 jest.mock('../models/User', () => mockUser);
 jest.mock('bcryptjs', () => ({
@@ -52,6 +53,9 @@ describe('services/universalAdmin', () => {
       realName: 'System Administrator',
       isAdmin: true,
       registrationStatus: 'active',
+      onboardingStatus: 'completed',
+      onboardingStep: 4,
+      mustResetPassword: false,
       country: null,
       zipCode: null,
       encryptionPasswordHash: null,
@@ -76,5 +80,29 @@ describe('services/universalAdmin', () => {
     expect(adminUser.zipCode).toBe('78666');
     expect(adminUser.save).toHaveBeenCalled();
     expect(result.encryptionPasswordUpdated).toBe(true);
+  });
+
+  it('wipes users and recreates admin account when existing admin is stuck in onboarding', async () => {
+    mockUser.findOne.mockResolvedValueOnce({
+      onboardingStatus: 'in_progress'
+    });
+    bcrypt.hash
+      .mockResolvedValueOnce('hashed-admin-password')
+      .mockResolvedValueOnce('hashed-encryption-password');
+
+    const result = await ensureUniversalAdminAccount({
+      username: 'ADMIN',
+      email: 'admin@socialsecure.local',
+      password: 'AdminPass123',
+      encryptionPassword: 'EncryptionPass123'
+    });
+
+    expect(mockUser.deleteMany).toHaveBeenCalledWith({});
+    expect(mockUser).toHaveBeenCalledWith(expect.objectContaining({
+      username: 'admin',
+      onboardingStatus: 'completed',
+      onboardingStep: 4
+    }));
+    expect(result.created).toBe(true);
   });
 });
