@@ -9,7 +9,7 @@ jest.mock('bcryptjs', () => ({
   hash: jest.fn()
 }));
 
-const mockUserModel = { findById: jest.fn(), findOne: jest.fn() };
+const mockUserModel = { findById: jest.fn() };
 jest.mock('../models/User', () => mockUserModel);
 jest.mock('../models/SecurityEvent', () => ({ create: jest.fn() }));
 
@@ -52,9 +52,6 @@ describe('Auth profile location update cooldown', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jwt.verify.mockReturnValue({ userId: 'user-1' });
-    mockUserModel.findOne.mockReturnValue({
-      select: jest.fn().mockResolvedValue(null)
-    });
   });
 
   it('allows location updates when the 7-day cooldown has elapsed', async () => {
@@ -145,7 +142,6 @@ describe('Auth profile location update cooldown', () => {
       .send({
         streetAddress: '123 Main St',
         phone: '+1 555-111-2222',
-        email: 'new@example.com',
         ageGroup: '25-34',
         sex: 'Female',
         race: 'Asian',
@@ -165,11 +161,15 @@ describe('Auth profile location update cooldown', () => {
     expect(user.save).toHaveBeenCalled();
     expect(user.streetAddress).toBe('123 Main St');
     expect(user.phone).toBe('+1 555-111-2222');
-    expect(user.email).toBe('new@example.com');
+    expect(user.email).toBe('old@example.com');
     expect(user.hobbies).toEqual(['Music', 'Travel']);
     expect(user.profileFieldVisibility).toEqual(expect.objectContaining({
+      streetAddress: 'secure',
       phone: 'secure',
       email: 'secure',
+      ageGroup: 'social',
+      sex: 'secure',
+      race: 'social',
       hobbies: 'secure'
     }));
   });

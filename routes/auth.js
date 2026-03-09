@@ -1177,8 +1177,14 @@ router.post('/encryption-password/lock', async (req, res) => {
 // Update user profile
 router.put('/profile', [
   body('realName').optional().trim().notEmpty().withMessage('Real name cannot be empty'),
-  body('email').optional({ nullable: true }).isEmail().normalizeEmail().withMessage('Valid email is required'),
-  body('phone').optional({ nullable: true }).isString().trim().isLength({ max: 30 }).withMessage('Phone must be at most 30 characters'),
+  body('phone')
+    .optional({ nullable: true })
+    .isString()
+    .trim()
+    .isLength({ max: 30 })
+    .withMessage('Phone must be at most 30 characters')
+    .matches(/^\+?[0-9()\-\s.]*$/)
+    .withMessage('Phone number format is invalid'),
   body('streetAddress').optional({ nullable: true }).isString().trim().isLength({ max: 200 }).withMessage('Home address must be at most 200 characters'),
   body('hobbies').optional({ nullable: true }).isArray({ max: 10 }).withMessage('Hobbies must be an array with at most 10 entries'),
   body('hobbies.*').optional({ nullable: true }).isString().trim().isLength({ max: 60 }).withMessage('Each hobby must be at most 60 characters'),
@@ -1318,7 +1324,7 @@ router.put('/profile', [
     }
 
     // Update allowed fields
-    const { realName, email, phone, streetAddress, hobbies, ageGroup, sex, race, profileFieldVisibility, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme, socialPagePreferences } = req.body;
+    const { realName, phone, streetAddress, hobbies, ageGroup, sex, race, profileFieldVisibility, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme, socialPagePreferences } = req.body;
     const now = Date.now();
 
     const requestedLocation = {
@@ -1376,18 +1382,6 @@ router.put('/profile', [
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'race')) {
       user.race = normalizeProfileOptionalValue(race);
-    }
-    if (Object.prototype.hasOwnProperty.call(req.body, 'email')) {
-      const normalizedEmail = (email || '').trim().toLowerCase();
-      if (normalizedEmail && normalizedEmail !== user.email) {
-        const existingUser = await User.findOne({ email: normalizedEmail, _id: { $ne: user._id } }).select('_id');
-        if (existingUser) {
-          return res.status(400).json({ error: 'Email already registered' });
-        }
-      }
-      if (normalizedEmail) {
-        user.email = normalizedEmail;
-      }
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'profileFieldVisibility')) {
       const normalizedProfileFieldVisibility = normalizeProfileFieldVisibility(profileFieldVisibility);

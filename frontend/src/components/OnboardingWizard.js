@@ -322,7 +322,6 @@ function OnboardingWizard({
     const normalizedAdditionalInfo = {
       streetAddress: additionalInfo.streetAddress.trim(),
       phone: additionalInfo.phone.trim(),
-      email: additionalInfo.email.trim().toLowerCase(),
       ageGroup: additionalInfo.ageGroup.trim(),
       sex: additionalInfo.sex.trim(),
       race: additionalInfo.race.trim(),
@@ -381,7 +380,7 @@ function OnboardingWizard({
 
       {step === 1 && (
         <form onSubmit={handleStepOne} className="space-y-4">
-          <h2 className="text-lg font-medium">Step 1: Encryption setup</h2>
+          <h2 className="text-lg font-medium">Step 1: Encryption Setup</h2>
           <p className="text-sm text-gray-600">
             Add your encryption password and bring your own PGP public key. If you leave the key blank, we generate one locally.
           </p>
@@ -457,7 +456,7 @@ function OnboardingWizard({
 
       {step === 2 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-medium">Step 2: Recovery seeds</h2>
+          <h2 className="text-lg font-medium">Step 2: Recovery Seeds</h2>
           <p className="text-sm text-gray-600">
             Generate and save your 12-word recovery seed phrase. Keep it private and offline.
           </p>
@@ -533,10 +532,30 @@ function OnboardingWizard({
             the public will not have access, and SocialSecure will not use it for anything &apos;Shitty&apos;.
           </p>
 
+          <div className="grid gap-2 sm:grid-cols-[2fr_1fr] sm:items-end">
+            <div className="block text-sm">
+              Email (from your account)
+              <p className="w-full border rounded p-2 mt-1 bg-gray-50 text-gray-700">{additionalInfo.email || 'No email on file'}</p>
+            </div>
+            <label className="block text-sm">
+              Visibility
+              <select
+                value={additionalInfo.profileFieldVisibility.email}
+                onChange={(event) => handleAdditionalInfoVisibilityChange('email', event.target.value)}
+                className="w-full border rounded p-2 mt-1"
+              >
+                {INFO_VISIBILITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
           {[
             { key: 'streetAddress', label: 'Home address', type: 'text', placeholder: '123 Main St' },
             { key: 'phone', label: 'Phone number', type: 'tel', placeholder: '+1 555-123-4567' },
-            { key: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com' },
             { key: 'ageGroup', label: 'Age', type: 'text', placeholder: '25-34' },
             { key: 'sex', label: 'Sex', type: 'text', placeholder: 'Optional' },
             { key: 'race', label: 'Race', type: 'text', placeholder: 'Optional' },
@@ -552,6 +571,9 @@ function OnboardingWizard({
                   className="w-full border rounded p-2 mt-1"
                   placeholder={field.placeholder}
                 />
+                {field.key === 'hobbies' && (
+                  <p className="mt-1 text-xs text-gray-500">Use commas between hobbies (up to 10).</p>
+                )}
               </label>
               <label className="block text-sm">
                 Visibility
