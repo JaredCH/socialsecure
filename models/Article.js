@@ -65,9 +65,35 @@ const articleSchema = new mongoose.Schema({
     type: String,
     default: 'en'
   },
+  // Primary standardized category for filtering/sorting
+  category: {
+    type: String,
+    default: 'general',
+    lowercase: true
+  },
+  // Identifies the feed provider (e.g. 'google-news', 'npr', 'bbc')
+  feedSource: {
+    type: String,
+    default: null
+  },
+  // Raw category string from the source feed
+  feedCategory: {
+    type: String,
+    default: null
+  },
+  // Language reported by the feed
+  feedLanguage: {
+    type: String,
+    default: null
+  },
+  // Extra metadata from the source (author, source url, etc.)
+  feedMetadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
   sourceType: {
     type: String,
-    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'gdlet'],
+    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'gdlet', 'npr', 'bbc'],
     default: 'rss'
   },
   // Operational fields
@@ -126,6 +152,7 @@ articleSchema.index({ topics: 1, publishedAt: -1 });
 articleSchema.index({ locations: 1, publishedAt: -1 });
 articleSchema.index({ localityLevel: 1, publishedAt: -1 });
 articleSchema.index({ sourceType: 1, publishedAt: -1 });
+articleSchema.index({ category: 1, publishedAt: -1 });
 articleSchema.index({ normalizedUrlHash: 1 });
 articleSchema.index({ isActive: 1, isPromoted: 1, viralScore: -1, publishedAt: -1 });
 

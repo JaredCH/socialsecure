@@ -13,7 +13,7 @@ const rssSourceSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government'],
+    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'npr', 'bbc'],
     default: 'rss'
   },
   category: {
