@@ -112,6 +112,7 @@ function ModerationDashboard() {
   const [ingestionFilters, setIngestionFilters] = useState({
     source: '',
     tag: '',
+    location: '',
     zipCode: '',
     region: '',
     processingStatus: '',
@@ -380,7 +381,7 @@ function ModerationDashboard() {
           <button type="button" onClick={() => loadIngestionRecords(1)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition-colors">↻ Refresh</button>
         </div>
         <div className="p-4 space-y-4">
-          <div className="grid gap-2 md:grid-cols-4">
+          <div className="grid gap-2 md:grid-cols-5">
             <input
               value={ingestionFilters.source}
               onChange={(e) => setIngestionFilters((prev) => ({ ...prev, source: e.target.value }))}
@@ -391,6 +392,12 @@ function ModerationDashboard() {
               value={ingestionFilters.tag}
               onChange={(e) => setIngestionFilters((prev) => ({ ...prev, tag: e.target.value }))}
               placeholder="Tag"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+            />
+            <input
+              value={ingestionFilters.location}
+              onChange={(e) => setIngestionFilters((prev) => ({ ...prev, location: e.target.value }))}
+              placeholder="City / County / ZIP (±50 mi)"
               className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
             />
             <input

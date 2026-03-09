@@ -108,10 +108,14 @@ jest.mock('../models/Article', () => ({
 const mockNewsIngestionRecordFind = jest.fn();
 const mockNewsIngestionRecordCountDocuments = jest.fn().mockResolvedValue(0);
 const mockNewsIngestionRecordFindById = jest.fn();
+const mockZipLocationIndexFind = jest.fn();
 jest.mock('../models/NewsIngestionRecord', () => ({
   find: (...args) => mockNewsIngestionRecordFind(...args),
   countDocuments: (...args) => mockNewsIngestionRecordCountDocuments(...args),
   findById: (...args) => mockNewsIngestionRecordFindById(...args)
+}));
+jest.mock('../models/ZipLocationIndex', () => ({
+  find: (...args) => mockZipLocationIndexFind(...args)
 }));
 
 const moderationRouter = require('./moderation');
@@ -152,6 +156,7 @@ describe('Moderation control panel admin actions', () => {
     mockNewsIngestionRecordFind.mockReturnValue(buildChain([]));
     mockNewsIngestionRecordCountDocuments.mockResolvedValue(0);
     mockNewsIngestionRecordFindById.mockReturnValue(buildChain([]));
+    mockZipLocationIndexFind.mockReturnValue(buildChain([]));
     mockArticleFindById.mockReturnValue(buildChain([]));
     mockReportFind.mockReturnValue(buildChain([]));
     mockReportCountDocuments.mockResolvedValue(0);
@@ -291,6 +296,78 @@ describe('Moderation control panel admin actions', () => {
     expect(logsRes.status).toBe(200);
     expect(logsRes.body.logs).toHaveLength(1);
     expect(logsRes.body.logs[0].severity).toBe('warn');
+  });
+
+  it('applies city search with nearby 50-mile location expansion for news ingestion records', async () => {
+    const app = buildApp();
+    mockZipLocationIndexFind
+      .mockReturnValueOnce(buildChain([
+        {
+          zipCode: '78701',
+          city: 'Austin',
+          county: 'Travis County',
+          state: 'Texas',
+          stateCode: 'TX',
+          latitude: 30.2672,
+          longitude: -97.7431
+        }
+      ]))
+      .mockReturnValueOnce(buildChain([
+        {
+          zipCode: '78701',
+          city: 'Austin',
+          county: 'Travis County',
+          state: 'Texas',
+          stateCode: 'TX',
+          latitude: 30.2672,
+          longitude: -97.7431
+        },
+        {
+          zipCode: '78664',
+          city: 'Round Rock',
+          county: 'Williamson County',
+          state: 'Texas',
+          stateCode: 'TX',
+          latitude: 30.5083,
+          longitude: -97.6789
+        },
+        {
+          zipCode: '78666',
+          city: 'San Marcos',
+          county: 'Hays County',
+          state: 'Texas',
+          stateCode: 'TX',
+          latitude: 29.8833,
+          longitude: -97.9414
+        },
+        {
+          zipCode: '75201',
+          city: 'Dallas',
+          county: 'Dallas County',
+          state: 'Texas',
+          stateCode: 'TX',
+          latitude: 32.7816,
+          longitude: -96.7998
+        }
+      ]));
+
+    const response = await request(app)
+      .get('/api/moderation/control-panel/news-ingestion?location=austin')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    const query = mockNewsIngestionRecordFind.mock.calls[0][0];
+    expect(query.$and).toBeTruthy();
+    const locationClause = query.$and.find((entry) => Array.isArray(entry.$or));
+    expect(locationClause).toBeTruthy();
+    const cityClause = locationClause.$or.find((entry) => entry['normalized.locationTags.cities']);
+    const countyClause = locationClause.$or.find((entry) => entry['normalized.locationTags.counties']);
+    const zipClause = locationClause.$or.find((entry) => entry['normalized.locationTags.zipCodes']);
+    expect(cityClause['normalized.locationTags.cities'].$in).toEqual(expect.arrayContaining(['austin', 'round rock', 'san marcos']));
+    expect(cityClause['normalized.locationTags.cities'].$in).not.toContain('dallas');
+    expect(countyClause['normalized.locationTags.counties'].$in).toEqual(expect.arrayContaining(['travis county', 'williamson county', 'hays county']));
+    expect(zipClause['normalized.locationTags.zipCodes'].$in).toEqual(expect.arrayContaining(['78701', '78664', '78666']));
+    expect(zipClause['normalized.locationTags.zipCodes'].$in).not.toContain('75201');
   });
 
   it('returns reports details with reporter and target user info', async () => {
