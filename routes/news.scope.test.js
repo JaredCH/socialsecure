@@ -899,4 +899,37 @@ describe('News scope routing', () => {
 
     expect(assignedZip).toBe('10001');
   });
+
+  it('correlates ingested US zip codes to a city-level local assignment', async () => {
+    const context = await newsRoutes.internals.resolveArticleLocationContext({
+      source: { name: 'Local Wire' },
+      item: { title: 'Public safety update for residents in 78666' }
+    });
+
+    expect(context.locationTags.zipCodes).toContain('78666');
+    expect(context.locationTags.cities).toContain('san marcos');
+    expect(context.localityLevel).toBe('city');
+  });
+
+  it('correlates ingested US city/state mentions to zip codes for local assignment', async () => {
+    const context = await newsRoutes.internals.resolveArticleLocationContext({
+      source: { name: 'Local Wire' },
+      item: { title: 'Roadwork announced in San Marcos, TX this weekend' }
+    });
+
+    expect(context.locationTags.cities).toContain('san marcos');
+    expect(context.locationTags.zipCodes).toContain('78666');
+    expect(context.localityLevel).toBe('city');
+  });
+
+  it('does not keep local city tags when city to zip correlation fails', async () => {
+    const context = await newsRoutes.internals.resolveArticleLocationContext({
+      source: { name: 'Unknown Local Wire' },
+      item: { title: 'Community update in Atlantis' }
+    });
+
+    expect(context.locationTags.cities).toEqual([]);
+    expect(context.locationTags.zipCodes).toEqual([]);
+    expect(context.localityLevel).toBe('global');
+  });
 });
