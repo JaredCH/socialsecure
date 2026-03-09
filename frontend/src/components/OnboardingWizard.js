@@ -202,6 +202,7 @@ function OnboardingWizard({
     const hasExistingEncryptionPassword = !!user?.hasEncryptionPassword;
     const normalizedPublicKey = normalizePgpPublicKey(byoPgpPublicKey);
     const usingByoPgp = normalizedPublicKey.length > 0;
+    const needsEncryptionPassword = hasExistingEncryptionPassword && !usingByoPgp && !user?.hasPGP;
 
     if (!hasExistingEncryptionPassword) {
       if (!passwordEvaluation.allRequirementsMet) {
@@ -227,6 +228,11 @@ function OnboardingWizard({
         toast.error('Public key format is invalid or unreadable. Please verify the armored public key block.');
         return;
       }
+    }
+
+    if (needsEncryptionPassword && !encryptionPassword) {
+      toast.error('Enter your encryption password to generate a local PGP key pair, or provide a BYOPGP public key.');
+      return;
     }
 
     const vaultPassword = hasExistingEncryptionPassword ? encryptionPassword || null : encryptionPassword;
@@ -405,9 +411,22 @@ function OnboardingWizard({
           </p>
 
           {user?.hasEncryptionPassword ? (
-            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-2">
-              Encryption password already configured for this account.
-            </div>
+            <>
+              <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-2">
+                Encryption password already configured for this account.
+              </div>
+              <input
+                type="password"
+                value={encryptionPassword}
+                onChange={(event) => setEncryptionPassword(event.target.value)}
+                className="w-full border rounded p-2"
+                placeholder="Enter encryption password to generate local PGP keys"
+                minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
+              />
+              <p className="text-xs text-gray-500">
+                If you do not paste a BYOPGP public key, enter your encryption password so we can generate a local key pair.
+              </p>
+            </>
           ) : (
             <>
               <input

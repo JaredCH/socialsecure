@@ -21,14 +21,37 @@ jest.mock('../utils/pgp', () => ({
   validatePublicKey: jest.fn()
 }));
 
+jest.mock('../utils/api', () => ({
+  authAPI: {
+    setEncryptionPassword: jest.fn(),
+    setupPGP: jest.fn(),
+    updateOnboardingProgress: jest.fn(),
+    completeOnboarding: jest.fn(),
+    updateProfile: jest.fn()
+  },
+  evaluateRegisterPassword: jest.fn(() => ({
+    requirementChecks: [],
+    allRequirementsMet: true,
+    strengthScore: 3,
+    strengthLabel: 'Strong'
+  }))
+}));
+
+jest.mock('react-hot-toast', () => ({
+  success: jest.fn(),
+  error: jest.fn()
+}));
+
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import toast from 'react-hot-toast';
 import {
   createRecoveryPhraseQrCodeDataUrl,
   INFO_VISIBILITY_OPTIONS,
   resolveInitialStep,
 } from './OnboardingWizard';
 import OnboardingWizard from './OnboardingWizard';
+import { authAPI } from '../utils/api';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -82,5 +105,80 @@ describe('OnboardingWizard helpers', () => {
       root.unmount();
     });
     container.remove();
+  });
+});
+
+describe('OnboardingWizard step 1 existing encryption password flow', () => {
+  let container;
+  let root;
+  let onProgressSaved;
+  let onCompleted;
+  let refreshEncryptionPasswordStatus;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    onProgressSaved = jest.fn().mockResolvedValue(undefined);
+    onCompleted = jest.fn().mockResolvedValue(undefined);
+    refreshEncryptionPasswordStatus = jest.fn().mockResolvedValue(undefined);
+
+    authAPI.setEncryptionPassword.mockResolvedValue({ data: {} });
+    authAPI.setupPGP.mockResolvedValue({ data: {} });
+    authAPI.updateOnboardingProgress.mockResolvedValue({ data: {} });
+    authAPI.completeOnboarding.mockResolvedValue({ data: {} });
+    authAPI.updateProfile.mockResolvedValue({ data: {} });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    container = null;
+    root = null;
+  });
+
+  it('shows encryption password input when account has existing encryption password', async () => {
+    await act(async () => {
+      root.render(
+        <OnboardingWizard
+          user={{ _id: 'u1', email: 'user@example.com', hasEncryptionPassword: true, hasPGP: false }}
+          onboarding={{ currentStep: 1 }}
+          onProgressSaved={onProgressSaved}
+          onCompleted={onCompleted}
+          refreshEncryptionPasswordStatus={refreshEncryptionPasswordStatus}
+        />
+      );
+    });
+
+    expect(
+      container.querySelector('input[placeholder="Enter encryption password to generate local PGP keys"]')
+    ).not.toBeNull();
+  });
+
+  it('blocks submit with clear message when local key generation lacks encryption password', async () => {
+    await act(async () => {
+      root.render(
+        <OnboardingWizard
+          user={{ _id: 'u1', email: 'user@example.com', hasEncryptionPassword: true, hasPGP: false }}
+          onboarding={{ currentStep: 1 }}
+          onProgressSaved={onProgressSaved}
+          onCompleted={onCompleted}
+          refreshEncryptionPasswordStatus={refreshEncryptionPasswordStatus}
+        />
+      );
+    });
+
+    const form = container.querySelector('form');
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(
+      'Enter your encryption password to generate a local PGP key pair, or provide a BYOPGP public key.'
+    );
+    expect(authAPI.updateOnboardingProgress).not.toHaveBeenCalled();
   });
 });
