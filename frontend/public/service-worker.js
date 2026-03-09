@@ -3,7 +3,10 @@ const APP_SHELL = ['/', '/index.html', '/manifest.json', '/icon-192x192.png', '/
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => {})
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch((error) => {
+      // eslint-disable-next-line no-console
+      console.warn('Service worker pre-cache failed', error);
+    })
   );
   self.skipWaiting();
 });
@@ -27,7 +30,10 @@ self.addEventListener('fetch', (event) => {
 
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/index.html'))
+      fetch(event.request).catch(async () => {
+        const fallback = await caches.match('/index.html');
+        return fallback || new Response('Offline', { status: 503, statusText: 'Offline' });
+      })
     );
     return;
   }

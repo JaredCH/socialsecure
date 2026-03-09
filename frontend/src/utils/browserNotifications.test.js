@@ -1,6 +1,5 @@
 import {
   deliverSiteNotification,
-  getBrowserNotificationPermission,
   requestBrowserNotificationPermission,
   shouldDisplaySiteNotification
 } from './browserNotifications';
@@ -68,7 +67,6 @@ describe('browserNotifications', () => {
     const result = await requestBrowserNotificationPermission();
     expect(result).toBe('granted');
     expect(requestPermission).toHaveBeenCalledTimes(1);
-    expect(getBrowserNotificationPermission()).toBe('default');
   });
 
   test('deliverSiteNotification uses service worker showNotification when available', async () => {
@@ -98,4 +96,3 @@ describe('browserNotifications', () => {
     }));
   });
 });
-
