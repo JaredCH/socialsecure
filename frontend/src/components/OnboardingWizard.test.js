@@ -27,7 +27,8 @@ jest.mock('../utils/api', () => ({
     setupPGP: jest.fn(),
     updateOnboardingProgress: jest.fn(),
     completeOnboarding: jest.fn(),
-    updateProfile: jest.fn()
+    updateProfile: jest.fn(),
+    getAddressSuggestions: jest.fn()
   },
   evaluateRegisterPassword: jest.fn(() => ({
     requirementChecks: [],
@@ -100,6 +101,51 @@ describe('OnboardingWizard helpers', () => {
     expect(matrix.textContent).toContain('Category');
     expect(matrix.textContent).toContain('What you entered');
     expect(matrix.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThanOrEqual(14);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('uses select menus for sex/race and normalizes phone before submit', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    authAPI.updateProfile.mockResolvedValue({ data: {} });
+
+    await act(async () => {
+      root.render(
+        <OnboardingWizard
+          user={{ _id: 'u1', email: 'user@example.com' }}
+          onboarding={{ currentStep: 3 }}
+          onProgressSaved={jest.fn().mockResolvedValue(undefined)}
+          onCompleted={jest.fn().mockResolvedValue(undefined)}
+          refreshEncryptionPasswordStatus={jest.fn().mockResolvedValue(undefined)}
+        />
+      );
+    });
+
+    const sexSelect = container.querySelector('select');
+    const phoneInput = container.querySelector('input[type="tel"]');
+    expect(sexSelect).not.toBeNull();
+    expect(phoneInput).not.toBeNull();
+
+    await act(async () => {
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value'
+      ).set;
+      nativeInputValueSetter.call(phoneInput, '5551112222');
+      phoneInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    expect(authAPI.updateProfile).toHaveBeenCalledWith(expect.objectContaining({
+      phone: '+15551112222'
+    }));
 
     act(() => {
       root.unmount();

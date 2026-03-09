@@ -99,6 +99,8 @@ export const authAPI = {
   updateOnboardingProgress: (step, data = {}) => api.post('/auth/onboarding/progress', { step, data }),
   completeOnboarding: (securityPreferences = {}) => api.post('/auth/onboarding/complete', { securityPreferences }),
   updateProfile: (data) => api.put('/auth/profile', data),
+  getAddressSuggestions: (query) => api.get(`/auth/address-suggestions?q=${encodeURIComponent(query)}`),
+  respondToAddressApproval: (requestId, decision) => api.post('/auth/address-approval/respond', { requestId, decision }),
   setupPGP: (publicKey) => api.post('/auth/pgp/setup', { publicKey }),
   getEncryptionPasswordStatus: () => api.get('/auth/encryption-password/status'),
   setEncryptionPassword: (data) => api.post('/auth/encryption-password/set', data),
