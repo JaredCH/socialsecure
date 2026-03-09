@@ -37,12 +37,63 @@ describe('User search routes', () => {
     jest.clearAllMocks();
   });
 
-  it('requires at least one search criteria field for multi-criteria session search', async () => {
+  it('returns default users sorted by friend count when criteria is empty', async () => {
     const app = buildApp();
+
+    const leanMock = jest.fn().mockResolvedValue([
+      {
+        _id: 'u-top',
+        username: 'topfriend',
+        realName: 'Top Friend',
+        city: 'Austin',
+        state: 'TX',
+        country: 'US',
+        county: 'Travis',
+        zipCode: '73301',
+        avatarUrl: '',
+        bannerUrl: '',
+        friendCount: 99,
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+        pgpPublicKey: 'pgp'
+      },
+      {
+        _id: 'u-low',
+        username: 'lowfriend',
+        realName: 'Low Friend',
+        city: 'Dallas',
+        state: 'TX',
+        country: 'US',
+        county: 'Dallas',
+        zipCode: '75001',
+        avatarUrl: '',
+        bannerUrl: '',
+        friendCount: 2,
+        createdAt: new Date('2026-03-02T00:00:00.000Z'),
+        pgpPublicKey: null
+      }
+    ]);
+    const limitMock = jest.fn().mockReturnValue({ lean: leanMock });
+    const sortMock = jest.fn().mockReturnValue({ limit: limitMock });
+    const selectMock = jest.fn().mockReturnValue({ sort: sortMock });
+    mockUser.find.mockReturnValue({ select: selectMock });
+
     const response = await request(app).post('/api/users/search').send({});
 
-    expect(response.status).toBe(400);
-    expect(response.body.error).toMatch(/at least one search criteria/i);
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(sortMock).toHaveBeenCalledWith({ friendCount: -1, createdAt: -1 });
+    expect(limitMock).toHaveBeenCalledWith(50);
+    expect(response.body.users).toHaveLength(2);
+    expect(response.body.users[0]).toMatchObject({
+      _id: 'u-top',
+      username: 'topfriend',
+      hasPGP: true
+    });
+    expect(response.body.users[1]).toMatchObject({
+      _id: 'u-low',
+      username: 'lowfriend',
+      hasPGP: false
+    });
   });
 
   it('returns ranked users using optional criteria and friend/work matching', async () => {

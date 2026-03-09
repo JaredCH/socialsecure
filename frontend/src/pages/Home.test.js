@@ -29,6 +29,12 @@ describe('Home landing page CTA behavior', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     userAPI.search.mockReset();
+    userAPI.search.mockResolvedValue({
+      data: {
+        users: [],
+        unsupportedCriteria: []
+      }
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -109,14 +115,43 @@ describe('Home landing page CTA behavior', () => {
     expect(container.querySelector('img[alt="Alice Johnson profile"]')).not.toBeNull();
   });
 
-  it('uses compact advanced controls with dropdowns, slider, and autosuggest wiring', async () => {
+  it('shows default results on initial load without filters', async () => {
     userAPI.search.mockResolvedValue({
       data: {
-        users: [],
+        users: [
+          {
+            _id: 'u-1',
+            username: 'mostfriends',
+            realName: 'Most Friends',
+            city: 'Seattle',
+            state: 'WA'
+          },
+          {
+            _id: 'u-2',
+            username: 'leastfriends',
+            realName: 'Least Friends',
+            city: 'Boise',
+            state: 'ID'
+          }
+        ],
         unsupportedCriteria: []
       }
     });
 
+    await renderHome({ isAuthenticated: false });
+    await act(async () => Promise.resolve());
+    await act(async () => Promise.resolve());
+
+    expect(userAPI.search).toHaveBeenCalledWith(expect.objectContaining({
+      firstName: '',
+      lastName: ''
+    }));
+    expect(container.textContent).toContain('2 shown');
+    expect(container.textContent).toContain('Most Friends');
+    expect(container.textContent).toContain('Least Friends');
+  });
+
+  it('uses compact advanced controls with dropdowns, slider, and autosuggest wiring', async () => {
     await renderHome({ isAuthenticated: false });
 
     expect(container.querySelector('select[name="state"]')).not.toBeNull();
