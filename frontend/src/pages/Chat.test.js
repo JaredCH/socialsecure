@@ -671,6 +671,47 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).toContain('View user social');
   });
 
+  it('renders sender names with enhanced legibility styling across themes', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            _id: 'm-legibility',
+            content: 'readable name',
+            userId: { _id: 'u2', username: 'buddy' },
+            senderNameColor: '#ff0000',
+            createdAt: '2024-01-01T00:00:00.000Z'
+          }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    const authorAction = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === '@buddy');
+    expect(authorAction).not.toBeUndefined();
+    expect(authorAction.className).toContain('text-[11px]');
+    expect(authorAction.className).toContain('font-bold');
+    expect(authorAction.className).toContain('normal-case');
+
+    const senderWrapper = authorAction.closest('span');
+    expect(senderWrapper).not.toBeNull();
+    expect(senderWrapper.style.textShadow).toContain('rgba');
+    expect(senderWrapper.style.color).toBe('rgb(255, 0, 0)');
+  });
+
   it('opens a direct message when loaded with a social deep link target', async () => {
     window.history.replaceState({}, '', '/chat?dm=u2');
 

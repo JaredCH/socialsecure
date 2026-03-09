@@ -125,6 +125,14 @@ function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu, longPre
   const senderNameColor = HEX_COLOR_REGEX.test(String(message.senderNameColor || ''))
     ? String(message.senderNameColor)
     : null;
+  const senderNameStyle = senderNameColor
+    ? {
+      color: senderNameColor,
+      textShadow: '0 0 1px rgba(15, 23, 42, 0.95), 0 0 1px rgba(248, 250, 252, 0.85)'
+    }
+    : {
+      textShadow: '0 0 1px rgba(15, 23, 42, 0.4)'
+    };
   const longPressTimerRef = useRef(null);
   const menuUser = message.userId?._id ? {
     _id: message.userId._id,
@@ -188,10 +196,10 @@ function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu, longPre
           ].join(' ')}
         >
           <header className="mb-0 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-normal">
-            <span className="truncate" style={senderNameColor ? { color: senderNameColor } : undefined}>
+            <span className="truncate" style={senderNameStyle}>
               <button
                 type="button"
-                className="truncate text-left hover:opacity-80"
+                className="truncate text-left text-[11px] font-bold normal-case hover:opacity-80"
                 onClick={(event) => triggerUserMenu(event)}
                 onContextMenu={(event) => triggerUserMenu(event)}
               >
