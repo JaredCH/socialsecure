@@ -44,6 +44,20 @@ const usernameAvailabilityLimiter = rateLimit({
   legacyHeaders: false,
   message: { available: false, error: 'Too many username availability checks. Please try again shortly.' }
 });
+const addressSuggestionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many address suggestion requests. Please try again shortly.' }
+});
+const addressApprovalResponseLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many address approval responses. Please try again later.' }
+});
 
 const isSafeHttpUrl = (value) => {
   try {
@@ -1240,7 +1254,7 @@ router.post('/encryption-password/lock', async (req, res) => {
 });
 
 // Update user profile
-router.get('/address-suggestions', authenticateToken, async (req, res) => {
+router.get('/address-suggestions', addressSuggestionLimiter, authenticateToken, async (req, res) => {
   try {
     const query = normalizeProfileOptionalValue(req.query.q || '');
     if (query.length < 3) {
@@ -1271,6 +1285,7 @@ router.get('/address-suggestions', authenticateToken, async (req, res) => {
 });
 
 router.post('/address-approval/respond', [
+  addressApprovalResponseLimiter,
   authenticateToken,
   body('requestId').isString().trim().notEmpty().withMessage('requestId is required'),
   body('decision').isIn(['approved', 'denied']).withMessage('decision must be approved or denied')
@@ -1358,7 +1373,7 @@ router.put('/profile', [
     .trim()
     .isLength({ max: 30 })
     .withMessage('Phone must be at most 30 characters')
-    .matches(/^(?:\+?[1-9]\d{7,14}|\(\d{3}\)\s\d{3}-\d{4})$/)
+    .matches(/^(?:\+1\d{10}|\+1[\s.-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})$/)
     .withMessage('Phone number format is invalid'),
   body('streetAddress').optional({ nullable: true }).isString().trim().isLength({ max: 200 }).withMessage('Home address must be at most 200 characters'),
   body('hobbies').optional({ nullable: true }).isArray({ max: 10 }).withMessage('Hobbies must be an array with at most 10 entries'),

@@ -136,7 +136,7 @@ const normalizePhoneForSubmission = (value) => {
   if (!digits) return '';
   const normalizedDigits = digits.startsWith('1') ? digits.slice(1, 11) : digits.slice(0, 10);
   if (normalizedDigits.length !== 10) {
-    return String(value || '').trim();
+    return '';
   }
   return `+1${normalizedDigits}`;
 };
@@ -671,7 +671,6 @@ function OnboardingWizard({
                     list={field.key === 'streetAddress' ? 'onboarding-address-suggestions' : undefined}
                     inputMode={field.key === 'phone' ? 'tel' : undefined}
                     maxLength={field.key === 'phone' ? 14 : undefined}
-                    pattern={field.key === 'phone' ? '^\\(\\d{3}\\) \\d{3}-\\d{4}$' : undefined}
                   />
                 )}
                 {field.key === 'streetAddress' && (
