@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const ONBOARDING_COMPLETE_STEP = 4;
 
 const resolveAdminProfile = () => {
   const defaultProfile = {
@@ -29,7 +30,8 @@ const ensureUniversalAdminAccount = async ({
   username,
   email,
   password,
-  encryptionPassword
+  encryptionPassword,
+  resetUsersOnInvalidOnboarding = false
 } = {}) => {
   const adminProfile = resolveAdminProfile();
   const normalizedUsername = String(username || '').trim().toLowerCase();
@@ -51,10 +53,10 @@ const ensureUniversalAdminAccount = async ({
   let adminUser = await User.findOne({ username: normalizedUsername });
   const now = new Date();
 
-  if (adminUser && adminUser.onboardingStatus !== 'completed') {
-    await User.deleteMany({});
+  if (adminUser && adminUser.onboardingStatus !== 'completed' && resetUsersOnInvalidOnboarding) {
+    const resetResult = await User.deleteMany({});
     adminUser = null;
-    console.warn('Universal ADMIN account onboarding state invalid. Reset all users and recreating ADMIN account.');
+    console.warn(`Universal ADMIN account onboarding state invalid. Reset ${resetResult?.deletedCount || 0} users and re-created ADMIN account.`);
   }
 
   if (!adminUser) {
@@ -73,7 +75,7 @@ const ensureUniversalAdminAccount = async ({
       registrationStatus: 'active',
       isAdmin: true,
       onboardingStatus: 'completed',
-      onboardingStep: 4,
+      onboardingStep: ONBOARDING_COMPLETE_STEP,
       mustResetPassword: false,
       encryptionPasswordHash,
       encryptionPasswordSetAt: encryptionPasswordHash ? now : null,
@@ -105,9 +107,9 @@ const ensureUniversalAdminAccount = async ({
     privilegesRepaired = true;
   }
 
-  if (adminUser.onboardingStatus !== 'completed' || adminUser.onboardingStep !== 4 || adminUser.mustResetPassword) {
+  if (adminUser.onboardingStatus !== 'completed' || adminUser.onboardingStep !== ONBOARDING_COMPLETE_STEP || adminUser.mustResetPassword) {
     adminUser.onboardingStatus = 'completed';
-    adminUser.onboardingStep = 4;
+    adminUser.onboardingStep = ONBOARDING_COMPLETE_STEP;
     adminUser.mustResetPassword = false;
     updated = true;
   }

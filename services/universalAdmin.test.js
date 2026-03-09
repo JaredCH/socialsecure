@@ -28,7 +28,8 @@ describe('services/universalAdmin', () => {
       username: 'ADMIN',
       email: 'admin@socialsecure.local',
       password: 'AdminPass123',
-      encryptionPassword: 'EncryptionPass123'
+      encryptionPassword: 'EncryptionPass123',
+      resetUsersOnInvalidOnboarding: true
     });
 
     expect(bcrypt.hash).toHaveBeenNthCalledWith(1, 'AdminPass123', 12);
@@ -68,7 +69,8 @@ describe('services/universalAdmin', () => {
       username: 'ADMIN',
       email: 'admin@socialsecure.local',
       password: 'AdminPass123',
-      encryptionPassword: 'EncryptionPass123'
+      encryptionPassword: 'EncryptionPass123',
+      resetUsersOnInvalidOnboarding: true
     });
 
     expect(bcrypt.hash).toHaveBeenCalledWith('EncryptionPass123', 12);
@@ -94,7 +96,8 @@ describe('services/universalAdmin', () => {
       username: 'ADMIN',
       email: 'admin@socialsecure.local',
       password: 'AdminPass123',
-      encryptionPassword: 'EncryptionPass123'
+      encryptionPassword: 'EncryptionPass123',
+      resetUsersOnInvalidOnboarding: true
     });
 
     expect(mockUser.deleteMany).toHaveBeenCalledWith({});
@@ -104,5 +107,35 @@ describe('services/universalAdmin', () => {
       onboardingStep: 4
     }));
     expect(result.created).toBe(true);
+  });
+
+  it('does not wipe users when onboarding reset flag is disabled', async () => {
+    const adminUser = {
+      realName: 'System Administrator',
+      isAdmin: true,
+      registrationStatus: 'active',
+      onboardingStatus: 'in_progress',
+      onboardingStep: 2,
+      mustResetPassword: true,
+      country: null,
+      zipCode: null,
+      encryptionPasswordHash: 'existing-hash',
+      save: jest.fn().mockResolvedValue(true)
+    };
+    mockUser.findOne.mockResolvedValueOnce(adminUser);
+
+    const result = await ensureUniversalAdminAccount({
+      username: 'ADMIN',
+      email: 'admin@socialsecure.local',
+      password: 'AdminPass123',
+      encryptionPassword: 'EncryptionPass123'
+    });
+
+    expect(mockUser.deleteMany).not.toHaveBeenCalled();
+    expect(adminUser.onboardingStatus).toBe('completed');
+    expect(adminUser.onboardingStep).toBe(4);
+    expect(adminUser.mustResetPassword).toBe(false);
+    expect(adminUser.save).toHaveBeenCalled();
+    expect(result.created).toBe(false);
   });
 });

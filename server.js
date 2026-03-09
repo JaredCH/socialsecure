@@ -168,7 +168,8 @@ mongoose.connect(mongoUri, {
       username: UNIVERSAL_ADMIN_USERNAME,
       email: UNIVERSAL_ADMIN_EMAIL,
       password: UNIVERSAL_ADMIN_PASSWORD,
-      encryptionPassword: UNIVERSAL_ADMIN_ENCRYPTION_PASSWORD
+      encryptionPassword: UNIVERSAL_ADMIN_ENCRYPTION_PASSWORD,
+      resetUsersOnInvalidOnboarding: true
     });
   } catch (error) {
     console.error('Failed to ensure universal ADMIN account:', error);
