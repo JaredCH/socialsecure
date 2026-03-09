@@ -115,7 +115,7 @@ const normalizeToStandardCategory = (raw = '') => {
   if (lower.includes('entertain') || lower.includes('movie') || lower.includes('music') || lower.includes('arts')) return 'entertainment';
   if (lower.includes('politic') || lower.includes('election') || lower.includes('government') || lower.includes('congress')) return 'politics';
   if (lower.includes('gaming') || lower.includes('video game') || lower.includes('esport')) return 'gaming';
-  if (lower.includes('artificial intelligence') || lower.includes('machine learning') || lower.includes(' ai ')) return 'ai';
+  if (lower.includes('artificial intelligence') || lower.includes('machine learning') || /\bai\b/.test(lower)) return 'ai';
   if (lower.includes('world') || lower.includes('international') || lower.includes('global')) return 'world';
   return 'general';
 };
