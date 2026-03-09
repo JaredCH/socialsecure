@@ -70,13 +70,16 @@ describe('Auth registration minimal identity flow', () => {
     expect(mockUserModel).toHaveBeenCalledWith(expect.objectContaining({
       realName: 'New User',
       username: 'new_user',
-      email: 'new@example.com'
+      email: 'new@example.com',
+      mustResetPassword: false
     }));
     expect(mockUserModel.mock.calls[0][0].passwordHash).toEqual(expect.any(String));
     expect(response.body.user).toMatchObject({
       username: 'new_user',
-      realName: 'New User'
+      realName: 'New User',
+      email: 'new@example.com'
     });
+    expect(response.body.requiresPasswordReset).toBe(false);
   });
 
   it('rejects registration when no name information is provided', async () => {

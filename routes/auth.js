@@ -9,6 +9,7 @@ const User = require('../models/User');
 const Session = require('../models/Session');
 const SecurityEvent = require('../models/SecurityEvent');
 const DeviceKey = require('../models/DeviceKey');
+const { createNotification } = require('../services/notifications');
 const {
   SOCIAL_THEME_PRESETS,
   SOCIAL_ACCENT_TOKENS,
@@ -75,6 +76,7 @@ const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().rep
 const isValidZipCode = (zipCode) => /^(?:\d{5}(?:-\d{4})?|[A-Z]\d[A-Z]\d[A-Z]\d)$/.test(zipCode);
 const normalizeLocationValue = (value) => (typeof value === 'string' ? value.trim() : '');
 const normalizeProfileOptionalValue = (value) => (typeof value === 'string' ? value.trim() : '');
+const normalizeAddressForMatch = (value) => normalizeProfileOptionalValue(value).toLowerCase().replace(/\s+/g, ' ');
 const generateTemporaryPassword = () => crypto.randomBytes(24).toString('base64url');
 const normalizeHobbies = (value) => {
   if (Array.isArray(value)) {
@@ -125,6 +127,31 @@ const getPgpPublicKeyValidationError = (publicKey) => {
   }
 
   return null;
+};
+
+const toAuthenticatedUserProfile = (user) => {
+  const pendingRequests = Array.isArray(user?.addressApprovalRequests)
+    ? user.addressApprovalRequests
+      .filter((request) => request && request.status === 'pending')
+      .map((request) => ({
+        requestId: String(request._id),
+        requesterId: String(request.requesterId || ''),
+        requesterUsername: request.requesterUsername || '',
+        requesterRealName: request.requesterRealName || '',
+        address: request.address || '',
+        requestedAt: request.requestedAt || null
+      }))
+    : [];
+
+  return {
+    ...user.toPublicProfile(),
+    email: user.email || '',
+    pendingStreetAddress: user.pendingStreetAddress || '',
+    pendingStreetAddressStatus: user.pendingStreetAddressStatus || 'none',
+    pendingStreetAddressRequestedAt: user.pendingStreetAddressRequestedAt || null,
+    pendingStreetAddressReviewedAt: user.pendingStreetAddressReviewedAt || null,
+    addressApprovalRequests: pendingRequests
+  };
 };
 
 // Generate JWT token
@@ -438,7 +465,7 @@ router.post('/register', [
       profileFieldVisibility: normalizedProfileFieldVisibility,
       locationLastUpdatedAt: new Date(),
       registrationStatus: 'active',
-      mustResetPassword: !password,
+      mustResetPassword: false,
       referralCode: referralCode || require('crypto').randomBytes(4).toString('hex')
     });
 
@@ -471,7 +498,7 @@ router.post('/register', [
 
     res.status(201).json({
       message: 'Registration successful',
-      user: user.toPublicProfile(),
+      user: toAuthenticatedUserProfile(user),
       token,
       requiresPasswordReset: !!user.mustResetPassword,
       expiresIn: 86400 // 24 hours in seconds
@@ -545,7 +572,7 @@ router.post('/login', [
 
     res.json({
       message: 'Login successful',
-      user: user.toPublicProfile(),
+      user: toAuthenticatedUserProfile(user),
       token,
       requiresPasswordReset: !!user.mustResetPassword,
       expiresIn: 86400
@@ -564,7 +591,7 @@ router.get('/me', async (req, res) => {
       return res.status(auth.status).json({ error: auth.error });
     }
 
-    res.json({ user: auth.user.toPublicProfile() });
+    res.json({ user: toAuthenticatedUserProfile(auth.user) });
   } catch (error) {
     console.error('Auth error:', error);
     res.status(401).json({ error: 'Invalid token' });
@@ -619,7 +646,7 @@ router.post('/password/change', [
     return res.json({
       success: true,
       message: 'Password changed successfully',
-      user: user.toPublicProfile()
+      user: toAuthenticatedUserProfile(user)
     });
   } catch (error) {
     console.error('Change password error:', error);
@@ -1213,6 +1240,116 @@ router.post('/encryption-password/lock', async (req, res) => {
 });
 
 // Update user profile
+router.get('/address-suggestions', authenticateToken, async (req, res) => {
+  try {
+    const query = normalizeProfileOptionalValue(req.query.q || '');
+    if (query.length < 3) {
+      return res.json({ suggestions: [] });
+    }
+
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^${escaped}`, 'i');
+    const users = await User.find({
+      streetAddress: { $regex: regex },
+      registrationStatus: 'active'
+    })
+      .select('streetAddress')
+      .limit(8)
+      .lean();
+
+    const deduped = [...new Set(
+      users
+        .map((candidate) => normalizeProfileOptionalValue(candidate.streetAddress))
+        .filter(Boolean)
+    )];
+
+    return res.json({ suggestions: deduped });
+  } catch (error) {
+    console.error('Address suggestion lookup error:', error);
+    return res.status(500).json({ error: 'Failed to load address suggestions' });
+  }
+});
+
+router.post('/address-approval/respond', [
+  authenticateToken,
+  body('requestId').isString().trim().notEmpty().withMessage('requestId is required'),
+  body('decision').isIn(['approved', 'denied']).withMessage('decision must be approved or denied')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { requestId, decision } = req.body;
+    const owner = await User.findById(req.user._id);
+    if (!owner) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const request = owner.addressApprovalRequests.find((entry) => String(entry._id) === String(requestId));
+    if (!request) {
+      return res.status(404).json({ error: 'Address approval request not found' });
+    }
+    if (request.status !== 'pending') {
+      return res.status(400).json({ error: 'Address approval request was already reviewed' });
+    }
+
+    const requester = await User.findById(request.requesterId);
+    if (!requester) {
+      request.status = 'denied';
+      request.respondedAt = new Date();
+      await owner.save();
+      return res.status(404).json({ error: 'Requesting user no longer exists' });
+    }
+
+    request.status = decision;
+    request.respondedAt = new Date();
+
+    if (decision === 'approved') {
+      requester.streetAddress = request.address;
+      requester.pendingStreetAddress = '';
+      requester.pendingStreetAddressStatus = 'approved';
+      requester.pendingStreetAddressRequestedAt = null;
+      requester.pendingStreetAddressReviewedAt = new Date();
+      requester.pendingStreetAddressReviewerId = owner._id;
+      requester.updatedAt = new Date();
+      await requester.save();
+    } else {
+      requester.pendingStreetAddress = '';
+      requester.pendingStreetAddressStatus = 'denied';
+      requester.pendingStreetAddressRequestedAt = null;
+      requester.pendingStreetAddressReviewedAt = new Date();
+      requester.pendingStreetAddressReviewerId = owner._id;
+      requester.updatedAt = new Date();
+      await requester.save();
+    }
+
+    owner.updatedAt = new Date();
+    await owner.save();
+
+    await createNotification({
+      recipientId: requester._id,
+      senderId: owner._id,
+      type: 'system',
+      title: decision === 'approved' ? 'Home address approved' : 'Home address denied',
+      body: decision === 'approved'
+        ? 'Your pending home address was approved and is now saved.'
+        : 'Your pending home address was denied. You can update and submit a different address at any time.',
+      data: { url: '/onboarding' }
+    });
+
+    return res.json({
+      success: true,
+      decision,
+      user: toAuthenticatedUserProfile(owner)
+    });
+  } catch (error) {
+    console.error('Address approval response error:', error);
+    return res.status(500).json({ error: 'Failed to respond to address request' });
+  }
+});
+
 router.put('/profile', [
   body('realName').optional().trim().notEmpty().withMessage('Real name cannot be empty'),
   body('phone')
@@ -1221,7 +1358,7 @@ router.put('/profile', [
     .trim()
     .isLength({ max: 30 })
     .withMessage('Phone must be at most 30 characters')
-    .matches(/^\+?[0-9()\-\s.]*$/)
+    .matches(/^(?:\+?[1-9]\d{7,14}|\(\d{3}\)\s\d{3}-\d{4})$/)
     .withMessage('Phone number format is invalid'),
   body('streetAddress').optional({ nullable: true }).isString().trim().isLength({ max: 200 }).withMessage('Home address must be at most 200 characters'),
   body('hobbies').optional({ nullable: true }).isArray({ max: 10 }).withMessage('Hobbies must be an array with at most 10 entries'),
@@ -1361,6 +1498,8 @@ router.put('/profile', [
       return res.status(404).json({ error: 'User not found' });
     }
 
+    let addressPendingApproval = false;
+
     // Update allowed fields
     const { realName, phone, streetAddress, hobbies, ageGroup, sex, race, profileFieldVisibility, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme, socialPagePreferences } = req.body;
     const now = Date.now();
@@ -1407,7 +1546,75 @@ router.put('/profile', [
       user.phone = normalizeProfileOptionalValue(phone);
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'streetAddress')) {
-      user.streetAddress = normalizeProfileOptionalValue(streetAddress);
+      const requestedAddress = normalizeProfileOptionalValue(streetAddress);
+      if (!requestedAddress) {
+        user.streetAddress = '';
+        user.pendingStreetAddress = '';
+        user.pendingStreetAddressStatus = 'none';
+        user.pendingStreetAddressRequestedAt = null;
+        user.pendingStreetAddressReviewedAt = null;
+        user.pendingStreetAddressReviewerId = null;
+      } else {
+        const requestedAddressKey = normalizeAddressForMatch(requestedAddress);
+        const currentAddressKey = normalizeAddressForMatch(user.streetAddress);
+        if (requestedAddressKey && requestedAddressKey !== currentAddressKey) {
+          const existingResident = await User.findOne({
+            _id: { $ne: user._id },
+            registrationStatus: 'active',
+            streetAddress: { $regex: new RegExp(`^${requestedAddress.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+          });
+
+          if (existingResident) {
+            addressPendingApproval = true;
+            user.pendingStreetAddress = requestedAddress;
+            user.pendingStreetAddressStatus = 'pending';
+            user.pendingStreetAddressRequestedAt = new Date();
+            user.pendingStreetAddressReviewedAt = null;
+            user.pendingStreetAddressReviewerId = null;
+
+            const now = new Date();
+            const existingRequests = Array.isArray(existingResident.addressApprovalRequests)
+              ? existingResident.addressApprovalRequests
+              : [];
+            const duplicatePendingRequest = existingRequests.find((request) =>
+              String(request.requesterId) === String(user._id)
+              && normalizeAddressForMatch(request.address) === requestedAddressKey
+              && request.status === 'pending'
+            );
+
+            if (!duplicatePendingRequest) {
+              existingResident.addressApprovalRequests.push({
+                requesterId: user._id,
+                requesterUsername: user.username || '',
+                requesterRealName: user.realName || '',
+                address: requestedAddress,
+                status: 'pending',
+                requestedAt: now
+              });
+              existingResident.updatedAt = now;
+              await existingResident.save();
+
+              await createNotification({
+                recipientId: existingResident._id,
+                senderId: user._id,
+                type: 'system',
+                title: 'Address approval requested',
+                body: `${user.username || 'A user'} is requesting approval to use your home address.`,
+                data: { url: '/settings#account' }
+              });
+            }
+          } else {
+            user.streetAddress = requestedAddress;
+            user.pendingStreetAddress = '';
+            user.pendingStreetAddressStatus = 'none';
+            user.pendingStreetAddressRequestedAt = null;
+            user.pendingStreetAddressReviewedAt = null;
+            user.pendingStreetAddressReviewerId = null;
+          }
+        } else {
+          user.streetAddress = requestedAddress;
+        }
+      }
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'hobbies')) {
       user.hobbies = normalizeHobbies(hobbies);
@@ -1473,8 +1680,11 @@ router.put('/profile', [
     await user.save();
 
     res.json({ 
-      message: 'Profile updated successfully',
-      user: user.toPublicProfile() 
+      message: addressPendingApproval
+        ? 'Profile updated. Your home address is pending approval from an existing resident.'
+        : 'Profile updated successfully',
+      addressPendingApproval,
+      user: toAuthenticatedUserProfile(user)
     });
   } catch (error) {
     console.error('Profile update error:', error);

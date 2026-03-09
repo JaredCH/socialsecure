@@ -31,9 +31,22 @@ const ADDITIONAL_INFO_FIELDS = [
   { key: 'streetAddress', label: 'Home address', type: 'text', placeholder: '123 Main St' },
   { key: 'phone', label: 'Phone number', type: 'tel', placeholder: '+1 555-123-4567' },
   { key: 'ageGroup', label: 'Age', type: 'text', placeholder: '25-34' },
-  { key: 'sex', label: 'Sex', type: 'text', placeholder: 'Optional' },
-  { key: 'race', label: 'Race', type: 'text', placeholder: 'Optional' },
+  { key: 'sex', label: 'Sex', type: 'select', placeholder: 'Select' },
+  { key: 'race', label: 'Race', type: 'select', placeholder: 'Select' },
   { key: 'hobbies', label: 'Hobbies', type: 'text', placeholder: 'Music, travel, cooking' }
+];
+const SEX_OPTIONS = ['Female', 'Male', 'Non-binary', 'Intersex', 'Prefer not to say', 'Other'];
+const RACE_OPTIONS = [
+  'American Indian or Alaska Native',
+  'Asian',
+  'Black or African American',
+  'Hispanic or Latino',
+  'Middle Eastern or North African',
+  'Native Hawaiian or Pacific Islander',
+  'White',
+  'Multiracial',
+  'Prefer not to say',
+  'Other'
 ];
 const SEED_WORD_BANK = [
   'amber', 'anchor', 'apex', 'apple', 'arrow', 'atlas', 'aurora', 'autumn', 'badge', 'bamboo', 'beacon', 'binary',
@@ -105,6 +118,29 @@ export const createRecoveryPhraseQrCodeDataUrl = async (phrase) => {
   });
 };
 
+const formatPhoneForInput = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  const normalizedDigits = digits.startsWith('1') ? digits.slice(1, 11) : digits.slice(0, 10);
+  const area = normalizedDigits.slice(0, 3);
+  const prefix = normalizedDigits.slice(3, 6);
+  const line = normalizedDigits.slice(6, 10);
+
+  if (!area) return '';
+  if (!prefix) return `(${area}`;
+  if (!line) return `(${area}) ${prefix}`;
+  return `(${area}) ${prefix}-${line}`;
+};
+
+const normalizePhoneForSubmission = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  const normalizedDigits = digits.startsWith('1') ? digits.slice(1, 11) : digits.slice(0, 10);
+  if (normalizedDigits.length !== 10) {
+    return String(value || '').trim();
+  }
+  return `+1${normalizedDigits}`;
+};
+
 function OnboardingWizard({
   user,
   onboarding,
@@ -143,10 +179,45 @@ function OnboardingWizard({
   }, [onboarding?.currentStep]);
 
   const [step, setStep] = useState(initialStep);
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
 
   useEffect(() => {
     setStep(initialStep);
   }, [initialStep]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    setAdditionalInfo((prev) => (prev.email ? prev : { ...prev, email: user.email }));
+  }, [user?.email]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const query = additionalInfo.streetAddress.trim();
+    if (query.length < 3) {
+      setAddressSuggestions([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await authAPI.getAddressSuggestions(query);
+        if (!cancelled) {
+          setAddressSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
+        }
+      } catch {
+        if (!cancelled) {
+          setAddressSuggestions([]);
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [additionalInfo.streetAddress]);
 
   useEffect(() => {
     let cancelled = false;
@@ -325,9 +396,10 @@ function OnboardingWizard({
   };
 
   const handleAdditionalInfoChange = (field, value) => {
+    const nextValue = field === 'phone' ? formatPhoneForInput(value) : value;
     setAdditionalInfo((prev) => ({
       ...prev,
-      [field]: value
+      [field]: nextValue
     }));
   };
 
@@ -346,7 +418,7 @@ function OnboardingWizard({
     setSubmitting(true);
     const normalizedAdditionalInfo = {
       streetAddress: additionalInfo.streetAddress.trim(),
-      phone: additionalInfo.phone.trim(),
+      phone: normalizePhoneForSubmission(additionalInfo.phone),
       ageGroup: additionalInfo.ageGroup.trim(),
       sex: additionalInfo.sex.trim(),
       race: additionalInfo.race.trim(),
@@ -359,11 +431,15 @@ function OnboardingWizard({
     };
 
     try {
-      await authAPI.updateProfile(normalizedAdditionalInfo);
+      const { data } = await authAPI.updateProfile(normalizedAdditionalInfo);
       await authAPI.completeOnboarding(onboarding?.securityPreferences || DEFAULT_SECURITY_PREFERENCES);
       await onProgressSaved();
       await onCompleted();
-      toast.success('Onboarding completed');
+      if (data?.addressPendingApproval) {
+        toast.success('Onboarding completed. Your home address is pending approval.');
+      } else {
+        toast.success('Onboarding completed');
+      }
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to save additional information');
     } finally {
@@ -574,13 +650,37 @@ function OnboardingWizard({
             {ADDITIONAL_INFO_FIELDS.map((field) => (
               <label key={field.key} className="block text-sm">
                 {field.label}
-                <input
-                  type={field.type}
-                  value={additionalInfo[field.key]}
-                  onChange={(event) => handleAdditionalInfoChange(field.key, event.target.value)}
-                  className="w-full border rounded p-2 mt-1"
-                  placeholder={field.placeholder}
-                />
+                {field.type === 'select' ? (
+                  <select
+                    value={additionalInfo[field.key]}
+                    onChange={(event) => handleAdditionalInfoChange(field.key, event.target.value)}
+                    className="w-full border rounded p-2 mt-1"
+                  >
+                    <option value="">{field.placeholder}</option>
+                    {(field.key === 'sex' ? SEX_OPTIONS : RACE_OPTIONS).map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={field.type}
+                    value={additionalInfo[field.key]}
+                    onChange={(event) => handleAdditionalInfoChange(field.key, event.target.value)}
+                    className="w-full border rounded p-2 mt-1"
+                    placeholder={field.placeholder}
+                    list={field.key === 'streetAddress' ? 'onboarding-address-suggestions' : undefined}
+                    inputMode={field.key === 'phone' ? 'tel' : undefined}
+                    maxLength={field.key === 'phone' ? 14 : undefined}
+                    pattern={field.key === 'phone' ? '^\\(\\d{3}\\) \\d{3}-\\d{4}$' : undefined}
+                  />
+                )}
+                {field.key === 'streetAddress' && (
+                  <datalist id="onboarding-address-suggestions">
+                    {addressSuggestions.map((suggestion) => (
+                      <option key={suggestion} value={suggestion} />
+                    ))}
+                  </datalist>
+                )}
                 {field.key === 'hobbies' && (
                   <p className="mt-1 text-xs text-gray-500">Use commas between hobbies (up to 10).</p>
                 )}

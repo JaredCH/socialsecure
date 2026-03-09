@@ -147,6 +147,7 @@ function UserSettings({
   const [sessions, setSessions] = useState([]);
   const [devices, setDevices] = useState([]);
   const [events, setEvents] = useState([]);
+  const [respondingAddressRequestId, setRespondingAddressRequestId] = useState('');
 
   const hasEncryptionPassword = !!encryptionPasswordStatus?.hasEncryptionPassword;
   const profileUserId = user?._id || null;
@@ -526,6 +527,21 @@ function UserSettings({
     }
   };
 
+  const handleAddressApprovalDecision = async (requestId, decision) => {
+    setRespondingAddressRequestId(requestId);
+    try {
+      const { data } = await authAPI.respondToAddressApproval(requestId, decision);
+      if (data?.user && typeof setUser === 'function') {
+        setUser(data.user);
+      }
+      toast.success(decision === 'approved' ? 'Address approved' : 'Address denied');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to respond to address request');
+    } finally {
+      setRespondingAddressRequestId('');
+    }
+  };
+
   if (!user) {
     return <div className="bg-white p-6 rounded shadow">Loading profile...</div>;
   }
@@ -585,6 +601,43 @@ function UserSettings({
             {user.mustResetPassword ? (
               <div className="mt-3 text-sm text-red-800 bg-red-50 border border-red-200 rounded p-3" role="alert">
                 Your password was reset by an administrator. You must set a new password now.
+              </div>
+            ) : null}
+            {user.pendingStreetAddressStatus === 'pending' && user.pendingStreetAddress ? (
+              <div className="mt-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3" role="status">
+                Your address <span className="font-medium">{user.pendingStreetAddress}</span> is pending approval from an existing resident.
+              </div>
+            ) : null}
+            {Array.isArray(user.addressApprovalRequests) && user.addressApprovalRequests.length > 0 ? (
+              <div className="mt-4 space-y-2 rounded border border-gray-200 bg-gray-50 p-3">
+                <p className="text-sm font-semibold text-gray-900">Address approval requests</p>
+                {user.addressApprovalRequests.map((request) => (
+                  <div key={request.requestId} className="rounded border border-gray-200 bg-white p-3 text-sm">
+                    <p className="text-gray-800">
+                      <span className="font-medium">{request.requesterRealName || request.requesterUsername || 'A user'}</span>
+                      {' '}requested to register with your home address:
+                    </p>
+                    <p className="mt-1 font-medium text-gray-900">{request.address}</p>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        disabled={respondingAddressRequestId === request.requestId}
+                        onClick={() => handleAddressApprovalDecision(request.requestId, 'approved')}
+                        className="rounded bg-green-600 px-3 py-1.5 text-white disabled:opacity-50"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={respondingAddressRequestId === request.requestId}
+                        onClick={() => handleAddressApprovalDecision(request.requestId, 'denied')}
+                        className="rounded bg-red-600 px-3 py-1.5 text-white disabled:opacity-50"
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : null}
             <form onSubmit={handleSaveAccountPassword} className="mt-4 space-y-3">

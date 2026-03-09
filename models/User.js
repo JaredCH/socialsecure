@@ -124,6 +124,67 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  pendingStreetAddress: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  pendingStreetAddressStatus: {
+    type: String,
+    enum: ['none', 'pending', 'approved', 'denied'],
+    default: 'none'
+  },
+  pendingStreetAddressRequestedAt: {
+    type: Date,
+    default: null
+  },
+  pendingStreetAddressReviewedAt: {
+    type: Date,
+    default: null
+  },
+  pendingStreetAddressReviewerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  addressApprovalRequests: {
+    type: [{
+      requesterId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+      },
+      requesterUsername: {
+        type: String,
+        trim: true,
+        default: ''
+      },
+      requesterRealName: {
+        type: String,
+        trim: true,
+        default: ''
+      },
+      address: {
+        type: String,
+        trim: true,
+        required: true
+      },
+      status: {
+        type: String,
+        enum: ['pending', 'approved', 'denied'],
+        default: 'pending'
+      },
+      requestedAt: {
+        type: Date,
+        default: Date.now
+      },
+      respondedAt: {
+        type: Date,
+        default: null
+      }
+    }],
+    default: []
+  },
   worksAt: {
     type: String,
     trim: true,
