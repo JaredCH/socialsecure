@@ -66,6 +66,20 @@ describe('User search routes', () => {
                 bio: 'Runner and reader',
                 avatarUrl: 'https://cdn.example.com/avatar-u1.jpg',
                 bannerUrl: 'https://cdn.example.com/banner-u1.jpg',
+                streetAddress: 'Austin, TX',
+                worksAt: 'Acme Corp',
+                hobbies: ['hiking', 'chess'],
+                ageGroup: '25-34',
+                sex: 'female',
+                race: 'other',
+                profileFieldVisibility: {
+                  streetAddress: 'public',
+                  worksAt: 'public',
+                  hobbies: 'public',
+                  ageGroup: 'public',
+                  sex: 'secure',
+                  race: 'public'
+                },
                 friendCount: 10,
                 createdAt: new Date('2026-03-01T00:00:00.000Z'),
                 pgpPublicKey: 'pgp'
@@ -83,6 +97,20 @@ describe('User search routes', () => {
                 bio: 'Cycling and games',
                 avatarUrl: '',
                 bannerUrl: '',
+                streetAddress: 'Dallas, TX',
+                worksAt: 'Other Company',
+                hobbies: ['music'],
+                ageGroup: '35-44',
+                sex: 'male',
+                race: 'white',
+                profileFieldVisibility: {
+                  streetAddress: 'secure',
+                  worksAt: 'social',
+                  hobbies: 'social',
+                  ageGroup: 'social',
+                  sex: 'social',
+                  race: 'social'
+                },
                 friendCount: 2,
                 createdAt: new Date('2026-03-02T00:00:00.000Z'),
                 pgpPublicKey: null
@@ -131,6 +159,8 @@ describe('User search routes', () => {
       city: 'Austin',
       worksAt: 'Acme',
       hobbies: 'hiking',
+      streetAddress: 'Austin',
+      race: 'other',
       friendsOfUser: 'sourceuser'
     });
 
@@ -145,6 +175,7 @@ describe('User search routes', () => {
       bannerUrl: 'https://cdn.example.com/banner-u1.jpg'
     });
     expect(response.body.users[0].rankingScore).toBeGreaterThan(0);
+    expect(response.body.unsupportedCriteria).toEqual([]);
   });
 
   it('keeps legacy GET search working for q-based lookups', async () => {

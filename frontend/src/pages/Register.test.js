@@ -76,6 +76,8 @@ describe('Register mobile-first layout', () => {
     expect(container.textContent).toContain('Profile details');
     expect(container.textContent).toContain('Sign-in details');
     expect(container.textContent).toContain('Location');
+    expect(container.textContent).toContain('Encryption setup (single step)');
+    expect(container.textContent).toContain('Optional panel: Home & work');
     expect(container.textContent).toContain('Referral');
   });
 
@@ -98,13 +100,17 @@ describe('Register mobile-first layout', () => {
     await renderRegister();
 
     const passwordInput = container.querySelector('input[name="password"]');
+    const encryptionPasswordInput = container.querySelector('input[name="encryptionPassword"]');
+    const confirmEncryptionPasswordInput = container.querySelector('input[name="confirmEncryptionPassword"]');
 
     expect(container.textContent).toContain('Strength: Weak');
     expect(container.textContent).toContain('Complete all password requirements to enable account creation.');
 
     await setInputValue(passwordInput, 'StrongPass1');
+    await setInputValue(encryptionPasswordInput, 'StrongPass1');
+    await setInputValue(confirmEncryptionPasswordInput, 'StrongPass1');
 
     expect(container.textContent).toContain('Strength: Strong');
-    expect(container.textContent).toContain('Password requirements satisfied.');
+    expect(container.textContent).toContain('Password and encryption setup requirements satisfied.');
   });
 });
