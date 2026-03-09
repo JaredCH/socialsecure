@@ -5,7 +5,7 @@ import { authAPI, evaluateRegisterPassword } from '../utils/api';
 import { unlockOrCreateVault } from '../utils/e2ee';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
 const MAX_PGP_PUBLIC_KEY_LENGTH = 20000;
 const PGP_PUBLIC_KEY_BEGIN = '-----BEGIN PGP PUBLIC KEY BLOCK-----';
@@ -15,18 +15,16 @@ const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
 const STEP_LABELS = [
   'Encryption & PGP Setup',
   'Recovery Kit Seed Phrase',
-  'Security Preferences',
-  'Finish'
+  'Additional Information'
 ];
-export const SESSION_TIMEOUT_OPTIONS = [
-  { value: 'per_message', label: 'Per message - require password' },
-  { value: '10', label: '10 minutes' },
-  { value: '30', label: '30 minutes' },
-  { value: '60', label: '60 minutes' },
-  { value: '120', label: '2 hours' },
-  { value: '240', label: '4 hours' },
-  { value: '360', label: '6 Hours' },
-  { value: '1440', label: 'Once Daily' }
+const DEFAULT_SECURITY_PREFERENCES = {
+  loginNotifications: true,
+  sessionTimeout: 60,
+  requirePasswordForSensitive: true
+};
+export const INFO_VISIBILITY_OPTIONS = [
+  { value: 'social', label: 'Social level' },
+  { value: 'secure', label: 'Secure level' }
 ];
 const SEED_WORD_BANK = [
   'amber', 'anchor', 'apex', 'apple', 'arrow', 'atlas', 'aurora', 'autumn', 'badge', 'bamboo', 'beacon', 'binary',
@@ -88,16 +86,6 @@ export const createRecoveryPhraseQrCodeDataUrl = async (phrase) => {
   });
 };
 
-export const getSessionTimeoutSelectValue = (preferences) => {
-  if (preferences?.requirePasswordForSensitive && preferences?.sessionTimeout === 5) {
-    return 'per_message';
-  }
-
-  const timeoutValue = String(preferences?.sessionTimeout ?? '');
-  const hasMatchingOption = SESSION_TIMEOUT_OPTIONS.some((option) => option.value === timeoutValue);
-  return hasMatchingOption ? timeoutValue : '60';
-};
-
 function OnboardingWizard({
   user,
   onboarding,
@@ -112,13 +100,24 @@ function OnboardingWizard({
   const [generatedPrivateKey, setGeneratedPrivateKey] = useState('');
   const [seedPhrase, setSeedPhrase] = useState('');
   const [seedPhraseQrDataUrl, setSeedPhraseQrDataUrl] = useState('');
-  const [securityPreferences, setSecurityPreferences] = useState(
-    onboarding?.securityPreferences || {
-      loginNotifications: true,
-      sessionTimeout: 60,
-      requirePasswordForSensitive: true
+  const [additionalInfo, setAdditionalInfo] = useState({
+    streetAddress: '',
+    phone: '',
+    email: user?.email || '',
+    ageGroup: '',
+    sex: '',
+    race: '',
+    hobbies: '',
+    profileFieldVisibility: {
+      streetAddress: 'social',
+      phone: 'social',
+      email: 'social',
+      ageGroup: 'social',
+      sex: 'social',
+      race: 'social',
+      hobbies: 'social'
     }
-  );
+  });
 
   const initialStep = useMemo(() => {
     return resolveInitialStep(onboarding?.currentStep);
@@ -300,40 +299,48 @@ function OnboardingWizard({
     }
   };
 
+  const handleAdditionalInfoChange = (field, value) => {
+    setAdditionalInfo((prev) => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleAdditionalInfoVisibilityChange = (field, value) => {
+    setAdditionalInfo((prev) => ({
+      ...prev,
+      profileFieldVisibility: {
+        ...prev.profileFieldVisibility,
+        [field]: value
+      }
+    }));
+  };
+
   const handleStepThree = async (event) => {
     event.preventDefault();
     setSubmitting(true);
-    const normalizedSecurityPreferences = {
-      ...securityPreferences,
-      sessionTimeout: !securityPreferences.requirePasswordForSensitive && securityPreferences.sessionTimeout === 5
-        ? 10
-        : securityPreferences.sessionTimeout
+    const normalizedAdditionalInfo = {
+      streetAddress: additionalInfo.streetAddress.trim(),
+      phone: additionalInfo.phone.trim(),
+      ageGroup: additionalInfo.ageGroup.trim(),
+      sex: additionalInfo.sex.trim(),
+      race: additionalInfo.race.trim(),
+      hobbies: additionalInfo.hobbies
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .slice(0, 10),
+      profileFieldVisibility: additionalInfo.profileFieldVisibility
     };
 
     try {
-      await authAPI.updateOnboardingProgress(3, {
-        securityPreferences: normalizedSecurityPreferences
-      });
+      await authAPI.updateProfile(normalizedAdditionalInfo);
+      await authAPI.completeOnboarding(onboarding?.securityPreferences || DEFAULT_SECURITY_PREFERENCES);
       await onProgressSaved();
-      setStep(4);
-      toast.success('Step 3 complete');
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to save security preferences');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleStepFour = async (event) => {
-    event.preventDefault();
-    setSubmitting(true);
-
-    try {
-      await authAPI.completeOnboarding(securityPreferences);
       await onCompleted();
-      toast.success('Security onboarding completed');
+      toast.success('Onboarding completed');
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to complete onboarding');
+      toast.error(error.response?.data?.error || 'Failed to save additional information');
     } finally {
       setSubmitting(false);
     }
@@ -364,7 +371,7 @@ function OnboardingWizard({
     <div className="max-w-2xl mx-auto bg-white rounded-lg shadow p-6">
       <h1 className="text-2xl font-semibold text-gray-900">Security Onboarding</h1>
       <p className="text-sm text-gray-600 mt-1">
-        Complete all 4 steps to unlock Feed, Chat, and Market features.
+        Complete all 3 steps to unlock Feed, Chat, and Market features.
       </p>
 
       {stepIndicator}
@@ -373,9 +380,9 @@ function OnboardingWizard({
 
       {step === 1 && (
         <form onSubmit={handleStepOne} className="space-y-4">
-          <h2 className="text-lg font-medium">Step 1: Encryption Password & PGP Setup</h2>
+          <h2 className="text-lg font-medium">Step 1: Encryption Setup</h2>
           <p className="text-sm text-gray-600">
-            Set your encryption password and configure PGP. Paste a BYOPGP public key, or leave it blank to generate one locally.
+            Add your encryption password and bring your own PGP public key. If you leave the key blank, we generate one locally.
           </p>
 
           {user?.hasEncryptionPassword ? (
@@ -449,9 +456,9 @@ function OnboardingWizard({
 
       {step === 2 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-medium">Step 2: Recovery Kit Seed Phrase</h2>
+          <h2 className="text-lg font-medium">Step 2: Recovery Seeds</h2>
           <p className="text-sm text-gray-600">
-            Generate and save your 12-word recovery phrase. Keep it private and offline.
+            Generate and save your 12-word recovery seed phrase. Keep it private and offline.
           </p>
 
           {generatedPrivateKey ? (
@@ -516,71 +523,74 @@ function OnboardingWizard({
 
       {step === 3 && (
         <form onSubmit={handleStepThree} className="space-y-4">
-          <h2 className="text-lg font-medium">Step 3: Security Preferences</h2>
-          <p className="text-sm text-gray-600">Set baseline preferences for account protection.</p>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={securityPreferences.loginNotifications}
-              onChange={(event) => setSecurityPreferences((prev) => ({
-                ...prev,
-                loginNotifications: event.target.checked
-              }))}
-            />
-            Enable login notifications
-          </label>
-
-          <label className="block text-sm">
-            Session timeout (minutes)
-            <select
-              value={getSessionTimeoutSelectValue(securityPreferences)}
-              onChange={(event) => setSecurityPreferences((prev) => ({
-                ...prev,
-                sessionTimeout: event.target.value === 'per_message'
-                  ? 5
-                  : Number.parseInt(event.target.value, 10) || 60,
-                requirePasswordForSensitive: event.target.value === 'per_message'
-                  ? true
-                  : prev.requirePasswordForSensitive
-              }))}
-              className="w-full border rounded p-2 mt-1"
-            >
-              {SESSION_TIMEOUT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={securityPreferences.requirePasswordForSensitive}
-              onChange={(event) => setSecurityPreferences((prev) => ({
-                ...prev,
-                requirePasswordForSensitive: event.target.checked,
-                sessionTimeout: !event.target.checked && prev.sessionTimeout === 5
-                  ? 10
-                  : prev.sessionTimeout
-              }))}
-            />
-            Require password for sensitive actions
-          </label>
-
-          <button type="submit" disabled={submitting} className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50">
-            {submitting ? 'Saving...' : 'Save and Continue'}
-          </button>
-        </form>
-      )}
-
-      {step === 4 && (
-        <form onSubmit={handleStepFour} className="space-y-4">
-          <h2 className="text-lg font-medium">Step 4: Finish Security Onboarding</h2>
+          <h2 className="text-lg font-medium">Step 3: Additional information onboarding</h2>
           <p className="text-sm text-gray-600">
-            Finalize onboarding to unlock all SocialSecure features.
+            Social circle/friend means your broader trusted network. Secure circle/friend means only your closest trusted contacts.
           </p>
+          <p className="text-sm text-gray-600">
+            Every field below is completely optional. Choose Social level or Secure level per field. Only people you allow can see this,
+            the public will not have access, and SocialSecure will not use it for anything &apos;Shitty&apos;.
+          </p>
+
+          <div className="grid gap-2 sm:grid-cols-[2fr_1fr] sm:items-end">
+            <div className="block text-sm">
+              Email (from your account)
+              <p className="w-full border rounded p-2 mt-1 bg-gray-50 text-gray-700">{additionalInfo.email || 'No email on file'}</p>
+            </div>
+            <label className="block text-sm">
+              Visibility
+              <select
+                value={additionalInfo.profileFieldVisibility.email}
+                onChange={(event) => handleAdditionalInfoVisibilityChange('email', event.target.value)}
+                className="w-full border rounded p-2 mt-1"
+              >
+                {INFO_VISIBILITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {[
+            { key: 'streetAddress', label: 'Home address', type: 'text', placeholder: '123 Main St' },
+            { key: 'phone', label: 'Phone number', type: 'tel', placeholder: '+1 555-123-4567' },
+            { key: 'ageGroup', label: 'Age', type: 'text', placeholder: '25-34' },
+            { key: 'sex', label: 'Sex', type: 'text', placeholder: 'Optional' },
+            { key: 'race', label: 'Race', type: 'text', placeholder: 'Optional' },
+            { key: 'hobbies', label: 'Hobbies', type: 'text', placeholder: 'Music, travel, cooking' }
+          ].map((field) => (
+            <div key={field.key} className="grid gap-2 sm:grid-cols-[2fr_1fr] sm:items-end">
+              <label className="block text-sm">
+                {field.label}
+                <input
+                  type={field.type}
+                  value={additionalInfo[field.key]}
+                  onChange={(event) => handleAdditionalInfoChange(field.key, event.target.value)}
+                  className="w-full border rounded p-2 mt-1"
+                  placeholder={field.placeholder}
+                />
+                {field.key === 'hobbies' && (
+                  <p className="mt-1 text-xs text-gray-500">Use commas between hobbies (up to 10).</p>
+                )}
+              </label>
+              <label className="block text-sm">
+                Visibility
+                <select
+                  value={additionalInfo.profileFieldVisibility[field.key]}
+                  onChange={(event) => handleAdditionalInfoVisibilityChange(field.key, event.target.value)}
+                  className="w-full border rounded p-2 mt-1"
+                >
+                  {INFO_VISIBILITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ))}
 
           <button type="submit" disabled={submitting} className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50">
             {submitting ? 'Completing...' : 'Complete Onboarding'}
