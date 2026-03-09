@@ -2994,33 +2994,39 @@ const Social = () => {
           const canPostToProfileThread = isAuthenticated && profileChatPermissions.canWrite;
           return (
             <div className="space-y-3">
-              <div className="rounded-xl border bg-white/70 p-3 text-xs text-slate-600">
-                <p><span className="font-semibold text-slate-800">Read:</span> {profileChatAccessSummary.read}</p>
-                <p><span className="font-semibold text-slate-800">Write:</span> {profileChatAccessSummary.write}</p>
+              <div className="rounded-2xl border border-slate-200 bg-white/85 p-3 text-xs text-slate-600 shadow-sm">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Thread Access</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <p className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2"><span className="font-semibold text-slate-800">Read:</span> {profileChatAccessSummary.read}</p>
+                  <p className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2"><span className="font-semibold text-slate-800">Write:</span> {profileChatAccessSummary.write}</p>
+                </div>
               </div>
               {profileChatLoading ? (
                 <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">Loading chat room…</div>
               ) : profileChatPermissions.canRead ? (
                 <>
-                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700">
-                      <span>{activeProfile?.username ? `@${activeProfile.username}` : 'Profile'} chat room</span>
-                      <span className="text-[10px] uppercase tracking-wide text-slate-500">Live</span>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-100 shadow-sm">
+                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-900/95 px-2.5 py-2 text-[11px] font-semibold text-slate-100">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                        {activeProfile?.username ? `@${activeProfile.username}` : 'Profile'} room
+                      </span>
+                      <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">Live</span>
                     </div>
-                    <div data-testid="social-mini-chat-viewport" className="max-h-72 space-y-1 overflow-y-auto px-2 py-1.5 [scrollbar-gutter:stable]">
+                    <div data-testid="social-mini-chat-viewport" className="max-h-72 space-y-1 overflow-y-auto px-2 py-2 [scrollbar-gutter:stable]">
                       {profileChatMessages.length === 0 ? (
                         <p className="text-sm text-slate-500">No messages yet. Start the conversation.</p>
                       ) : profileChatMessages.map((message) => (
                         <div key={message._id} className="flex justify-start">
-                          <div data-testid="social-mini-chat-bubble" className="max-w-[94%] rounded-xl border border-slate-200 bg-slate-50 px-1.5 py-0.5">
-                            <p className="text-[10px] font-semibold uppercase tracking-normal text-slate-500">@{message?.userId?.username || 'user'}</p>
+                          <div data-testid="social-mini-chat-bubble" className="max-w-[94%] rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">@{message?.userId?.username || 'user'}</p>
                             <p data-testid="social-mini-chat-message-content" className="whitespace-pre-wrap break-words text-[13px] leading-4 text-slate-800">{message?.content || ''}</p>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-white/85 p-2 shadow-sm">
                     <textarea
                       value={profileChatInput}
                       onChange={(event) => setProfileChatInput(event.target.value)}
@@ -3028,13 +3034,13 @@ const Social = () => {
                       placeholder={canPostToProfileThread ? 'Write a message…' : (isAuthenticated ? 'You do not have write access' : 'Sign in to send messages')}
                       disabled={!canPostToProfileThread || profileChatSending}
                       rows={3}
-                      className="max-h-36 min-h-[40px] w-full resize-none rounded border border-slate-300 bg-white px-2.5 py-1.5 text-sm leading-5 disabled:bg-slate-200"
+                      className="max-h-36 min-h-[40px] w-full resize-none rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-sm leading-5 shadow-inner disabled:bg-slate-200"
                     />
                     <button
                       type="button"
                       onClick={handleSendProfileChatMessage}
                       disabled={!canPostToProfileThread || profileChatSending || !profileChatInput.trim()}
-                      className="w-full rounded bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition duration-150 hover:bg-slate-800 disabled:opacity-60"
+                      className="w-full rounded-xl bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition duration-150 hover:bg-slate-800 disabled:opacity-60"
                     >
                       {profileChatSending ? 'Sending…' : 'Send'}
                     </button>
@@ -3352,7 +3358,7 @@ const Social = () => {
         });
       case 'chat':
         return renderGlassPanel('Chat', renderPanelBody('chat_panel'), {
-          subtitle: 'Jump into direct or room conversations'
+          subtitle: 'Private room for profile and friend conversations'
         });
       case 'calendar':
         return renderGlassPanel(
