@@ -171,7 +171,7 @@ router.post('/search', userSearchLimiter, async (req, res) => {
     if (!hasAnyCriteria) {
       return res.json({
         success: true,
-        users: users.slice(0, limit).map((user) => ({
+        users: users.map((user) => ({
           _id: user._id,
           username: user.username,
           realName: user.realName,
