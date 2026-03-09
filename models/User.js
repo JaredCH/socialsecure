@@ -119,6 +119,67 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: null
   },
+  streetAddress: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  worksAt: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  hobbies: {
+    type: [String],
+    default: []
+  },
+  ageGroup: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  sex: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  race: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  profileFieldVisibility: {
+    streetAddress: {
+      type: String,
+      enum: ['public', 'social', 'secure'],
+      default: 'social'
+    },
+    worksAt: {
+      type: String,
+      enum: ['public', 'social', 'secure'],
+      default: 'social'
+    },
+    hobbies: {
+      type: String,
+      enum: ['public', 'social', 'secure'],
+      default: 'social'
+    },
+    ageGroup: {
+      type: String,
+      enum: ['public', 'social', 'secure'],
+      default: 'social'
+    },
+    sex: {
+      type: String,
+      enum: ['public', 'social', 'secure'],
+      default: 'social'
+    },
+    race: {
+      type: String,
+      enum: ['public', 'social', 'secure'],
+      default: 'social'
+    }
+  },
   locationLastUpdatedAt: {
     type: Date,
     default: null

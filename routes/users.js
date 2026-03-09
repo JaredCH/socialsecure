@@ -129,8 +129,7 @@ router.post('/search', userSearchLimiter, async (req, res) => {
     if (!hasAnyCriteria) {
       return res.status(400).json({ error: 'At least one search criteria value is required' });
     }
-    const unsupportedCriteria = ['streetAddress', 'ageFilters', 'sex', 'race']
-      .filter((key) => criteria[key]);
+    const unsupportedCriteria = [];
 
     const requestedLimit = Number.parseInt(req.body.limit, 10);
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 50) : 20;
@@ -148,9 +147,25 @@ router.post('/search', userSearchLimiter, async (req, res) => {
     if (criteria.zip) userFilter.zipCode = buildContainsRegex(criteria.zip);
     if (criteria.county) userFilter.county = buildContainsRegex(criteria.county);
     if (criteria.phone) userFilter.phone = buildContainsRegex(criteria.phone);
+    if (criteria.streetAddress) {
+      userFilter.streetAddress = buildContainsRegex(criteria.streetAddress);
+      userFilter['profileFieldVisibility.streetAddress'] = 'public';
+    }
+    if (criteria.ageFilters) {
+      userFilter.ageGroup = buildContainsRegex(criteria.ageFilters);
+      userFilter['profileFieldVisibility.ageGroup'] = 'public';
+    }
+    if (criteria.sex) {
+      userFilter.sex = buildContainsRegex(criteria.sex);
+      userFilter['profileFieldVisibility.sex'] = 'public';
+    }
+    if (criteria.race) {
+      userFilter.race = buildContainsRegex(criteria.race);
+      userFilter['profileFieldVisibility.race'] = 'public';
+    }
 
     const users = await User.find(userFilter)
-      .select('username realName city state country county zipCode phone bio friendCount createdAt pgpPublicKey avatarUrl bannerUrl')
+      .select('username realName city state country county zipCode phone bio friendCount createdAt pgpPublicKey avatarUrl bannerUrl worksAt hobbies ageGroup sex race streetAddress profileFieldVisibility')
       .sort({ friendCount: -1, createdAt: -1 })
       .limit(Math.max(limit * 5, 40))
       .lean();
@@ -206,12 +221,19 @@ router.post('/search', userSearchLimiter, async (req, res) => {
           county: buildContainsRegex(criteria.county),
           phone: buildContainsRegex(criteria.phone),
           worksAt: buildContainsRegex(criteria.worksAt),
-          hobbies: buildContainsRegex(criteria.hobbies)
+          hobbies: buildContainsRegex(criteria.hobbies),
+          ageFilters: buildContainsRegex(criteria.ageFilters),
+          sex: buildContainsRegex(criteria.sex),
+          race: buildContainsRegex(criteria.race),
+          streetAddress: buildContainsRegex(criteria.streetAddress)
         };
         const searchableProfileText = [
           user.bio || '',
           resume?.summary || '',
-          resume?.skills?.join(' ') || ''
+          resume?.skills?.join(' ') || '',
+          user.profileFieldVisibility?.hobbies === 'public' && Array.isArray(user.hobbies)
+            ? user.hobbies.join(' ')
+            : ''
         ].join(' ');
         const workHistory = Array.isArray(resume?.experience) ? resume.experience : [];
 
@@ -241,10 +263,29 @@ router.post('/search', userSearchLimiter, async (req, res) => {
         if (criteria.friendsOfUser) scoreRule(friendSet ? friendSet.has(String(user._id)) : false, SCORE_WEIGHTS.FRIEND_OF_USER);
 
         if (criteria.worksAt) {
-          scoreRule(workHistory.some((entry) => matchers.worksAt?.test(entry?.employer || '')), SCORE_WEIGHTS.WORKS_AT);
+          const matchesResumeEmployment = workHistory.some((entry) => matchers.worksAt?.test(entry?.employer || ''));
+          const matchesProfileEmployment = user.profileFieldVisibility?.worksAt === 'public'
+            && matchers.worksAt?.test(user.worksAt || '');
+          scoreRule(matchesResumeEmployment || matchesProfileEmployment, SCORE_WEIGHTS.WORKS_AT);
         }
 
         if (criteria.hobbies) scoreRule(matchers.hobbies?.test(searchableProfileText), SCORE_WEIGHTS.HOBBIES);
+        if (criteria.ageFilters) scoreRule(
+          user.profileFieldVisibility?.ageGroup === 'public' && matchers.ageFilters?.test(user.ageGroup || ''),
+          SCORE_WEIGHTS.QUERY_TEXT
+        );
+        if (criteria.sex) scoreRule(
+          user.profileFieldVisibility?.sex === 'public' && matchers.sex?.test(user.sex || ''),
+          SCORE_WEIGHTS.QUERY_TEXT
+        );
+        if (criteria.race) scoreRule(
+          user.profileFieldVisibility?.race === 'public' && matchers.race?.test(user.race || ''),
+          SCORE_WEIGHTS.QUERY_TEXT
+        );
+        if (criteria.streetAddress) scoreRule(
+          user.profileFieldVisibility?.streetAddress === 'public' && matchers.streetAddress?.test(user.streetAddress || ''),
+          SCORE_WEIGHTS.QUERY_TEXT
+        );
 
         const normalizedScore = maxScore > 0 ? score / maxScore : 0;
 

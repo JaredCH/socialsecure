@@ -28,6 +28,7 @@ const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
 const ONBOARDING_TOTAL_STEPS = 4;
 const LOCATION_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const LOCATION_CHANGE_FIELDS = ['city', 'state', 'country'];
+const PROFILE_VISIBILITY_OPTIONS = ['public', 'social', 'secure'];
 const passwordChangeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -66,6 +67,30 @@ const normalizeLinks = (links) => {
 const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 const isValidZipCode = (zipCode) => /^(?:\d{5}(?:-\d{4})?|[A-Z]\d[A-Z]\d[A-Z]\d)$/.test(zipCode);
 const normalizeLocationValue = (value) => (typeof value === 'string' ? value.trim() : '');
+const normalizeProfileOptionalValue = (value) => (typeof value === 'string' ? value.trim() : '');
+const normalizeHobbies = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => normalizeProfileOptionalValue(entry))
+      .filter(Boolean)
+      .slice(0, 10);
+  }
+  return [];
+};
+const normalizeProfileFieldVisibility = (value = {}) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return {
+    streetAddress: PROFILE_VISIBILITY_OPTIONS.includes(value.streetAddress) ? value.streetAddress : undefined,
+    worksAt: PROFILE_VISIBILITY_OPTIONS.includes(value.worksAt) ? value.worksAt : undefined,
+    hobbies: PROFILE_VISIBILITY_OPTIONS.includes(value.hobbies) ? value.hobbies : undefined,
+    ageGroup: PROFILE_VISIBILITY_OPTIONS.includes(value.ageGroup) ? value.ageGroup : undefined,
+    sex: PROFILE_VISIBILITY_OPTIONS.includes(value.sex) ? value.sex : undefined,
+    race: PROFILE_VISIBILITY_OPTIONS.includes(value.race) ? value.race : undefined
+  };
+};
 
 const normalizePgpPublicKey = (value) => {
   if (typeof value !== 'string') return '';
@@ -296,6 +321,26 @@ router.post('/register', [
       }
       return true;
     }),
+  body('streetAddress').optional({ checkFalsy: true }).trim().isLength({ max: 200 }).withMessage('Home address must be at most 200 characters'),
+  body('worksAt').optional({ checkFalsy: true }).trim().isLength({ max: 120 }).withMessage('Place of employment must be at most 120 characters'),
+  body('hobbies').optional().isArray({ max: 10 }).withMessage('Hobbies must be an array with at most 10 entries'),
+  body('hobbies.*').optional({ checkFalsy: true }).trim().isLength({ max: 60 }).withMessage('Each hobby must be at most 60 characters'),
+  body('ageGroup').optional({ checkFalsy: true }).trim().isLength({ max: 40 }).withMessage('Age must be at most 40 characters'),
+  body('sex').optional({ checkFalsy: true }).trim().isLength({ max: 40 }).withMessage('Sex must be at most 40 characters'),
+  body('race').optional({ checkFalsy: true }).trim().isLength({ max: 60 }).withMessage('Race must be at most 60 characters'),
+  body('profileFieldVisibility')
+    .optional()
+    .custom((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('Profile visibility settings must be an object');
+      }
+      const entries = Object.entries(value);
+      const hasInvalidValue = entries.some(([, visibility]) => !PROFILE_VISIBILITY_OPTIONS.includes(visibility));
+      if (hasInvalidValue) {
+        throw new Error(`Profile visibility must be one of: ${PROFILE_VISIBILITY_OPTIONS.join(', ')}`);
+      }
+      return true;
+    }),
   body('referralCode').optional().trim()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -312,9 +357,17 @@ router.post('/register', [
       countryCode,
       county,
       zipCode,
+      streetAddress,
+      worksAt,
+      hobbies,
+      ageGroup,
+      sex,
+      race,
+      profileFieldVisibility,
       referralCode
     } = req.body;
     const normalizedCounty = county?.trim();
+    const normalizedProfileFieldVisibility = normalizeProfileFieldVisibility(profileFieldVisibility);
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
@@ -337,6 +390,13 @@ router.post('/register', [
       country: countryCode,
       county: normalizedCounty || undefined,
       zipCode: normalizeZipCode(zipCode),
+      streetAddress: normalizeProfileOptionalValue(streetAddress),
+      worksAt: normalizeProfileOptionalValue(worksAt),
+      hobbies: normalizeHobbies(hobbies),
+      ageGroup: normalizeProfileOptionalValue(ageGroup),
+      sex: normalizeProfileOptionalValue(sex),
+      race: normalizeProfileOptionalValue(race),
+      profileFieldVisibility: normalizedProfileFieldVisibility,
       locationLastUpdatedAt: new Date(),
       registrationStatus: 'active',
       referralCode: referralCode || require('crypto').randomBytes(4).toString('hex')

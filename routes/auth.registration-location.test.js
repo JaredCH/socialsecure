@@ -125,4 +125,47 @@ describe('Auth registration location fields', () => {
     );
     expect(mockUserModel).not.toHaveBeenCalled();
   });
+
+  it('accepts optional profile discovery fields with visibility settings', async () => {
+    const app = buildApp();
+
+    const response = await request(app)
+      .post('/api/auth/register')
+      .send({
+        realName: 'New User',
+        username: 'new_user',
+        email: 'new@example.com',
+        password: 'StrongPass1',
+        countryCode: 'US',
+        zipCode: '73301',
+        streetAddress: 'Austin, TX',
+        worksAt: 'Acme Corp',
+        hobbies: ['Hiking', 'Music'],
+        ageGroup: '25-34',
+        sex: 'Female',
+        race: 'Other',
+        profileFieldVisibility: {
+          streetAddress: 'social',
+          worksAt: 'public',
+          hobbies: 'public',
+          ageGroup: 'public',
+          sex: 'secure',
+          race: 'social'
+        }
+      });
+
+    expect(response.status).toBe(201);
+    expect(mockUserModel).toHaveBeenCalledWith(expect.objectContaining({
+      streetAddress: 'Austin, TX',
+      worksAt: 'Acme Corp',
+      hobbies: ['Hiking', 'Music'],
+      ageGroup: '25-34',
+      sex: 'Female',
+      race: 'Other',
+      profileFieldVisibility: expect.objectContaining({
+        worksAt: 'public',
+        hobbies: 'public'
+      })
+    }));
+  });
 });
