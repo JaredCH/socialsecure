@@ -24,6 +24,18 @@ import { authAPI, notificationAPI } from './utils/api';
 import { initRealtime, disconnectRealtime } from './utils/realtime';
 import { deliverSiteNotification, shouldDisplaySiteNotification } from './utils/browserNotifications';
 
+const ONBOARDING_TOTAL_STEPS = 4;
+const DEFAULT_SECURITY_PREFERENCES = {
+  loginNotifications: true,
+  sessionTimeout: 60,
+  requirePasswordForSensitive: true
+};
+const VALID_ONBOARDING_STATUSES = new Set(['pending', 'in_progress', 'completed']);
+
+const normalizeOnboardingStatusValue = (value, fallback = 'pending') => (
+  VALID_ONBOARDING_STATUSES.has(value) ? value : fallback
+);
+
 const ProtectedRoute = ({
   isAuthenticated,
   onboardingRequired = false,
@@ -88,13 +100,9 @@ function App() {
   });
   const [onboardingStatus, setOnboardingStatus] = useState({
     status: 'completed',
-    currentStep: 4,
+    currentStep: ONBOARDING_TOTAL_STEPS,
     completedSteps: [1, 2, 3, 4],
-    securityPreferences: {
-      loginNotifications: true,
-      sessionTimeout: 60,
-      requirePasswordForSensitive: true
-    }
+    securityPreferences: DEFAULT_SECURITY_PREFERENCES
   });
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [incomingNotification, setIncomingNotification] = useState(null);
@@ -157,13 +165,9 @@ function App() {
     if (!localStorage.getItem('token')) {
       setOnboardingStatus({
         status: 'completed',
-        currentStep: 4,
+        currentStep: ONBOARDING_TOTAL_STEPS,
         completedSteps: [1, 2, 3, 4],
-        securityPreferences: {
-          loginNotifications: true,
-          sessionTimeout: 60,
-          requirePasswordForSensitive: true
-        }
+        securityPreferences: DEFAULT_SECURITY_PREFERENCES
       });
       return;
     }
@@ -171,27 +175,21 @@ function App() {
     setCheckingOnboardingStatus(true);
     try {
       const { data } = await authAPI.getOnboardingStatus();
-      setOnboardingStatus({
-        status: data.status || 'pending',
-        currentStep: data.currentStep || 1,
-        completedSteps: data.completedSteps || [],
-        securityPreferences: data.securityPreferences || {
-          loginNotifications: true,
-          sessionTimeout: 60,
-          requirePasswordForSensitive: true
-        }
+      setOnboardingStatus((prev) => {
+        const status = normalizeOnboardingStatusValue(data.status, prev.status);
+        return {
+          status,
+          currentStep: status === 'completed'
+            ? ONBOARDING_TOTAL_STEPS
+            : Number.isInteger(data.currentStep) ? data.currentStep : prev.currentStep,
+          completedSteps: status === 'completed'
+            ? [1, 2, 3, 4]
+            : Array.isArray(data.completedSteps) ? data.completedSteps : prev.completedSteps,
+          securityPreferences: data.securityPreferences || prev.securityPreferences || DEFAULT_SECURITY_PREFERENCES
+        };
       });
     } catch {
-      setOnboardingStatus({
-        status: 'pending',
-        currentStep: 1,
-        completedSteps: [],
-        securityPreferences: {
-          loginNotifications: true,
-          sessionTimeout: 60,
-          requirePasswordForSensitive: true
-        }
-      });
+      setOnboardingStatus((prev) => prev);
     } finally {
       setCheckingOnboardingStatus(false);
     }
@@ -211,9 +209,9 @@ function App() {
         setUnreadNotificationCount(Number(data.user?.unreadNotificationCount || 0));
         setOnboardingStatus((prev) => ({
           ...prev,
-          status: data.user?.onboardingStatus || 'pending',
-          currentStep: data.user?.onboardingStep || 1,
-          securityPreferences: data.user?.securityPreferences || prev.securityPreferences
+          status: normalizeOnboardingStatusValue(data.user?.onboardingStatus, prev.status),
+          currentStep: Number.isInteger(data.user?.onboardingStep) ? data.user.onboardingStep : prev.currentStep,
+          securityPreferences: data.user?.securityPreferences || prev.securityPreferences || DEFAULT_SECURITY_PREFERENCES
         }));
         setEncryptionPasswordStatus((prev) => ({
           ...prev,
@@ -379,9 +377,9 @@ function App() {
     setUnreadNotificationCount(Number(payload.user?.unreadNotificationCount || 0));
     setOnboardingStatus((prev) => ({
       ...prev,
-      status: payload.user?.onboardingStatus || 'pending',
-      currentStep: payload.user?.onboardingStep || 1,
-      securityPreferences: payload.user?.securityPreferences || prev.securityPreferences
+      status: normalizeOnboardingStatusValue(payload.user?.onboardingStatus, prev.status),
+      currentStep: Number.isInteger(payload.user?.onboardingStep) ? payload.user.onboardingStep : prev.currentStep,
+      securityPreferences: payload.user?.securityPreferences || prev.securityPreferences || DEFAULT_SECURITY_PREFERENCES
     }));
     setEncryptionPasswordStatus({
       hasEncryptionPassword: !!payload.user?.hasEncryptionPassword,
@@ -399,13 +397,9 @@ function App() {
     setWelcomeProfile(null);
     setOnboardingStatus({
       status: 'completed',
-      currentStep: 4,
+      currentStep: ONBOARDING_TOTAL_STEPS,
       completedSteps: [1, 2, 3, 4],
-      securityPreferences: {
-        loginNotifications: true,
-        sessionTimeout: 60,
-        requirePasswordForSensitive: true
-      }
+      securityPreferences: DEFAULT_SECURITY_PREFERENCES
     });
     setEncryptionPasswordStatus({
       hasEncryptionPassword: true,

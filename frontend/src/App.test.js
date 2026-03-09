@@ -123,6 +123,16 @@ describe('App navbar features dropdown', () => {
     expect(featuresMenu.textContent).toContain('Resume');
   });
 
+  it('does not redirect completed users to onboarding when onboarding status refresh fails', async () => {
+    localStorage.setItem('token', 'token');
+    authAPI.getOnboardingStatus.mockRejectedValueOnce(new Error('network error'));
+
+    await renderApp();
+
+    expect(container.textContent).toContain('Home Page');
+    expect(container.textContent).not.toContain('Onboarding Page');
+  });
+
   it('opens Features dropdown on hover and closes on mouse leave', async () => {
     localStorage.setItem('token', 'token');
 
