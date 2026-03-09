@@ -75,6 +75,11 @@ const PROFILE_CHAT_ROLE_OPTIONS = [
   { value: 'circles', label: 'Circles' },
   { value: 'guests', label: 'Guests' }
 ];
+const PROFILE_CHAT_ROLE_ICONS = {
+  friends: '👥',
+  circles: '⭕',
+  guests: '🌐'
+};
 
 const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
 const THEME_ACCENT_TO_HEADER_CLASS = {
@@ -3070,44 +3075,46 @@ const Social = () => {
                 </div>
               )}
             {profileChatPermissions.isOwner ? (
-              <div className="space-y-3 rounded-xl border bg-slate-50 p-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Read access</p>
-                  <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-700">
-                    {PROFILE_CHAT_ROLE_OPTIONS.map((option) => (
-                      <label key={`read-${option.value}`} className="inline-flex items-center gap-1">
-                        <input
-                          type="checkbox"
-                          checked={profileChatAccessDraft.readRoles.includes(option.value)}
-                          onChange={() => toggleProfileChatRole('readRoles', option.value)}
-                        />
-                        {option.label}
-                      </label>
-                    ))}
+              <div className="space-y-2 rounded-xl border bg-slate-50 p-2.5">
+                {[
+                  { field: 'readRoles', label: 'Read access' },
+                  { field: 'writeRoles', label: 'Write access' }
+                ].map((accessConfig) => (
+                  <div key={accessConfig.field} className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{accessConfig.label}</p>
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      {PROFILE_CHAT_ROLE_OPTIONS.map((option) => {
+                        const isSelected = profileChatAccessDraft[accessConfig.field].includes(option.value);
+                        return (
+                          <button
+                            key={`${accessConfig.field}-${option.value}`}
+                            type="button"
+                            onClick={() => toggleProfileChatRole(accessConfig.field, option.value)}
+                            aria-label={`${accessConfig.label}: ${option.label}`}
+                            aria-pressed={isSelected}
+                            title={option.label}
+                            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border text-sm transition ${
+                              isSelected
+                                ? 'border-blue-400 bg-blue-100 text-blue-700'
+                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            <span aria-hidden="true">{PROFILE_CHAT_ROLE_ICONS[option.value] || '•'}</span>
+                            <span className="sr-only">{option.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Write access</p>
-                  <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-700">
-                    {PROFILE_CHAT_ROLE_OPTIONS.map((option) => (
-                      <label key={`write-${option.value}`} className="inline-flex items-center gap-1">
-                        <input
-                          type="checkbox"
-                          checked={profileChatAccessDraft.writeRoles.includes(option.value)}
-                          onChange={() => toggleProfileChatRole('writeRoles', option.value)}
-                        />
-                        {option.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                ))}
                 <button
                   type="button"
                   onClick={handleSaveProfileChatAccess}
                   disabled={profileChatSavingAccess}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-white disabled:opacity-60"
+                  title="Save chat access"
+                  className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white disabled:opacity-60"
                 >
-                  {profileChatSavingAccess ? 'Saving access…' : 'Save chat access'}
+                  {profileChatSavingAccess ? 'Saving…' : '💾 Save'}
                 </button>
               </div>
             ) : null}
@@ -3516,36 +3523,19 @@ const Social = () => {
       default:
         return (
           <div className="space-y-6">
-            {ownerEditingEnabled && !isGuestPreview ? (
-              composerVisible
-                ? renderGlassPanel('Composer', renderPanelBody('composer'), {
-                  subtitle: 'Share an update to the center stage',
-                  action: (
-                    <button
-                      type="button"
-                      onClick={() => setComposerVisible(false)}
-                      className="rounded-2xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white/70"
-                    >
-                      Hide
-                    </button>
-                  )
-                })
-                : renderGlassPanel(
-                  'Composer',
-                  <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-700">
-                    <p>The composer stays tucked away until you need to post.</p>
-                    <button
-                      type="button"
-                      onClick={() => setComposerVisible(true)}
-                      className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                    >
-                      Start a post
-                    </button>
-                  </div>,
-                  {
-                    subtitle: 'Hidden by default for a cleaner stage'
-                  }
+            {ownerEditingEnabled && !isGuestPreview && composerVisible ? (
+              renderGlassPanel('Composer', renderPanelBody('composer'), {
+                subtitle: 'Share an update to the center stage',
+                action: (
+                  <button
+                    type="button"
+                    onClick={() => setComposerVisible(false)}
+                    className="rounded-2xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white/70"
+                  >
+                    Hide
+                  </button>
                 )
+              })
             ) : null}
             {renderGlassPanel('Feed', renderPanelBody('timeline'), {
               subtitle: (isOwnSocialContext && !isGuestPreview) ? 'Your personalized stream' : 'Public social feed'
