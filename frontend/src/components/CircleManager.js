@@ -6,6 +6,12 @@ const NODE_SIZE = 84;
 const OWNER_X = STAGE_WIDTH / 2;
 const OWNER_Y = STAGE_HEIGHT / 2;
 const OWNER_RADIUS = 120;
+const OWNER_NODE_SIZE = 64;
+const FRIEND_CHIPS_PER_ROW = 8;
+const FRIEND_CHIP_X_SPACING = 88;
+const SECURE_RING_COLOR = '#f59e0b';
+const SOCIAL_RING_COLOR = '#e0e7ff';
+const STAGE_BACKGROUND = 'radial-gradient(circle at center, rgba(59,130,246,0.14), rgba(15,23,42,0.04) 58%)';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -88,6 +94,7 @@ function CircleManager({
   }, [activeCircleName, circles]);
 
   useEffect(() => {
+    if (!circles.length) return undefined;
     const step = () => {
       setPositions((prev) => {
         const next = { ...prev };
@@ -200,7 +207,12 @@ function CircleManager({
         />
         <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
           <span className="font-medium text-slate-600">Secure circle</span>
-          <input aria-label="Create secure circle toggle" type="checkbox" checked={circleAudience === 'secure'} onChange={(event) => setCircleAudience(event.target.checked ? 'secure' : 'social')} />
+          <input
+            aria-label="Create secure circle toggle"
+            type="checkbox"
+            checked={circleAudience === 'secure'}
+            onChange={(event) => setCircleAudience(event.target.checked ? 'secure' : 'social')}
+          />
         </label>
         <input
           value={circleProfileImageUrl}
@@ -229,13 +241,13 @@ function CircleManager({
             onPointerUp={() => setDraggingCircleName('')}
             onPointerLeave={() => setDraggingCircleName('')}
           >
-            <div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: 'radial-gradient(circle at center, rgba(59,130,246,0.14), rgba(15,23,42,0.04) 58%)' }} />
+            <div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: STAGE_BACKGROUND }} />
             <div
               className="relative mx-auto"
               style={{ width: `${STAGE_WIDTH}px`, height: `${STAGE_HEIGHT}px` }}
               data-testid="circle-spider-stage"
             >
-              <div className="absolute rounded-full border-2 border-violet-200 bg-violet-500 text-xs font-semibold text-white shadow-sm" style={{ left: `${OWNER_X - 32}px`, top: `${OWNER_Y - 32}px`, width: '64px', height: '64px', display: 'grid', placeItems: 'center' }}>
+              <div className="absolute rounded-full border-2 border-violet-200 bg-violet-500 text-xs font-semibold text-white shadow-sm" style={{ left: `${OWNER_X - (OWNER_NODE_SIZE / 2)}px`, top: `${OWNER_Y - (OWNER_NODE_SIZE / 2)}px`, width: `${OWNER_NODE_SIZE}px`, height: `${OWNER_NODE_SIZE}px`, display: 'grid', placeItems: 'center' }}>
                 You
               </div>
               {friends.map((friend, index) => {
@@ -250,7 +262,7 @@ function CircleManager({
                       event.dataTransfer.setData('text/plain', friendName);
                     }}
                     className="absolute bottom-2 left-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 shadow-sm"
-                    style={{ transform: `translateX(${(index % 8) * 88}px)` }}
+                    style={{ transform: `translateX(${(index % FRIEND_CHIPS_PER_ROW) * FRIEND_CHIP_X_SPACING}px)` }}
                   >
                     {friendName}
                   </button>
@@ -264,8 +276,8 @@ function CircleManager({
                     key={circle.name}
                     type="button"
                     data-testid={`circle-node-${circle.name}`}
-                    className={`absolute flex h-[84px] w-[84px] cursor-grab flex-col items-center justify-center rounded-full border-2 text-xs font-semibold text-white shadow-lg transition ${isActive ? 'scale-105 ring-4 ring-violet-200' : ''}`}
-                    style={{ left: `${position.x}px`, top: `${position.y}px`, backgroundColor: circle.color || '#3B82F6', borderColor: circle.relationshipAudience === 'secure' ? '#f59e0b' : '#e0e7ff' }}
+                    className={`absolute flex cursor-grab flex-col items-center justify-center rounded-full border-2 text-xs font-semibold text-white shadow-lg transition ${isActive ? 'scale-105 ring-4 ring-violet-200' : ''}`}
+                    style={{ left: `${position.x}px`, top: `${position.y}px`, width: `${NODE_SIZE}px`, height: `${NODE_SIZE}px`, backgroundColor: circle.color || '#3B82F6', borderColor: circle.relationshipAudience === 'secure' ? SECURE_RING_COLOR : SOCIAL_RING_COLOR }}
                     onClick={() => setActiveCircleName(circle.name)}
                     onPointerDown={(event) => {
                       const nodeBounds = event.currentTarget.getBoundingClientRect();
