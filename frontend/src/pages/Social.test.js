@@ -303,6 +303,8 @@ describe('Social page hero background rendering', () => {
     expect(chatAPI.getConversationMessages).toHaveBeenCalledWith('thread-guest', 1, 25);
     expect(container.textContent).toContain('guest-readable');
     expect(container.textContent).toContain('Sign in to post in this chat room.');
+    expect(container.textContent).toContain('Thread Access');
+    expect(container.textContent).toContain('@buddy room');
 
     const messageViewport = container.querySelector('[data-testid="social-mini-chat-viewport"]');
     expect(messageViewport).toBeTruthy();
@@ -315,7 +317,7 @@ describe('Social page hero background rendering', () => {
     const messageBubble = messageText?.closest('[data-testid="social-mini-chat-bubble"]');
     expect(messageBubble).toBeTruthy();
     expect(messageBubble?.className).toContain('px-1.5');
-    expect(messageBubble?.className).toContain('py-0.5');
+    expect(messageBubble?.className).toContain('py-1');
     expect(messageBubble?.className).toContain('max-w-[94%]');
 
     expect(messageText?.closest('div.overflow-y-auto')).toBe(messageViewport);
