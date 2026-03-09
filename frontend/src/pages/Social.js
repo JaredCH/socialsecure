@@ -47,19 +47,20 @@ const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
 const MAX_UPCOMING_CALENDAR_ITEMS = 6;
 const CODE_MODE_SNIPPETS = [
-  { label: 'Bold', value: '**bold**' },
-  { label: 'Italic', value: '*italic*' },
-  { label: 'Code', value: '`inline code`' },
-  { label: 'Heading', value: '# Heading' },
-  { label: 'Sub heading', value: '## Sub heading' },
-  { label: 'List', value: '- List item' },
-  { label: 'Link', value: '[SocialSecure](https://example.com)' },
-  { label: 'Image', value: '![Alt text](https://example.com/image.jpg)' },
-  { label: 'Quote', value: '> Quoted text' },
-  { label: 'Text color', value: '[color=red]Red text[/color]' },
-  { label: 'Highlight', value: '[bg=yellow]Highlighted[/bg]' },
-  { label: 'Vertical line', value: '[vline=4]Callout text[/vline]' }
+  { label: 'Bold', value: '**bold**', syntax: '**text**', description: 'Bold text', icon: 'B', requiresSelection: false },
+  { label: 'Italic', value: '*italic*', syntax: '*text*', description: 'Italic text', icon: 'I', requiresSelection: false },
+  { label: 'Code', value: '`inline code`', syntax: '`code`', description: 'Inline code snippet', icon: '<>', requiresSelection: false },
+  { label: 'Heading', value: '\n# Heading\n', syntax: '# Heading', description: 'Large heading (H1) — toolbar inserts with surrounding newlines', icon: 'H1', requiresSelection: false },
+  { label: 'Sub heading', value: '\n## Sub heading\n', syntax: '## Sub heading', description: 'Medium heading (H2) — toolbar inserts with surrounding newlines', icon: 'H2', requiresSelection: false },
+  { label: 'List', value: '\n- List item\n', syntax: '- item', description: 'Unordered list item — toolbar inserts with surrounding newlines', icon: '•—', requiresSelection: false },
+  { label: 'Quote', value: '\n> Quoted text\n', syntax: '> quote', description: 'Blockquote — toolbar inserts with surrounding newlines', icon: '❝', requiresSelection: false },
+  { label: 'Link', value: '[Label](https://example.com)', syntax: '[Label](url)', description: 'Hyperlink', icon: '🔗', requiresSelection: false },
+  { label: 'Image', value: '![Alt text](https://example.com/image.jpg)', syntax: '![alt](url)', description: 'Embed image via URL', icon: '⬛', requiresSelection: false },
+  { label: 'Color', value: '[color=red]Red text[/color]', syntax: '[color=red]…[/color]', description: 'Colored text — highlight text first', icon: 'A', requiresSelection: true },
+  { label: 'Highlight', value: '[bg=yellow]Highlighted[/bg]', syntax: '[bg=yellow]…[/bg]', description: 'Background highlight — highlight text first', icon: 'BG', requiresSelection: true },
+  { label: 'V-Line', value: '[vline=4]Callout text[/vline]', syntax: '[vline=4]…[/vline]', description: 'Vertical callout line — highlight text first', icon: '|', requiresSelection: true }
 ];
+const CODE_MODE_HAS_SELECTION_ITEMS = CODE_MODE_SNIPPETS.some((s) => s.requiresSelection);
 const PANEL_WIDTH_UNITS_BY_SIZE = {
   halfCol: 1,
   oneCol: 2,
@@ -569,6 +570,9 @@ const Social = () => {
     privacy: false,
     interaction: false
   });
+  const [composerMdGuideOpen, setComposerMdGuideOpen] = useState(false);
+  const [composerMdMobileOpen, setComposerMdMobileOpen] = useState(false);
+  const [copiedMd, setCopiedMd] = useState('');
   const [composerImageUploading, setComposerImageUploading] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
   const [circles, setCircles] = useState([]);
@@ -2263,6 +2267,13 @@ const Social = () => {
     }, 0);
   };
 
+  const handleCopyMdSyntax = (syntax) => {
+    navigator.clipboard?.writeText(syntax).then(() => {
+      setCopiedMd(syntax);
+      window.setTimeout(() => setCopiedMd(''), 1500);
+    }).catch(() => {});
+  };
+
   const refreshCircles = async () => {
     try {
       const response = await circlesAPI.getCircles();
@@ -3019,162 +3030,328 @@ const Social = () => {
         );
       case 'composer':
         return isOwnSocialContext && !isGuestPreview ? (
-          <form onSubmit={handleSubmitPost} className="space-y-3 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              {COMPOSER_EDITOR_MODES.map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => handlePostFormField('editorMode', mode)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${postForm.editorMode === mode ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100'}`}
-                >
-                  {mode === 'design' ? 'Design Studio' : 'Code Mode'}
-                </button>
-              ))}
-              <span className="ml-auto text-xs text-slate-500">Text + image by default, everything else optional.</span>
-            </div>
-
-            {postForm.editorMode === 'code' ? (
-              <textarea ref={composerCodeTextareaRef} value={postForm.codeContent} onChange={(event) => setPostForm((prev) => ({ ...prev, codeContent: event.target.value }))} placeholder="Use markdown + blocks. Example: [color=red]hello[/color]" className="min-h-28 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" maxLength={5000} />
-            ) : (
-              <textarea ref={composerDesignTextareaRef} value={postForm.content} onChange={(event) => setPostForm((prev) => ({ ...prev, content: event.target.value }))} placeholder="What's on your mind?" className="min-h-28 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" maxLength={5000} />
-            )}
-
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100">
-                <input type="file" accept="image/*" className="hidden" onChange={handleComposerImageUpload} />
-                {composerImageUploading ? 'Uploading image…' : 'Upload image'}
-              </label>
-              <span className="text-xs text-slate-500">{postForm.mediaUrls.length} attachment{postForm.mediaUrls.length === 1 ? '' : 's'}</span>
-            </div>
-
-            {postForm.mediaUrls.length > 0 ? (
-              <ul className="space-y-1">
-                {postForm.mediaUrls.map((url, index) => (
-                  <li key={`${url}-${index}`} className="flex items-center justify-between rounded-xl border bg-slate-50 px-3 py-2 text-sm">
-                    <span className="truncate pr-2">{url}</span>
-                    <button type="button" onClick={() => handleRemoveMediaUrl(index)} className="text-red-600 hover:text-red-700">Remove</button>
-                  </li>
+          <form onSubmit={handleSubmitPost} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
+            {/* ── Header: mode tabs ── */}
+            <div className="flex items-center gap-1 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
+              <div className="flex rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
+                {COMPOSER_EDITOR_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => handlePostFormField('editorMode', mode)}
+                    className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${postForm.editorMode === mode ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    {mode === 'design' ? '✦ Design Studio' : '</> Code Mode'}
+                  </button>
                 ))}
-              </ul>
-            ) : null}
-
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, formatting: !prev.formatting }))} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">Formatting</button>
-              <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, media: !prev.media }))} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">Links & media</button>
-              <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, privacy: !prev.privacy }))} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">Audience</button>
-              <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, interaction: !prev.interaction }))} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">Advanced post type</button>
+              </div>
+              <span className="ml-auto hidden text-[11px] text-slate-400 sm:block">Text + image by default · everything else optional</span>
             </div>
 
-            {composerPanels.formatting ? (
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{postForm.editorMode === 'code' ? 'Code Mode snippets' : 'Design Studio tools'}</p>
-                <div className="flex flex-wrap gap-2">
-                  {postForm.editorMode === 'code' ? CODE_MODE_SNIPPETS.map((snippet) => (
-                    <button key={snippet.label} type="button" onClick={() => applyComposerSnippet(snippet.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100">{snippet.label}</button>
-                  )) : (
-                    <>
-                      <button type="button" onClick={() => applyDesignWrapper('**')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Bold</button>
-                      <button type="button" onClick={() => applyDesignWrapper('*')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Italic</button>
-                      <button type="button" onClick={() => applyDesignWrapper('`')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Code</button>
-                      <button type="button" onClick={() => applyDesignWrapper('[color=red]', '[/color]')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Color</button>
-                      <button type="button" onClick={() => applyDesignWrapper('[bg=yellow]', '[/bg]')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Highlight</button>
-                      <button type="button" onClick={() => applyDesignWrapper('[vline=4]', '[/vline]')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Vertical line</button>
-                      <button type="button" onClick={() => applyComposerSnippet('\n# Heading\n')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Heading</button>
-                      <button type="button" onClick={() => applyComposerSnippet('\n## Sub heading\n')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Sub heading</button>
-                      <button type="button" onClick={() => applyComposerSnippet('\n- List item\n')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">List</button>
-                      <button type="button" onClick={() => applyComposerSnippet('\n> Quote\n')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Quote</button>
-                      <button type="button" onClick={() => applyComposerSnippet('[Label](https://example.com)')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Link</button>
-                      <button type="button" onClick={() => applyComposerSnippet('![Alt text](https://example.com/image.jpg)')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">Image</button>
-                    </>
+            <div className="space-y-0">
+              {/* ── Code Mode: quick action toolbar ── */}
+              {postForm.editorMode === 'code' ? (
+                <div className="border-b border-slate-100 bg-slate-50/40 px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {CODE_MODE_SNIPPETS.map((snippet) => (
+                      <button
+                        key={snippet.label}
+                        type="button"
+                        title={snippet.requiresSelection ? `${snippet.description} — highlight text first` : snippet.description}
+                        onClick={() => applyComposerSnippet(snippet.value)}
+                        className={`inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md border px-1.5 text-[11px] font-semibold transition-colors ${snippet.requiresSelection ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-100'}`}
+                      >
+                        {snippet.icon}
+                      </button>
+                    ))}
+                    <div className="ml-auto flex items-center gap-1">
+                      {/* Desktop MD Guide toggle */}
+                      <button
+                        type="button"
+                        onClick={() => setComposerMdGuideOpen((v) => !v)}
+                        title="Toggle Markdown reference guide"
+                        className={`hidden rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors lg:inline-flex ${composerMdGuideOpen ? 'border-blue-300 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                      >
+                        {composerMdGuideOpen ? '✕ Hide Guide' : '? MD Guide'}
+                      </button>
+                      {/* Mobile MD Guide button */}
+                      <button
+                        type="button"
+                        onClick={() => setComposerMdMobileOpen(true)}
+                        title="Open Markdown reference"
+                        className="inline-flex rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-500 hover:border-blue-300 hover:text-blue-600 lg:hidden"
+                      >
+                        ? MD Guide
+                      </button>
+                    </div>
+                  </div>
+                  {/* amber key for selection-required items */}
+                  {CODE_MODE_HAS_SELECTION_ITEMS ? (
+                    <p className="mt-1.5 text-[10px] text-amber-600">
+                      <span className="rounded bg-amber-50 px-1 py-0.5 text-amber-700">amber</span> = highlight text in editor first
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* ── Design Studio: formatting toolbar ── */}
+              {postForm.editorMode === 'design' ? (
+                <div className="border-b border-slate-100 bg-slate-50/40 px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button type="button" title="Bold — highlight text first" onClick={() => applyDesignWrapper('**')} className="inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100">B</button>
+                    <button type="button" title="Italic — highlight text first" onClick={() => applyDesignWrapper('*')} className="inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 text-[11px] italic font-semibold text-slate-700 hover:bg-slate-100">I</button>
+                    <button type="button" title="Code — highlight text first" onClick={() => applyDesignWrapper('`')} className="inline-flex h-7 min-w-[2.5rem] items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 font-mono text-[11px] text-slate-700 hover:bg-slate-100">{`<>`}</button>
+                    <button type="button" title="Text color — highlight text first" onClick={() => applyDesignWrapper('[color=red]', '[/color]')} className="inline-flex h-7 items-center justify-center rounded-md border border-amber-200 bg-amber-50 px-2 text-[11px] font-semibold text-amber-700 hover:bg-amber-100">A</button>
+                    <button type="button" title="Highlight — highlight text first" onClick={() => applyDesignWrapper('[bg=yellow]', '[/bg]')} className="inline-flex h-7 items-center justify-center rounded-md border border-yellow-200 bg-yellow-50 px-2 text-[11px] font-semibold text-yellow-700 hover:bg-yellow-100">BG</button>
+                    <button type="button" title="Vertical callout line — highlight text first" onClick={() => applyDesignWrapper('[vline=4]', '[/vline]')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100">|—</button>
+                    <span className="mx-1 h-4 w-px bg-slate-200" />
+                    <button type="button" title="Heading H1" onClick={() => applyComposerSnippet('\n# Heading\n')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-600 hover:bg-slate-100">H1</button>
+                    <button type="button" title="Heading H2" onClick={() => applyComposerSnippet('\n## Sub heading\n')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100">H2</button>
+                    <button type="button" title="Unordered list item" onClick={() => applyComposerSnippet('\n- List item\n')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 hover:bg-slate-100">•—</button>
+                    <button type="button" title="Blockquote" onClick={() => applyComposerSnippet('\n> Quote\n')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 hover:bg-slate-100">❝</button>
+                    <button type="button" title="Insert link" onClick={() => applyComposerSnippet('[Label](https://example.com)')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 hover:bg-slate-100">🔗</button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-400">Tip: select text before clicking a formatting button to wrap it</p>
+                </div>
+              ) : null}
+
+              {/* ── Main editor area ── */}
+              <div className={`flex gap-0 ${postForm.editorMode === 'code' && composerMdGuideOpen ? 'lg:flex-row' : 'flex-col'}`}>
+                {/* Textarea */}
+                <div className="flex-1 p-3">
+                  {postForm.editorMode === 'code' ? (
+                    <textarea
+                      ref={composerCodeTextareaRef}
+                      value={postForm.codeContent}
+                      onChange={(event) => setPostForm((prev) => ({ ...prev, codeContent: event.target.value }))}
+                      placeholder={"Write with markdown + custom blocks\n\nExample: **bold**, *italic*, [color=red]colored text[/color]"}
+                      className="min-h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 font-mono text-sm text-slate-800 placeholder-slate-400 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      maxLength={5000}
+                    />
+                  ) : (
+                    <textarea
+                      ref={composerDesignTextareaRef}
+                      value={postForm.content}
+                      onChange={(event) => setPostForm((prev) => ({ ...prev, content: event.target.value }))}
+                      placeholder="What's on your mind?"
+                      className="min-h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      maxLength={5000}
+                    />
                   )}
+                  <div className="mt-1.5 flex justify-end">
+                    <span className="text-[10px] text-slate-400">
+                      {(postForm.editorMode === 'code' ? postForm.codeContent : postForm.content).length} / 5000
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ) : null}
 
-            {composerPanels.media ? (
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                <label className="block text-sm font-medium text-gray-700">Optional link / media URL</label>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input type="url" value={postForm.mediaUrlInput} onChange={(event) => setPostForm((prev) => ({ ...prev, mediaUrlInput: event.target.value }))} placeholder="https://example.com/image.jpg" className="flex-1 rounded-xl border border-slate-300 px-3 py-2" />
-                  <button type="button" onClick={handleAddMediaUrl} className="rounded-xl border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50">Add URL</button>
-                </div>
-              </div>
-            ) : null}
-
-            {composerPanels.privacy ? (
-              <PrivacySelector form={postForm} circles={circles} friends={friends} onChange={handlePostFormField} onToggleCircle={handleToggleCircle} onAddExcludeUser={handleAddExcludeUser} onRemoveExcludeUser={handleRemoveExcludeUser} />
-            ) : null}
-
-            {composerPanels.interaction ? (
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Post Type</label>
-                <select value={postForm.contentType} onChange={(event) => setPostForm((prev) => ({ ...prev, contentType: event.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                  {COMPOSER_CONTENT_TYPES.map((option) => <option key={option} value={option}>{option.charAt(0).toUpperCase() + option.slice(1)}</option>)}
-                </select>
-              </div>
-            ) : null}
-
-            {composerPanels.interaction && postForm.contentType === 'poll' ? (
-              <div className="space-y-3 rounded-xl border bg-blue-50/40 p-3">
-                <h4 className="text-sm font-semibold text-gray-700">Poll Settings</h4>
-                <input type="text" value={postForm.interaction.poll.question} onChange={(event) => updateInteractionField('poll', 'question', event.target.value)} placeholder="Poll question" className="w-full rounded-xl border px-3 py-2 text-sm" />
-                <div className="space-y-2">
-                  {postForm.interaction.poll.options.map((option, index) => (
-                    <div key={`poll-option-${index}`} className="flex gap-2">
-                      <input type="text" value={option} onChange={(event) => updateInteractionOption('poll', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border px-3 py-2 text-sm" />
-                      <button type="button" onClick={() => removeInteractionOption('poll', index)} className="px-2 text-red-600" disabled={postForm.interaction.poll.options.length <= 2}>Remove</button>
+                {/* Desktop MD Guide side panel — only in code mode when open */}
+                {postForm.editorMode === 'code' && composerMdGuideOpen ? (
+                  <div className="hidden w-72 shrink-0 border-l border-slate-100 bg-slate-50 p-3 lg:flex lg:flex-col">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Markdown Reference</p>
+                    <div className="flex-1 overflow-y-auto">
+                      <ul className="space-y-1.5">
+                        {CODE_MODE_SNIPPETS.map((snippet) => (
+                          <li key={snippet.label} className="group flex items-start gap-2 rounded-lg p-1.5 hover:bg-white">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-semibold text-slate-700">{snippet.label}</p>
+                              <code className="block text-[10px] text-blue-600 break-all">{snippet.syntax}</code>
+                              {snippet.requiresSelection ? (
+                                <p className="text-[10px] text-amber-600">⚠ Highlight text first</p>
+                              ) : null}
+                            </div>
+                            <button
+                              type="button"
+                              title={`Copy: ${snippet.syntax}`}
+                              onClick={() => handleCopyMdSyntax(snippet.syntax)}
+                              className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 transition-colors hover:bg-blue-100 hover:text-blue-600"
+                            >
+                              {copiedMd === snippet.syntax ? '✓' : 'copy'}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                  ))}
-                  <button type="button" onClick={() => addInteractionOption('poll')} className="text-sm text-blue-700 hover:underline" disabled={postForm.interaction.poll.options.length >= INTERACTION_MAX_OPTIONS}>Add poll option</button>
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={postForm.interaction.poll.allowMultiple} onChange={(event) => updateInteractionField('poll', 'allowMultiple', event.target.checked)} />Allow multiple selections</label>
-                  <input type="datetime-local" value={postForm.interaction.poll.expiresAt} onChange={(event) => updateInteractionField('poll', 'expiresAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
-                </div>
+                    <p className="mt-2 text-[10px] text-slate-400">Click any toolbar button above to insert at cursor</p>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
 
-            {composerPanels.interaction && postForm.contentType === 'quiz' ? (
-              <div className="space-y-3 rounded-xl border bg-violet-50/40 p-3">
-                <h4 className="text-sm font-semibold text-gray-700">Quiz Settings</h4>
-                <input type="text" value={postForm.interaction.quiz.question} onChange={(event) => updateInteractionField('quiz', 'question', event.target.value)} placeholder="Quiz question" className="w-full rounded-xl border px-3 py-2 text-sm" />
-                <div className="space-y-2">
-                  {postForm.interaction.quiz.options.map((option, index) => (
-                    <div key={`quiz-option-${index}`} className="flex gap-2">
-                      <input type="text" value={option} onChange={(event) => updateInteractionOption('quiz', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border px-3 py-2 text-sm" />
-                      <button type="button" onClick={() => removeInteractionOption('quiz', index)} className="px-2 text-red-600" disabled={postForm.interaction.quiz.options.length <= 2}>Remove</button>
+              {/* ── Image upload + attachments ── */}
+              <div className="border-t border-slate-100 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:border-blue-300 hover:text-blue-600">
+                    <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="2" y="4" width="16" height="12" rx="2" /><circle cx="7" cy="9" r="1.5" /><path d="M2 14l4-4 4 4 3-3 5 4" /></svg>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleComposerImageUpload} />
+                    {composerImageUploading ? 'Uploading…' : 'Add image'}
+                  </label>
+                  {postForm.mediaUrls.length > 0 ? (
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-600">
+                      {postForm.mediaUrls.length} attachment{postForm.mediaUrls.length === 1 ? '' : 's'}
+                    </span>
+                  ) : null}
+                </div>
+                {postForm.mediaUrls.length > 0 ? (
+                  <ul className="mt-2 space-y-1">
+                    {postForm.mediaUrls.map((url, index) => (
+                      <li key={`${url}-${index}`} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-white px-2.5 py-1.5 text-xs">
+                        <svg aria-hidden="true" className="h-3 w-3 shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
+                        <span className="min-w-0 flex-1 truncate text-slate-600">{url}</span>
+                        <button type="button" onClick={() => handleRemoveMediaUrl(index)} className="shrink-0 text-red-400 hover:text-red-600">✕</button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+
+              {/* ── Advanced expandable section ── */}
+              <div className="border-t border-slate-100">
+                <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, media: !prev.media }))} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${composerPanels.media ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`}>
+                    🔗 Links & Media
+                  </button>
+                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, privacy: !prev.privacy }))} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${composerPanels.privacy ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`}>
+                    🔒 Audience
+                  </button>
+                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, interaction: !prev.interaction }))} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${composerPanels.interaction ? 'border-violet-300 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`}>
+                    ⚡ Advanced
+                  </button>
+                </div>
+
+                {composerPanels.media ? (
+                  <div className="mx-3 mb-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                    <label className="block text-xs font-semibold text-slate-600">Optional link / media URL</label>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input type="url" value={postForm.mediaUrlInput} onChange={(event) => setPostForm((prev) => ({ ...prev, mediaUrlInput: event.target.value }))} placeholder="https://example.com/image.jpg" className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+                      <button type="button" onClick={handleAddMediaUrl} className="rounded-xl border border-blue-500 bg-white px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50">Add URL</button>
                     </div>
-                  ))}
-                  <button type="button" onClick={() => addInteractionOption('quiz')} className="text-sm text-blue-700 hover:underline" disabled={postForm.interaction.quiz.options.length >= INTERACTION_MAX_OPTIONS}>Add quiz option</button>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <select value={postForm.interaction.quiz.correctOptionIndex} onChange={(event) => updateInteractionField('quiz', 'correctOptionIndex', Number(event.target.value))} className="rounded-xl border px-3 py-2 text-sm">
-                    {postForm.interaction.quiz.options.map((_, index) => <option key={`quiz-correct-${index}`} value={index}>Correct option #{index + 1}</option>)}
-                  </select>
-                  <input type="datetime-local" value={postForm.interaction.quiz.expiresAt} onChange={(event) => updateInteractionField('quiz', 'expiresAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
-                </div>
-                <textarea value={postForm.interaction.quiz.explanation} onChange={(event) => updateInteractionField('quiz', 'explanation', event.target.value)} placeholder="Explanation shown after answer (optional)" className="w-full rounded-xl border px-3 py-2 text-sm" rows={2} />
-              </div>
-            ) : null}
+                  </div>
+                ) : null}
 
-            {composerPanels.interaction && postForm.contentType === 'countdown' ? (
-              <div className="space-y-3 rounded-xl border bg-emerald-50/40 p-3">
-                <h4 className="text-sm font-semibold text-gray-700">Countdown Settings</h4>
-                <input type="text" value={postForm.interaction.countdown.label} onChange={(event) => updateInteractionField('countdown', 'label', event.target.value)} placeholder="Countdown label" className="w-full rounded-xl border px-3 py-2 text-sm" />
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <input type="datetime-local" value={postForm.interaction.countdown.targetAt} onChange={(event) => updateInteractionField('countdown', 'targetAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
-                  <input type="text" value={postForm.interaction.countdown.timezone} onChange={(event) => updateInteractionField('countdown', 'timezone', event.target.value)} placeholder="Timezone (e.g. UTC)" className="rounded-xl border px-3 py-2 text-sm" />
-                </div>
-                <input type="url" value={postForm.interaction.countdown.linkUrl} onChange={(event) => updateInteractionField('countdown', 'linkUrl', event.target.value)} placeholder="Optional link URL" className="w-full rounded-xl border px-3 py-2 text-sm" />
-              </div>
-            ) : null}
+                {composerPanels.privacy ? (
+                  <div className="mx-3 mb-3">
+                    <PrivacySelector form={postForm} circles={circles} friends={friends} onChange={handlePostFormField} onToggleCircle={handleToggleCircle} onAddExcludeUser={handleAddExcludeUser} onRemoveExcludeUser={handleRemoveExcludeUser} />
+                  </div>
+                ) : null}
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              {renderFormattedPostContent(postForm.editorMode === 'code' ? postForm.codeContent : postForm.content)}
+                {composerPanels.interaction ? (
+                  <div className="mx-3 mb-3 space-y-3 rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">Post Type</label>
+                      <select value={postForm.contentType} onChange={(event) => setPostForm((prev) => ({ ...prev, contentType: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none">
+                        {COMPOSER_CONTENT_TYPES.map((option) => <option key={option} value={option}>{option.charAt(0).toUpperCase() + option.slice(1)}</option>)}
+                      </select>
+                    </div>
+
+                    {postForm.contentType === 'poll' ? (
+                      <div className="space-y-3 rounded-xl border bg-blue-50/40 p-3">
+                        <h4 className="text-sm font-semibold text-gray-700">Poll Settings</h4>
+                        <input type="text" value={postForm.interaction.poll.question} onChange={(event) => updateInteractionField('poll', 'question', event.target.value)} placeholder="Poll question" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                        <div className="space-y-2">
+                          {postForm.interaction.poll.options.map((option, index) => (
+                            <div key={`poll-option-${index}`} className="flex gap-2">
+                              <input type="text" value={option} onChange={(event) => updateInteractionOption('poll', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border px-3 py-2 text-sm" />
+                              <button type="button" onClick={() => removeInteractionOption('poll', index)} className="px-2 text-red-600" disabled={postForm.interaction.poll.options.length <= 2}>Remove</button>
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => addInteractionOption('poll')} className="text-sm text-blue-700 hover:underline" disabled={postForm.interaction.poll.options.length >= INTERACTION_MAX_OPTIONS}>Add poll option</button>
+                        </div>
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={postForm.interaction.poll.allowMultiple} onChange={(event) => updateInteractionField('poll', 'allowMultiple', event.target.checked)} />Allow multiple selections</label>
+                          <input type="datetime-local" value={postForm.interaction.poll.expiresAt} onChange={(event) => updateInteractionField('poll', 'expiresAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {postForm.contentType === 'quiz' ? (
+                      <div className="space-y-3 rounded-xl border bg-violet-50/40 p-3">
+                        <h4 className="text-sm font-semibold text-gray-700">Quiz Settings</h4>
+                        <input type="text" value={postForm.interaction.quiz.question} onChange={(event) => updateInteractionField('quiz', 'question', event.target.value)} placeholder="Quiz question" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                        <div className="space-y-2">
+                          {postForm.interaction.quiz.options.map((option, index) => (
+                            <div key={`quiz-option-${index}`} className="flex gap-2">
+                              <input type="text" value={option} onChange={(event) => updateInteractionOption('quiz', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border px-3 py-2 text-sm" />
+                              <button type="button" onClick={() => removeInteractionOption('quiz', index)} className="px-2 text-red-600" disabled={postForm.interaction.quiz.options.length <= 2}>Remove</button>
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => addInteractionOption('quiz')} className="text-sm text-blue-700 hover:underline" disabled={postForm.interaction.quiz.options.length >= INTERACTION_MAX_OPTIONS}>Add quiz option</button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <select value={postForm.interaction.quiz.correctOptionIndex} onChange={(event) => updateInteractionField('quiz', 'correctOptionIndex', Number(event.target.value))} className="rounded-xl border px-3 py-2 text-sm">
+                            {postForm.interaction.quiz.options.map((_, index) => <option key={`quiz-correct-${index}`} value={index}>Correct option #{index + 1}</option>)}
+                          </select>
+                          <input type="datetime-local" value={postForm.interaction.quiz.expiresAt} onChange={(event) => updateInteractionField('quiz', 'expiresAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
+                        </div>
+                        <textarea value={postForm.interaction.quiz.explanation} onChange={(event) => updateInteractionField('quiz', 'explanation', event.target.value)} placeholder="Explanation shown after answer (optional)" className="w-full rounded-xl border px-3 py-2 text-sm" rows={2} />
+                      </div>
+                    ) : null}
+
+                    {postForm.contentType === 'countdown' ? (
+                      <div className="space-y-3 rounded-xl border bg-emerald-50/40 p-3">
+                        <h4 className="text-sm font-semibold text-gray-700">Countdown Settings</h4>
+                        <input type="text" value={postForm.interaction.countdown.label} onChange={(event) => updateInteractionField('countdown', 'label', event.target.value)} placeholder="Countdown label" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <input type="datetime-local" value={postForm.interaction.countdown.targetAt} onChange={(event) => updateInteractionField('countdown', 'targetAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
+                          <input type="text" value={postForm.interaction.countdown.timezone} onChange={(event) => updateInteractionField('countdown', 'timezone', event.target.value)} placeholder="Timezone (e.g. UTC)" className="rounded-xl border px-3 py-2 text-sm" />
+                        </div>
+                        <input type="url" value={postForm.interaction.countdown.linkUrl} onChange={(event) => updateInteractionField('countdown', 'linkUrl', event.target.value)} placeholder="Optional link URL" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* ── Live preview ── */}
+              {(postForm.editorMode === 'code' ? postForm.codeContent : postForm.content) ? (
+                <div className="mx-3 mb-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Preview</p>
+                  {renderFormattedPostContent(postForm.editorMode === 'code' ? postForm.codeContent : postForm.content)}
+                </div>
+              ) : null}
+
+              {/* ── Footer: submit ── */}
+              <div className="border-t border-slate-100 bg-slate-50/60 px-3 py-2.5">
+                <button
+                  type="submit"
+                  disabled={submittingPost || composerImageUploading}
+                  className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-blue-700 hover:to-blue-600 disabled:opacity-60 sm:w-auto sm:min-w-[140px]"
+                >
+                  {composerImageUploading ? 'Uploading image…' : submittingPost ? 'Publishing…' : 'Publish Post'}
+                </button>
+              </div>
             </div>
 
-            <button type="submit" disabled={submittingPost || composerImageUploading} className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60">{composerImageUploading ? 'Uploading image…' : submittingPost ? 'Publishing…' : 'Publish Post'}</button>
+            {/* ── Mobile MD Guide popup ── */}
+            {composerMdMobileOpen ? (
+              <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 lg:hidden" onClick={() => setComposerMdMobileOpen(false)}>
+                <div className="w-full max-w-lg rounded-t-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                    <p className="font-semibold text-slate-800">Markdown Quick Reference</p>
+                    <button type="button" onClick={() => setComposerMdMobileOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+                  </div>
+                  <div className="max-h-[60vh] overflow-y-auto p-4">
+                    <ul className="space-y-2">
+                      {CODE_MODE_SNIPPETS.map((snippet) => (
+                        <li key={snippet.label} className="flex items-center gap-3 rounded-xl border border-slate-100 p-2.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-slate-700">{snippet.label}</p>
+                            <code className="text-[11px] text-blue-600 break-all">{snippet.syntax}</code>
+                            <p className="text-[11px] text-slate-400">{snippet.description}{snippet.requiresSelection ? ' · ⚠ highlight text first' : ''}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyMdSyntax(snippet.syntax)}
+                            className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+                          >
+                            {copiedMd === snippet.syntax ? '✓ Copied' : 'Copy'}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </form>
         ) : <p className="text-sm text-slate-500">Post publishing is available only in owner view.</p>;
       case 'circles':
