@@ -424,10 +424,19 @@ function Chat() {
   const renderedMessages = useMemo(() => {
     if (activeConversation?.type !== 'dm') return messages;
     if (!dmUnlockedByConversation[String(activeConversationId || '')]) {
-      return messages.map((message) => ({
-        ...message,
-        content: LOCKED_DM_PLACEHOLDER
-      }));
+      return messages.map((message) => {
+        const decrypted = decryptedDmContentById[String(message._id)];
+        if (dmOfflineState === 'decrypted_offline' && decrypted) {
+          return {
+            ...message,
+            content: decrypted
+          };
+        }
+        return {
+          ...message,
+          content: LOCKED_DM_PLACEHOLDER
+        };
+      });
     }
     return messages.map((message) => {
       const decrypted = decryptedDmContentById[String(message._id)];
@@ -437,7 +446,7 @@ function Chat() {
         content: decrypted
       };
     });
-  }, [activeConversation?.type, activeConversationId, decryptedDmContentById, dmUnlockedByConversation, messages]);
+  }, [activeConversation?.type, activeConversationId, decryptedDmContentById, dmOfflineState, dmUnlockedByConversation, messages]);
 
   const sharedMediaSnippets = useMemo(
     () => renderedMessages.filter((message) => /\[[^\]]+\]|https?:\/\//i.test(message.content || '')).slice(-6),

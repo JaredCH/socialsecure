@@ -984,6 +984,33 @@ describe('Chat zip room indicator', () => {
         }
       }
     });
+    chatAPI.getConversationMessages.mockImplementation((conversationId) => {
+      if (conversationId === 'dm1') {
+        return Promise.resolve({
+          data: {
+            messages: [{
+              _id: 'dm-msg-offline-1',
+              conversationId: 'dm1',
+              content: '[Encrypted message]',
+              userId: { _id: 'u2', username: 'buddy' },
+              createdAt: new Date().toISOString(),
+              e2ee: {
+                version: 1,
+                senderDeviceId: 'device-2',
+                clientMessageId: 'dm-offline-1',
+                keyVersion: 1,
+                nonce: 'abc',
+                aad: '',
+                ciphertext: 'ciphertext',
+                signature: 'sig',
+                ciphertextHash: 'h'.repeat(64)
+              }
+            }]
+          }
+        });
+      }
+      return Promise.resolve({ data: { messages: [] } });
+    });
 
     await renderChat();
 
@@ -1035,6 +1062,7 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
+    expect(container.textContent).toContain('decrypted dm');
     const returnOnlineButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Return Online');
     expect(returnOnlineButton.disabled).toBe(false);
   });
