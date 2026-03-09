@@ -519,6 +519,130 @@ const buildLocationTags = ({ locationTokens = [], assignedZipCode = null }) => {
   };
 };
 
+const normalizeLocationTagSet = (locationTags = {}, assignedZipCode = null) => ({
+  zipCodes: extractZipTokens([...(Array.isArray(locationTags.zipCodes) ? locationTags.zipCodes : []), assignedZipCode]),
+  cities: toUniqueNonEmptyLocationTokens(locationTags.cities || []),
+  counties: toUniqueNonEmptyLocationTokens(locationTags.counties || []),
+  states: toUniqueNonEmptyLocationTokens(locationTags.states || []),
+  countries: toUniqueNonEmptyLocationTokens(locationTags.countries || [])
+});
+
+const isLikelyUsCountryToken = (token = '') => {
+  const normalized = normalizeLocationToken(token);
+  return normalized === 'us'
+    || normalized === 'usa'
+    || normalized === 'united states'
+    || normalized === 'united states of america';
+};
+
+const extractLocationZipCode = (location = {}) => normalizeZipCode(
+  location?.zipCode || location?.zipcode || location?.postalCode || location?.postalcode || ''
+);
+
+const enrichLocationTagsWithCorrelations = async ({ locationTags = {}, assignedZipCode = null }) => {
+  const enriched = normalizeLocationTagSet(locationTags, assignedZipCode);
+  const countryHints = new Set(enriched.countries);
+  const isUsContext = countryHints.size === 0 || [...countryHints].some((token) => isLikelyUsCountryToken(token));
+
+  for (const zipCode of [...enriched.zipCodes]) {
+    let zipLocation = null;
+    try {
+      zipLocation = await findZipLocation(zipCode);
+    } catch (error) {
+      console.warn('News zip correlation lookup failed:', zipCode, error.message);
+    }
+
+    if (!zipLocation) {
+      try {
+        const geocoded = await geocodeLocationQuery(zipCode);
+        zipLocation = geocoded?.result || null;
+      } catch (error) {
+        console.warn('News zip geocode correlation failed:', zipCode, error.message);
+      }
+    }
+
+    if (zipLocation?.city) enriched.cities.push(normalizeLocationToken(zipLocation.city));
+    if (zipLocation?.county) enriched.counties.push(normalizeLocationToken(zipLocation.county));
+    if (zipLocation?.state) enriched.states.push(normalizeLocationToken(zipLocation.state));
+    if (zipLocation?.stateCode) enriched.states.push(normalizeLocationToken(zipLocation.stateCode));
+    if (zipLocation?.country) enriched.countries.push(normalizeLocationToken(zipLocation.country));
+    if (zipLocation?.countryCode) enriched.countries.push(normalizeLocationToken(zipLocation.countryCode));
+    const resolvedZip = extractLocationZipCode(zipLocation);
+    if (resolvedZip && isZipLikeToken(resolvedZip)) enriched.zipCodes.push(resolvedZip);
+  }
+
+  if (isUsContext) {
+    for (const city of [...enriched.cities]) {
+      let matched = null;
+      const stateHints = enriched.states.length > 0 ? [...enriched.states] : [];
+      if (stateHints.length > 0) {
+        for (const stateHint of stateHints) {
+          try {
+            matched = await findZipLocationByCityState({ city, state: stateHint, countryCode: 'US' });
+          } catch (error) {
+            console.warn('News city correlation lookup failed:', `${city}, ${stateHint}`, error.message);
+          }
+          if (matched?.zipCode) break;
+        }
+      }
+
+      if (!matched?.zipCode) {
+        try {
+          const primaryStateHint = stateHints[0];
+          const query = primaryStateHint ? `${city}, ${primaryStateHint}, US` : `${city}, US`;
+          const geocoded = await geocodeLocationQuery(query);
+          matched = geocoded?.result || null;
+        } catch (error) {
+          console.warn('News city geocode correlation failed:', city, error.message);
+        }
+      }
+
+      const resolvedZip = extractLocationZipCode(matched);
+      if (resolvedZip && isZipLikeToken(resolvedZip)) {
+        enriched.zipCodes.push(resolvedZip);
+      }
+      if (matched?.state) enriched.states.push(normalizeLocationToken(matched.state));
+      if (matched?.stateCode) enriched.states.push(normalizeLocationToken(matched.stateCode));
+      if (matched?.country) enriched.countries.push(normalizeLocationToken(matched.country));
+      if (matched?.countryCode) enriched.countries.push(normalizeLocationToken(matched.countryCode));
+    }
+  }
+
+  const normalized = normalizeLocationTagSet(enriched);
+  // Enforce deterministic city-level locality assignment: keep city/zip tags only when both are present.
+  if (normalized.zipCodes.length === 0) {
+    normalized.cities = [];
+  } else if (normalized.cities.length === 0) {
+    normalized.zipCodes = [];
+  }
+  return normalized;
+};
+
+const inferLocalityLevelFromTags = (locationTags = {}) => {
+  const tags = normalizeLocationTagSet(locationTags);
+  if (tags.zipCodes.length > 0 && tags.cities.length > 0) return 'city';
+  if (tags.counties.length > 0) return 'county';
+  if (tags.states.length > 0) return 'state';
+  if (tags.countries.length > 0) return 'country';
+  return 'global';
+};
+
+const resolveArticleLocationContext = async ({ source = {}, item = {}, query = null }) => {
+  const locationTokens = buildArticleLocationTokens({ source, item, query });
+  const assignedZipCode = await resolveAssignedZipCode({ locationTokens, source, item, query });
+  const rawLocationTags = buildLocationTags({ locationTokens, assignedZipCode });
+  const locationTags = await enrichLocationTagsWithCorrelations({ locationTags: rawLocationTags, assignedZipCode });
+  const localityLevel = inferLocalityLevelFromTags(locationTags);
+  const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
+  return {
+    locationTokens,
+    assignedZipCode,
+    locationTags,
+    localityLevel,
+    scopeMetadata
+  };
+};
+
 const deriveScopeMetadata = ({ locationTags = {}, localityLevel = 'global', locationTokens = [] }) => {
   if (Array.isArray(locationTags.zipCodes) && locationTags.zipCodes.length > 0) {
     return { scopeReason: 'zip_match', scopeConfidence: 1 };
@@ -1102,11 +1226,13 @@ async function fetchRssSource(source) {
 
     return await Promise.all(items.map(async (item) => {
       const providerId = detectProviderIdFromUrl(source.url);
-      const locationTokens = buildArticleLocationTokens({ source, item });
-      const localityLevel = inferLocalityLevel(locationTokens);
-      const assignedZipCode = await resolveAssignedZipCode({ locationTokens, source, item });
-      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
-      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({ source, item });
       const rawCategories = item.categories || [];
       const primaryCategory = normalizeToStandardCategory(
         source.category || rawCategories[0] || ''
@@ -1191,16 +1317,17 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
         ? item.rssSource
         : (item.rssSource?.url || item.rssSource?._ || null);
 
-      const locationTokens = buildArticleLocationTokens({ source: { name: sourceName, category: query }, item, query });
-      const localityLevel = inferLocalityLevel(locationTokens);
-      const assignedZipCode = await resolveAssignedZipCode({
+      const {
         locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
         source: { name: sourceName, category: query },
         item,
         query
       });
-      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
-      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
       
       return {
         title: item.title || 'Untitled',
@@ -1343,19 +1470,16 @@ async function fetchNprSource(section, feedConfig) {
       const rawCategories = Array.isArray(item.categories) ? item.categories : [];
       const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
 
-      const locationTokens = buildArticleLocationTokens({
-        source: { name: 'NPR', category: section },
-        item,
-        query: null
-      });
-      const localityLevel = inferLocalityLevel(locationTokens);
-      const assignedZipCode = await resolveAssignedZipCode({
+      const {
         locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
         source: { name: 'NPR', category: section },
         item
       });
-      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
-      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
 
       return {
         title: item.title || 'Untitled',
@@ -1416,19 +1540,16 @@ async function fetchBbcSource(section, feedConfig) {
       const rawCategories = Array.isArray(item.categories) ? item.categories : [];
       const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
 
-      const locationTokens = buildArticleLocationTokens({
-        source: { name: 'BBC News', category: section },
-        item,
-        query: null
-      });
-      const localityLevel = inferLocalityLevel(locationTokens);
-      const assignedZipCode = await resolveAssignedZipCode({
+      const {
         locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
         source: { name: 'BBC News', category: section },
         item
       });
-      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
-      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
 
       return {
         title: item.title || 'Untitled',
@@ -1508,7 +1629,13 @@ async function fetchGdeltSource(query, options = {}) {
     const articles = Array.isArray(data.articles) ? data.articles : [];
     return await Promise.all(articles.map(async (item) => {
       const sourceDomain = item.domain || item.source || 'GDELT';
-      const locationTokens = buildArticleLocationTokens({
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
         source: { name: sourceDomain, category: query },
         item: {
           title: item.title || '',
@@ -1517,15 +1644,6 @@ async function fetchGdeltSource(query, options = {}) {
         },
         query
       });
-      const localityLevel = inferLocalityLevel(locationTokens);
-      const assignedZipCode = await resolveAssignedZipCode({
-        locationTokens,
-        source: { name: sourceDomain, category: query },
-        item: { title: item.title || '' },
-        query
-      });
-      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
-      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
 
       return {
         title: item.title || 'Untitled',
@@ -2933,6 +3051,7 @@ module.exports = {
     getItemPublishedAt,
     articleMatchesLocation,
     resolveAssignedZipCode,
+    resolveArticleLocationContext,
     inferLocationTokensFromText,
     resolveLocationContext,
     geocodeContextCache,
