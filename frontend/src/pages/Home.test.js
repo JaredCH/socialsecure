@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import Home from './Home';
+import Home, { SEARCH_DEBOUNCE_MS } from './Home';
 import { userAPI } from '../utils/api';
 
 jest.mock('../utils/api', () => ({
@@ -97,7 +97,7 @@ describe('Home landing page CTA behavior', () => {
     await act(async () => {
       nativeInputValueSetter.call(firstNameInput, 'Ali');
       firstNameInput.dispatchEvent(new Event('input', { bubbles: true }));
-      jest.advanceTimersByTime(300);
+      jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 50);
     });
 
     await act(async () => Promise.resolve());

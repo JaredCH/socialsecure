@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { userAPI } from '../utils/api';
 
+export const SEARCH_DEBOUNCE_MS = 250;
+
 function Home({ isAuthenticated = false }) {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
@@ -97,7 +99,7 @@ function Home({ isAuthenticated = false }) {
 
     const timer = setTimeout(() => {
       runSearch(searchForm);
-    }, 250);
+    }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
   }, [searchForm]);
