@@ -32,15 +32,18 @@ const parser = new Parser({
   customFields: {
     feed: [
       ['media:thumbnail', 'mediaThumbnail', { keepArray: true }],
-      ['media:content', 'mediaContent', { keepArray: true }]
+      ['media:content', 'mediaContent', { keepArray: true }],
+      ['language', 'feedLanguage']
     ],
     item: [
       ['content:encoded', 'contentEncoded'],
       ['media:content', 'mediaContent', { keepArray: true }],
       ['media:thumbnail', 'mediaThumbnail', { keepArray: true }],
       ['dc:creator', 'dcCreator'],
+      ['dc:subject', 'dcSubject'],
       ['geo:lat', 'geoLat'],
-      ['geo:long', 'geoLong']
+      ['geo:long', 'geoLong'],
+      ['source', 'rssSource']
     ]
   }
 });
@@ -76,7 +79,104 @@ const TOPIC_FILTER_ALIASES = {
   politics: ['politics', 'political'],
   finance: ['finance', 'financial'],
   gaming: ['gaming', 'games', 'game'],
-  ai: ['ai', 'artificial intelligence', 'machine learning']
+  ai: ['ai', 'artificial intelligence', 'machine learning'],
+  world: ['world', 'international'],
+  general: ['general', 'top stories', 'headlines']
+};
+
+// ============================================
+// STANDARDIZED CATEGORY SYSTEM
+// ============================================
+
+const STANDARDIZED_CATEGORIES = [
+  'technology', 'science', 'health', 'business', 'sports',
+  'entertainment', 'politics', 'finance', 'gaming', 'ai',
+  'world', 'general'
+];
+
+/**
+ * Map a raw topic/category string to the closest standardized category.
+ */
+const normalizeToStandardCategory = (raw = '') => {
+  const lower = normalizeTopicToken(raw);
+  if (!lower) return 'general';
+  if (STANDARDIZED_CATEGORIES.includes(lower)) return lower;
+  // Check aliases
+  for (const [category, aliases] of Object.entries(TOPIC_FILTER_ALIASES)) {
+    if (aliases.includes(lower)) return category;
+  }
+  // Partial matches
+  if (lower.includes('tech') || lower.includes('software') || lower.includes('computing')) return 'technology';
+  if (lower.includes('scienc') || lower.includes('environment')) return 'science';
+  if (lower.includes('health') || lower.includes('medical') || lower.includes('wellness')) return 'health';
+  if (lower.includes('financ') || lower.includes('stock') || lower.includes('invest') || lower.includes('banking')) return 'finance';
+  if (lower.includes('business') || lower.includes('econom') || lower.includes('market')) return 'business';
+  if (lower.includes('sport') || lower.includes('athletic') || lower.includes('football') || lower.includes('basketball') || lower.includes('soccer')) return 'sports';
+  if (lower.includes('entertain') || lower.includes('movie') || lower.includes('music') || lower.includes('arts')) return 'entertainment';
+  if (lower.includes('politic') || lower.includes('election') || lower.includes('government') || lower.includes('congress')) return 'politics';
+  if (lower.includes('gaming') || lower.includes('video game') || lower.includes('esport')) return 'gaming';
+  if (lower.includes('artificial intelligence') || lower.includes('machine learning') || /\bai\b/.test(lower)) return 'ai';
+  if (lower.includes('world') || lower.includes('international') || lower.includes('global')) return 'world';
+  return 'general';
+};
+
+// ============================================
+// GOOGLE NEWS TOPIC CONFIGURATION
+// ============================================
+
+/**
+ * Google News topic map with standardized category and locale-aware RSS URLs.
+ * Each entry produces a section-specific RSS feed URL using topic search.
+ */
+const GOOGLE_NEWS_TOPIC_MAP = {
+  technology: { category: 'technology', label: 'Technology' },
+  science: { category: 'science', label: 'Science' },
+  health: { category: 'health', label: 'Health' },
+  business: { category: 'business', label: 'Business' },
+  sports: { category: 'sports', label: 'Sports' },
+  entertainment: { category: 'entertainment', label: 'Entertainment' },
+  politics: { category: 'politics', label: 'Politics' },
+  finance: { category: 'finance', label: 'Finance' },
+  gaming: { category: 'gaming', label: 'Gaming' },
+  'artificial intelligence': { category: 'ai', label: 'AI & Machine Learning' }
+};
+
+const buildGoogleNewsFeedUrl = (query) => {
+  const encodedQuery = encodeURIComponent(query);
+  return `https://news.google.com/rss/search?q=${encodedQuery}&hl=en-US&gl=US&ceid=US:en`;
+};
+
+// ============================================
+// NPR RSS FEED CONFIGURATION
+// ============================================
+
+const NPR_ENABLED = String(process.env.NPR_ENABLED || 'true').toLowerCase() !== 'false';
+
+const NPR_FEED_MAP = {
+  news: { url: 'https://feeds.npr.org/1001/rss.xml', category: 'general', label: 'NPR News' },
+  politics: { url: 'https://feeds.npr.org/1014/rss.xml', category: 'politics', label: 'NPR Politics' },
+  business: { url: 'https://feeds.npr.org/1006/rss.xml', category: 'business', label: 'NPR Business' },
+  technology: { url: 'https://feeds.npr.org/1019/rss.xml', category: 'technology', label: 'NPR Technology' },
+  science: { url: 'https://feeds.npr.org/1007/rss.xml', category: 'science', label: 'NPR Science' },
+  health: { url: 'https://feeds.npr.org/1128/rss.xml', category: 'health', label: 'NPR Health' },
+  world: { url: 'https://feeds.npr.org/1004/rss.xml', category: 'world', label: 'NPR World' }
+};
+
+// ============================================
+// BBC RSS FEED CONFIGURATION
+// ============================================
+
+const BBC_ENABLED = String(process.env.BBC_ENABLED || 'true').toLowerCase() !== 'false';
+
+const BBC_FEED_MAP = {
+  top: { url: 'https://feeds.bbci.co.uk/news/rss.xml', category: 'general', label: 'BBC Top Stories' },
+  world: { url: 'https://feeds.bbci.co.uk/news/world/rss.xml', category: 'world', label: 'BBC World' },
+  business: { url: 'https://feeds.bbci.co.uk/news/business/rss.xml', category: 'business', label: 'BBC Business' },
+  politics: { url: 'https://feeds.bbci.co.uk/news/politics/rss.xml', category: 'politics', label: 'BBC Politics' },
+  health: { url: 'https://feeds.bbci.co.uk/news/health/rss.xml', category: 'health', label: 'BBC Health' },
+  technology: { url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', category: 'technology', label: 'BBC Technology' },
+  science: { url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', category: 'science', label: 'BBC Science' },
+  entertainment: { url: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml', category: 'entertainment', label: 'BBC Entertainment' }
 };
 
 // ============================================
@@ -997,6 +1097,10 @@ async function fetchRssSource(source) {
       const assignedZipCode = await resolveAssignedZipCode({ locationTokens, source, item });
       const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
       const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
+      const rawCategories = item.categories || [];
+      const primaryCategory = normalizeToStandardCategory(
+        source.category || rawCategories[0] || ''
+      );
       
       return {
         title: item.title || 'Untitled',
@@ -1006,13 +1110,23 @@ async function fetchRssSource(source) {
         url: item.link,
         imageUrl: getItemImageUrl(item),
         publishedAt: getItemPublishedAt(item),
-        topics: toUniqueNonEmptyStrings(item.categories?.map(c => normalizeTopicToken(c)) || []),
+        category: primaryCategory,
+        topics: toUniqueNonEmptyStrings([primaryCategory, ...rawCategories.map(c => normalizeTopicToken(c))]),
         locations: locationTokens,
         assignedZipCode,
         sourceType: 'rss',
         localityLevel,
         language: item.isoLanguage || feed.language || 'en',
         providerId,
+        feedSource: providerId,
+        feedCategory: rawCategories[0] || source.category || null,
+        feedLanguage: feed.language || feed.feedLanguage || null,
+        feedMetadata: {
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
         scrapeTimestamp: new Date(),
         ...(NEWS_LOCATION_TAGGER_V2_ENABLED
           ? {
@@ -1037,12 +1151,17 @@ async function fetchRssSource(source) {
 
 /**
  * Google News Source Adapter
- * Handles Google News RSS feeds based on queries
+ * Handles Google News RSS feeds based on queries.
+ * Uses locale-aware feed URLs and captures Google News categories,
+ * source attribution, and maps to standardized categories.
  */
 async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
   try {
-    const encodedQuery = encodeURIComponent(query);
-    const feedUrl = `https://news.google.com/rss/search?q=${encodedQuery}`;
+    const feedUrl = buildGoogleNewsFeedUrl(query);
+    const topicConfig = GOOGLE_NEWS_TOPIC_MAP[query.toLowerCase()] || null;
+    const standardCategory = topicConfig
+      ? topicConfig.category
+      : normalizeToStandardCategory(query);
     
     const feed = await parser.parseURL(feedUrl);
     
@@ -1054,6 +1173,13 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
       if (dashIndex > 0) {
         sourceName = item.title.substring(dashIndex + 3);
       }
+
+      // Capture categories from the RSS item (Google News provides these)
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      // Google News items may include a <source> element with the original publisher
+      const rssSourceUrl = typeof item.rssSource === 'string'
+        ? item.rssSource
+        : (item.rssSource?.url || item.rssSource?._ || null);
 
       const locationTokens = buildArticleLocationTokens({ source: { name: sourceName, category: query }, item, query });
       const localityLevel = inferLocalityLevel(locationTokens);
@@ -1074,12 +1200,27 @@ async function fetchGoogleNewsSource(query, sourceType = 'googleNews') {
         url: item.link,
         imageUrl: getItemImageUrl(item),
         publishedAt: getItemPublishedAt(item),
-        topics: toUniqueNonEmptyStrings([query.toLowerCase(), ...(item.categories || []).map((category) => normalizeTopicToken(category))]),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          query.toLowerCase(),
+          ...rawCategories.map((category) => normalizeTopicToken(category))
+        ]),
         locations: locationTokens,
         assignedZipCode,
         sourceType,
         localityLevel,
-        language: 'en',
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'google-news',
+        feedCategory: topicConfig ? topicConfig.label : query,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          googleNewsQuery: query,
+          googleNewsCategories: rawCategories,
+          originalSource: sourceName,
+          originalSourceUrl: rssSourceUrl,
+          feedTitle: feed.title || null
+        },
         scrapeTimestamp: new Date(),
         ...(NEWS_LOCATION_TAGGER_V2_ENABLED
           ? {
@@ -1179,6 +1320,152 @@ async function fetchGovernmentSource(source) {
 }
 
 /**
+ * NPR RSS Adapter
+ * Fetches articles from NPR's free RSS feeds with category and location metadata.
+ * NPR items include dc:creator, categories, and frequently mention city/state in titles.
+ */
+async function fetchNprSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+
+      const locationTokens = buildArticleLocationTokens({
+        source: { name: 'NPR', category: section },
+        item,
+        query: null
+      });
+      const localityLevel = inferLocalityLevel(locationTokens);
+      const assignedZipCode = await resolveAssignedZipCode({
+        locationTokens,
+        source: { name: 'NPR', category: section },
+        item
+      });
+      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
+      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
+
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'NPR',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'npr',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'npr',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          nprSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching NPR source "${section}":`, error.message);
+    return [];
+  }
+}
+
+/**
+ * BBC RSS Adapter
+ * Fetches articles from BBC News' free RSS feeds with category and location metadata.
+ * BBC items often include geo-tagged content and regional section identifiers.
+ */
+async function fetchBbcSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+
+      const locationTokens = buildArticleLocationTokens({
+        source: { name: 'BBC News', category: section },
+        item,
+        query: null
+      });
+      const localityLevel = inferLocalityLevel(locationTokens);
+      const assignedZipCode = await resolveAssignedZipCode({
+        locationTokens,
+        source: { name: 'BBC News', category: section },
+        item
+      });
+      const locationTags = buildLocationTags({ locationTokens, assignedZipCode });
+      const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
+
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'BBC News',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'bbc',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'bbc',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          bbcSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching BBC source "${section}":`, error.message);
+    return [];
+  }
+}
+
+/**
  * GDELT 2.0 DOC API Adapter
  * Fetches geolocated articles from GDELT's free document API.
  * Returns articles with location tags derived from GDELT's geolocation metadata.
@@ -1238,12 +1525,21 @@ async function fetchGdeltSource(query, options = {}) {
         url: item.url,
         imageUrl: item.socialimage || null,
         publishedAt: parseGdeltDate(item.seendate),
+        category: normalizeToStandardCategory(query),
         topics: toUniqueNonEmptyStrings([query.toLowerCase(), ...(item.domain ? [item.domain] : [])]),
         locations: locationTokens,
         assignedZipCode,
         sourceType: 'gdlet',
         localityLevel,
         language: item.language || 'en',
+        feedSource: 'gdelt',
+        feedCategory: query,
+        feedLanguage: item.language || 'en',
+        feedMetadata: {
+          gdeltDomain: item.domain || null,
+          gdeltSeenDate: item.seendate || null,
+          gdeltLanguage: item.language || null
+        },
         scrapeTimestamp: new Date(),
         ...(NEWS_LOCATION_TAGGER_V2_ENABLED
           ? {
@@ -1389,9 +1685,14 @@ async function processArticles(articles, options = {}) {
               description: scoredArticle.description,
               imageUrl: scoredArticle.imageUrl,
               publishedAt: scoredArticle.publishedAt,
+              category: scoredArticle.category || existing.category || 'general',
               topics: [...new Set([...(existing.topics || []), ...(scoredArticle.topics || [])])],
               locations: mergedLocations,
               assignedZipCode: scoredArticle.assignedZipCode || existing.assignedZipCode || null,
+              feedSource: scoredArticle.feedSource || existing.feedSource || null,
+              feedCategory: scoredArticle.feedCategory || existing.feedCategory || null,
+              feedLanguage: scoredArticle.feedLanguage || existing.feedLanguage || null,
+              feedMetadata: scoredArticle.feedMetadata || existing.feedMetadata || {},
               locationTags: NEWS_LOCATION_TAGGER_V2_ENABLED
                 ? mergeLocationTags(existing.locationTags, scoredArticle.locationTags, scoredArticle.assignedZipCode)
                 : existing.locationTags,
@@ -1629,24 +1930,29 @@ async function ingestAllSources() {
   }
   
   // 2. Fetch default Google News topics - include ALL 10 categories
-  const defaultTopics = [
-    'technology',
-    'science',
-    'health',
-    'business',
-    'sports',
-    'entertainment',
-    'politics',
-    'finance',
-    'gaming',
-    'artificial intelligence'
-  ];
+  const defaultTopics = Object.keys(GOOGLE_NEWS_TOPIC_MAP);
   for (const topic of defaultTopics) {
     const articles = await fetchGoogleNewsSource(topic, 'googleNews');
     allArticles = [...allArticles, ...articles];
   }
   
-  // 3. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
+  // 3. Fetch NPR sources (gated by NPR_ENABLED)
+  if (NPR_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(NPR_FEED_MAP)) {
+      const articles = await fetchNprSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 4. Fetch BBC sources (gated by BBC_ENABLED)
+  if (BBC_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(BBC_FEED_MAP)) {
+      const articles = await fetchBbcSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 5. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
   if (GDELT_ENABLED) {
     const gdeltQueries = GDELT_DEFAULT_QUERIES;
     for (const query of gdeltQueries) {
@@ -1655,10 +1961,10 @@ async function ingestAllSources() {
     }
   }
   
-  // 4. Process all articles (deduplication)
+  // 6. Process all articles (deduplication)
   const results = await processArticles(allArticles, { ingestionRunId });
   
-  // 5. Log scope quality metrics
+  // 7. Log scope quality metrics
   const scopeQuality = computeScopeQualityMetrics(allArticles, startTime);
   console.log('[news-scope-quality]', JSON.stringify(scopeQuality));
   
@@ -2378,7 +2684,7 @@ router.post('/sources', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Source already exists' });
     }
 
-    if (type === 'rss' || type === 'googleNews' || type === 'government' || type === 'podcast') {
+    if (type === 'rss' || type === 'googleNews' || type === 'government' || type === 'podcast' || type === 'npr' || type === 'bbc') {
       try {
         const previewFeed = await parser.parseURL(url);
         const itemCount = Array.isArray(previewFeed?.items) ? previewFeed.items.length : 0;
@@ -2535,7 +2841,9 @@ router.get('/topics', (req, res) => {
     { id: 'politics', name: 'Politics', icon: '🏛️' },
     { id: 'finance', name: 'Finance', icon: '📈' },
     { id: 'gaming', name: 'Gaming', icon: '🎮' },
-    { id: 'ai', name: 'AI & Machine Learning', icon: '🤖' }
+    { id: 'ai', name: 'AI & Machine Learning', icon: '🤖' },
+    { id: 'world', name: 'World', icon: '🌍' },
+    { id: 'general', name: 'General', icon: '📰' }
   ];
   
   res.json({ topics });
@@ -2606,7 +2914,9 @@ module.exports = {
     fetchYoutubeSource,
     fetchPodcastSource,
     fetchGovernmentSource,
-    fetchGdeltSource
+    fetchGdeltSource,
+    fetchNprSource,
+    fetchBbcSource
   },
   internals: {
     processArticles,
@@ -2616,6 +2926,12 @@ module.exports = {
     inferLocationTokensFromText,
     resolveLocationContext,
     geocodeContextCache,
-    computeScopeQualityMetrics
+    computeScopeQualityMetrics,
+    normalizeToStandardCategory,
+    buildGoogleNewsFeedUrl,
+    GOOGLE_NEWS_TOPIC_MAP,
+    NPR_FEED_MAP,
+    BBC_FEED_MAP,
+    STANDARDIZED_CATEGORIES
   }
 };

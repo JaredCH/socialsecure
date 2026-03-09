@@ -49,7 +49,7 @@ const sourcePreferenceSchema = new mongoose.Schema({
   },
   sourceType: {
     type: String,
-    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'gdlet'],
+    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'gdlet', 'npr', 'bbc'],
     default: 'rss'
   },
   enabled: {

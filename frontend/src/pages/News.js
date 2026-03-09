@@ -13,6 +13,8 @@ const ALL_CATEGORIES = [
   { id: 'finance', name: 'Finance', icon: '📈' },
   { id: 'gaming', name: 'Gaming', icon: '🎮' },
   { id: 'ai', name: 'AI & Machine Learning', icon: '🤖' },
+  { id: 'world', name: 'World', icon: '🌍' },
+  { id: 'general', name: 'General', icon: '📰' },
 ];
 
 const NEWS_SCOPES = [
@@ -27,7 +29,9 @@ const SOURCE_FORMAT_GUIDANCE = {
   podcast: 'Podcast RSS feed URL from Apple, Spotify, or publisher-hosted feed',
   youtube: 'YouTube channel URL (we auto-convert it to the channel RSS format)',
   googleNews: 'Google News query feed URL',
-  government: 'Official government or public-service feed URL'
+  government: 'Official government or public-service feed URL',
+  npr: 'NPR RSS feed URL (e.g., https://feeds.npr.org/1001/rss.xml)',
+  bbc: 'BBC News RSS feed URL (e.g., https://feeds.bbci.co.uk/news/rss.xml)'
 };
 
 // Format relative time (e.g., "2 hours ago")
@@ -52,7 +56,9 @@ const getSourceTypeLabel = (sourceType) => {
     youtube: '📺 YouTube',
     podcast: '🎙️ Podcast',
     government: '🏛️ Government',
-    gdlet: 'GDLET'
+    gdlet: 'GDELT',
+    npr: '📻 NPR',
+    bbc: '📡 BBC'
   };
   return labels[sourceType] || sourceType;
 };
@@ -689,6 +695,8 @@ function News() {
                     <option value="youtube">YouTube</option>
                     <option value="googleNews">Google News</option>
                     <option value="government">Government</option>
+                    <option value="npr">NPR</option>
+                    <option value="bbc">BBC</option>
                   </select>
                   <input
                     type="text"
