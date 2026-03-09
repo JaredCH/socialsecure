@@ -22,6 +22,7 @@ import NotificationSettings from './pages/NotificationSettings';
 import ResumePublic from './pages/ResumePublic';
 import { authAPI, notificationAPI } from './utils/api';
 import { initRealtime, disconnectRealtime } from './utils/realtime';
+import { deliverSiteNotification, shouldDisplaySiteNotification } from './utils/browserNotifications';
 
 const ProtectedRoute = ({
   isAuthenticated,
@@ -97,6 +98,7 @@ function App() {
   });
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [incomingNotification, setIncomingNotification] = useState(null);
+  const [notificationPreferences, setNotificationPreferences] = useState({});
   const [isFeaturesMenuOpen, setIsFeaturesMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [welcomeConfirmationPending, setWelcomeConfirmationPending] = useState(
@@ -270,8 +272,10 @@ function App() {
       try {
         const response = await notificationAPI.getPreferences();
         preferences = response.data?.preferences || null;
+        setNotificationPreferences(preferences || {});
       } catch {
         preferences = null;
+        setNotificationPreferences({});
       }
 
       if (cancelled) return;
@@ -318,6 +322,14 @@ function App() {
       notificationSocketRef.current = null;
     };
   }, [isAuthenticated, user?._id]);
+
+  useEffect(() => {
+    if (!shouldDisplaySiteNotification(incomingNotification, notificationPreferences)) {
+      return;
+    }
+
+    deliverSiteNotification(incomingNotification);
+  }, [incomingNotification, notificationPreferences]);
 
   useEffect(() => {
     if (!isFeaturesMenuOpen) {
@@ -402,6 +414,7 @@ function App() {
     });
     setUnreadNotificationCount(0);
     setIncomingNotification(null);
+    setNotificationPreferences({});
   };
 
   const handleRegistrationWelcomeRequired = (registeredUser) => {

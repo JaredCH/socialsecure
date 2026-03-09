@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { notificationAPI } from '../utils/api';
+import {
+  getBrowserNotificationPermission,
+  isBrowserNotificationSupported,
+  requestBrowserNotificationPermission
+} from '../utils/browserNotifications';
 
 const CHANNELS = ['inApp', 'email', 'push'];
 
@@ -37,6 +42,7 @@ const NotificationSettings = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [browserPermission, setBrowserPermission] = useState(getBrowserNotificationPermission());
 
   useEffect(() => {
     const loadPreferences = async () => {
@@ -84,6 +90,11 @@ const NotificationSettings = () => {
     setError('');
     setSuccess('');
     try {
+      const hasPushEnabled = Object.keys(TYPE_LABELS).some((typeKey) => Boolean(preferences[typeKey]?.push));
+      if (hasPushEnabled && browserPermission === 'default') {
+        const permission = await requestBrowserNotificationPermission();
+        setBrowserPermission(permission);
+      }
       await notificationAPI.updatePreferences({
         ...preferences,
         realtime: realtimePreferences
@@ -96,10 +107,41 @@ const NotificationSettings = () => {
     }
   };
 
+  const enableBrowserNotifications = async () => {
+    setError('');
+    const permission = await requestBrowserNotificationPermission();
+    setBrowserPermission(permission);
+    if (permission === 'denied') {
+      setError('Browser notifications are blocked. Enable notifications for this site in your browser settings.');
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white shadow rounded-lg">
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Notification Settings</h1>
       <p className="text-sm text-gray-600 mb-6">Choose which notifications you receive by channel.</p>
+
+      <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-gray-900">Browser notification permission</p>
+            <p className="text-gray-600">
+              {isBrowserNotificationSupported()
+                ? `Current status: ${browserPermission}`
+                : 'This browser does not support notifications.'}
+            </p>
+          </div>
+          {isBrowserNotificationSupported() && browserPermission !== 'granted' ? (
+            <button
+              type="button"
+              onClick={enableBrowserNotifications}
+              className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Enable browser notifications
+            </button>
+          ) : null}
+        </div>
+      </div>
 
       {error ? <div className="mb-4 p-3 rounded bg-red-50 text-red-700 border border-red-200">{error}</div> : null}
       {success ? <div className="mb-4 p-3 rounded bg-green-50 text-green-700 border border-green-200">{success}</div> : null}
