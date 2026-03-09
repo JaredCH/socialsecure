@@ -7,6 +7,8 @@ const Friendship = require('../models/Friendship');
 const { normalizeRelationshipAudience, RELATIONSHIP_AUDIENCE_VALUES } = require('../utils/relationshipAudience');
 
 const COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
+const MAX_CIRCLES_PER_USER = 10;
+const MAX_MEMBERS_PER_CIRCLE = 25;
 
 const authenticateToken = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -94,6 +96,9 @@ router.post('/', [
     const name = normalizeCircleName(req.body.name);
     if (findCircleIndex(user.circles, name) >= 0) {
       return res.status(409).json({ error: 'Circle name already exists' });
+    }
+    if (Array.isArray(user.circles) && user.circles.length >= MAX_CIRCLES_PER_USER) {
+      return res.status(400).json({ error: `You can create up to ${MAX_CIRCLES_PER_USER} circles` });
     }
 
     user.circles.push({
@@ -222,6 +227,9 @@ router.post('/:circleName/members', [
 
     const alreadyExists = (user.circles[index].members || []).some((id) => String(id) === memberId);
     if (!alreadyExists) {
+      if ((user.circles[index].members || []).length >= MAX_MEMBERS_PER_CIRCLE) {
+        return res.status(400).json({ error: `Circle member limit is ${MAX_MEMBERS_PER_CIRCLE}` });
+      }
       user.circles[index].members.push(memberId);
       await user.save();
     }

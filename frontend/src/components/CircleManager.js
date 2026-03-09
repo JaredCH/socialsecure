@@ -12,6 +12,9 @@ const FRIEND_RING_RADIUS = OWNER_RADIUS + 120;
 const SECURE_RING_COLOR = '#f59e0b';
 const SOCIAL_RING_COLOR = '#e0e7ff';
 const STAGE_BACKGROUND = 'radial-gradient(circle at center, rgba(59,130,246,0.14), rgba(15,23,42,0.04) 58%)';
+const MAX_CIRCLES = 10;
+const MAX_MEMBERS_PER_CIRCLE = 25;
+const CIRCLE_LIMIT_MESSAGE = `Circle limit reached (${MAX_CIRCLES}). Delete one to add another.`;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -45,11 +48,26 @@ function CircleManager({
   const [suggestQuery, setSuggestQuery] = useState('');
   const [positions, setPositions] = useState({});
   const [draggingCircleName, setDraggingCircleName] = useState('');
+  const [showCreateControls, setShowCreateControls] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(null);
+  const hasCircleCapacity = circles.length < MAX_CIRCLES;
+
+  useEffect(() => {
+    if (!hasCircleCapacity) {
+      setStatusMessage(CIRCLE_LIMIT_MESSAGE);
+    } else {
+      setStatusMessage((prev) => (prev === CIRCLE_LIMIT_MESSAGE ? '' : prev));
+    }
+  }, [hasCircleCapacity]);
 
   const handleCreate = (event) => {
     event.preventDefault();
+    if (!hasCircleCapacity) {
+      setStatusMessage(`You can create up to ${MAX_CIRCLES} circles.`);
+      return;
+    }
     const name = circleName.trim();
     if (!name) return;
     const normalizedProfileImageUrl = circleProfileImageUrl.trim();
@@ -62,6 +80,8 @@ function CircleManager({
     setCircleName('');
     setCircleProfileImageUrl('');
     setCircleAudience('social');
+    setShowCreateControls(false);
+    setStatusMessage('');
   };
 
   useEffect(() => {
@@ -200,6 +220,17 @@ function CircleManager({
     event.preventDefault();
     const friendId = event.dataTransfer.getData('application/socialsecure-friend-id');
     if (friendId) {
+      const members = Array.isArray(circle.members) ? circle.members : [];
+      const alreadyMember = members.some((member) => String(member?._id || member) === String(friendId));
+      if (alreadyMember) {
+        setStatusMessage('That friend is already in this circle.');
+        return;
+      }
+      if (members.length >= MAX_MEMBERS_PER_CIRCLE) {
+        setStatusMessage(`Each circle can have up to ${MAX_MEMBERS_PER_CIRCLE} members.`);
+        return;
+      }
+      setStatusMessage('');
       onAddMember(circle.name, friendId);
     }
   };
@@ -208,43 +239,67 @@ function CircleManager({
     <div className="space-y-4 rounded-2xl border border-violet-200 bg-gradient-to-b from-white via-violet-50/40 to-sky-50/50 p-5 shadow">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-semibold text-gray-900">Circle Manager</h3>
-        <p className="text-xs text-slate-500">Drag circles, drop friends, and tap nodes to edit instantly.</p>
+        <p className="text-xs text-slate-500">
+          {circles.length}/{MAX_CIRCLES} circles • drag circles, drop friends, and tap nodes to edit instantly.
+        </p>
       </div>
-
-      <form onSubmit={handleCreate} className="grid grid-cols-1 gap-2 md:grid-cols-5">
-        <input
-          value={circleName}
-          onChange={(event) => setCircleName(event.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2"
-          placeholder="Circle name"
-          maxLength={50}
-        />
-        <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-          <span className="font-medium text-slate-600">Secure circle</span>
-          <input
-            aria-label="Create secure circle toggle"
-            type="checkbox"
-            checked={circleAudience === 'secure'}
-            onChange={(event) => setCircleAudience(event.target.checked ? 'secure' : 'social')}
-          />
-        </label>
-        <input
-          value={circleProfileImageUrl}
-          onChange={(event) => setCircleProfileImageUrl(event.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2"
-          placeholder="Profile image URL (optional)"
-          maxLength={2048}
-        />
-        <input
-          type="color"
-          value={circleColor}
-          onChange={(event) => setCircleColor(event.target.value)}
-          className="h-10 rounded-xl border border-slate-200 bg-white p-1"
-        />
-        <button type="submit" className="rounded-xl bg-violet-600 px-4 py-2 text-white transition hover:-translate-y-0.5 hover:bg-violet-700">
-          Add New Circle
-        </button>
-      </form>
+      <div className="rounded-2xl border border-slate-200 bg-white/70 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-slate-500">Quick setup stays tucked away until needed.</p>
+          {!showCreateControls ? (
+            <button
+              type="button"
+              onClick={() => setShowCreateControls(true)}
+              disabled={!hasCircleCapacity}
+              className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              Add New Circle
+            </button>
+          ) : null}
+        </div>
+        {showCreateControls ? (
+          <form onSubmit={handleCreate} className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-5">
+            <input
+              value={circleName}
+              onChange={(event) => setCircleName(event.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+              placeholder="Circle name"
+              maxLength={50}
+            />
+            <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+              <span className="font-medium text-slate-600">Secure circle</span>
+              <input
+                aria-label="Create secure circle toggle"
+                type="checkbox"
+                checked={circleAudience === 'secure'}
+                onChange={(event) => setCircleAudience(event.target.checked ? 'secure' : 'social')}
+              />
+            </label>
+            <input
+              value={circleProfileImageUrl}
+              onChange={(event) => setCircleProfileImageUrl(event.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+              placeholder="Profile image URL (optional)"
+              maxLength={2048}
+            />
+            <input
+              type="color"
+              value={circleColor}
+              onChange={(event) => setCircleColor(event.target.value)}
+              className="h-10 rounded-xl border border-slate-200 bg-white p-1"
+            />
+            <div className="flex gap-2">
+              <button type="submit" className="flex-1 rounded-xl bg-violet-600 px-4 py-2 text-white transition hover:-translate-y-0.5 hover:bg-violet-700">
+                Add
+              </button>
+              <button type="button" onClick={() => setShowCreateControls(false)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+                Hide
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </div>
+      {statusMessage ? <p className="text-xs font-medium text-amber-700">{statusMessage}</p> : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">
         <div>
@@ -333,9 +388,9 @@ function CircleManager({
         <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/90 p-4">
           {selectedCircle ? (
             <>
-              <div className="flex items-center justify-between gap-2">
+              <div className="group flex items-center justify-between gap-2">
                 <h4 className="font-semibold text-slate-800">Edit Circle</h4>
-                <button type="button" onClick={() => onDeleteCircle(selectedCircle.name)} className="text-sm font-medium text-red-600 hover:text-red-700">Delete</button>
+                <button type="button" onClick={() => onDeleteCircle(selectedCircle.name)} className="text-sm font-medium text-red-600 opacity-40 transition hover:text-red-700 group-hover:opacity-100">Delete</button>
               </div>
               <input value={editName} onChange={(event) => setEditName(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Circle name" maxLength={50} />
               <input value={editProfileImageUrl} onChange={(event) => setEditProfileImageUrl(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Profile image URL (optional)" maxLength={2048} />
@@ -360,6 +415,12 @@ function CircleManager({
                         type="button"
                         className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
                         onClick={() => {
+                          const memberCount = Array.isArray(selectedCircle.members) ? selectedCircle.members.length : 0;
+                          if (memberCount >= MAX_MEMBERS_PER_CIRCLE) {
+                            setStatusMessage(`Each circle can have up to ${MAX_MEMBERS_PER_CIRCLE} members.`);
+                            return;
+                          }
+                          setStatusMessage('');
                           onAddMember(selectedCircle.name, friend._id);
                           setSuggestQuery('');
                         }}
@@ -373,6 +434,9 @@ function CircleManager({
               </div>
 
               <div className="space-y-2">
+                <p className="text-xs text-slate-500">
+                  {Array.isArray(selectedCircle.members) ? selectedCircle.members.length : 0}/{MAX_MEMBERS_PER_CIRCLE} members
+                </p>
                 {(selectedCircle.members || []).length === 0 ? (
                   <p className="text-sm text-slate-500">No members yet.</p>
                 ) : (selectedCircle.members || []).map((member) => (

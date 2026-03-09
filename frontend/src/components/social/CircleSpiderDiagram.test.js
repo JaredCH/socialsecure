@@ -23,7 +23,7 @@ describe('CircleSpiderDiagram', () => {
     root = null;
   });
 
-  it('renders circles and shows mutual summary', async () => {
+  it('renders circles and shows mutual summary plus node popup', async () => {
     await act(async () => {
       root.render(
         <CircleSpiderDiagram
@@ -43,9 +43,17 @@ describe('CircleSpiderDiagram', () => {
       );
     });
 
-    expect(container.textContent).toContain('Spider diagram');
+    expect(container.textContent).toContain('Circle web');
     expect(container.textContent).toContain('2 members');
     expect(container.textContent).toContain('1 mutual');
     expect(container.textContent).toContain('@alice');
+
+    const memberNode = container.querySelector('[data-testid="circle-web-member-2"]');
+    await act(async () => {
+      memberNode.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Two');
+    expect(container.textContent).toContain('@two');
   });
 });
