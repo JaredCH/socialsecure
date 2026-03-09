@@ -113,6 +113,7 @@ describe('Home landing page CTA behavior', () => {
     expect(container.textContent).toContain('Alice Johnson');
     expect(container.querySelector('img[alt="Alice Johnson hero"]')).not.toBeNull();
     expect(container.querySelector('img[alt="Alice Johnson profile"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/social?user=alice"]')).not.toBeNull();
   });
 
   it('shows default results on initial load without filters', async () => {
@@ -149,6 +150,8 @@ describe('Home landing page CTA behavior', () => {
     expect(container.textContent).toContain('2 shown');
     expect(container.textContent).toContain('Most Friends');
     expect(container.textContent).toContain('Least Friends');
+    expect(container.querySelector('a[href="/social?user=mostfriends"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/social?user=leastfriends"]')).not.toBeNull();
   });
 
   it('uses compact advanced controls with dropdowns, slider, and autosuggest wiring', async () => {
