@@ -234,7 +234,7 @@ describe('Social page hero background rendering', () => {
     expect(container.querySelector('[data-testid="social-calendar-preview-grid"]')).toBeTruthy();
     expect(container.textContent).toContain('Upcoming');
     expect(container.textContent).toContain('US:');
-    const upcomingEventLink = container.querySelector('[data-testid="social-upcoming-event-event-event-1"]');
+    const upcomingEventLink = container.querySelector('[data-testid="social-upcoming-event-event-1"]');
     expect(upcomingEventLink).toBeTruthy();
     expect(upcomingEventLink.getAttribute('href')).toBe('/calendar');
     expect(upcomingEventLink.textContent).toContain('Team sync for launch planning and execution');

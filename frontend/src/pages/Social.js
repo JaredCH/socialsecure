@@ -3452,7 +3452,7 @@ const Social = () => {
                         {item.type === 'event' ? (
                           <Link
                             to={socialCalendarPath}
-                            data-testid={`social-upcoming-event-${item.id}`}
+                            data-testid={`social-upcoming-${item.id}`}
                             className="group flex items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-gradient-to-r from-white to-blue-50/80 px-3 py-2 text-xs text-slate-700 transition hover:border-blue-200 hover:from-blue-50 hover:to-blue-100/70"
                           >
                             <div className="min-w-0 flex-1">
