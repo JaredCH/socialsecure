@@ -12,6 +12,7 @@ const polarToCartesian = (radius, angleRadians) => ({
 
 function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor = '#3B82F6' }) {
   const [activeKey, setActiveKey] = useState('');
+  const [selectedItem, setSelectedItem] = useState(null);
   const ownerLabel = String(profileLabel || 'User').replace(/^@/, '').slice(0, 8) || 'User';
 
   const { circleNodes, memberNodes, edges, mutualCount } = useMemo(() => {
@@ -26,6 +27,7 @@ function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor 
         name: circle.name,
         audience: circle.relationshipAudience === 'secure' ? 'secure' : 'social',
         color: circle.color || accentColor,
+        profileImageUrl: circle.profileImageUrl || '',
         point: polarToCartesian(CIRCLE_RADIUS, angle)
       };
     });
@@ -97,10 +99,17 @@ function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor 
   return (
     <div className="space-y-3">
       <p className="text-xs uppercase tracking-wide text-slate-500">
-        Spider diagram • {memberNodes.length} members • {mutualCount} mutual
+        Circle web • {memberNodes.length} members • {mutualCount} mutual
       </p>
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white/80 p-3">
         <svg viewBox="0 0 480 360" className="h-[320px] w-full min-w-[460px]">
+          <defs>
+            {circleNodes.map((circle) => (
+              <clipPath key={`clip-${circle.key}`} id={`clip-${circle.key}`}>
+                <circle cx={circle.point.x} cy={circle.point.y} r="16" />
+              </clipPath>
+            ))}
+          </defs>
           {edges.map((edge) => (
             <line
               key={edge.key}
@@ -124,8 +133,38 @@ function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor 
               key={circle.key}
               onMouseEnter={() => setActiveKey(circle.key)}
               onMouseLeave={() => setActiveKey('')}
+              onClick={() => setSelectedItem({
+                type: 'circle',
+                name: circle.name,
+                avatarUrl: circle.profileImageUrl,
+                subtitle: circle.audience === 'secure' ? 'Secure circle' : 'Social circle'
+              })}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedItem({
+                    type: 'circle',
+                    name: circle.name,
+                    avatarUrl: circle.profileImageUrl,
+                    subtitle: circle.audience === 'secure' ? 'Secure circle' : 'Social circle'
+                  });
+                }
+              }}
             >
               <circle cx={circle.point.x} cy={circle.point.y} r="16" fill={circle.color} opacity="0.88" />
+              {circle.profileImageUrl ? (
+                <image
+                  href={circle.profileImageUrl}
+                  x={circle.point.x - 16}
+                  y={circle.point.y - 16}
+                  width="32"
+                  height="32"
+                  preserveAspectRatio="xMidYMid slice"
+                  clipPath={`url(#clip-${circle.key})`}
+                />
+              ) : null}
               <title>{circle.name} ({circle.audience})</title>
               <text x={circle.point.x} y={circle.point.y + 4} textAnchor="middle" className="fill-white text-[9px] font-semibold">
                 {circle.name.slice(0, 8)}
@@ -139,6 +178,25 @@ function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor 
               onMouseEnter={() => setActiveKey(member.key)}
               onMouseLeave={() => setActiveKey('')}
               className={member.isMutual ? 'drop-shadow-[0_0_6px_rgba(251,191,36,0.95)]' : ''}
+              onClick={() => setSelectedItem({
+                type: 'member',
+                name: member.realName || member.username,
+                avatarUrl: member.avatarUrl || '',
+                subtitle: member.isMutual ? `@${member.username} • Mutual friend` : `@${member.username}`
+              })}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedItem({
+                    type: 'member',
+                    name: member.realName || member.username,
+                    avatarUrl: member.avatarUrl || '',
+                    subtitle: member.isMutual ? `@${member.username} • Mutual friend` : `@${member.username}`
+                  });
+                }
+              }}
             >
               <circle
                 cx={member.point.x}
@@ -155,8 +213,26 @@ function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor 
           ))}
         </svg>
       </div>
+      {selectedItem ? (
+        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-700">
+          {selectedItem.avatarUrl ? (
+            <img src={selectedItem.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+          ) : (
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-slate-200 text-xs font-semibold text-slate-600">
+              {selectedItem.name.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold text-slate-900">{selectedItem.name}</p>
+            <p className="truncate text-xs text-slate-500">{selectedItem.subtitle}</p>
+          </div>
+          <button type="button" onClick={() => setSelectedItem(null)} className="rounded-full px-2 py-1 text-xs text-slate-500 hover:bg-slate-100">
+            Close
+          </button>
+        </div>
+      ) : null}
       <p className="text-xs text-slate-500">
-        Viewing circles for <span className="font-semibold text-slate-700">@{profileLabel}</span>. Mutual friends glow amber.
+        Viewing circles for <span className="font-semibold text-slate-700">@{profileLabel}</span>. Hover for links, tap nodes for quick identity cards.
       </p>
     </div>
   );

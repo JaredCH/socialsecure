@@ -59,16 +59,22 @@ describe('CircleManager', () => {
       );
     });
 
-    const nameInput = container.querySelector('input[placeholder="Circle name"]');
-    const profileInput = container.querySelector('input[placeholder="Profile image URL (optional)"]');
-    const secureToggle = container.querySelector('input[aria-label="Create secure circle toggle"]');
     const createButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Add New Circle');
 
     await act(async () => {
-      setInputValue(nameInput, 'Core Team');
+      createButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const nameInputAfterOpen = container.querySelector('input[placeholder="Circle name"]');
+    const profileInput = container.querySelector('input[placeholder="Profile image URL (optional)"]');
+    const secureToggle = container.querySelector('input[aria-label="Create secure circle toggle"]');
+    const submitButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Add');
+
+    await act(async () => {
+      setInputValue(nameInputAfterOpen, 'Core Team');
       setInputValue(profileInput, 'https://example.com/core.png');
       secureToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      createButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      submitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onCreateCircle).toHaveBeenCalledWith(expect.objectContaining({
@@ -76,6 +82,79 @@ describe('CircleManager', () => {
       relationshipAudience: 'secure',
       profileImageUrl: 'https://example.com/core.png'
     }));
+  });
+
+  it('blocks quick add when circle limit is reached', async () => {
+    const onCreateCircle = jest.fn();
+    const tenCircles = Array.from({ length: 10 }).map((_, index) => ({
+      name: `Circle ${index + 1}`,
+      color: '#3B82F6',
+      relationshipAudience: 'social',
+      profileImageUrl: '',
+      members: []
+    }));
+
+    await act(async () => {
+      root.render(
+        <CircleManager
+          circles={tenCircles}
+          friends={baseFriends}
+          onCreateCircle={onCreateCircle}
+          onUpdateCircle={jest.fn()}
+          onDeleteCircle={jest.fn()}
+          onAddMember={jest.fn()}
+          onRemoveMember={jest.fn()}
+        />
+      );
+    });
+
+    const createButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Add New Circle');
+    expect(createButton.disabled).toBe(true);
+    expect(container.textContent).toContain('Circle limit reached (10)');
+    expect(onCreateCircle).not.toHaveBeenCalled();
+  });
+
+  it('shows member limit message when suggestion add exceeds 25', async () => {
+    const onAddMember = jest.fn();
+    const fullCircle = [{
+      name: 'Trusted',
+      color: '#3B82F6',
+      relationshipAudience: 'social',
+      profileImageUrl: '',
+      memberCount: 25,
+      members: Array.from({ length: 25 }).map((_, index) => ({
+        _id: `member-${index}`,
+        username: `member${index}`,
+        realName: `Member ${index}`
+      }))
+    }];
+
+    await act(async () => {
+      root.render(
+        <CircleManager
+          circles={fullCircle}
+          friends={baseFriends}
+          onCreateCircle={jest.fn()}
+          onUpdateCircle={jest.fn()}
+          onDeleteCircle={jest.fn()}
+          onAddMember={onAddMember}
+          onRemoveMember={jest.fn()}
+        />
+      );
+    });
+
+    const suggestInput = Array.from(container.querySelectorAll('input')).find((input) => input.getAttribute('placeholder')?.startsWith('Search friends to add'));
+    await act(async () => {
+      setInputValue(suggestInput, 'bob');
+    });
+
+    const bobSuggestion = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('@bob'));
+    await act(async () => {
+      bobSuggestion.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onAddMember).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Each circle can have up to 25 members.');
   });
 
   it('saves edits and supports autosuggest + remove', async () => {
@@ -98,8 +177,8 @@ describe('CircleManager', () => {
     });
 
     const editInputs = Array.from(container.querySelectorAll('input[placeholder="Circle name"]'));
-    const editNameInput = editInputs[1];
-    const editProfileInput = Array.from(container.querySelectorAll('input[placeholder="Profile image URL (optional)"]'))[1];
+    const editNameInput = editInputs[0];
+    const editProfileInput = Array.from(container.querySelectorAll('input[placeholder="Profile image URL (optional)"]'))[0];
     const editToggle = container.querySelector('input[aria-label="Circle type toggle"]');
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Save Changes');
 
