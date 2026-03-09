@@ -9,7 +9,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock('../utils/api', () => ({
   authAPI: {
-    getProfile: jest.fn()
+    getProfile: jest.fn(),
+    updateProfile: jest.fn()
   },
   calendarAPI: {
     getMyEvents: jest.fn(),
@@ -96,6 +97,8 @@ describe('Social page hero background rendering', () => {
         user: {
           _id: 'u-1',
           username: 'alpha',
+          worksAt: 'Acme Labs',
+          profileFieldVisibility: { worksAt: 'social' },
           socialPagePreferences: {
             hero: {
               backgroundImageUseRandomGallery: true
@@ -105,6 +108,21 @@ describe('Social page hero background rendering', () => {
       }
     });
     discoveryAPI.trackEvent.mockResolvedValue({});
+    authAPI.updateProfile.mockResolvedValue({
+      data: {
+        user: {
+          _id: 'u-1',
+          username: 'alpha',
+          worksAt: 'Acme Labs',
+          profileFieldVisibility: { worksAt: 'social' },
+          socialPagePreferences: {
+            hero: {
+              backgroundImageUseRandomGallery: true
+            }
+          }
+        }
+      }
+    });
     resumeAPI.getMyResume.mockResolvedValue({ data: { resume: null } });
     circlesAPI.getCircles.mockResolvedValue({ data: { circles: [] } });
     friendsAPI.getFriends.mockResolvedValue({ data: { friends: [] } });
@@ -307,6 +325,54 @@ describe('Social page hero background rendering', () => {
     expect(guestViewButton).toBeTruthy();
     expect(guestViewButton.closest('div').className).toContain('top-36');
     expect(guestViewButton.closest('div').className).toContain('z-[70]');
+  });
+
+  it('renders combined top friends and partner panel plus personal information panel', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+    expect(container.textContent).toContain('Top 5 Friends + Partner / Spouse');
+    expect(container.textContent).toContain('Top Friends');
+    expect(container.textContent).toContain('Partner / Spouse');
+    expect(container.textContent).toContain('Personal Information');
+    expect(container.textContent).toContain('Acme Labs');
+  });
+
+  it('allows owner to edit personal information from the panel modal', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+    const editButton = container.querySelector('button[aria-label="Edit personal information"]');
+    expect(editButton).toBeTruthy();
+
+    await act(async () => {
+      editButton?.click();
+    });
+
+    const worksAtInput = container.querySelector('input#personal-info-worksAt');
+    expect(worksAtInput).toBeTruthy();
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(worksAtInput, 'Blue Team');
+      worksAtInput.dispatchEvent(new Event('input', { bubbles: true }));
+      worksAtInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const hobbiesInput = container.querySelector('input#personal-info-hobbies');
+    expect(hobbiesInput).toBeTruthy();
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(hobbiesInput, 'h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12');
+      hobbiesInput.dispatchEvent(new Event('input', { bubbles: true }));
+      hobbiesInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Save');
+    expect(saveButton).toBeTruthy();
+    await act(async () => {
+      saveButton?.click();
+    });
+
+    expect(authAPI.updateProfile).toHaveBeenCalled();
+    const updatePayload = authAPI.updateProfile.mock.calls[0][0];
+    expect(updatePayload.worksAt).toBe('Blue Team');
+    expect(updatePayload.profileFieldVisibility?.worksAt).toBe('social');
+    expect(updatePayload.hobbies).toEqual(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'h7', 'h8', 'h9', 'h10']);
   });
 
   it('loads profile chat thread/messages for guest viewers when read access allows guests', async () => {
