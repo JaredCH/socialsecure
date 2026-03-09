@@ -16,6 +16,7 @@ const ChatRoom = require('../models/ChatRoom');
 const ChatConversation = require('../models/ChatConversation');
 const Article = require('../models/Article');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
+const ZipLocationIndex = require('../models/ZipLocationIndex');
 
 const REPORT_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const REPORT_LIMIT_MAX = 5;
@@ -80,6 +81,113 @@ const requireAdmin = (req, res, next) => {
 
 const normalizeSortDirection = (value) => (String(value || '').toLowerCase() === 'asc' ? 1 : -1);
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const EARTH_RADIUS_MILES = 3958.8;
+const NEWS_INGESTION_LOCATION_RADIUS_MILES = 50;
+const MAX_NEWS_INGESTION_LOCATION_MATCHES = 250;
+
+const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase();
+const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().split('-')[0];
+const isZipCodeToken = (value) => /^\d{5}(?:-\d{4})?$/.test(String(value || '').trim());
+const toRadians = (value) => (value * Math.PI) / 180;
+const haversineMiles = (lat1, lon1, lat2, lon2) => {
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_MILES * c;
+};
+const hasCoordinates = (entry = {}) => Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude);
+const toUniqueStrings = (values = []) => [...new Set(values.filter(Boolean))];
+
+const buildNewsIngestionLocationFilter = async (locationQuery = '') => {
+  const rawQuery = String(locationQuery || '').trim();
+  if (!rawQuery) return null;
+
+  const normalizedToken = normalizeLocationToken(rawQuery);
+  const normalizedZipCode = normalizeZipCode(rawQuery);
+  const zipLikeQuery = isZipCodeToken(rawQuery);
+  const exactTokenRegex = new RegExp(`^${escapeRegex(normalizedToken)}$`, 'i');
+  const startsWithTokenRegex = new RegExp(`^${escapeRegex(normalizedToken)}`, 'i');
+  const anchorQuery = zipLikeQuery
+    ? { zipCode: normalizedZipCode }
+    : {
+      $or: [
+        { city: { $regex: exactTokenRegex } },
+        { county: { $regex: exactTokenRegex } },
+        { aliases: { $regex: exactTokenRegex } },
+        { city: { $regex: startsWithTokenRegex } },
+        { county: { $regex: startsWithTokenRegex } },
+        { aliases: { $regex: startsWithTokenRegex } }
+      ]
+    };
+
+  const anchors = await ZipLocationIndex.find(anchorQuery).limit(MAX_NEWS_INGESTION_LOCATION_MATCHES).lean();
+  const anchorStates = toUniqueStrings(anchors.flatMap((entry) => [
+    String(entry.state || '').trim(),
+    String(entry.stateCode || '').trim()
+  ]).filter(Boolean));
+  const anchorsWithCoordinates = anchors.filter(hasCoordinates);
+
+  let nearbyEntries = [];
+  if (anchorsWithCoordinates.length > 0) {
+    const candidateQuery = {
+      latitude: { $ne: null },
+      longitude: { $ne: null }
+    };
+    if (anchorStates.length > 0) {
+      candidateQuery.$or = anchorStates.flatMap((stateToken) => {
+        const stateRegex = new RegExp(`^${escapeRegex(stateToken)}$`, 'i');
+        return [{ state: stateRegex }, { stateCode: stateRegex }];
+      });
+    }
+    const candidates = await ZipLocationIndex.find(candidateQuery).limit(5000).lean();
+    nearbyEntries = candidates.filter((candidate) => anchorsWithCoordinates.some((anchor) => (
+      haversineMiles(anchor.latitude, anchor.longitude, candidate.latitude, candidate.longitude)
+      <= NEWS_INGESTION_LOCATION_RADIUS_MILES
+    )));
+  }
+
+  const matchedEntries = [...anchors, ...nearbyEntries];
+  const matchedZipCodes = toUniqueStrings(matchedEntries.map((entry) => normalizeZipCode(entry.zipCode)).filter(Boolean));
+  const matchedCities = toUniqueStrings(matchedEntries.map((entry) => normalizeLocationToken(entry.city)).filter(Boolean));
+  const matchedCounties = toUniqueStrings(matchedEntries.map((entry) => normalizeLocationToken(entry.county)).filter(Boolean));
+
+  const locationOrClauses = [];
+  if (matchedZipCodes.length > 0) {
+    locationOrClauses.push(
+      { 'normalized.assignedZipCode': { $in: matchedZipCodes } },
+      { 'normalized.locationTags.zipCodes': { $in: matchedZipCodes } }
+    );
+  }
+  if (matchedCities.length > 0) {
+    locationOrClauses.push({ 'normalized.locationTags.cities': { $in: matchedCities } });
+  }
+  if (matchedCounties.length > 0) {
+    locationOrClauses.push({ 'normalized.locationTags.counties': { $in: matchedCounties } });
+  }
+
+  if (locationOrClauses.length === 0) {
+    if (zipLikeQuery) {
+      return {
+        $or: [
+          { 'normalized.assignedZipCode': normalizedZipCode },
+          { 'normalized.locationTags.zipCodes': normalizedZipCode }
+        ]
+      };
+    }
+    return {
+      $or: [
+        { 'normalized.locationTags.cities': new RegExp(escapeRegex(normalizedToken), 'i') },
+        { 'normalized.locationTags.counties': new RegExp(escapeRegex(normalizedToken), 'i') },
+        { 'normalized.locationTags.states': new RegExp(escapeRegex(normalizedToken), 'i') }
+      ]
+    };
+  }
+
+  return { $or: locationOrClauses };
+};
+
 const normalizeLocationAssociations = (normalized = {}) => {
   const tags = normalized.locationTags || {};
   return {
@@ -672,6 +780,7 @@ router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, asy
     const source = String(req.query.source || '').trim();
     const tag = String(req.query.tag || '').trim().toLowerCase();
     const zipCode = String(req.query.zipCode || '').trim().toUpperCase();
+    const location = String(req.query.location || '').trim();
     const region = String(req.query.region || '').trim().toLowerCase();
     const processingStatus = String(req.query.processingStatus || '').trim().toLowerCase();
     const search = String(req.query.search || '').trim();
@@ -704,12 +813,24 @@ router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, asy
       if (toDate && !Number.isNaN(toDate.getTime())) query.scrapedAt.$lte = toDate;
       if (Object.keys(query.scrapedAt).length === 0) delete query.scrapedAt;
     }
+    const andClauses = [];
     if (search) {
-      query.$or = [
+      andClauses.push({
+        $or: [
         { 'normalized.title': new RegExp(escapeRegex(search), 'i') },
         { 'normalized.url': new RegExp(escapeRegex(search), 'i') },
         { 'source.sourceId': new RegExp(escapeRegex(search), 'i') }
-      ];
+        ]
+      });
+    }
+    if (location) {
+      const locationClause = await buildNewsIngestionLocationFilter(location);
+      if (locationClause) {
+        andClauses.push(locationClause);
+      }
+    }
+    if (andClauses.length > 0) {
+      query.$and = andClauses;
     }
 
     const [records, total] = await Promise.all([
