@@ -270,7 +270,7 @@ function CircleManager({
                 const centerY = y + (FRIEND_NODE_SIZE / 2);
                 const dx = centerX - OWNER_X;
                 const dy = centerY - OWNER_Y;
-                const distance = Math.sqrt((dx ** 2) + (dy ** 2));
+                const distance = Math.hypot(dx, dy);
                 const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
                 return (
                   <React.Fragment key={friend._id}>
