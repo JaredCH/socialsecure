@@ -108,4 +108,63 @@ describe('Home landing page CTA behavior', () => {
     expect(container.querySelector('img[alt="Alice Johnson hero"]')).not.toBeNull();
     expect(container.querySelector('img[alt="Alice Johnson profile"]')).not.toBeNull();
   });
+
+  it('uses compact advanced controls with dropdowns, slider, and autosuggest wiring', async () => {
+    userAPI.search.mockResolvedValue({
+      data: {
+        users: [],
+        unsupportedCriteria: []
+      }
+    });
+
+    await renderHome({ isAuthenticated: false });
+
+    expect(container.querySelector('select[name="state"]')).not.toBeNull();
+    expect(container.querySelector('select[name="sex"]')).not.toBeNull();
+    expect(container.querySelector('select[name="race"]')).not.toBeNull();
+    expect(container.querySelector('input[name="ageFilters"][type="range"]')).not.toBeNull();
+    expect(container.querySelector('input[name="city"]')?.getAttribute('list')).toBe('home-city-suggestions');
+    expect(container.querySelector('input[name="county"]')?.getAttribute('list')).toBe('home-county-suggestions');
+    expect(container.querySelector('input[name="zip"]')?.getAttribute('list')).toBe('home-zip-suggestions');
+
+    const stateSelect = container.querySelector('select[name="state"]');
+    const sexSelect = container.querySelector('select[name="sex"]');
+    const raceSelect = container.querySelector('select[name="race"]');
+    const ageToggle = container.querySelector('input[name="ageFiltersEnabled"]');
+    const ageRange = container.querySelector('input[name="ageFilters"][type="range"]');
+    expect(ageRange.disabled).toBe(true);
+    const nativeSelectValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      'value'
+    ).set;
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    ).set;
+
+    await act(async () => {
+      nativeSelectValueSetter.call(stateSelect, 'TX');
+      stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      nativeSelectValueSetter.call(sexSelect, 'Female');
+      sexSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      nativeSelectValueSetter.call(raceSelect, 'Asian');
+      raceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      ageToggle.checked = true;
+      ageToggle.dispatchEvent(new Event('change', { bubbles: true }));
+      nativeInputValueSetter.call(ageRange, '42');
+      ageRange.dispatchEvent(new Event('input', { bubbles: true }));
+      jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 50);
+    });
+    expect(ageRange.disabled).toBe(false);
+
+    await act(async () => Promise.resolve());
+    await act(async () => Promise.resolve());
+
+    expect(userAPI.search).toHaveBeenLastCalledWith(expect.objectContaining({
+      state: 'TX',
+      sex: 'Female',
+      race: 'Asian',
+      ageFilters: '42'
+    }));
+  });
 });
