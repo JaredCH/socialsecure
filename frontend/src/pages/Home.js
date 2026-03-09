@@ -451,33 +451,38 @@ function Home({ isAuthenticated = false }) {
             </div>
             {searchResults.length > 0 ? (
               <ul className="max-h-[36rem] space-y-3 overflow-y-auto pr-1">
-              {searchResults.map((user) => (
-                <li key={user._id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                  {user.bannerUrl ? (
-                    <img src={user.bannerUrl} alt={`${user.realName || user.username} hero`} className="h-20 w-full object-cover" />
-                  ) : (
-                    <div className="h-20 w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-slate-700" />
-                  )}
-                  <div className="flex items-center gap-3 p-3">
-                    {user.avatarUrl ? (
-                      <img src={user.avatarUrl} alt={`${user.realName || user.username} profile`} className="h-12 w-12 rounded-full border border-white object-cover shadow-sm" />
-                    ) : (
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700">
-                        {String(user.realName || user.username || '?')
-                          .split(' ')
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .map((part) => part[0]?.toUpperCase() || '')
-                          .join('')}
+              {searchResults.map((user) => {
+                const userSocialLink = `/social?user=${encodeURIComponent(user.username || '')}`;
+                return (
+                  <li key={user._id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    <Link to={userSocialLink} className="block hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+                      {user.bannerUrl ? (
+                        <img src={user.bannerUrl} alt={`${user.realName || user.username} hero`} className="h-20 w-full object-cover" />
+                      ) : (
+                        <div className="h-20 w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-slate-700" />
+                      )}
+                      <div className="flex items-center gap-3 p-3">
+                        {user.avatarUrl ? (
+                          <img src={user.avatarUrl} alt={`${user.realName || user.username} profile`} className="h-12 w-12 rounded-full border border-white object-cover shadow-sm" />
+                        ) : (
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700">
+                            {String(user.realName || user.username || '?')
+                              .split(' ')
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((part) => part[0]?.toUpperCase() || '')
+                              .join('')}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{user.realName || user.username}</p>
+                          <p className="truncate text-xs text-slate-600">@{user.username} · {user.city || 'N/A'}{user.state ? `, ${user.state}` : ''}</p>
+                        </div>
                       </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{user.realName || user.username}</p>
-                      <p className="truncate text-xs text-slate-600">@{user.username} · {user.city || 'N/A'}{user.state ? `, ${user.state}` : ''}</p>
-                    </div>
-                  </div>
-                </li>
-              ))}
+                    </Link>
+                  </li>
+                );
+              })}
               </ul>
             ) : (
               <p className="text-sm text-slate-500">No profiles available yet.</p>
