@@ -271,8 +271,27 @@ describe('Social page hero background rendering', () => {
 
   it('keeps composer hidden by default with a reveal action', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
-    expect(container.textContent).toContain('Start a post');
+    expect(container.textContent).toContain('Compose');
+    expect(container.textContent).not.toContain('The composer stays tucked away until you need to post.');
     expect(container.textContent).not.toContain('Publish Post');
+  });
+
+  it('renders compact owner chat access controls with icon tooltips', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+    const expectedRoleButtonsPerType = 2;
+    expect(container.querySelectorAll('button[title="Friends"]').length).toBe(expectedRoleButtonsPerType);
+    expect(container.querySelectorAll('button[title="Circles"]').length).toBe(expectedRoleButtonsPerType);
+    expect(container.querySelectorAll('button[title="Guests"]').length).toBe(expectedRoleButtonsPerType);
+    const readFriendsButton = container.querySelector('button[aria-label="Read access: Friends"]');
+    expect(readFriendsButton?.textContent).toContain('👥');
+    expect(readFriendsButton?.getAttribute('aria-pressed')).toBe('true');
+    await act(async () => {
+      readFriendsButton?.click();
+    });
+    expect(readFriendsButton?.getAttribute('aria-pressed')).toBe('false');
+    const saveAccessButton = container.querySelector('button[title="Save chat access"]');
+    expect(saveAccessButton).toBeTruthy();
+    expect(saveAccessButton?.textContent).toContain('Save');
   });
 
   it('positions owner floating controls with elevated stacking context', async () => {
