@@ -138,6 +138,7 @@ const USER_MENU_HEIGHT_PX = 220;
 const DM_UNLOCK_COOKIE_NAME = 'socialsecure_dm_unlock_v1';
 const DM_UNLOCK_CACHE_SECONDS = 30 * 60;
 const LOCKED_DM_PLACEHOLDER = '🔒 Conversation locked. Unlock to view encrypted messages.';
+const DM_OFFLINE_SELECTION_ERROR = 'dm_offline_mode_selected';
 
 const readCookie = (name) => {
   const source = typeof document?.cookie === 'string' ? document.cookie : '';
@@ -590,6 +591,54 @@ function Chat() {
     return session;
   }, [profile?._id]);
 
+  useEffect(() => {
+    if (!activeConversationId || activeConversation?.type !== 'dm') return;
+    if (!dmUnlockedByConversation[String(activeConversationId)]) return;
+    const encryptedMessages = messages.filter((message) => message?.e2ee?.ciphertext);
+    if (encryptedMessages.length === 0) return;
+    const pendingMessages = encryptedMessages.filter((message) => !decryptedDmContentById[String(message._id)]);
+    if (pendingMessages.length === 0) return;
+
+    let cancelled = false;
+    const decryptMessages = async () => {
+      try {
+        const session = await ensureE2EESession();
+        const decryptedEntries = {};
+        for (const message of pendingMessages) {
+          try {
+            decryptedEntries[String(message._id)] = await decryptEnvelope({
+              session,
+              roomId: activeConversationId,
+              envelope: message.e2ee
+            });
+          } catch {
+            // keep encrypted placeholder when key is unavailable
+          }
+        }
+        if (!cancelled && Object.keys(decryptedEntries).length > 0) {
+          setDecryptedDmContentById((prev) => ({
+            ...prev,
+            ...decryptedEntries
+          }));
+        }
+      } catch {
+        // user can choose offline mode from unlock prompt and decrypt later
+      }
+    };
+
+    decryptMessages();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeConversation?.type,
+    activeConversationId,
+    decryptedDmContentById,
+    dmUnlockedByConversation,
+    ensureE2EESession,
+    messages
+  ]);
+
   const handlePasswordUnlock = useCallback(() => {
     const resolver = passwordResolverRef.current;
     if (!resolver) return;
@@ -608,6 +657,14 @@ function Chat() {
     passwordResolverRef.current = null;
     setPasswordModalOpen(false);
     resolver.reject(new Error('Encryption password is required'));
+  }, []);
+
+  const handleUseOfflineMode = useCallback(() => {
+    const resolver = passwordResolverRef.current;
+    if (!resolver) return;
+    passwordResolverRef.current = null;
+    setPasswordModalOpen(false);
+    resolver.reject(new Error(DM_OFFLINE_SELECTION_ERROR));
   }, []);
 
   const persistDmUnlockCache = useCallback((conversationId, shouldCache) => {
@@ -633,6 +690,24 @@ function Chat() {
       await session.persist();
     }
   }, []);
+
+  const prepareOfflineDmData = useCallback(async () => {
+    if (!activeConversationId || activeConversation?.type !== 'dm') {
+      return;
+    }
+    setDmOfflineState('downloading_encrypted');
+    try {
+      await chatAPI.getConversationMessages(activeConversationId, 1, 100);
+      if (isOnline && e2eeSessionRef.current) {
+        await hydrateConversationKeys({ conversationId: activeConversationId, session: e2eeSessionRef.current });
+      }
+      setDmOfflineState('ready_offline');
+      toast.success('Encrypted DM data is cached. Disconnect from the internet before decrypting.');
+    } catch (error) {
+      setDmOfflineState('online');
+      toast.error(error.response?.data?.error || error.message || 'Failed to prepare offline DM data');
+    }
+  }, [activeConversation?.type, activeConversationId, hydrateConversationKeys, isOnline]);
 
   const handleSend = async (event) => {
     event.preventDefault();
@@ -746,6 +821,10 @@ function Chat() {
       }
       toast.success('Direct message unlocked.');
     } catch (error) {
+      if (error?.message === DM_OFFLINE_SELECTION_ERROR) {
+        await prepareOfflineDmData();
+        return;
+      }
       toast.error(error.response?.data?.error || error.message || 'Failed to unlock direct message');
     }
   }, [
@@ -753,6 +832,7 @@ function Chat() {
     activeConversationId,
     ensureE2EESession,
     hydrateConversationKeys,
+    prepareOfflineDmData,
     persistDmUnlockCache,
     rememberDmUnlock,
     strictDmLockMode
@@ -780,23 +860,8 @@ function Chat() {
   }, []);
 
   const handleGoOffline = useCallback(async () => {
-    if (!activeConversationId || activeConversation?.type !== 'dm') {
-      return;
-    }
-    setDmOfflineState('downloading_encrypted');
-    try {
-      await chatAPI.getConversationMessages(activeConversationId, 1, 100);
-      if (isOnline) {
-        const session = await ensureE2EESession();
-        await hydrateConversationKeys({ conversationId: activeConversationId, session });
-      }
-      setDmOfflineState('ready_offline');
-      toast.success('Encrypted DM data downloaded for offline decrypt.');
-    } catch (error) {
-      setDmOfflineState('online');
-      toast.error(error.response?.data?.error || error.message || 'Failed to prepare offline DM data');
-    }
-  }, [activeConversation?.type, activeConversationId, ensureE2EESession, hydrateConversationKeys, isOnline]);
+    await prepareOfflineDmData();
+  }, [prepareOfflineDmData]);
 
   const handleDecryptOfflineMessages = useCallback(async () => {
     if (activeConversation?.type !== 'dm') return;
@@ -1296,10 +1361,7 @@ function Chat() {
                     <button
                       type="button"
                       onClick={handleGoOffline}
-                      disabled={
-                        !dmUnlockedByConversation[String(activeConversationId)]
-                        || dmOfflineState !== 'online'
-                      }
+                      disabled={dmOfflineState !== 'online'}
                       className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
                     >
                       {dmOfflineState === 'downloading_encrypted' ? 'Downloading…' : 'Go Offline'}
@@ -1307,7 +1369,7 @@ function Chat() {
                     <button
                       type="button"
                       onClick={handleDecryptOfflineMessages}
-                      disabled={!dmUnlockedByConversation[String(activeConversationId)] || isOnline || dmOfflineState !== 'ready_offline'}
+                      disabled={isOnline || dmOfflineState !== 'ready_offline'}
                       className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
                     >
                       Decrypt Offline Messages
@@ -1324,6 +1386,11 @@ function Chat() {
                 ) : null}
               </div>
             </div>
+            {activeConversation?.type === 'dm' && dmOfflineState === 'ready_offline' && isOnline ? (
+              <div className={`mt-2 rounded border px-2 py-1 text-[10px] ${activeTheme.panelGlass}`}>
+                Offline package ready. Disconnect from the internet, then use “Decrypt Offline Messages”.
+              </div>
+            ) : null}
           </header>
 
           {messagesError ? (
@@ -1482,7 +1549,7 @@ function Chat() {
           <div className={`w-full max-w-sm rounded border p-3 ${activeTheme.panelGlass}`}>
             <h3 className="text-sm font-semibold">Unlock DM encryption</h3>
             <p className="mt-1 text-xs opacity-80">
-              Enter your encryption password to unlock your local vault for DM send/decrypt.
+              Enter your encryption password to unlock and decrypt now, or use offline mode to prepare messages for offline decryption.
             </p>
             <input
               type="password"
@@ -1499,6 +1566,13 @@ function Chat() {
                 className={`rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleUseOfflineMode}
+                className={`rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
+              >
+                Use Offline Mode
               </button>
               <button
                 type="button"
