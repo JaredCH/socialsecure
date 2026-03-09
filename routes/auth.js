@@ -84,6 +84,8 @@ const normalizeProfileFieldVisibility = (value = {}) => {
 
   return {
     streetAddress: PROFILE_VISIBILITY_OPTIONS.includes(value.streetAddress) ? value.streetAddress : undefined,
+    phone: PROFILE_VISIBILITY_OPTIONS.includes(value.phone) ? value.phone : undefined,
+    email: PROFILE_VISIBILITY_OPTIONS.includes(value.email) ? value.email : undefined,
     worksAt: PROFILE_VISIBILITY_OPTIONS.includes(value.worksAt) ? value.worksAt : undefined,
     hobbies: PROFILE_VISIBILITY_OPTIONS.includes(value.hobbies) ? value.hobbies : undefined,
     ageGroup: PROFILE_VISIBILITY_OPTIONS.includes(value.ageGroup) ? value.ageGroup : undefined,
@@ -1175,6 +1177,29 @@ router.post('/encryption-password/lock', async (req, res) => {
 // Update user profile
 router.put('/profile', [
   body('realName').optional().trim().notEmpty().withMessage('Real name cannot be empty'),
+  body('email').optional({ nullable: true }).isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('phone').optional({ nullable: true }).isString().trim().isLength({ max: 30 }).withMessage('Phone must be at most 30 characters'),
+  body('streetAddress').optional({ nullable: true }).isString().trim().isLength({ max: 200 }).withMessage('Home address must be at most 200 characters'),
+  body('hobbies').optional({ nullable: true }).isArray({ max: 10 }).withMessage('Hobbies must be an array with at most 10 entries'),
+  body('hobbies.*').optional({ nullable: true }).isString().trim().isLength({ max: 60 }).withMessage('Each hobby must be at most 60 characters'),
+  body('ageGroup').optional({ nullable: true }).isString().trim().isLength({ max: 40 }).withMessage('Age must be at most 40 characters'),
+  body('sex').optional({ nullable: true }).isString().trim().isLength({ max: 40 }).withMessage('Sex must be at most 40 characters'),
+  body('race').optional({ nullable: true }).isString().trim().isLength({ max: 60 }).withMessage('Race must be at most 60 characters'),
+  body('profileFieldVisibility')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('profileFieldVisibility must be an object');
+      }
+
+      const normalized = normalizeProfileFieldVisibility(value);
+      const hasInvalidField = Object.keys(value).some((key) => normalized[key] === undefined);
+      if (hasInvalidField) {
+        throw new Error(`Visibility must be one of: ${PROFILE_VISIBILITY_OPTIONS.join(', ')}`);
+      }
+
+      return true;
+    }),
   body('city').optional().trim(),
   body('state').optional().trim(),
   body('country').optional().trim(),
@@ -1293,7 +1318,7 @@ router.put('/profile', [
     }
 
     // Update allowed fields
-    const { realName, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme, socialPagePreferences } = req.body;
+    const { realName, email, phone, streetAddress, hobbies, ageGroup, sex, race, profileFieldVisibility, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme, socialPagePreferences } = req.body;
     const now = Date.now();
 
     const requestedLocation = {
@@ -1334,6 +1359,47 @@ router.put('/profile', [
     }
 
     if (realName) user.realName = realName;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'phone')) {
+      user.phone = normalizeProfileOptionalValue(phone);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'streetAddress')) {
+      user.streetAddress = normalizeProfileOptionalValue(streetAddress);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'hobbies')) {
+      user.hobbies = normalizeHobbies(hobbies);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'ageGroup')) {
+      user.ageGroup = normalizeProfileOptionalValue(ageGroup);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'sex')) {
+      user.sex = normalizeProfileOptionalValue(sex);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'race')) {
+      user.race = normalizeProfileOptionalValue(race);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'email')) {
+      const normalizedEmail = (email || '').trim().toLowerCase();
+      if (normalizedEmail && normalizedEmail !== user.email) {
+        const existingUser = await User.findOne({ email: normalizedEmail, _id: { $ne: user._id } }).select('_id');
+        if (existingUser) {
+          return res.status(400).json({ error: 'Email already registered' });
+        }
+      }
+      if (normalizedEmail) {
+        user.email = normalizedEmail;
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'profileFieldVisibility')) {
+      const normalizedProfileFieldVisibility = normalizeProfileFieldVisibility(profileFieldVisibility);
+      const definedVisibilityEntries = Object.entries(normalizedProfileFieldVisibility)
+        .filter(([, value]) => typeof value === 'string');
+      if (definedVisibilityEntries.length > 0) {
+        user.profileFieldVisibility = {
+          ...(user.profileFieldVisibility?.toObject?.() || user.profileFieldVisibility || {}),
+          ...Object.fromEntries(definedVisibilityEntries)
+        };
+      }
+    }
 
     if (Object.prototype.hasOwnProperty.call(req.body, 'bio')) {
       user.bio = (bio || '').trim();

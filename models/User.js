@@ -154,6 +154,16 @@ const userSchema = new mongoose.Schema({
       enum: ['public', 'social', 'secure'],
       default: 'social'
     },
+    phone: {
+      type: String,
+      enum: ['public', 'social', 'secure'],
+      default: 'social'
+    },
+    email: {
+      type: String,
+      enum: ['public', 'social', 'secure'],
+      default: 'social'
+    },
     worksAt: {
       type: String,
       enum: ['public', 'social', 'secure'],
