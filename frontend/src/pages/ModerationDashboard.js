@@ -98,6 +98,7 @@ const formatAssociatedLocations = (locationAssociations = {}) => {
     ...zipCodes.map((value) => `zip:${value}`)
   ];
 };
+const getIngestedTimestamp = (record = {}) => record.ingestedAt || record.createdAt || null;
 
 function ModerationDashboard() {
   const [overview, setOverview] = useState(null);
@@ -488,7 +489,7 @@ function ModerationDashboard() {
                           </div>
                         ) : null}
                       </div>
-                      <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(row.ingestedAt || row.createdAt).toLocaleString()}</span>
+                      <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(getIngestedTimestamp(row)).toLocaleString()}</span>
                     </div>
                   </button>
                 ))}
@@ -702,7 +703,9 @@ function ModerationDashboard() {
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Normalized Data</h4>
                   <div className="space-y-1 text-xs">
                     {ingestionDetail.record.normalized?.publishedAt ? <p><span className="font-medium text-gray-500">Published:</span> {new Date(ingestionDetail.record.normalized.publishedAt).toLocaleString()}</p> : null}
-                    {ingestionDetail.record.ingestedAt ? <p><span className="font-medium text-gray-500">Ingested:</span> {new Date(ingestionDetail.record.ingestedAt).toLocaleString()}</p> : null}
+                    {getIngestedTimestamp(ingestionDetail.record) ? (
+                      <p><span className="font-medium text-gray-500">Ingested:</span> {new Date(getIngestedTimestamp(ingestionDetail.record)).toLocaleString()}</p>
+                    ) : null}
                     <p><span className="font-medium text-gray-500">ZIP:</span> {ingestionDetail.record.normalized?.assignedZipCode || 'N/A'}</p>
                     <p><span className="font-medium text-gray-500">Locality:</span> {ingestionDetail.record.normalized?.localityLevel || 'N/A'}</p>
                     <p><span className="font-medium text-gray-500">Language:</span> {ingestionDetail.record.normalized?.language || 'en'}</p>

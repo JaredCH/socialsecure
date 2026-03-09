@@ -1751,6 +1751,13 @@ const buildNormalizedUrlHash = (url) => {
   if (!url) return null;
   return crypto.createHash('sha256').update(String(url).toLowerCase().trim()).digest('hex').substring(0, 16);
 };
+const EMPTY_LOCATION_TAGS = Object.freeze({
+  zipCodes: [],
+  cities: [],
+  counties: [],
+  states: [],
+  countries: []
+});
 
 const ensureCityAssociationSpecificity = (article = {}) => {
   const normalizedTags = normalizeLocationTagSet(article.locationTags || {}, article.assignedZipCode);
@@ -1763,9 +1770,14 @@ const ensureCityAssociationSpecificity = (article = {}) => {
     };
   }
 
-  const fallbackLocality = normalizedTags.counties.length > 0
-    ? 'county'
-    : (normalizedTags.states.length > 0 ? 'state' : (normalizedTags.countries.length > 0 ? 'country' : 'global'));
+  let fallbackLocality = 'global';
+  if (normalizedTags.counties.length > 0) {
+    fallbackLocality = 'county';
+  } else if (normalizedTags.states.length > 0) {
+    fallbackLocality = 'state';
+  } else if (normalizedTags.countries.length > 0) {
+    fallbackLocality = 'country';
+  }
   return {
     ...article,
     localityLevel: fallbackLocality,
@@ -1773,8 +1785,8 @@ const ensureCityAssociationSpecificity = (article = {}) => {
   };
 };
 
-const buildIngestionNormalizedPayload = (article = {}) => {
-  const safeArticle = ensureCityAssociationSpecificity(article);
+const buildIngestionNormalizedPayload = (article = {}, options = {}) => {
+  const safeArticle = options.alreadyNormalized ? article : ensureCityAssociationSpecificity(article);
   return {
     title: safeArticle.title || '',
     description: safeArticle.description || '',
@@ -1787,13 +1799,7 @@ const buildIngestionNormalizedPayload = (article = {}) => {
     localityLevel: safeArticle.localityLevel || 'global',
     language: safeArticle.language || 'en',
     normalizedUrlHash: safeArticle.normalizedUrlHash || null,
-    locationTags: safeArticle.locationTags || {
-      zipCodes: [],
-      cities: [],
-      counties: [],
-      states: [],
-      countries: []
-    }
+    locationTags: safeArticle.locationTags || EMPTY_LOCATION_TAGS
   };
 };
 
@@ -1867,6 +1873,7 @@ async function processArticles(articles, options = {}) {
         lastScoredAt: scoring.lastScoredAt
       };
       const scopedArticle = ensureCityAssociationSpecificity(scoredArticle);
+      const ingestionTimestamp = new Date();
 
       // Check for duplicate by URL hash
       const existing = await findExistingArticle(
@@ -1927,7 +1934,7 @@ async function processArticles(articles, options = {}) {
               url: scopedArticle.url || ''
             },
             scrapedAt: article.scrapeTimestamp || new Date(),
-            normalized: buildIngestionNormalizedPayload(scopedArticle),
+            normalized: buildIngestionNormalizedPayload(scopedArticle, { alreadyNormalized: true }),
             resolvedScope: mapLocalityLevelToScope(scopedArticle.localityLevel),
             dedupe: {
               outcome: 'updated',
@@ -1939,7 +1946,7 @@ async function processArticles(articles, options = {}) {
               operation: 'update',
               persistedAt: new Date()
             },
-            ingestedAt: new Date(),
+            ingestedAt: ingestionTimestamp,
             processingStatus: 'processed',
             tags: scopedArticle.topics || [],
             events: buildIngestionEvents({ outcome: 'updated', duplicateReason: 'incoming_newer_than_existing' })
@@ -1956,7 +1963,7 @@ async function processArticles(articles, options = {}) {
               url: scopedArticle.url || ''
             },
             scrapedAt: article.scrapeTimestamp || new Date(),
-            normalized: buildIngestionNormalizedPayload(scopedArticle),
+            normalized: buildIngestionNormalizedPayload(scopedArticle, { alreadyNormalized: true }),
             resolvedScope: mapLocalityLevelToScope(scopedArticle.localityLevel),
             dedupe: {
               outcome: 'duplicate',
@@ -1968,7 +1975,7 @@ async function processArticles(articles, options = {}) {
               operation: 'skip',
               persistedAt: new Date()
             },
-            ingestedAt: new Date(),
+            ingestedAt: ingestionTimestamp,
             processingStatus: 'processed',
             tags: scopedArticle.topics || [],
             events: buildIngestionEvents({ outcome: 'duplicate', duplicateReason: 'incoming_not_newer' })
@@ -1992,7 +1999,7 @@ async function processArticles(articles, options = {}) {
           url: scopedArticle.url || ''
         },
         scrapedAt: article.scrapeTimestamp || new Date(),
-        normalized: buildIngestionNormalizedPayload(scopedArticle),
+        normalized: buildIngestionNormalizedPayload(scopedArticle, { alreadyNormalized: true }),
         resolvedScope: mapLocalityLevelToScope(scopedArticle.localityLevel),
         dedupe: {
           outcome: 'inserted',
@@ -2004,7 +2011,7 @@ async function processArticles(articles, options = {}) {
           operation: 'insert',
           persistedAt: new Date()
         },
-        ingestedAt: new Date(),
+        ingestedAt: ingestionTimestamp,
         processingStatus: 'processed',
         tags: scopedArticle.topics || [],
         events: buildIngestionEvents({ outcome: 'inserted' })

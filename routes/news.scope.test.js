@@ -954,22 +954,24 @@ describe('News scope routing', () => {
 
   it('cleans up stale news data with duplicate ingestion records', async () => {
     const realReadyState = Object.getOwnPropertyDescriptor(require('mongoose').connection, 'readyState');
-    Object.defineProperty(require('mongoose').connection, 'readyState', { configurable: true, value: 1 });
-    Article.deleteMany.mockResolvedValue({ deletedCount: 3 });
-    NewsIngestionRecord.deleteMany.mockResolvedValue({ deletedCount: 4 });
+    try {
+      Object.defineProperty(require('mongoose').connection, 'readyState', { configurable: true, value: 1 });
+      Article.deleteMany.mockResolvedValue({ deletedCount: 3 });
+      NewsIngestionRecord.deleteMany.mockResolvedValue({ deletedCount: 4 });
 
-    const cleanup = await newsRoutes.internals.cleanupStaleNewsData();
+      const cleanup = await newsRoutes.internals.cleanupStaleNewsData();
 
-    expect(cleanup.articlesDeleted).toBe(3);
-    expect(cleanup.ingestionRecordsDeleted).toBe(4);
-    expect(NewsIngestionRecord.deleteMany).toHaveBeenCalledWith(expect.objectContaining({
-      $or: expect.arrayContaining([
-        { 'dedupe.outcome': 'duplicate' }
-      ])
-    }));
-
-    if (realReadyState) {
-      Object.defineProperty(require('mongoose').connection, 'readyState', realReadyState);
+      expect(cleanup.articlesDeleted).toBe(3);
+      expect(cleanup.ingestionRecordsDeleted).toBe(4);
+      expect(NewsIngestionRecord.deleteMany).toHaveBeenCalledWith(expect.objectContaining({
+        $or: expect.arrayContaining([
+          { 'dedupe.outcome': 'duplicate' }
+        ])
+      }));
+    } finally {
+      if (realReadyState) {
+        Object.defineProperty(require('mongoose').connection, 'readyState', realReadyState);
+      }
     }
   });
 });
