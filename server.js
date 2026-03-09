@@ -13,6 +13,8 @@ const User = require('./models/User');
 const Friendship = require('./models/Friendship');
 const { initializeRealtime } = require('./services/realtime');
 const { ensureUniversalAdminAccount } = require('./services/universalAdmin');
+const { startEventScheduleIngestionScheduler } = require('./services/eventScheduleIngestion');
+const { startEventRoomLifecycleScheduler } = require('./services/eventRoomLifecycle');
 
 const TYPING_THROTTLE_MS = 1000;
 const SOCKET_JWT_SECRET = process.env.JWT_SECRET || '';
