@@ -178,6 +178,10 @@ describe('Social page hero background rendering', () => {
     const links = Array.from(container.querySelectorAll('a'));
     expect(links.some((link) => link.getAttribute('href') === '/calendar?user=buddy')).toBe(true);
     expect(links.some((link) => link.getAttribute('href') === '/chat?profile=u-2')).toBe(true);
+    expect(container.textContent).not.toContain('Request, accept, or deny relationship listing');
+    expect(container.textContent).not.toContain('Signals from your network');
+    expect(container.textContent).not.toContain('Stay responsive without leaving the hub');
+    expect(container.textContent).not.toContain('Public social feed');
   });
 
   it('navigates to the selected profile calendar when guest clicks the calendar tab', async () => {
@@ -231,6 +235,9 @@ describe('Social page hero background rendering', () => {
     });
 
     expect(calendarAPI.getMyEvents).toHaveBeenCalled();
+    const previewShell = container.querySelector('[data-testid="social-calendar-preview-shell"]');
+    expect(previewShell).toBeTruthy();
+    expect(previewShell.className).toContain('max-w-3xl');
     expect(container.querySelector('[data-testid="social-calendar-preview-grid"]')).toBeTruthy();
     expect(container.textContent).toContain('Upcoming');
     expect(container.textContent).toContain('US:');

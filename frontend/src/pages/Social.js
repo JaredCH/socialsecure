@@ -2856,7 +2856,7 @@ const Social = () => {
         return (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-slate-500">{(isOwnSocialContext && !isGuestPreview) ? 'Your personalized timeline.' : 'Public feed view.'}</p>
+              <p className="text-sm text-slate-500">{(isOwnSocialContext && !isGuestPreview) ? 'Your personalized timeline.' : 'Timeline'}</p>
               <button type="button" onClick={loadFeed} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" disabled={loadingFeed}>{loadingFeed ? 'Refreshing…' : 'Refresh'}</button>
             </div>
             {feedError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">{feedError}</div> : null}
@@ -2934,7 +2934,6 @@ const Social = () => {
       case 'moderation_status':
         return isAuthenticated && !isGuestPreview ? (
           <div className="space-y-3">
-            <p className="text-sm text-gray-600">Track the current status of your submitted reports.</p>
             {myReports.length === 0 ? <p className="text-sm text-gray-500">No submitted reports yet.</p> : myReports.slice(0, 10).map((report) => (
               <div key={report.id} className="rounded-xl border p-2 text-sm">
                 <p className="font-medium text-gray-900">{report.category} • {report.targetType} • {report.status}</p>
@@ -2968,7 +2967,7 @@ const Social = () => {
                 <label className="flex flex-col gap-1 text-sm text-gray-700"><span>Audience</span><select value={galleryRelationshipAudience} onChange={(event) => setGalleryRelationshipAudience(event.target.value)} className="rounded-xl border px-3 py-2"><option value="social">Social</option><option value="secure">Secure</option></select></label>
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700"><input type="file" accept="image/*" onChange={handleUploadGalleryImage} disabled={galleryBusy} /></label>
               </div>
-            ) : <p className="text-sm text-gray-600">Browse gallery items and react with like/dislike.</p>}
+            ) : null}
             {galleryError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{galleryError}</div> : null}
             {galleryLoading ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">Loading gallery…</div> : galleryItems.length === 0 ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">No gallery images yet.</div> : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -3382,16 +3381,16 @@ const Social = () => {
         });
       case 'gallery':
         return renderGlassPanel('Gallery', renderPanelBody('gallery'), {
-          subtitle: 'Media, moments, and social proof'
+          subtitle: null
         });
       case 'chat':
         return renderGlassPanel('Chat', renderPanelBody('chat_panel'), {
-          subtitle: 'Private room for profile and friend conversations'
+          subtitle: null
         });
       case 'calendar':
         return renderGlassPanel(
           'Calendar',
-          <div className="space-y-4 text-sm text-slate-700">
+          <div data-testid="social-calendar-preview-shell" className="mx-auto w-full max-w-3xl space-y-4 text-sm text-slate-700">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/55 px-4 py-4">
               <div>
                 <p className="font-semibold text-slate-900">Coordinate upcoming events</p>
@@ -3538,7 +3537,7 @@ const Social = () => {
               })
             ) : null}
             {renderGlassPanel('Feed', renderPanelBody('timeline'), {
-              subtitle: (isOwnSocialContext && !isGuestPreview) ? 'Your personalized stream' : 'Public social feed'
+              subtitle: (isOwnSocialContext && !isGuestPreview) ? 'Your personalized stream' : null
             })}
             {renderGlassPanel('Gallery', renderPanelBody('gallery'), {
               subtitle: 'Pinned visuals and recent uploads'
@@ -3664,7 +3663,7 @@ const Social = () => {
             No partner listing activity yet.
           </div>
         ),
-        { subtitle: 'Request, accept, or deny relationship listing' }
+        { subtitle: null }
       ) : null}
 
       {!isPrivateGuestLock ? renderGlassPanel(
@@ -3682,15 +3681,15 @@ const Social = () => {
             </div>
           ))}
         </div>,
-        { subtitle: 'Signals from your network' }
+        { subtitle: null }
       ) : null}
 
       {!isPrivateGuestLock ? renderGlassPanel('Chat', renderPanelBody('chat_panel'), {
-        subtitle: 'Stay responsive without leaving the hub'
+        subtitle: null
       }) : null}
 
       {isAuthenticated && !isGuestPreview && !isPrivateGuestLock ? renderGlassPanel('Moderation', renderPanelBody('moderation_status'), {
-        subtitle: 'Recent trust & safety signals'
+        subtitle: null
       }) : null}
     </div>
   );
