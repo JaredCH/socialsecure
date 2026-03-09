@@ -139,4 +139,27 @@ describe('CircleManager', () => {
 
     expect(onRemoveMember).toHaveBeenCalledWith('Trusted', 'f-1');
   });
+
+  it('renders friends as connected circle nodes around the owner node', async () => {
+    await act(async () => {
+      root.render(
+        <CircleManager
+          circles={baseCircles}
+          friends={baseFriends}
+          onCreateCircle={jest.fn()}
+          onUpdateCircle={jest.fn()}
+          onDeleteCircle={jest.fn()}
+          onAddMember={jest.fn()}
+          onRemoveMember={jest.fn()}
+        />
+      );
+    });
+
+    const aliceNode = container.querySelector('[data-testid="friend-node-f-1"]');
+    const bobNode = container.querySelector('[data-testid="friend-node-f-2"]');
+    expect(aliceNode).toBeTruthy();
+    expect(bobNode).toBeTruthy();
+    expect(aliceNode.textContent).toContain('Alice');
+    expect(bobNode.textContent).toContain('Bob');
+  });
 });

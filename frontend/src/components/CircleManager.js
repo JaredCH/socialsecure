@@ -7,8 +7,8 @@ const OWNER_X = STAGE_WIDTH / 2;
 const OWNER_Y = STAGE_HEIGHT / 2;
 const OWNER_RADIUS = 120;
 const OWNER_NODE_SIZE = 64;
-const FRIEND_CHIPS_PER_ROW = 8;
-const FRIEND_CHIP_X_SPACING = 88;
+const FRIEND_NODE_SIZE = 56;
+const FRIEND_RING_RADIUS = OWNER_RADIUS + 120;
 const SECURE_RING_COLOR = '#f59e0b';
 const SOCIAL_RING_COLOR = '#e0e7ff';
 const STAGE_BACKGROUND = 'radial-gradient(circle at center, rgba(59,130,246,0.14), rgba(15,23,42,0.04) 58%)';
@@ -157,6 +157,20 @@ function CircleManager({
     }).slice(0, 8);
   }, [selectedCircle, friends, suggestQuery]);
 
+  const friendPositions = useMemo(
+    () => friends.map((friend, index) => {
+      const angle = ((Math.PI * 2) / Math.max(friends.length, 1)) * index - (Math.PI / 2);
+      const x = OWNER_X + (FRIEND_RING_RADIUS * Math.cos(angle)) - (FRIEND_NODE_SIZE / 2);
+      const y = OWNER_Y + (FRIEND_RING_RADIUS * Math.sin(angle)) - (FRIEND_NODE_SIZE / 2);
+      return {
+        friend,
+        x: clamp(x, 10, STAGE_WIDTH - FRIEND_NODE_SIZE - 10),
+        y: clamp(y, 10, STAGE_HEIGHT - FRIEND_NODE_SIZE - 10)
+      };
+    }),
+    [friends]
+  );
+
   const handleSaveCircle = () => {
     if (!selectedCircle) return;
     const normalizedName = editName.trim();
@@ -250,22 +264,35 @@ function CircleManager({
               <div className="absolute rounded-full border-2 border-violet-200 bg-violet-500 text-xs font-semibold text-white shadow-sm" style={{ left: `${OWNER_X - (OWNER_NODE_SIZE / 2)}px`, top: `${OWNER_Y - (OWNER_NODE_SIZE / 2)}px`, width: `${OWNER_NODE_SIZE}px`, height: `${OWNER_NODE_SIZE}px`, display: 'grid', placeItems: 'center' }}>
                 You
               </div>
-              {friends.map((friend, index) => {
+              {friendPositions.map(({ friend, x, y }) => {
                 const friendName = friend.realName || friend.username;
+                const centerX = x + (FRIEND_NODE_SIZE / 2);
+                const centerY = y + (FRIEND_NODE_SIZE / 2);
+                const dx = centerX - OWNER_X;
+                const dy = centerY - OWNER_Y;
+                const distance = Math.sqrt((dx ** 2) + (dy ** 2));
+                const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
                 return (
-                  <button
-                    key={friend._id}
-                    type="button"
-                    draggable
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData('application/socialsecure-friend-id', String(friend._id));
-                      event.dataTransfer.setData('text/plain', friendName);
-                    }}
-                    className="absolute bottom-2 left-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 shadow-sm"
-                    style={{ transform: `translateX(${(index % FRIEND_CHIPS_PER_ROW) * FRIEND_CHIP_X_SPACING}px)` }}
-                  >
-                    {friendName}
-                  </button>
+                  <React.Fragment key={friend._id}>
+                    <div
+                      className="pointer-events-none absolute origin-left bg-slate-200/80"
+                      style={{ left: `${OWNER_X}px`, top: `${OWNER_Y}px`, width: `${distance}px`, height: '2px', transform: `rotate(${angle}deg)` }}
+                    />
+                    <button
+                      type="button"
+                      draggable
+                      data-testid={`friend-node-${friend._id}`}
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData('application/socialsecure-friend-id', String(friend._id));
+                        event.dataTransfer.setData('text/plain', friendName);
+                      }}
+                      className="absolute flex items-center justify-center rounded-full border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 shadow-sm"
+                      style={{ left: `${x}px`, top: `${y}px`, width: `${FRIEND_NODE_SIZE}px`, height: `${FRIEND_NODE_SIZE}px` }}
+                      title={`Drag ${friendName} onto a circle`}
+                    >
+                      <span className="line-clamp-2 text-center leading-tight">{friendName}</span>
+                    </button>
+                  </React.Fragment>
                 );
               })}
               {circles.map((circle) => {
