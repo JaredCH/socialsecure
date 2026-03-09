@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import Chat from './Chat';
 import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
-import { createWrappedRoomKeyPackage, encryptEnvelope, unlockOrCreateVault } from '../utils/e2ee';
+import { createWrappedRoomKeyPackage, decryptEnvelope, encryptEnvelope, unlockOrCreateVault } from '../utils/e2ee';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -125,6 +125,7 @@ describe('Chat zip room indicator', () => {
       ciphertextHash: 'a'.repeat(64),
       algorithms: { cipher: 'AES-256-GCM', signature: 'ECDSA-P256-SHA256', hash: 'SHA-256' }
     });
+    decryptEnvelope.mockResolvedValue('decrypted dm');
     createWrappedRoomKeyPackage.mockResolvedValue({
       senderDeviceId: 'device-1',
       recipientDeviceId: 'device-2',
@@ -897,6 +898,78 @@ describe('Chat zip room indicator', () => {
     expect(chatAPI.sendConversationMessage).not.toHaveBeenCalledWith('dm1', expect.anything());
   });
 
+  it('renders decrypted direct message content after unlocking', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockImplementation((conversationId) => {
+      if (conversationId === 'dm1') {
+        return Promise.resolve({
+          data: {
+            messages: [{
+              _id: 'dm-message-1',
+              content: '[Encrypted message]',
+              userId: { _id: 'u2', username: 'buddy' },
+              createdAt: new Date().toISOString(),
+              e2ee: {
+                ciphertext: 'cipher',
+                nonce: 'nonce',
+                aad: '',
+                keyVersion: 1,
+                senderDeviceId: 'device-2',
+                clientMessageId: 'client-1',
+                signature: 'sig',
+                ciphertextHash: 'h'.repeat(64)
+              }
+            }]
+          }
+        });
+      }
+      return Promise.resolve({ data: { messages: [] } });
+    });
+    decryptEnvelope.mockResolvedValue('hello from dm');
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(container.textContent).toContain('🔒 Conversation locked');
+    expect(container.textContent).not.toContain('hello from dm');
+
+    const unlockDmButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock DM');
+    await act(async () => {
+      unlockDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
+    await act(async () => {
+      setInputValue(passwordInput, 'secret-password');
+      await flush();
+    });
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    await act(async () => {
+      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(decryptEnvelope).toHaveBeenCalled();
+    expect(container.textContent).toContain('hello from dm');
+    expect(container.textContent).not.toContain('[Encrypted message]');
+  });
+
   it('supports DM offline controls state transitions', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
     authAPI.getProfile.mockResolvedValue({
@@ -925,24 +998,16 @@ describe('Chat zip room indicator', () => {
       unlockDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
-    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
-    expect(passwordInput).not.toBeNull();
+    const offlineModeButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Use Offline Mode');
+    expect(offlineModeButton).not.toBeUndefined();
     await act(async () => {
-      setInputValue(passwordInput, 'secret-password');
-      await flush();
-    });
-    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
-    await act(async () => {
-      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      offlineModeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 
-    const goOfflineButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Go Offline');
-    expect(goOfflineButton).not.toBeUndefined();
-    await act(async () => {
-      goOfflineButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flush();
-    });
+    expect(container.textContent).toContain('Offline package ready. Disconnect from the internet');
+    const decryptButtonWhileOnline = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Decrypt Offline Messages');
+    expect(decryptButtonWhileOnline.disabled).toBe(true);
 
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
     await act(async () => {
@@ -955,6 +1020,18 @@ describe('Chat zip room indicator', () => {
 
     await act(async () => {
       decryptButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
+    expect(passwordInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(passwordInput, 'secret-password');
+      await flush();
+    });
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    await act(async () => {
+      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 
