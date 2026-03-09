@@ -1007,7 +1007,7 @@ describe('Chat zip room indicator', () => {
 
     expect(container.textContent).toContain('Offline package ready. Disconnect from the internet');
     const decryptButtonWhileOnline = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Decrypt Offline Messages');
-    expect(decryptButtonWhileOnline.disabled).toBe(true);
+    expect(decryptButtonWhileOnline.disabled).toBe(false);
 
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
     await act(async () => {

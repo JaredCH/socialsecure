@@ -865,7 +865,11 @@ function Chat() {
 
   const handleDecryptOfflineMessages = useCallback(async () => {
     if (activeConversation?.type !== 'dm') return;
-    if (isOnline || dmOfflineState !== 'ready_offline') return;
+    if (dmOfflineState !== 'ready_offline') return;
+    if (isOnline) {
+      toast('Disconnect from the internet before decrypting offline messages.');
+      return;
+    }
     try {
       const session = await ensureE2EESession();
       const decryptedEntries = {};
@@ -1369,7 +1373,7 @@ function Chat() {
                     <button
                       type="button"
                       onClick={handleDecryptOfflineMessages}
-                      disabled={isOnline || dmOfflineState !== 'ready_offline'}
+                      disabled={dmOfflineState !== 'ready_offline'}
                       className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
                     >
                       Decrypt Offline Messages
