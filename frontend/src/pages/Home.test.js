@@ -1,7 +1,8 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import Home from './Home';
+import Home, { SEARCH_DEBOUNCE_MS } from './Home';
+import { userAPI } from '../utils/api';
 
 jest.mock('../utils/api', () => ({
   userAPI: {
@@ -26,12 +27,16 @@ describe('Home landing page CTA behavior', () => {
   };
 
   beforeEach(() => {
+    jest.useFakeTimers();
+    userAPI.search.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
   });
 
   afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
     act(() => {
       root.unmount();
     });
@@ -62,5 +67,45 @@ describe('Home landing page CTA behavior', () => {
     expect(container.textContent).toContain('Go to Social');
     expect(container.textContent).toContain('Open Calendar');
     expect(container.textContent).toContain('Interactive maps with population density heatmaps');
+  });
+
+  it('streams search results while typing and renders profile/hero images', async () => {
+    userAPI.search.mockResolvedValue({
+      data: {
+        users: [
+          {
+            _id: 'u-1',
+            username: 'alice',
+            realName: 'Alice Johnson',
+            city: 'Austin',
+            state: 'TX',
+            avatarUrl: 'https://cdn.example.com/alice-avatar.jpg',
+            bannerUrl: 'https://cdn.example.com/alice-banner.jpg'
+          }
+        ],
+        unsupportedCriteria: []
+      }
+    });
+
+    await renderHome({ isAuthenticated: false });
+
+    const firstNameInput = container.querySelector('input[name="firstName"]');
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    ).set;
+    await act(async () => {
+      nativeInputValueSetter.call(firstNameInput, 'Ali');
+      firstNameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 50);
+    });
+
+    await act(async () => Promise.resolve());
+    await act(async () => Promise.resolve());
+
+    expect(userAPI.search).toHaveBeenCalledWith(expect.objectContaining({ firstName: 'Ali' }));
+    expect(container.textContent).toContain('Alice Johnson');
+    expect(container.querySelector('img[alt="Alice Johnson hero"]')).not.toBeNull();
+    expect(container.querySelector('img[alt="Alice Johnson profile"]')).not.toBeNull();
   });
 });

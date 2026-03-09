@@ -150,7 +150,7 @@ router.post('/search', userSearchLimiter, async (req, res) => {
     if (criteria.phone) userFilter.phone = buildContainsRegex(criteria.phone);
 
     const users = await User.find(userFilter)
-      .select('username realName city state country county zipCode phone bio friendCount createdAt pgpPublicKey')
+      .select('username realName city state country county zipCode phone bio friendCount createdAt pgpPublicKey avatarUrl bannerUrl')
       .sort({ friendCount: -1, createdAt: -1 })
       .limit(Math.max(limit * 5, 40))
       .lean();
@@ -257,6 +257,8 @@ router.post('/search', userSearchLimiter, async (req, res) => {
           country: user.country,
           county: user.county,
           zipCode: user.zipCode,
+          avatarUrl: user.avatarUrl || '',
+          bannerUrl: user.bannerUrl || '',
           hasPGP: !!user.pgpPublicKey,
           rankingScore: Number(normalizedScore.toFixed(4))
         };

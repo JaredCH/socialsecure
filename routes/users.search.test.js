@@ -64,6 +64,8 @@ describe('User search routes', () => {
                 phone: '512-555-1111',
                 country: 'US',
                 bio: 'Runner and reader',
+                avatarUrl: 'https://cdn.example.com/avatar-u1.jpg',
+                bannerUrl: 'https://cdn.example.com/banner-u1.jpg',
                 friendCount: 10,
                 createdAt: new Date('2026-03-01T00:00:00.000Z'),
                 pgpPublicKey: 'pgp'
@@ -79,6 +81,8 @@ describe('User search routes', () => {
                 phone: '214-555-2222',
                 country: 'US',
                 bio: 'Cycling and games',
+                avatarUrl: '',
+                bannerUrl: '',
                 friendCount: 2,
                 createdAt: new Date('2026-03-02T00:00:00.000Z'),
                 pgpPublicKey: null
@@ -136,7 +140,9 @@ describe('User search routes', () => {
     expect(response.body.users[0]).toMatchObject({
       _id: 'u-1',
       username: 'alice',
-      hasPGP: true
+      hasPGP: true,
+      avatarUrl: 'https://cdn.example.com/avatar-u1.jpg',
+      bannerUrl: 'https://cdn.example.com/banner-u1.jpg'
     });
     expect(response.body.users[0].rankingScore).toBeGreaterThan(0);
   });

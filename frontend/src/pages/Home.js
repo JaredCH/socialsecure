@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { userAPI } from '../utils/api';
+
+export const SEARCH_DEBOUNCE_MS = 250;
 
 function Home({ isAuthenticated = false }) {
   const [searching, setSearching] = useState(false);
@@ -23,38 +25,84 @@ function Home({ isAuthenticated = false }) {
     sex: '',
     race: ''
   });
+  const activeSearchRequestRef = useRef(0);
 
   const onSearchFieldChange = (event) => {
     const { name, value } = event.target;
     setSearchForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSearch = async (event) => {
-    event.preventDefault();
+  const runSearch = async (criteria, { showEmptyCriteriaError = false } = {}) => {
     setSearchError('');
     setSearchNotice('');
 
-    const hasAnyCriteria = Object.values(searchForm).some((value) => value.trim().length > 0);
+    const normalizedCriteria = Object.entries(criteria || {}).reduce((acc, [key, value]) => {
+      acc[key] = String(value || '').trim();
+      return acc;
+    }, {});
+    const hasAnyCriteria = Object.values(normalizedCriteria).some((value) => value.length > 0);
+
     if (!hasAnyCriteria) {
-      setSearchError('Add at least one optional search value to start a search session.');
+      activeSearchRequestRef.current += 1;
+      if (showEmptyCriteriaError) {
+        setSearchError('Add at least one optional search value to start a search session.');
+      }
+      setSearchNotice('');
       setSearchResults([]);
+      setSearching(false);
       return;
     }
 
+    const requestId = activeSearchRequestRef.current + 1;
+    activeSearchRequestRef.current = requestId;
     setSearching(true);
     try {
-      const { data } = await userAPI.search(searchForm);
+      const { data } = await userAPI.search(normalizedCriteria);
+      if (requestId !== activeSearchRequestRef.current) {
+        return;
+      }
       setSearchResults(Array.isArray(data?.users) ? data.users : []);
       if (Array.isArray(data?.unsupportedCriteria) && data.unsupportedCriteria.length > 0) {
         setSearchNotice(`Some criteria are accepted but not yet directly rankable: ${data.unsupportedCriteria.join(', ')}.`);
+      } else {
+        setSearchNotice('');
       }
     } catch (error) {
+      if (requestId !== activeSearchRequestRef.current) {
+        return;
+      }
       setSearchError(error.response?.data?.error || 'Search session failed. Please try again.');
       setSearchResults([]);
+      setSearchNotice('');
     } finally {
-      setSearching(false);
+      if (requestId === activeSearchRequestRef.current) {
+        setSearching(false);
+      }
     }
   };
+
+  const handleSearch = (event) => {
+    event.preventDefault();
+    runSearch(searchForm, { showEmptyCriteriaError: true });
+  };
+
+  useEffect(() => {
+    const hasAnyCriteria = Object.values(searchForm).some((value) => value.trim().length > 0);
+    if (!hasAnyCriteria) {
+      activeSearchRequestRef.current += 1;
+      setSearching(false);
+      setSearchError('');
+      setSearchNotice('');
+      setSearchResults([]);
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      runSearch(searchForm);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [searchForm]);
 
   const featureHighlights = [
     {
@@ -217,10 +265,10 @@ function Home({ isAuthenticated = false }) {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="search-session-heading">
+      <section className="rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="search-session-heading">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 id="search-session-heading" className="text-2xl font-bold text-slate-900">Start a Search Session</h2>
+            <h2 id="search-session-heading" className="text-xl font-bold text-slate-900 sm:text-2xl">Start a Search Session</h2>
             <p className="mt-1 text-sm text-slate-600">
               All fields are optional. SocialSecure ranks results by how closely each profile matches your criteria.
             </p>
@@ -230,87 +278,116 @@ function Home({ isAuthenticated = false }) {
           </span>
         </div>
 
-        <form onSubmit={handleSearch} className="mt-4 space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <form onSubmit={handleSearch} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-4 lg:col-span-7">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Name First</span>
-              <input name="firstName" value={searchForm.firstName} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="firstName" value={searchForm.firstName} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Name Last</span>
-              <input name="lastName" value={searchForm.lastName} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="lastName" value={searchForm.lastName} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">City</span>
-              <input name="city" value={searchForm.city} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="city" value={searchForm.city} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">State</span>
-              <input name="state" value={searchForm.state} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="state" value={searchForm.state} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Zip</span>
-              <input name="zip" value={searchForm.zip} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="zip" value={searchForm.zip} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">County</span>
-              <input name="county" value={searchForm.county} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="county" value={searchForm.county} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Phone</span>
-              <input name="phone" value={searchForm.phone} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="phone" value={searchForm.phone} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Street Address</span>
-              <input name="streetAddress" value={searchForm.streetAddress} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="streetAddress" value={searchForm.streetAddress} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Friends of User</span>
-              <input name="friendsOfUser" value={searchForm.friendsOfUser} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="friendsOfUser" value={searchForm.friendsOfUser} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Works At</span>
-              <input name="worksAt" value={searchForm.worksAt} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="worksAt" value={searchForm.worksAt} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Hobbies</span>
-              <input name="hobbies" value={searchForm.hobbies} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="hobbies" value={searchForm.hobbies} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Age Filters</span>
-              <input name="ageFilters" value={searchForm.ageFilters} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" placeholder="Optional age detail" />
+                <input name="ageFilters" value={searchForm.ageFilters} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="Optional age detail" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Sex</span>
-              <input name="sex" value={searchForm.sex} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="sex" value={searchForm.sex} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-sm text-slate-700">
               <span className="mb-1 block font-medium">Race</span>
-              <input name="race" value={searchForm.race} onChange={onSearchFieldChange} className="w-full rounded border border-slate-300 px-3 py-2" />
+                <input name="race" value={searchForm.race} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
-          </div>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="submit" disabled={searching} className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
-              {searching ? 'Searching…' : 'Search'}
-            </button>
-            {searchError ? <p className="text-sm text-red-600">{searchError}</p> : null}
-            {!searchError && searchNotice ? <p className="text-sm text-amber-700">{searchNotice}</p> : null}
-          </div>
-        </form>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button type="submit" disabled={searching} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60">
+                {searching ? 'Searching…' : 'Search'}
+              </button>
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">Live results as you type</span>
+              {searchError ? <p className="text-sm text-red-600">{searchError}</p> : null}
+              {!searchError && searchNotice ? <p className="text-sm text-amber-700">{searchNotice}</p> : null}
+            </div>
+          </form>
 
-        <div className="mt-4">
-          {searchResults.length > 0 ? (
-            <ul className="space-y-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 lg:col-span-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">Search Results</h3>
+              <span className="text-xs text-slate-500">{searchResults.length} shown</span>
+            </div>
+            {searchResults.length > 0 ? (
+              <ul className="max-h-[36rem] space-y-3 overflow-y-auto pr-1">
               {searchResults.map((user) => (
-                <li key={user._id} className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  <span className="font-semibold text-slate-900">{user.realName}</span> (@{user.username}) · {user.city || 'N/A'}{user.state ? `, ${user.state}` : ''}
+                <li key={user._id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                  {user.bannerUrl ? (
+                    <img src={user.bannerUrl} alt={`${user.realName || user.username} hero`} className="h-20 w-full object-cover" />
+                  ) : (
+                    <div className="h-20 w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-slate-700" />
+                  )}
+                  <div className="flex items-center gap-3 p-3">
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt={`${user.realName || user.username} profile`} className="h-12 w-12 rounded-full border border-white object-cover shadow-sm" />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700">
+                        {String(user.realName || user.username || '?')
+                          .split(' ')
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((part) => part[0]?.toUpperCase() || '')
+                          .join('')}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{user.realName || user.username}</p>
+                      <p className="truncate text-xs text-slate-600">@{user.username} · {user.city || 'N/A'}{user.state ? `, ${user.state}` : ''}</p>
+                    </div>
+                  </div>
                 </li>
               ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-slate-500">Search results will appear here once you run a search session.</p>
-          )}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">Start typing in any optional filter to stream matching profiles here.</p>
+            )}
+          </div>
         </div>
       </section>
 
