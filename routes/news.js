@@ -535,6 +535,10 @@ const isLikelyUsCountryToken = (token = '') => {
     || normalized === 'united states of america';
 };
 
+const extractLocationZipCode = (location = {}) => normalizeZipCode(
+  location?.zipCode || location?.zipcode || location?.postalCode || location?.postalcode || ''
+);
+
 const enrichLocationTagsWithCorrelations = async ({ locationTags = {}, assignedZipCode = null }) => {
   const enriched = normalizeLocationTagSet(locationTags, assignedZipCode);
   const countryHints = new Set(enriched.countries);
@@ -563,27 +567,29 @@ const enrichLocationTagsWithCorrelations = async ({ locationTags = {}, assignedZ
     if (zipLocation?.stateCode) enriched.states.push(normalizeLocationToken(zipLocation.stateCode));
     if (zipLocation?.country) enriched.countries.push(normalizeLocationToken(zipLocation.country));
     if (zipLocation?.countryCode) enriched.countries.push(normalizeLocationToken(zipLocation.countryCode));
-    const resolvedZip = normalizeZipCode(zipLocation?.zipCode || zipLocation?.zipcode || zipLocation?.postalCode || zipLocation?.postalcode || '');
+    const resolvedZip = extractLocationZipCode(zipLocation);
     if (resolvedZip && isZipLikeToken(resolvedZip)) enriched.zipCodes.push(resolvedZip);
   }
 
   if (isUsContext) {
     for (const city of [...enriched.cities]) {
       let matched = null;
-      const stateHints = enriched.states.length > 0 ? [...enriched.states] : [null];
-      for (const stateHint of stateHints) {
-        if (!stateHint) continue;
-        try {
-          matched = await findZipLocationByCityState({ city, state: stateHint, countryCode: 'US' });
-        } catch (error) {
-          console.warn('News city correlation lookup failed:', `${city}, ${stateHint}`, error.message);
+      const stateHints = enriched.states.length > 0 ? [...enriched.states] : [];
+      if (stateHints.length > 0) {
+        for (const stateHint of stateHints) {
+          try {
+            matched = await findZipLocationByCityState({ city, state: stateHint, countryCode: 'US' });
+          } catch (error) {
+            console.warn('News city correlation lookup failed:', `${city}, ${stateHint}`, error.message);
+          }
+          if (matched?.zipCode) break;
         }
-        if (matched?.zipCode) break;
       }
 
       if (!matched?.zipCode) {
         try {
-          const query = enriched.states.length > 0 ? `${city}, ${enriched.states[0]}, US` : `${city}, US`;
+          const primaryStateHint = stateHints[0];
+          const query = primaryStateHint ? `${city}, ${primaryStateHint}, US` : `${city}, US`;
           const geocoded = await geocodeLocationQuery(query);
           matched = geocoded?.result || null;
         } catch (error) {
@@ -591,7 +597,7 @@ const enrichLocationTagsWithCorrelations = async ({ locationTags = {}, assignedZ
         }
       }
 
-      const resolvedZip = normalizeZipCode(matched?.zipCode || matched?.zipcode || matched?.postalCode || matched?.postalcode || '');
+      const resolvedZip = extractLocationZipCode(matched);
       if (resolvedZip && isZipLikeToken(resolvedZip)) {
         enriched.zipCodes.push(resolvedZip);
       }
@@ -603,10 +609,10 @@ const enrichLocationTagsWithCorrelations = async ({ locationTags = {}, assignedZ
   }
 
   const normalized = normalizeLocationTagSet(enriched);
+  // Enforce deterministic city-level locality assignment: keep city/zip tags only when both are present.
   if (normalized.zipCodes.length === 0) {
     normalized.cities = [];
-  }
-  if (normalized.cities.length === 0) {
+  } else if (normalized.cities.length === 0) {
     normalized.zipCodes = [];
   }
   return normalized;
