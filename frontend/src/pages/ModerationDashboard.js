@@ -84,6 +84,22 @@ const Modal = ({ title, onClose, children }) => (
   </div>
 );
 
+const formatAssociatedLocations = (locationAssociations = {}) => {
+  const cities = Array.isArray(locationAssociations.cities) ? locationAssociations.cities : [];
+  const states = Array.isArray(locationAssociations.states) ? locationAssociations.states : [];
+  const countries = Array.isArray(locationAssociations.countries) ? locationAssociations.countries : [];
+  const zipCodes = Array.isArray(locationAssociations.zipCodes) ? locationAssociations.zipCodes : [];
+  const counties = Array.isArray(locationAssociations.counties) ? locationAssociations.counties : [];
+  return [
+    ...cities.map((value) => `city:${value}`),
+    ...counties.map((value) => `county:${value}`),
+    ...states.map((value) => `state:${value}`),
+    ...countries.map((value) => `country:${value}`),
+    ...zipCodes.map((value) => `zip:${value}`)
+  ];
+};
+const getIngestedTimestamp = (record = {}) => record.ingestedAt || record.createdAt || null;
+
 function ModerationDashboard() {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -359,7 +375,7 @@ function ModerationDashboard() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-gray-50 px-5 py-3">
           <div>
             <h2 className="text-base font-semibold text-gray-900">📰 News Ingestion Observability</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Inspect scraped records, dedupe outcomes, persistence details, and processing logs.</p>
+            <p className="text-xs text-gray-500 mt-0.5">Inspect scraped records, dedupe outcomes, ingestion timing, associated locations, persistence details, and processing logs.</p>
           </div>
           <button type="button" onClick={() => loadIngestionRecords(1)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition-colors">↻ Refresh</button>
         </div>
@@ -459,6 +475,11 @@ function ModerationDashboard() {
                           {row.normalized?.assignedZipCode ? <span className="text-xs text-gray-500">📍 {row.normalized.assignedZipCode}</span> : null}
                           {row.eventCount > 0 ? <span className="text-xs text-gray-400">{row.eventCount} events</span> : null}
                         </div>
+                        {formatAssociatedLocations(row.locationAssociations).length > 0 ? (
+                          <p className="text-[11px] text-gray-500 mt-1 truncate">
+                            Associated: {formatAssociatedLocations(row.locationAssociations).join(' • ')}
+                          </p>
+                        ) : null}
                         {(row.tags || []).length > 0 ? (
                           <div className="flex flex-wrap gap-1 mt-1.5">
                             {row.tags.slice(0, 5).map((tag) => (
@@ -468,7 +489,7 @@ function ModerationDashboard() {
                           </div>
                         ) : null}
                       </div>
-                      <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(row.createdAt).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(getIngestedTimestamp(row)).toLocaleString()}</span>
                     </div>
                   </button>
                 ))}
@@ -682,9 +703,15 @@ function ModerationDashboard() {
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Normalized Data</h4>
                   <div className="space-y-1 text-xs">
                     {ingestionDetail.record.normalized?.publishedAt ? <p><span className="font-medium text-gray-500">Published:</span> {new Date(ingestionDetail.record.normalized.publishedAt).toLocaleString()}</p> : null}
+                    {getIngestedTimestamp(ingestionDetail.record) ? (
+                      <p><span className="font-medium text-gray-500">Ingested:</span> {new Date(getIngestedTimestamp(ingestionDetail.record)).toLocaleString()}</p>
+                    ) : null}
                     <p><span className="font-medium text-gray-500">ZIP:</span> {ingestionDetail.record.normalized?.assignedZipCode || 'N/A'}</p>
                     <p><span className="font-medium text-gray-500">Locality:</span> {ingestionDetail.record.normalized?.localityLevel || 'N/A'}</p>
                     <p><span className="font-medium text-gray-500">Language:</span> {ingestionDetail.record.normalized?.language || 'en'}</p>
+                    {(ingestionDetail.record.locationAssociations?.cities || []).length > 0 ? (
+                      <p><span className="font-medium text-gray-500">Cities:</span> {ingestionDetail.record.locationAssociations.cities.join(', ')}</p>
+                    ) : null}
                     {(ingestionDetail.record.normalized?.locations || []).length > 0 ? (
                       <p><span className="font-medium text-gray-500">Locations:</span> {ingestionDetail.record.normalized.locations.join(', ')}</p>
                     ) : null}

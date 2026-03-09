@@ -59,6 +59,8 @@ const MAX_FEED_CANDIDATES = 400;
 const DETERMINISTIC_SCOPE_WEIGHT = 2;
 const LOCATION_GEOCODE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_LOCATION_QUERY_HINTS = 30;
+const NEWS_RETENTION_DAYS = 7;
+const NEWS_RETENTION_MS = NEWS_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const NEWS_LOCATION_TAGGER_V2_ENABLED = String(process.env.NEWS_LOCATION_TAGGER_V2 || 'true').toLowerCase() !== 'false';
 const GDELT_ENABLED = String(process.env.GDELT_ENABLED || 'false').toLowerCase() === 'true';
 const GDELT_API_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc';
@@ -1749,6 +1751,57 @@ const buildNormalizedUrlHash = (url) => {
   if (!url) return null;
   return crypto.createHash('sha256').update(String(url).toLowerCase().trim()).digest('hex').substring(0, 16);
 };
+const EMPTY_LOCATION_TAGS = Object.freeze({
+  zipCodes: [],
+  cities: [],
+  counties: [],
+  states: [],
+  countries: []
+});
+
+const ensureCityAssociationSpecificity = (article = {}) => {
+  const normalizedTags = normalizeLocationTagSet(article.locationTags || {}, article.assignedZipCode);
+  const normalizedLocality = normalizeLocationToken(article.localityLevel || 'global');
+  if (normalizedLocality !== 'city' || normalizedTags.cities.length > 0) {
+    return {
+      ...article,
+      localityLevel: normalizedLocality || 'global',
+      locationTags: normalizedTags
+    };
+  }
+
+  let fallbackLocality = 'global';
+  if (normalizedTags.counties.length > 0) {
+    fallbackLocality = 'county';
+  } else if (normalizedTags.states.length > 0) {
+    fallbackLocality = 'state';
+  } else if (normalizedTags.countries.length > 0) {
+    fallbackLocality = 'country';
+  }
+  return {
+    ...article,
+    localityLevel: fallbackLocality,
+    locationTags: normalizedTags
+  };
+};
+
+const buildIngestionNormalizedPayload = (article = {}, options = {}) => {
+  const safeArticle = options.alreadyNormalized ? article : ensureCityAssociationSpecificity(article);
+  return {
+    title: safeArticle.title || '',
+    description: safeArticle.description || '',
+    url: safeArticle.url || '',
+    imageUrl: safeArticle.imageUrl || null,
+    publishedAt: safeArticle.publishedAt || null,
+    topics: safeArticle.topics || [],
+    locations: safeArticle.locations || [],
+    assignedZipCode: safeArticle.assignedZipCode || null,
+    localityLevel: safeArticle.localityLevel || 'global',
+    language: safeArticle.language || 'en',
+    normalizedUrlHash: safeArticle.normalizedUrlHash || null,
+    locationTags: safeArticle.locationTags || EMPTY_LOCATION_TAGS
+  };
+};
 
 const persistNewsIngestionRecord = async (payload) => {
   if (mongoose.connection?.readyState !== 1) {
@@ -1760,6 +1813,32 @@ const persistNewsIngestionRecord = async (payload) => {
     console.warn('Unable to persist NewsIngestionRecord:', error.message);
     return null;
   }
+};
+
+const cleanupStaleNewsData = async () => {
+  if (mongoose.connection?.readyState !== 1) {
+    return null;
+  }
+  const cutoff = new Date(Date.now() - NEWS_RETENTION_MS);
+  const [articleCleanup, recordCleanup] = await Promise.all([
+    Article.deleteMany({
+      $or: [
+        { publishedAt: { $lt: cutoff } },
+        { ingestTimestamp: { $lt: cutoff } }
+      ]
+    }),
+    NewsIngestionRecord.deleteMany({
+      $or: [
+        { scrapedAt: { $lt: cutoff } },
+        { 'dedupe.outcome': 'duplicate' }
+      ]
+    })
+  ]);
+  return {
+    cutoff,
+    articlesDeleted: articleCleanup?.deletedCount || 0,
+    ingestionRecordsDeleted: recordCleanup?.deletedCount || 0
+  };
 };
 
 async function processArticles(articles, options = {}) {
@@ -1793,79 +1872,70 @@ async function processArticles(articles, options = {}) {
         isPromoted: scoring.isPromoted,
         lastScoredAt: scoring.lastScoredAt
       };
+      const scopedArticle = ensureCityAssociationSpecificity(scoredArticle);
+      const ingestionTimestamp = new Date();
 
       // Check for duplicate by URL hash
       const existing = await findExistingArticle(
-        scoredArticle.url,
-        scoredArticle.sourceId,
-        scoredArticle.normalizedUrlHash
+        scopedArticle.url,
+        scopedArticle.sourceId,
+        scopedArticle.normalizedUrlHash
       );
       
       if (existing) {
         // Update if newer
-        const incomingPublishedAt = scoredArticle.publishedAt ? new Date(scoredArticle.publishedAt) : null;
+        const incomingPublishedAt = scopedArticle.publishedAt ? new Date(scopedArticle.publishedAt) : null;
         const existingPublishedAt = existing.publishedAt ? new Date(existing.publishedAt) : null;
         if (incomingPublishedAt && (!existingPublishedAt || incomingPublishedAt > existingPublishedAt)) {
-          const mergedLocations = [...new Set([...(existing.locations || []), ...(scoredArticle.locations || [])])];
+          const mergedLocations = [...new Set([...(existing.locations || []), ...(scopedArticle.locations || [])])];
           await Article.findByIdAndUpdate(existing._id, {
             $set: {
-              title: scoredArticle.title,
-              description: scoredArticle.description,
-              imageUrl: scoredArticle.imageUrl,
-              publishedAt: scoredArticle.publishedAt,
-              category: scoredArticle.category || existing.category || 'general',
-              topics: [...new Set([...(existing.topics || []), ...(scoredArticle.topics || [])])],
+              title: scopedArticle.title,
+              description: scopedArticle.description,
+              imageUrl: scopedArticle.imageUrl,
+              publishedAt: scopedArticle.publishedAt,
+              category: scopedArticle.category || existing.category || 'general',
+              topics: [...new Set([...(existing.topics || []), ...(scopedArticle.topics || [])])],
               locations: mergedLocations,
-              assignedZipCode: scoredArticle.assignedZipCode || existing.assignedZipCode || null,
-              feedSource: scoredArticle.feedSource || existing.feedSource || null,
-              feedCategory: scoredArticle.feedCategory || existing.feedCategory || null,
-              feedLanguage: scoredArticle.feedLanguage || existing.feedLanguage || null,
-              feedMetadata: scoredArticle.feedMetadata || existing.feedMetadata || {},
+              assignedZipCode: scopedArticle.assignedZipCode || existing.assignedZipCode || null,
+              feedSource: scopedArticle.feedSource || existing.feedSource || null,
+              feedCategory: scopedArticle.feedCategory || existing.feedCategory || null,
+              feedLanguage: scopedArticle.feedLanguage || existing.feedLanguage || null,
+              feedMetadata: scopedArticle.feedMetadata || existing.feedMetadata || {},
               locationTags: NEWS_LOCATION_TAGGER_V2_ENABLED
-                ? mergeLocationTags(existing.locationTags, scoredArticle.locationTags, scoredArticle.assignedZipCode)
+                ? mergeLocationTags(existing.locationTags, scopedArticle.locationTags, scopedArticle.assignedZipCode)
                 : existing.locationTags,
               scopeReason: NEWS_LOCATION_TAGGER_V2_ENABLED
-                ? (scoredArticle.scopeReason || existing.scopeReason || 'source_default')
+                ? (scopedArticle.scopeReason || existing.scopeReason || 'source_default')
                 : existing.scopeReason,
               scopeConfidence: NEWS_LOCATION_TAGGER_V2_ENABLED
                 ? Math.max(
                   Number.isFinite(existing.scopeConfidence) ? existing.scopeConfidence : 0,
-                  Number.isFinite(scoredArticle.scopeConfidence) ? scoredArticle.scopeConfidence : 0
+                  Number.isFinite(scopedArticle.scopeConfidence) ? scopedArticle.scopeConfidence : 0
                 )
                 : existing.scopeConfidence,
-              viralScore: scoredArticle.viralScore,
-              viralScoreVersion: scoredArticle.viralScoreVersion,
-              viralSignals: scoredArticle.viralSignals,
-              isPromoted: scoredArticle.isPromoted,
-              lastScoredAt: scoredArticle.lastScoredAt
+              viralScore: scopedArticle.viralScore,
+              viralScoreVersion: scopedArticle.viralScoreVersion,
+              viralSignals: scopedArticle.viralSignals,
+              isPromoted: scopedArticle.isPromoted,
+              lastScoredAt: scopedArticle.lastScoredAt,
+              localityLevel: scopedArticle.localityLevel || existing.localityLevel || 'global'
             }
           });
           results.updated++;
-          scoredArticles.push(scoredArticle);
+          scoredArticles.push(scopedArticle);
           await persistNewsIngestionRecord({
             ingestionRunId,
             source: {
-              name: scoredArticle.source || '',
-              sourceType: scoredArticle.sourceType || '',
-              sourceId: scoredArticle.sourceId || '',
-              providerId: scoredArticle.providerId || '',
-              url: scoredArticle.url || ''
+              name: scopedArticle.source || '',
+              sourceType: scopedArticle.sourceType || '',
+              sourceId: scopedArticle.sourceId || '',
+              providerId: scopedArticle.providerId || '',
+              url: scopedArticle.url || ''
             },
             scrapedAt: article.scrapeTimestamp || new Date(),
-            normalized: {
-              title: scoredArticle.title || '',
-              description: scoredArticle.description || '',
-              url: scoredArticle.url || '',
-              imageUrl: scoredArticle.imageUrl || null,
-              publishedAt: scoredArticle.publishedAt || null,
-              topics: scoredArticle.topics || [],
-              locations: scoredArticle.locations || [],
-              assignedZipCode: scoredArticle.assignedZipCode || null,
-              localityLevel: scoredArticle.localityLevel || 'global',
-              language: scoredArticle.language || 'en',
-              normalizedUrlHash: scoredArticle.normalizedUrlHash || null
-            },
-            resolvedScope: mapLocalityLevelToScope(scoredArticle.localityLevel),
+            normalized: buildIngestionNormalizedPayload(scopedArticle, { alreadyNormalized: true }),
+            resolvedScope: mapLocalityLevelToScope(scopedArticle.localityLevel),
             dedupe: {
               outcome: 'updated',
               existingArticleId: existing._id,
@@ -1876,8 +1946,9 @@ async function processArticles(articles, options = {}) {
               operation: 'update',
               persistedAt: new Date()
             },
+            ingestedAt: ingestionTimestamp,
             processingStatus: 'processed',
-            tags: scoredArticle.topics || [],
+            tags: scopedArticle.topics || [],
             events: buildIngestionEvents({ outcome: 'updated', duplicateReason: 'incoming_newer_than_existing' })
           });
         } else {
@@ -1885,27 +1956,15 @@ async function processArticles(articles, options = {}) {
           await persistNewsIngestionRecord({
             ingestionRunId,
             source: {
-              name: scoredArticle.source || '',
-              sourceType: scoredArticle.sourceType || '',
-              sourceId: scoredArticle.sourceId || '',
-              providerId: scoredArticle.providerId || '',
-              url: scoredArticle.url || ''
+              name: scopedArticle.source || '',
+              sourceType: scopedArticle.sourceType || '',
+              sourceId: scopedArticle.sourceId || '',
+              providerId: scopedArticle.providerId || '',
+              url: scopedArticle.url || ''
             },
             scrapedAt: article.scrapeTimestamp || new Date(),
-            normalized: {
-              title: scoredArticle.title || '',
-              description: scoredArticle.description || '',
-              url: scoredArticle.url || '',
-              imageUrl: scoredArticle.imageUrl || null,
-              publishedAt: scoredArticle.publishedAt || null,
-              topics: scoredArticle.topics || [],
-              locations: scoredArticle.locations || [],
-              assignedZipCode: scoredArticle.assignedZipCode || null,
-              localityLevel: scoredArticle.localityLevel || 'global',
-              language: scoredArticle.language || 'en',
-              normalizedUrlHash: scoredArticle.normalizedUrlHash || null
-            },
-            resolvedScope: mapLocalityLevelToScope(scoredArticle.localityLevel),
+            normalized: buildIngestionNormalizedPayload(scopedArticle, { alreadyNormalized: true }),
+            resolvedScope: mapLocalityLevelToScope(scopedArticle.localityLevel),
             dedupe: {
               outcome: 'duplicate',
               existingArticleId: existing._id,
@@ -1916,8 +1975,9 @@ async function processArticles(articles, options = {}) {
               operation: 'skip',
               persistedAt: new Date()
             },
+            ingestedAt: ingestionTimestamp,
             processingStatus: 'processed',
-            tags: scoredArticle.topics || [],
+            tags: scopedArticle.topics || [],
             events: buildIngestionEvents({ outcome: 'duplicate', duplicateReason: 'incoming_not_newer' })
           });
         }
@@ -1925,34 +1985,22 @@ async function processArticles(articles, options = {}) {
       }
       
       // Create new article
-      const newArticle = new Article(scoredArticle);
+      const newArticle = new Article(scopedArticle);
       await newArticle.save();
       results.inserted++;
-      scoredArticles.push(scoredArticle);
+      scoredArticles.push(scopedArticle);
       await persistNewsIngestionRecord({
         ingestionRunId,
         source: {
-          name: scoredArticle.source || '',
-          sourceType: scoredArticle.sourceType || '',
-          sourceId: scoredArticle.sourceId || '',
-          providerId: scoredArticle.providerId || '',
-          url: scoredArticle.url || ''
+          name: scopedArticle.source || '',
+          sourceType: scopedArticle.sourceType || '',
+          sourceId: scopedArticle.sourceId || '',
+          providerId: scopedArticle.providerId || '',
+          url: scopedArticle.url || ''
         },
         scrapedAt: article.scrapeTimestamp || new Date(),
-        normalized: {
-          title: scoredArticle.title || '',
-          description: scoredArticle.description || '',
-          url: scoredArticle.url || '',
-          imageUrl: scoredArticle.imageUrl || null,
-          publishedAt: scoredArticle.publishedAt || null,
-          topics: scoredArticle.topics || [],
-          locations: scoredArticle.locations || [],
-          assignedZipCode: scoredArticle.assignedZipCode || null,
-          localityLevel: scoredArticle.localityLevel || 'global',
-          language: scoredArticle.language || 'en',
-          normalizedUrlHash: scoredArticle.normalizedUrlHash || null
-        },
-        resolvedScope: mapLocalityLevelToScope(scoredArticle.localityLevel),
+        normalized: buildIngestionNormalizedPayload(scopedArticle, { alreadyNormalized: true }),
+        resolvedScope: mapLocalityLevelToScope(scopedArticle.localityLevel),
         dedupe: {
           outcome: 'inserted',
           existingArticleId: null,
@@ -1963,8 +2011,9 @@ async function processArticles(articles, options = {}) {
           operation: 'insert',
           persistedAt: new Date()
         },
+        ingestedAt: ingestionTimestamp,
         processingStatus: 'processed',
-        tags: scoredArticle.topics || [],
+        tags: scopedArticle.topics || [],
         events: buildIngestionEvents({ outcome: 'inserted' })
       });
     } catch (error) {
@@ -1983,21 +2032,12 @@ async function processArticles(articles, options = {}) {
           url: article?.url || ''
         },
         scrapedAt: article?.scrapeTimestamp || new Date(),
-        normalized: {
-          title: article?.title || '',
-          description: article?.description || '',
-          url: article?.url || '',
-          imageUrl: article?.imageUrl || null,
-          publishedAt: article?.publishedAt || null,
-          topics: article?.topics || [],
-          locations: article?.locations || [],
-          assignedZipCode: article?.assignedZipCode || null,
-          localityLevel: article?.localityLevel || 'global',
-          language: article?.language || 'en',
+        normalized: buildIngestionNormalizedPayload({
+          ...(article || {}),
           normalizedUrlHash: article?.url
             ? buildNormalizedUrlHash(article.url)
             : null
-        },
+        }),
         resolvedScope: mapLocalityLevelToScope(article?.localityLevel),
         dedupe: {
           outcome: 'error',
@@ -2011,6 +2051,7 @@ async function processArticles(articles, options = {}) {
           errorCode: error?.code ? String(error.code) : null,
           errorMessage: error?.message || 'Unknown processing error'
         },
+        ingestedAt: new Date(),
         processingStatus: 'failed',
         tags: article?.topics || [],
         events: buildIngestionEvents({ outcome: 'error', errorMessage: error?.message || 'Unknown processing error' })
@@ -2040,6 +2081,14 @@ async function ingestAllSources() {
   console.log('Starting news ingestion...');
   const startTime = Date.now();
   const ingestionRunId = uuidv4();
+  const cleanupResult = await cleanupStaleNewsData();
+  if (cleanupResult) {
+    console.log('[news-retention-cleanup]', JSON.stringify({
+      cutoff: cleanupResult.cutoff,
+      articlesDeleted: cleanupResult.articlesDeleted,
+      ingestionRecordsDeleted: cleanupResult.ingestionRecordsDeleted
+    }));
+  }
   
   let allArticles = [];
   
@@ -3048,6 +3097,8 @@ module.exports = {
   },
   internals: {
     processArticles,
+    cleanupStaleNewsData,
+    ensureCityAssociationSpecificity,
     getItemPublishedAt,
     articleMatchesLocation,
     resolveAssignedZipCode,

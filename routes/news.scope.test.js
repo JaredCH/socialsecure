@@ -10,7 +10,8 @@ jest.mock('../models/Article', () => ({
   find: jest.fn(),
   countDocuments: jest.fn(),
   findDuplicate: jest.fn(),
-  findByIdAndUpdate: jest.fn()
+  findByIdAndUpdate: jest.fn(),
+  deleteMany: jest.fn()
 }));
 
 jest.mock('../models/RssSource', () => ({
@@ -32,11 +33,16 @@ jest.mock('../models/NewsPreferences', () => ({
 jest.mock('../models/User', () => ({
   findById: jest.fn()
 }));
+jest.mock('../models/NewsIngestionRecord', () => ({
+  create: jest.fn(),
+  deleteMany: jest.fn()
+}));
 jest.mock('node-geocoder', () => jest.fn(() => ({ geocode: mockGeocode })));
 
 const jwt = require('jsonwebtoken');
 const Article = require('../models/Article');
 const NewsPreferences = require('../models/NewsPreferences');
+const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 const User = require('../models/User');
 const newsRoutes = require('./news');
 
@@ -71,6 +77,8 @@ describe('News scope routing', () => {
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'user-1' }));
     Article.countDocuments.mockResolvedValue(2);
     Article.findDuplicate.mockResolvedValue(null);
+    Article.deleteMany.mockResolvedValue({ deletedCount: 0 });
+    NewsIngestionRecord.deleteMany.mockResolvedValue({ deletedCount: 0 });
     mockGeocode.mockReset();
     mockGeocode.mockResolvedValue([]);
     newsRoutes.internals.geocodeContextCache.clear();
@@ -931,5 +939,39 @@ describe('News scope routing', () => {
     expect(context.locationTags.cities).toEqual([]);
     expect(context.locationTags.zipCodes).toEqual([]);
     expect(context.localityLevel).toBe('global');
+  });
+
+  it('downgrades city locality when no explicit city association can be specified', () => {
+    const normalized = newsRoutes.internals.ensureCityAssociationSpecificity({
+      localityLevel: 'city',
+      assignedZipCode: null,
+      locationTags: { cities: [], states: ['tx'], countries: ['us'] }
+    });
+
+    expect(normalized.localityLevel).toBe('state');
+    expect(normalized.locationTags.cities).toEqual([]);
+  });
+
+  it('cleans up stale news data with duplicate ingestion records', async () => {
+    const realReadyState = Object.getOwnPropertyDescriptor(require('mongoose').connection, 'readyState');
+    try {
+      Object.defineProperty(require('mongoose').connection, 'readyState', { configurable: true, value: 1 });
+      Article.deleteMany.mockResolvedValue({ deletedCount: 3 });
+      NewsIngestionRecord.deleteMany.mockResolvedValue({ deletedCount: 4 });
+
+      const cleanup = await newsRoutes.internals.cleanupStaleNewsData();
+
+      expect(cleanup.articlesDeleted).toBe(3);
+      expect(cleanup.ingestionRecordsDeleted).toBe(4);
+      expect(NewsIngestionRecord.deleteMany).toHaveBeenCalledWith(expect.objectContaining({
+        $or: expect.arrayContaining([
+          { 'dedupe.outcome': 'duplicate' }
+        ])
+      }));
+    } finally {
+      if (realReadyState) {
+        Object.defineProperty(require('mongoose').connection, 'readyState', realReadyState);
+      }
+    }
   });
 });

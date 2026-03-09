@@ -80,6 +80,16 @@ const requireAdmin = (req, res, next) => {
 
 const normalizeSortDirection = (value) => (String(value || '').toLowerCase() === 'asc' ? 1 : -1);
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const normalizeLocationAssociations = (normalized = {}) => {
+  const tags = normalized.locationTags || {};
+  return {
+    zipCodes: Array.isArray(tags.zipCodes) ? tags.zipCodes : [],
+    cities: Array.isArray(tags.cities) ? tags.cities : [],
+    counties: Array.isArray(tags.counties) ? tags.counties : [],
+    states: Array.isArray(tags.states) ? tags.states : [],
+    countries: Array.isArray(tags.countries) ? tags.countries : []
+  };
+};
 
 router.post('/report', [
   authenticateToken,
@@ -725,14 +735,17 @@ router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, asy
           topics: record.normalized?.topics || [],
           assignedZipCode: record.normalized?.assignedZipCode || null,
           locations: record.normalized?.locations || [],
-          localityLevel: record.normalized?.localityLevel || 'global'
+          localityLevel: record.normalized?.localityLevel || 'global',
+          locationTags: normalizeLocationAssociations(record.normalized)
         },
+        locationAssociations: normalizeLocationAssociations(record.normalized),
         resolvedScope: record.resolvedScope || 'global',
         dedupe: record.dedupe,
         persistence: record.persistence,
         processingStatus: record.processingStatus,
         tags: record.tags || [],
         eventCount: Array.isArray(record.events) ? record.events.length : 0,
+        ingestedAt: record.ingestedAt || record.persistence?.persistedAt || record.createdAt || null,
         createdAt: record.createdAt
       })),
       pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
@@ -755,6 +768,8 @@ router.get('/control-panel/news-ingestion/:recordId', authenticateToken, require
     return res.json({
       record: {
         ...record,
+        locationAssociations: normalizeLocationAssociations(record.normalized),
+        ingestedAt: record.ingestedAt || record.persistence?.persistedAt || record.createdAt || null,
         persistedArticle
       }
     });
