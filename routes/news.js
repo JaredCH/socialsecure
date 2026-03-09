@@ -256,6 +256,16 @@ const normalizeTopicToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 const normalizeUsZipCode = (value) => normalizeZipCode(value).split('-')[0];
 const geocodeContextCache = new Map();
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const CAPITAL_CITY_MATCHERS = US_STATE_CAPITALS.map(([capitalCity, stateName, stateAbbrev]) => ({
+  capitalCity,
+  stateName,
+  stateAbbrev,
+  cityPattern: new RegExp(`\\b${escapeRegex(capitalCity)}\\b`, 'i'),
+  stateNamePattern: new RegExp(`\\b${escapeRegex(stateName)}\\b`, 'i'),
+  stateAbbrevPattern: new RegExp(`\\b${escapeRegex(stateAbbrev)}\\b`, 'i')
+}));
 
 const toUniqueNonEmptyStrings = (values = []) => [...new Set(values
   .map((value) => String(value || '').trim())
@@ -349,12 +359,16 @@ const inferLocationTokensFromText = (input = '') => {
     }
   }
 
-  for (const [capitalCity, stateName, stateAbbrev] of US_STATE_CAPITALS) {
-    const cityPattern = new RegExp(`\\b${capitalCity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  for (const {
+    capitalCity, stateName, stateAbbrev, cityPattern, stateNamePattern, stateAbbrevPattern
+  } of CAPITAL_CITY_MATCHERS) {
     if (!cityPattern.test(text)) continue;
-    const stateAbbrevPattern = new RegExp(`\\b${stateAbbrev}\\b`, 'i');
-    const hasExplicitStateHint = lower.includes(stateName) || stateAbbrevPattern.test(text);
-    if (!hasExplicitStateHint && !hasLocalStorySignal) continue;
+    const hasExplicitStateHint = stateNamePattern.test(text) || stateAbbrevPattern.test(text);
+    if (!hasExplicitStateHint) {
+      if (!hasLocalStorySignal) continue;
+      tokens.push(capitalCity);
+      continue;
+    }
     tokens.push(capitalCity, stateName, stateAbbrev);
   }
 

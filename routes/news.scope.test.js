@@ -992,7 +992,14 @@ describe('News scope routing', () => {
   });
 
   it('correlates US capital city local stories when state abbreviation is omitted', async () => {
-    mockGeocode.mockResolvedValue([{ zipcode: '78701' }]);
+    mockGeocode.mockResolvedValue([{
+      zipcode: '78701',
+      city: 'Austin',
+      state: 'Texas',
+      stateCode: 'TX',
+      country: 'United States',
+      countryCode: 'US'
+    }]);
     const context = await newsRoutes.internals.resolveArticleLocationContext({
       source: { name: 'Local Wire' },
       item: { title: 'Austin city council approves downtown transit upgrades' }
