@@ -216,13 +216,21 @@ describe('Moderation control panel admin actions', () => {
         _id: 'record-1',
         ingestionRunId: 'run-1',
         source: { name: 'State Wire', sourceType: 'rss' },
-        normalized: { title: 'Texas emergency update', topics: ['politics'], assignedZipCode: '78666', locations: ['Texas'], localityLevel: 'state' },
+        normalized: {
+          title: 'Texas emergency update',
+          topics: ['politics'],
+          assignedZipCode: '78666',
+          locations: ['Texas'],
+          localityLevel: 'state',
+          locationTags: { zipCodes: ['78666'], cities: ['san marcos'], states: ['tx'], countries: ['us'] }
+        },
         resolvedScope: 'regional',
         dedupe: { outcome: 'inserted' },
         persistence: { operation: 'insert' },
         processingStatus: 'processed',
         tags: ['politics'],
         events: [{ eventType: 'insert' }],
+        ingestedAt: new Date('2026-03-06T00:00:30.000Z'),
         createdAt: new Date('2026-03-06T00:00:00.000Z')
       }
     ]));
@@ -235,6 +243,8 @@ describe('Moderation control panel admin actions', () => {
     expect(response.status).toBe(200);
     expect(response.body.records).toHaveLength(1);
     expect(response.body.records[0].resolvedScope).toBe('regional');
+    expect(response.body.records[0].locationAssociations.cities).toEqual(['san marcos']);
+    expect(response.body.records[0].ingestedAt).toBeTruthy();
     expect(response.body.pagination.total).toBe(1);
   });
 
@@ -244,7 +254,7 @@ describe('Moderation control panel admin actions', () => {
       _id: 'record-2',
       ingestionRunId: 'run-2',
       source: { name: 'City Desk', sourceType: 'rss' },
-      normalized: { title: 'City update', assignedZipCode: '10001' },
+      normalized: { title: 'City update', assignedZipCode: '10001', locationTags: { cities: ['new york'], states: ['ny'] } },
       dedupe: { outcome: 'updated' },
       persistence: { articleId: 'article-1', operation: 'update' },
       processingStatus: 'processed',
@@ -267,6 +277,7 @@ describe('Moderation control panel admin actions', () => {
       .set('Authorization', 'Bearer token');
     expect(detailRes.status).toBe(200);
     expect(detailRes.body.record.persistence.articleId).toBe('article-1');
+    expect(detailRes.body.record.locationAssociations.cities).toEqual(['new york']);
 
     const timelineRes = await request(app)
       .get('/api/moderation/control-panel/news-ingestion/record-2/timeline')

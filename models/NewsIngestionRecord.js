@@ -17,6 +17,7 @@ const newsIngestionRecordSchema = new mongoose.Schema({
     providerId: { type: String, default: '' },
     url: { type: String, default: '' }
   },
+  ingestedAt: { type: Date, default: Date.now, index: true },
   scrapedAt: { type: Date, default: Date.now, index: true },
   normalized: {
     title: { type: String, default: '' },
@@ -29,7 +30,14 @@ const newsIngestionRecordSchema = new mongoose.Schema({
     assignedZipCode: { type: String, default: null },
     localityLevel: { type: String, default: 'global' },
     language: { type: String, default: 'en' },
-    normalizedUrlHash: { type: String, default: null }
+    normalizedUrlHash: { type: String, default: null },
+    locationTags: {
+      zipCodes: [{ type: String }],
+      cities: [{ type: String }],
+      counties: [{ type: String }],
+      states: [{ type: String }],
+      countries: [{ type: String }]
+    }
   },
   resolvedScope: { type: String, default: 'global', index: true },
   dedupe: {
@@ -45,7 +53,8 @@ const newsIngestionRecordSchema = new mongoose.Schema({
     errorMessage: { type: String, default: null }
   },
   processingStatus: { type: String, enum: ['processed', 'failed'], default: 'processed', index: true },
-  tags: [{ type: String, index: true }]
+  tags: [{ type: String, index: true }],
+  events: { type: [ingestionEventSchema], default: [] }
 }, {
   timestamps: true
 });
