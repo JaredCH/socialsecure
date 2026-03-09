@@ -59,7 +59,7 @@ describe('Circles routes limits', () => {
     mockUser.findById.mockResolvedValue({
       circles: [{
         name: 'Trusted',
-        members: Array.from({ length: 25 }).map((_, index) => `507f1f77bcf86cd7994390${String(index).padStart(2, '0')}`)
+        members: Array.from({ length: 25 }).map((_, index) => `507f1f77bcf86cd7994390${index.toString(16).padStart(2, '0')}`)
       }],
       save
     });

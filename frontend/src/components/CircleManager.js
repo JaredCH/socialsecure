@@ -14,6 +14,7 @@ const SOCIAL_RING_COLOR = '#e0e7ff';
 const STAGE_BACKGROUND = 'radial-gradient(circle at center, rgba(59,130,246,0.14), rgba(15,23,42,0.04) 58%)';
 const MAX_CIRCLES = 10;
 const MAX_MEMBERS_PER_CIRCLE = 25;
+const CIRCLE_LIMIT_MESSAGE = `Circle limit reached (${MAX_CIRCLES}). Delete one to add another.`;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -52,6 +53,14 @@ function CircleManager({
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(null);
   const hasCircleCapacity = circles.length < MAX_CIRCLES;
+
+  useEffect(() => {
+    if (!hasCircleCapacity) {
+      setStatusMessage(CIRCLE_LIMIT_MESSAGE);
+    } else {
+      setStatusMessage((prev) => (prev === CIRCLE_LIMIT_MESSAGE ? '' : prev));
+    }
+  }, [hasCircleCapacity]);
 
   const handleCreate = (event) => {
     event.preventDefault();
@@ -290,7 +299,6 @@ function CircleManager({
           </form>
         ) : null}
       </div>
-      {!hasCircleCapacity ? <p className="text-xs font-medium text-amber-700">Circle limit reached ({MAX_CIRCLES}). Delete one to add another.</p> : null}
       {statusMessage ? <p className="text-xs font-medium text-amber-700">{statusMessage}</p> : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">

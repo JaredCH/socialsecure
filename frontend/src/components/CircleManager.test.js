@@ -121,7 +121,6 @@ describe('CircleManager', () => {
       color: '#3B82F6',
       relationshipAudience: 'social',
       profileImageUrl: '',
-      memberCount: 25,
       members: Array.from({ length: 25 }).map((_, index) => ({
         _id: `member-${index}`,
         username: `member${index}`,

@@ -131,6 +131,7 @@ function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor 
           {circleNodes.map((circle) => (
             <g
               key={circle.key}
+              data-testid={`circle-web-circle-${circle.name}`}
               onMouseEnter={() => setActiveKey(circle.key)}
               onMouseLeave={() => setActiveKey('')}
               onClick={() => setSelectedItem({
@@ -175,6 +176,7 @@ function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor 
           {memberNodes.map((member) => (
             <g
               key={member.key}
+              data-testid={`circle-web-member-${member.id}`}
               onMouseEnter={() => setActiveKey(member.key)}
               onMouseLeave={() => setActiveKey('')}
               className={member.isMutual ? 'drop-shadow-[0_0_6px_rgba(251,191,36,0.95)]' : ''}
@@ -232,7 +234,7 @@ function CircleSpiderDiagram({ circles = [], profileLabel = 'User', accentColor 
         </div>
       ) : null}
       <p className="text-xs text-slate-500">
-        Viewing circles for <span className="font-semibold text-slate-700">@{profileLabel}</span>. Hover for links, tap nodes for quick identity cards.
+        Viewing circles for <span className="font-semibold text-slate-700">@{profileLabel}</span>. Hover for links, click or press Enter/Space on nodes for quick identity cards.
       </p>
     </div>
   );

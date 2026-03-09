@@ -48,8 +48,7 @@ describe('CircleSpiderDiagram', () => {
     expect(container.textContent).toContain('1 mutual');
     expect(container.textContent).toContain('@alice');
 
-    const interactiveNodes = container.querySelectorAll('g[role="button"]');
-    const memberNode = interactiveNodes[interactiveNodes.length - 1];
+    const memberNode = container.querySelector('[data-testid="circle-web-member-2"]');
     await act(async () => {
       memberNode.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
