@@ -87,6 +87,7 @@ export const evaluateRegisterPassword = (password = '') => {
 
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
+  checkUsernameAvailability: (username) => api.get(`/auth/username-availability?username=${encodeURIComponent(username)}`),
   login: (data) => api.post('/auth/login', data),
   getProfile: () => api.get('/auth/me'),
   getSecurityCenter: () => api.get('/auth/security-center'),

@@ -11,9 +11,10 @@ const mockUserSave = jest.fn().mockResolvedValue(true);
 const mockToPublicProfile = jest.fn(() => ({
   _id: 'user-1',
   username: 'new_user',
-  country: 'US',
+  realName: 'New User',
+  country: null,
   county: null,
-  zipCode: 'K1A0B1'
+  zipCode: null
 }));
 
 const mockUserModel = jest.fn(function userConstructor(data) {
@@ -47,125 +48,63 @@ const buildApp = () => {
   return app;
 };
 
-describe('Auth registration location fields', () => {
+describe('Auth registration minimal identity flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUserFindOne.mockResolvedValue(null);
   });
 
-  it('registers without county and normalizes zip code', async () => {
+  it('registers with first/last name, username, and email only', async () => {
     const app = buildApp();
 
     const response = await request(app)
       .post('/api/auth/register')
       .send({
-        realName: 'New User',
+        firstName: 'New',
+        lastName: 'User',
         username: 'new_user',
-        email: 'new@example.com',
-        password: 'StrongPass1',
-        countryCode: 'us',
-        zipCode: 'k1a 0b1'
+        email: 'new@example.com'
       });
 
     expect(response.status).toBe(201);
     expect(mockUserModel).toHaveBeenCalledWith(expect.objectContaining({
-      country: 'US',
-      zipCode: 'K1A0B1'
+      realName: 'New User',
+      username: 'new_user',
+      email: 'new@example.com'
     }));
-    expect(mockUserModel.mock.calls[0][0].county).toBeUndefined();
+    expect(mockUserModel.mock.calls[0][0].passwordHash).toEqual(expect.any(String));
     expect(response.body.user).toMatchObject({
-      country: 'US',
-      county: null,
-      zipCode: 'K1A0B1'
+      username: 'new_user',
+      realName: 'New User'
     });
   });
 
-  it('rejects malformed zip code with explicit validation error', async () => {
+  it('rejects registration when no name information is provided', async () => {
     const app = buildApp();
 
     const response = await request(app)
       .post('/api/auth/register')
       .send({
-        realName: 'New User',
         username: 'new_user',
-        email: 'new@example.com',
-        password: 'StrongPass1',
-        countryCode: 'US',
-        zipCode: '12'
+        email: 'new@example.com'
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.errors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ msg: expect.stringMatching(/zip code must be a valid/i) })
-      ])
-    );
+    expect(response.body.error).toMatch(/name is required/i);
     expect(mockUserModel).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid country selection', async () => {
+  it('returns username availability for live registration checks', async () => {
     const app = buildApp();
 
-    const response = await request(app)
-      .post('/api/auth/register')
-      .send({
-        realName: 'New User',
-        username: 'new_user',
-        email: 'new@example.com',
-        password: 'StrongPass1',
-        countryCode: 'USA',
-        zipCode: 'K1A0B1'
-      });
+    mockUserFindOne.mockResolvedValueOnce({ _id: 'taken-user' });
+    const takenResponse = await request(app).get('/api/auth/username-availability?username=taken_name');
+    expect(takenResponse.status).toBe(200);
+    expect(takenResponse.body.available).toBe(false);
 
-    expect(response.status).toBe(400);
-    expect(response.body.errors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ msg: expect.stringMatching(/country.*list/i) })
-      ])
-    );
-    expect(mockUserModel).not.toHaveBeenCalled();
-  });
-
-  it('accepts optional profile discovery fields with visibility settings', async () => {
-    const app = buildApp();
-
-    const response = await request(app)
-      .post('/api/auth/register')
-      .send({
-        realName: 'New User',
-        username: 'new_user',
-        email: 'new@example.com',
-        password: 'StrongPass1',
-        countryCode: 'US',
-        zipCode: '73301',
-        streetAddress: 'Austin, TX',
-        worksAt: 'Acme Corp',
-        hobbies: ['Hiking', 'Music'],
-        ageGroup: '25-34',
-        sex: 'Female',
-        race: 'Other',
-        profileFieldVisibility: {
-          streetAddress: 'social',
-          worksAt: 'public',
-          hobbies: 'public',
-          ageGroup: 'public',
-          sex: 'secure',
-          race: 'social'
-        }
-      });
-
-    expect(response.status).toBe(201);
-    expect(mockUserModel).toHaveBeenCalledWith(expect.objectContaining({
-      streetAddress: 'Austin, TX',
-      worksAt: 'Acme Corp',
-      hobbies: ['Hiking', 'Music'],
-      ageGroup: '25-34',
-      sex: 'Female',
-      race: 'Other',
-      profileFieldVisibility: expect.objectContaining({
-        worksAt: 'public',
-        hobbies: 'public'
-      })
-    }));
+    mockUserFindOne.mockResolvedValueOnce(null);
+    const availableResponse = await request(app).get('/api/auth/username-availability?username=free_name');
+    expect(availableResponse.status).toBe(200);
+    expect(availableResponse.body.available).toBe(true);
   });
 });

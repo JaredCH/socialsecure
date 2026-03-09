@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import Register from './Register';
-import { evaluateRegisterPassword } from '../utils/api';
+import { authAPI } from '../utils/api';
 
 jest.mock('react-hot-toast', () => ({
   success: jest.fn(),
@@ -11,14 +11,14 @@ jest.mock('react-hot-toast', () => ({
 
 jest.mock('../utils/api', () => ({
   authAPI: {
-    register: jest.fn()
-  },
-  evaluateRegisterPassword: jest.fn()
+    register: jest.fn(),
+    checkUsernameAvailability: jest.fn()
+  }
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('Register mobile-first layout', () => {
+describe('Register minimal onboarding-first flow', () => {
   let container;
   let root;
 
@@ -45,23 +45,17 @@ describe('Register mobile-first layout', () => {
   };
 
   beforeEach(() => {
+    jest.useFakeTimers();
+    authAPI.checkUsernameAvailability.mockResolvedValue({ data: { available: true } });
+    authAPI.register.mockResolvedValue({ data: { token: 't', user: { _id: 'u1' } } });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    evaluateRegisterPassword.mockImplementation((password = '') => {
-      const isStrong = password.length >= 10;
-      return {
-        strengthLabel: isStrong ? 'Strong' : 'Weak',
-        allRequirementsMet: isStrong,
-        requirementChecks: [
-          { id: 'length', label: 'At least 8 characters', met: password.length >= 8 },
-          { id: 'case', label: 'Upper and lower case letters', met: /[a-z]/.test(password) && /[A-Z]/.test(password) }
-        ]
-      };
-    });
   });
 
   afterEach(() => {
+    jest.clearAllMocks();
+    jest.useRealTimers();
     act(() => {
       root.unmount();
     });
@@ -70,47 +64,34 @@ describe('Register mobile-first layout', () => {
     root = null;
   });
 
-  it('groups registration content into mobile-friendly sections', async () => {
+  it('renders only the required registration fields', async () => {
     await renderRegister();
 
-    expect(container.textContent).toContain('Profile details');
-    expect(container.textContent).toContain('Sign-in details');
-    expect(container.textContent).toContain('Location');
-    expect(container.textContent).toContain('Encryption setup (single step)');
-    expect(container.textContent).toContain('Optional panel: Home & work');
-    expect(container.textContent).toContain('Referral');
+    expect(container.textContent).toContain('Basic details');
+    expect(container.querySelector('input[name="firstName"]')).not.toBeNull();
+    expect(container.querySelector('input[name="lastName"]')).not.toBeNull();
+    expect(container.querySelector('input[name="username"]')).not.toBeNull();
+    expect(container.querySelector('input[name="email"]')).not.toBeNull();
+    expect(container.querySelector('input[name="password"]')).toBeNull();
+    expect(container.querySelector('[data-testid="register-submit-footer"]')).not.toBeNull();
   });
 
-  it('uses responsive location fields, expandable password rules, and a sticky mobile submit area', async () => {
+  it('checks username availability live and only enables submit when available', async () => {
     await renderRegister();
 
-    const locationGrid = container.querySelector('[data-testid="location-grid"]');
-    const passwordRequirements = container.querySelector('[data-testid="password-requirements"]');
-    const submitFooter = container.querySelector('[data-testid="register-submit-footer"]');
+    const usernameInput = container.querySelector('input[name="username"]');
     const submitButton = container.querySelector('button[type="submit"]');
 
-    expect(locationGrid.className).toContain('sm:grid-cols-2');
-    expect(passwordRequirements.tagName).toBe('DETAILS');
-    expect(submitFooter.className).toContain('sticky');
-    expect(submitFooter.className).toContain('bottom-0');
-    expect(submitButton.className).toContain('min-h-[44px]');
-  });
+    expect(submitButton.disabled).toBe(true);
 
-  it('updates the password summary and submit hint when password strength changes', async () => {
-    await renderRegister();
+    await setInputValue(usernameInput, 'new_user');
 
-    const passwordInput = container.querySelector('input[name="password"]');
-    const encryptionPasswordInput = container.querySelector('input[name="encryptionPassword"]');
-    const confirmEncryptionPasswordInput = container.querySelector('input[name="confirmEncryptionPassword"]');
+    await act(async () => {
+      jest.advanceTimersByTime(400);
+    });
 
-    expect(container.textContent).toContain('Strength: Weak');
-    expect(container.textContent).toContain('Complete all password requirements to enable account creation.');
-
-    await setInputValue(passwordInput, 'StrongPass1');
-    await setInputValue(encryptionPasswordInput, 'StrongPass1');
-    await setInputValue(confirmEncryptionPasswordInput, 'StrongPass1');
-
-    expect(container.textContent).toContain('Strength: Strong');
-    expect(container.textContent).toContain('Password and encryption setup requirements satisfied.');
+    expect(authAPI.checkUsernameAvailability).toHaveBeenCalledWith('new_user');
+    expect(container.textContent).toContain('Username is available.');
+    expect(submitButton.disabled).toBe(false);
   });
 });
