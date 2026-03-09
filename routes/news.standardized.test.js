@@ -1,4 +1,5 @@
 const mockGeocode = jest.fn();
+const mockParseUrl = jest.fn();
 
 jest.mock('jsonwebtoken', () => ({
   verify: jest.fn()
@@ -31,6 +32,7 @@ jest.mock('../models/User', () => ({
   findById: jest.fn()
 }));
 jest.mock('node-geocoder', () => jest.fn(() => ({ geocode: mockGeocode })));
+jest.mock('rss-parser', () => jest.fn().mockImplementation(() => ({ parseURL: mockParseUrl })));
 
 const newsRoutes = require('./news');
 
@@ -120,6 +122,8 @@ describe('NPR adapter', () => {
     jest.clearAllMocks();
     mockGeocode.mockReset();
     mockGeocode.mockResolvedValue([]);
+    mockParseUrl.mockReset();
+    mockParseUrl.mockRejectedValue(new Error('parse error'));
     newsRoutes.internals.geocodeContextCache.clear();
   });
 
@@ -158,6 +162,8 @@ describe('BBC adapter', () => {
     jest.clearAllMocks();
     mockGeocode.mockReset();
     mockGeocode.mockResolvedValue([]);
+    mockParseUrl.mockReset();
+    mockParseUrl.mockRejectedValue(new Error('parse error'));
     newsRoutes.internals.geocodeContextCache.clear();
   });
 
@@ -188,6 +194,32 @@ describe('BBC adapter', () => {
     });
     expect(articles).toEqual([]);
   });
+
+  it('does not infer local scope from BBC source/category labels alone', async () => {
+    mockParseUrl.mockResolvedValueOnce({
+      language: 'en-gb',
+      items: [
+        {
+          title: 'What is BookTok and how did it start?',
+          contentSnippet: 'The TikTok trend that can get thousands of people reading the same novel',
+          link: 'https://www.bbc.co.uk/bitesize/articles/z9cgnk7?at_medium=RSS&at_campaign=rss',
+          guid: 'https://www.bbc.co.uk/bitesize/articles/z9cgnk7#2',
+          categories: ['entertainment'],
+          isoDate: '2026-03-03T10:07:14.000Z'
+        }
+      ]
+    });
+
+    const articles = await newsRoutes.adapters.fetchBbcSource('entertainment', {
+      url: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
+      category: 'entertainment',
+      label: 'BBC Entertainment'
+    });
+
+    expect(articles).toHaveLength(1);
+    expect(articles[0].localityLevel).toBe('global');
+    expect(articles[0].locations).toEqual([]);
+  });
 });
 
 describe('Google News adapter standardized fields', () => {
@@ -195,6 +227,8 @@ describe('Google News adapter standardized fields', () => {
     jest.clearAllMocks();
     mockGeocode.mockReset();
     mockGeocode.mockResolvedValue([]);
+    mockParseUrl.mockReset();
+    mockParseUrl.mockRejectedValue(new Error('parse error'));
     newsRoutes.internals.geocodeContextCache.clear();
   });
 
