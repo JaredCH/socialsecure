@@ -991,6 +991,30 @@ describe('News scope routing', () => {
     expect(context.localityLevel).toBe('city');
   });
 
+  it('correlates US capital city local stories when state abbreviation is omitted', async () => {
+    mockGeocode.mockResolvedValue([{ zipcode: '78701' }]);
+    const context = await newsRoutes.internals.resolveArticleLocationContext({
+      source: { name: 'Local Wire' },
+      item: { title: 'Austin city council approves downtown transit upgrades' }
+    });
+
+    expect(context.locationTags.cities).toContain('austin');
+    expect(context.locationTags.states).toEqual(expect.arrayContaining(['texas', 'tx']));
+    expect(context.locationTags.zipCodes).toContain('78701');
+    expect(context.localityLevel).toBe('city');
+  });
+
+  it('does not force city locality for non-local capital city mentions', async () => {
+    const context = await newsRoutes.internals.resolveArticleLocationContext({
+      source: { name: 'National Wire' },
+      item: { title: 'Federal budget debate in Washington continues in Congress' }
+    });
+
+    expect(context.locationTags.cities).toEqual([]);
+    expect(context.locationTags.zipCodes).toEqual([]);
+    expect(context.localityLevel).not.toBe('city');
+  });
+
   it('does not keep local city tags when city to zip correlation fails', async () => {
     const context = await newsRoutes.internals.resolveArticleLocationContext({
       source: { name: 'Unknown Local Wire' },
