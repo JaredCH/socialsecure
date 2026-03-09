@@ -54,15 +54,73 @@ const parsePagination = (query) => {
   };
 };
 
-const publicUserProjection = '_id username realName city state country registrationStatus pgpPublicKey createdAt profileTheme socialPagePreferences friendListPrivacy topFriendsPrivacy';
+const PROFILE_VISIBILITY_ORDER = {
+  public: 0,
+  social: 1,
+  secure: 2
+};
+const PERSONAL_INFO_FIELD_LABELS = {
+  phone: 'Phone',
+  worksAt: 'Works At',
+  hobbies: 'Hobbies',
+  ageGroup: 'Age Group',
+  sex: 'Sex',
+  race: 'Race',
+  streetAddress: 'Street Address'
+};
+const DEFAULT_PROFILE_FIELD_VISIBILITY = 'social';
+const publicUserProjection = '_id username realName city state country registrationStatus pgpPublicKey createdAt profileTheme socialPagePreferences friendListPrivacy topFriendsPrivacy phone worksAt hobbies ageGroup sex race streetAddress profileFieldVisibility';
 
 const isPrivateProfile = (userDoc) => (
   userDoc?.friendListPrivacy === 'private'
   && userDoc?.topFriendsPrivacy === 'private'
 );
 
-const toPublicUserProfile = (userDoc) => {
+const resolveViewerProfileAccessLevel = ({ isOwner, isFriend, isSecureFriend }) => {
+  if (isOwner) return 'secure';
+  if (isSecureFriend) return 'secure';
+  if (isFriend) return 'social';
+  return 'public';
+};
+
+const canViewerAccessVisibility = (fieldVisibility, maxAccessLevel) => {
+  const visibility = PROFILE_VISIBILITY_ORDER[fieldVisibility] !== undefined ? fieldVisibility : DEFAULT_PROFILE_FIELD_VISIBILITY;
+  const maxOrder = PROFILE_VISIBILITY_ORDER[maxAccessLevel] ?? PROFILE_VISIBILITY_ORDER.public;
+  return PROFILE_VISIBILITY_ORDER[visibility] <= maxOrder;
+};
+
+const normalizePersonalInfoValue = (value, fieldId) => {
+  if (fieldId === 'hobbies') {
+    if (!Array.isArray(value) || value.length === 0) return '';
+    return value
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+  return String(value || '').trim();
+};
+
+const buildPublicPersonalInfo = (userDoc, relationshipContext = {}) => {
+  if (!userDoc) return [];
+  const maxAccessLevel = resolveViewerProfileAccessLevel(relationshipContext);
+  return Object.entries(PERSONAL_INFO_FIELD_LABELS).reduce((entries, [fieldId, label]) => {
+    const value = normalizePersonalInfoValue(userDoc[fieldId], fieldId);
+    if (!value) return entries;
+    const visibility = userDoc?.profileFieldVisibility?.[fieldId] || DEFAULT_PROFILE_FIELD_VISIBILITY;
+    if (!canViewerAccessVisibility(visibility, maxAccessLevel)) return entries;
+    entries.push({
+      id: fieldId,
+      label,
+      value,
+      visibility
+    });
+    return entries;
+  }, []);
+};
+
+const toPublicUserProfile = (userDoc, relationshipContext = {}) => {
   if (!userDoc) return null;
+  const personalInfo = buildPublicPersonalInfo(userDoc, relationshipContext);
 
   return {
     _id: userDoc._id,
@@ -77,6 +135,7 @@ const toPublicUserProfile = (userDoc) => {
     socialPagePreferences: toPublicSocialPagePreferences(userDoc.socialPagePreferences, {
       profileTheme: userDoc.profileTheme || 'default'
     }),
+    personalInfo,
     createdAt: userDoc.createdAt
   };
 };
@@ -175,6 +234,34 @@ const getViewerFriendIds = async (viewerId) => {
   }, new Set());
 };
 
+const getViewerFriendContext = async (viewerId, targetId) => {
+  const normalizedViewerId = String(viewerId || '').trim();
+  const normalizedTargetId = String(targetId || '').trim();
+  if (!normalizedViewerId || !normalizedTargetId || normalizedViewerId === normalizedTargetId) {
+    return { isFriend: false, isSecureFriend: false };
+  }
+
+  const friendship = await Friendship.findOne({
+    status: 'accepted',
+    $or: [
+      { requester: normalizedViewerId, recipient: normalizedTargetId },
+      { requester: normalizedTargetId, recipient: normalizedViewerId }
+    ]
+  }).select('requester requesterCategory recipientCategory').lean();
+
+  if (!friendship) {
+    return { isFriend: false, isSecureFriend: false };
+  }
+
+  const viewerCategory = String(friendship.requester || '') === normalizedViewerId
+    ? friendship.requesterCategory
+    : friendship.recipientCategory;
+  return {
+    isFriend: true,
+    isSecureFriend: viewerCategory === 'secure'
+  };
+};
+
 const publicPostQuery = (userId) => ({
   targetFeedId: userId,
   visibility: 'public',
@@ -254,6 +341,9 @@ router.get('/users/:username', publicReadLimiter, async (req, res) => {
     const blocked = await hasBlockRelationship(viewerId, user._id);
     const isOwner = viewerId && String(viewerId) === String(user._id);
     const privateProfile = isPrivateProfile(user) && !isOwner;
+    const relationshipContext = isOwner
+      ? { isOwner: true, isFriend: true, isSecureFriend: true }
+      : await getViewerFriendContext(viewerId, user._id);
     if (blocked) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -266,7 +356,7 @@ router.get('/users/:username', publicReadLimiter, async (req, res) => {
     return res.json({
       success: true,
       user: {
-        ...toPublicUserProfile(user),
+        ...toPublicUserProfile(user, relationshipContext),
         ...(!privateProfile ? (resumeMeta || { hasPublicResume: false }) : { hasPublicResume: false })
       }
     });
@@ -387,6 +477,9 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
     const blocked = await hasBlockRelationship(viewerId, user._id);
     const isOwner = viewerId && String(viewerId) === String(user._id);
     const privateProfile = isPrivateProfile(user) && !isOwner;
+    const relationshipContext = isOwner
+      ? { isOwner: true, isFriend: true, isSecureFriend: true }
+      : await getViewerFriendContext(viewerId, user._id);
     if (blocked) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -406,7 +499,7 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
       return res.json({
         success: true,
         user: {
-          ...toPublicUserProfile(user),
+          ...toPublicUserProfile(user, relationshipContext),
           hasPublicResume: false,
           restrictedContent: true
         },
@@ -436,7 +529,7 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
     return res.json({
       success: true,
       user: {
-        ...toPublicUserProfile(user),
+        ...toPublicUserProfile(user, relationshipContext),
         ...(resumeMeta || { hasPublicResume: false })
       },
       posts: posts.map(toPublicPost),

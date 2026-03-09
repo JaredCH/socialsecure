@@ -21,11 +21,15 @@ const mockBlockList = {
 const mockResume = {
   findOne: jest.fn()
 };
+const mockFriendship = {
+  findOne: jest.fn()
+};
 
 jest.mock('../models/User', () => mockUser);
 jest.mock('../models/Post', () => mockPost);
 jest.mock('../models/BlockList', () => mockBlockList);
 jest.mock('../models/Resume', () => mockResume);
+jest.mock('../models/Friendship', () => mockFriendship);
 
 const jwt = require('jsonwebtoken');
 const publicRouter = require('./public');
@@ -79,6 +83,7 @@ describe('Public resume routes', () => {
     mockUser.findOne.mockReturnValue(resolvedQuery(targetUser));
     mockBlockList.findOne.mockReturnValue(resolvedQuery(null));
     mockResume.findOne.mockReturnValue(resolvedQuery(null));
+    mockFriendship.findOne.mockReturnValue(resolvedQuery(null));
   });
 
   it('returns hosted resume for public visibility to guests', async () => {
@@ -188,5 +193,40 @@ describe('Public resume routes', () => {
     expect(response.body.user.restrictedContent).toBe(true);
     expect(response.body.posts).toEqual([]);
     expect(response.body.pagination.total).toBe(0);
+  });
+
+  it('includes social-level personal info for friends and hides secure-only fields', async () => {
+    const app = buildApp();
+    jwt.verify.mockReturnValue({ userId: 'viewer-1' });
+    mockUser.findOne.mockReturnValue(resolvedQuery({
+      ...targetUser,
+      worksAt: 'Acme Labs',
+      hobbies: ['Cycling', 'Chess'],
+      streetAddress: '123 Main St',
+      profileFieldVisibility: {
+        worksAt: 'social',
+        hobbies: 'secure',
+        streetAddress: 'secure'
+      }
+    }));
+    mockFriendship.findOne.mockReturnValue(resolvedQuery({
+      requester: 'viewer-1',
+      requesterCategory: 'social',
+      recipientCategory: 'social'
+    }));
+    mockPost.find.mockReturnValue(resolvedPostQuery([]));
+    mockPost.countDocuments.mockResolvedValue(0);
+
+    const response = await request(app)
+      .get('/api/public/users/alice/feed')
+      .set('Authorization', 'Bearer viewer-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.user.personalInfo).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'worksAt', value: 'Acme Labs', visibility: 'social' })
+    ]));
+    const visibleFieldIds = response.body.user.personalInfo.map((entry) => entry.id);
+    expect(visibleFieldIds).not.toContain('hobbies');
+    expect(visibleFieldIds).not.toContain('streetAddress');
   });
 });

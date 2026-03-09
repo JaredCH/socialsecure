@@ -41,6 +41,7 @@ const HERO_IMAGE_HISTORY_LIMIT = 3;
 const HERO_RANDOM_BACKGROUND_ROTATION_INTERVAL_MS = 12000;
 const FEED_POLL_INTERVAL_MS = 30000;
 const TOP_FRIENDS_LIMIT = 5;
+const MAX_HOBBIES = 10;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
 const MAX_UPCOMING_CALENDAR_ITEMS = 6;
@@ -80,6 +81,15 @@ const PROFILE_CHAT_ROLE_ICONS = {
   circles: '⭕',
   guests: '🌐'
 };
+const PERSONAL_INFO_FIELDS = [
+  { id: 'phone', label: 'Phone', inputType: 'text' },
+  { id: 'worksAt', label: 'Works At', inputType: 'text' },
+  { id: 'hobbies', label: 'Hobbies', inputType: 'text' },
+  { id: 'ageGroup', label: 'Age Group', inputType: 'text' },
+  { id: 'sex', label: 'Sex', inputType: 'text' },
+  { id: 'race', label: 'Race', inputType: 'text' },
+  { id: 'streetAddress', label: 'Street Address', inputType: 'text' }
+];
 
 const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
 const THEME_ACCENT_TO_HEADER_CLASS = {
@@ -390,6 +400,12 @@ const normalizeGalleryItem = (item) => ({
   relationshipAudience: item?.relationshipAudience === 'secure' ? 'secure' : 'social',
 });
 
+const normalizePersonalInfoFieldValue = (profileSource = {}, fieldId) => (
+  fieldId === 'hobbies'
+    ? (Array.isArray(profileSource?.hobbies) ? profileSource.hobbies.join(', ') : '')
+    : String(profileSource?.[fieldId] || '').trim()
+);
+
 const resolveInitialHeroTab = (pathname = '', search = '') => {
   const requestedTab = new URLSearchParams(search).get('tab');
   if (SOCIAL_HERO_TABS.some((tab) => tab.id === requestedTab)) {
@@ -521,6 +537,10 @@ const Social = () => {
   });
   const [partnerActionBusyFriendshipId, setPartnerActionBusyFriendshipId] = useState('');
   const [partnerActionError, setPartnerActionError] = useState('');
+  const [personalInfoModalOpen, setPersonalInfoModalOpen] = useState(false);
+  const [personalInfoDraft, setPersonalInfoDraft] = useState({ values: {}, visibility: {} });
+  const [personalInfoSaveBusy, setPersonalInfoSaveBusy] = useState(false);
+  const [personalInfoSaveError, setPersonalInfoSaveError] = useState('');
   const [composerVisible, setComposerVisible] = useState(false);
   const [showSlimHeader, setShowSlimHeader] = useState(false);
   const localTypingTimeoutsRef = useRef({});
@@ -938,6 +958,77 @@ const Social = () => {
       setPartnerActionBusyFriendshipId('');
     }
   };
+
+  const buildPersonalInfoDraftFromProfile = useCallback((profileSource) => {
+    const nextValues = {};
+    const nextVisibility = {};
+    PERSONAL_INFO_FIELDS.forEach((field) => {
+      nextValues[field.id] = normalizePersonalInfoFieldValue(profileSource, field.id);
+      const rawVisibility = profileSource?.profileFieldVisibility?.[field.id];
+      nextVisibility[field.id] = rawVisibility === 'secure' ? 'secure' : 'social';
+    });
+    return { values: nextValues, visibility: nextVisibility };
+  }, []);
+
+  const openPersonalInfoModal = useCallback(() => {
+    setPersonalInfoDraft(buildPersonalInfoDraftFromProfile(currentUser || {}));
+    setPersonalInfoSaveError('');
+    setPersonalInfoModalOpen(true);
+  }, [buildPersonalInfoDraftFromProfile, currentUser]);
+
+  const handlePersonalInfoDraftValueChange = useCallback((fieldId, value) => {
+    setPersonalInfoDraft((prev) => ({
+      ...prev,
+      values: {
+        ...(prev.values || {}),
+        [fieldId]: value
+      }
+    }));
+  }, []);
+
+  const handlePersonalInfoDraftVisibilityChange = useCallback((fieldId, visibility) => {
+    setPersonalInfoDraft((prev) => ({
+      ...prev,
+      visibility: {
+        ...(prev.visibility || {}),
+        [fieldId]: visibility === 'secure' ? 'secure' : 'social'
+      }
+    }));
+  }, []);
+
+  const handleSavePersonalInfo = useCallback(async () => {
+    if (!isOwnSocialContext || isGuestPreview) return;
+    setPersonalInfoSaveBusy(true);
+    setPersonalInfoSaveError('');
+    try {
+      const payload = {
+        profileFieldVisibility: {}
+      };
+      PERSONAL_INFO_FIELDS.forEach((field) => {
+        const rawValue = personalInfoDraft?.values?.[field.id];
+        if (field.id === 'hobbies') {
+          payload.hobbies = String(rawValue || '')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+            .slice(0, MAX_HOBBIES);
+        } else {
+          payload[field.id] = String(rawValue || '').trim();
+        }
+        payload.profileFieldVisibility[field.id] = personalInfoDraft?.visibility?.[field.id] === 'secure' ? 'secure' : 'social';
+      });
+      const response = await authAPI.updateProfile(payload);
+      const updatedUser = response.data?.user || null;
+      if (updatedUser) {
+        setCurrentUser(updatedUser);
+      }
+      setPersonalInfoModalOpen(false);
+    } catch (error) {
+      setPersonalInfoSaveError(error.response?.data?.error || 'Failed to save personal information.');
+    } finally {
+      setPersonalInfoSaveBusy(false);
+    }
+  }, [isOwnSocialContext, isGuestPreview, personalInfoDraft]);
 
   const setGalleryActionLoading = (imageId, value) => {
     setGalleryActionLoadingByImage((prev) => {
@@ -3176,6 +3267,23 @@ const Social = () => {
   const incomingPartnerRequests = friends.filter((friend) => friend.partnerStatus === 'pending' && friend.partnerCanRespond);
   const outgoingPartnerRequest = friends.find((friend) => friend.partnerStatus === 'pending' && friend.partnerRequestedByViewer);
   const availablePartnerCandidates = friends.filter((friend) => friend.partnerStatus === 'none');
+  const visiblePersonalInfoItems = useMemo(() => {
+    if (isOwnSocialContext) {
+      return PERSONAL_INFO_FIELDS.reduce((entries, field) => {
+        const rawValue = normalizePersonalInfoFieldValue(currentUser, field.id);
+        if (!rawValue) return entries;
+        const visibility = currentUser?.profileFieldVisibility?.[field.id] === 'secure' ? 'secure' : 'social';
+        entries.push({
+          id: field.id,
+          label: field.label,
+          value: rawValue,
+          visibility
+        });
+        return entries;
+      }, []);
+    }
+    return Array.isArray(activeProfile?.personalInfo) ? activeProfile.personalInfo : [];
+  }, [isOwnSocialContext, currentUser, activeProfile?.personalInfo]);
   const liveTypingCount = Object.values(commentTypingByPostId).reduce((total, entry) => total + Object.keys(entry || {}).length, 0);
   const calendarCountdowns = posts.filter((post) => post?.interaction?.type === 'countdown').slice(0, 5);
   const calendarPreviewMonthDays = useMemo(
@@ -3547,123 +3655,186 @@ const Social = () => {
     }
   };
 
+  const renderFriendAvatar = (friend, sizeClass = 'h-14 w-14') => (
+    <div className={`flex ${sizeClass} items-center justify-center overflow-hidden rounded-[1rem] bg-slate-200 text-sm font-semibold text-slate-700`}>
+      {friend?.avatarUrl ? (
+        <img src={friend.avatarUrl} alt={friend.username || 'friend'} className="h-full w-full object-cover" />
+      ) : (
+        (friend?.realName || friend?.username || '?').charAt(0).toUpperCase()
+      )}
+    </div>
+  );
+
   const renderPulseRail = () => (
     <div className="space-y-6">
       {isPrivateGuestLock ? renderGlassPanel('Access Locked', renderPrivateProfileBody(), {
         subtitle: 'Pulse, live activity, and messaging stay hidden while this profile is private'
       }) : renderGlassPanel(
-        'Top Friends',
-        topFriends.length === 0 ? (
-          <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">Top friends are private or not configured yet.</div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
-            {topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend, index) => (
-              <div key={friend._id || friend.username} className="rounded-2xl bg-white/55 p-3 text-center">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center overflow-hidden rounded-[1.1rem] bg-slate-200 text-lg font-semibold text-slate-700">
-                  {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
-                </div>
-                <p className="mt-2 truncate text-sm font-semibold text-slate-900">@{friend.username}</p>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">Top {index + 1}</p>
+        'Top 5 Friends + Partner / Spouse',
+        <div className="space-y-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top Friends</p>
+            {topFriends.length === 0 ? (
+              <div className="mt-2 rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">Top friends are private or not configured yet.</div>
+            ) : (
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
+                {topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend, index) => (
+                  <div key={friend._id || friend.username} className="rounded-2xl bg-white/55 p-3 text-center">
+                    <div className="mx-auto h-16 w-16">{renderFriendAvatar(friend, 'h-16 w-16')}</div>
+                    <p className="mt-2 truncate text-sm font-semibold text-slate-900">@{friend.username}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Top {index + 1}</p>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        ),
-        { subtitle: 'Top 5 ranking' }
+
+          <div className="space-y-3 border-t border-white/50 pt-4 text-sm text-slate-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Partner / Spouse</p>
+            {(activePartnerFriend || incomingPartnerRequests.length > 0 || outgoingPartnerRequest || availablePartnerCandidates.length > 0) ? (
+              <>
+                {activePartnerFriend ? (
+                  <div className="rounded-2xl bg-emerald-50 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      {renderFriendAvatar(activePartnerFriend)}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Listed partner</p>
+                        <p className="mt-1 font-semibold text-slate-900">@{activePartnerFriend.username}</p>
+                      </div>
+                    </div>
+                    {isOwnSocialContext && !isGuestPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => handlePartnerListingAction(activePartnerFriend.friendshipId, 'clear')}
+                        disabled={partnerActionBusyFriendshipId === String(activePartnerFriend.friendshipId)}
+                        className="mt-3 rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-60"
+                      >
+                        Remove listing
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {incomingPartnerRequests.map((friend) => (
+                  <div key={`partner-incoming-${friend.friendshipId || friend._id}`} className="rounded-2xl bg-amber-50 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      {renderFriendAvatar(friend)}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Incoming request</p>
+                        <p className="mt-1 font-semibold text-slate-900">@{friend.username}</p>
+                      </div>
+                    </div>
+                    {isOwnSocialContext && !isGuestPreview ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handlePartnerListingAction(friend.friendshipId, 'accept')}
+                          disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
+                          className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-60"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePartnerListingAction(friend.friendshipId, 'deny')}
+                          disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
+                          className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-white disabled:opacity-60"
+                        >
+                          Deny
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+
+                {!activePartnerFriend && outgoingPartnerRequest ? (
+                  <div className="rounded-2xl bg-blue-50 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      {renderFriendAvatar(outgoingPartnerRequest)}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Pending request</p>
+                        <p className="mt-1 font-semibold text-slate-900">@{outgoingPartnerRequest.username}</p>
+                      </div>
+                    </div>
+                    {isOwnSocialContext && !isGuestPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => handlePartnerListingAction(outgoingPartnerRequest.friendshipId, 'clear')}
+                        disabled={partnerActionBusyFriendshipId === String(outgoingPartnerRequest.friendshipId)}
+                        className="mt-3 rounded-xl border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-white disabled:opacity-60"
+                      >
+                        Cancel request
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {isOwnSocialContext && !isGuestPreview && !activePartnerFriend ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Send request</p>
+                    {availablePartnerCandidates.length === 0 ? (
+                      <p className="rounded-2xl bg-white/55 px-3 py-3 text-xs text-slate-500">No available friends to request right now.</p>
+                    ) : availablePartnerCandidates.map((friend) => (
+                      <button
+                        key={`partner-candidate-${friend.friendshipId || friend._id}`}
+                        type="button"
+                        onClick={() => handlePartnerListingAction(friend.friendshipId, 'request')}
+                        disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
+                        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50/50 disabled:opacity-60"
+                      >
+                        <span>@{friend.username}</span>
+                        <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] uppercase tracking-wide text-blue-700">Request</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {partnerActionError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{partnerActionError}</div> : null}
+              </>
+            ) : (
+              <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">
+                No partner listing activity yet.
+              </div>
+            )}
+          </div>
+        </div>,
+        { subtitle: 'Top 5 ranking with relationship spotlight' }
       )}
 
       {!isPrivateGuestLock ? renderGlassPanel(
-        'Partner / Spouse',
-        (activePartnerFriend || incomingPartnerRequests.length > 0 || outgoingPartnerRequest || availablePartnerCandidates.length > 0) ? (
-          <div className="space-y-3 text-sm text-slate-700">
-            {activePartnerFriend ? (
-              <div className="rounded-2xl bg-emerald-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Listed partner</p>
-                <p className="mt-1 font-semibold text-slate-900">@{activePartnerFriend.username}</p>
-                {isOwnSocialContext && !isGuestPreview ? (
-                  <button
-                    type="button"
-                    onClick={() => handlePartnerListingAction(activePartnerFriend.friendshipId, 'clear')}
-                    disabled={partnerActionBusyFriendshipId === String(activePartnerFriend.friendshipId)}
-                    className="mt-3 rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-60"
-                  >
-                    Remove listing
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-
-            {incomingPartnerRequests.map((friend) => (
-              <div key={`partner-incoming-${friend.friendshipId || friend._id}`} className="rounded-2xl bg-amber-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Incoming request</p>
-                <p className="mt-1 font-semibold text-slate-900">@{friend.username}</p>
-                {isOwnSocialContext && !isGuestPreview ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handlePartnerListingAction(friend.friendshipId, 'accept')}
-                      disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
-                      className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-60"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePartnerListingAction(friend.friendshipId, 'deny')}
-                      disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
-                      className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-white disabled:opacity-60"
-                    >
-                      Deny
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-
-            {!activePartnerFriend && outgoingPartnerRequest ? (
-              <div className="rounded-2xl bg-blue-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Pending request</p>
-                <p className="mt-1 font-semibold text-slate-900">@{outgoingPartnerRequest.username}</p>
-                {isOwnSocialContext && !isGuestPreview ? (
-                  <button
-                    type="button"
-                    onClick={() => handlePartnerListingAction(outgoingPartnerRequest.friendshipId, 'clear')}
-                    disabled={partnerActionBusyFriendshipId === String(outgoingPartnerRequest.friendshipId)}
-                    className="mt-3 rounded-xl border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-white disabled:opacity-60"
-                  >
-                    Cancel request
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-
-            {isOwnSocialContext && !isGuestPreview && !activePartnerFriend ? (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Send request</p>
-                {availablePartnerCandidates.length === 0 ? (
-                  <p className="rounded-2xl bg-white/55 px-3 py-3 text-xs text-slate-500">No available friends to request right now.</p>
-                ) : availablePartnerCandidates.map((friend) => (
-                  <button
-                    key={`partner-candidate-${friend.friendshipId || friend._id}`}
-                    type="button"
-                    onClick={() => handlePartnerListingAction(friend.friendshipId, 'request')}
-                    disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50/50 disabled:opacity-60"
-                  >
-                    <span>@{friend.username}</span>
-                    <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] uppercase tracking-wide text-blue-700">Request</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            {partnerActionError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{partnerActionError}</div> : null}
+        'Personal Information',
+        visiblePersonalInfoItems.length === 0 ? (
+          <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">
+            {isOwnSocialContext ? 'Add personal details to share with friends and guests.' : 'No personal details are available for this viewer.'}
           </div>
         ) : (
-          <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">
-            No partner listing activity yet.
-          </div>
+          <ul className="space-y-2 text-sm text-slate-700">
+            {visiblePersonalInfoItems.map((item) => (
+              <li key={item.id} className="rounded-2xl bg-white/60 px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-slate-900">{item.label}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${item.visibility === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-700'}`}>
+                    {item.visibility === 'secure' ? 'Secure' : 'Social'}
+                  </span>
+                </div>
+                <p className="mt-1 text-slate-700">{item.value}</p>
+              </li>
+            ))}
+          </ul>
         ),
-        { subtitle: null }
+        {
+          subtitle: 'Shared with friends and guests based on social/secure visibility',
+          action: (isOwnSocialContext && !isGuestPreview) ? (
+            <button
+              type="button"
+              aria-label="Edit personal information"
+              onClick={openPersonalInfoModal}
+              className="rounded-xl border border-slate-300 bg-white/80 px-2.5 py-1.5 text-sm font-semibold text-slate-700 hover:bg-white"
+            >
+              ✎
+            </button>
+          ) : null
+        }
       ) : null}
 
       {!isPrivateGuestLock ? renderGlassPanel(
@@ -3793,6 +3964,66 @@ const Social = () => {
           </div>
         </div>
       </div>
+
+      {personalInfoModalOpen ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/55 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-3xl border border-white/60 bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Edit Personal Information</h3>
+                <p className="text-sm text-slate-500">Set each field and choose Social or Secure visibility.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPersonalInfoModalOpen(false)}
+                className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {PERSONAL_INFO_FIELDS.map((field) => (
+                <div key={`personal-info-draft-${field.id}`} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor={`personal-info-${field.id}`}>{field.label}</label>
+                  <input
+                    id={`personal-info-${field.id}`}
+                    type={field.inputType}
+                    value={personalInfoDraft?.values?.[field.id] || ''}
+                    onChange={(event) => handlePersonalInfoDraftValueChange(field.id, event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+                  />
+                  <select
+                    value={personalInfoDraft?.visibility?.[field.id] === 'secure' ? 'secure' : 'social'}
+                    onChange={(event) => handlePersonalInfoDraftVisibilityChange(field.id, event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700"
+                  >
+                    <option value="social">Social</option>
+                    <option value="secure">Secure</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+            {personalInfoSaveError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{personalInfoSaveError}</div> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPersonalInfoModalOpen(false)}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePersonalInfo}
+                disabled={personalInfoSaveBusy}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                {personalInfoSaveBusy ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <SocialStageSettingsSidebar
         isOpen={designStudioOpen}
