@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import Calendar from './Calendar';
+import { authAPI, calendarAPI } from '../utils/api';
 
 jest.mock('../utils/api', () => ({
   authAPI: {
@@ -31,6 +32,11 @@ describe('Calendar layout sizing', () => {
   let root;
 
   beforeEach(() => {
+    authAPI.getProfile.mockResolvedValue({ data: { user: { username: 'owner', realName: 'Owner User' } } });
+    calendarAPI.getMyCalendar.mockResolvedValue({ data: { calendar: { title: 'My Calendar', timezone: 'UTC', guestVisibility: 'private', defaultView: 'month' } } });
+    calendarAPI.getMyEvents.mockResolvedValue({ data: { events: [] } });
+    calendarAPI.getUserCalendar.mockResolvedValue({ data: { calendar: { title: 'Guest Calendar', timezone: 'UTC', guestVisibility: 'public_readonly', defaultView: 'month' }, owner: { username: 'buddy' }, isOwner: false } });
+    calendarAPI.getUserCalendarEvents.mockResolvedValue({ data: { events: [] } });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -74,5 +80,26 @@ describe('Calendar layout sizing', () => {
     expect(monthGrid).not.toBeNull();
     expect(monthGrid.className).toContain('flex-1');
     expect(monthGrid.className).toContain('min-h-0');
+  });
+
+  it('shows a friendly empty-state message when a user has no calendar', async () => {
+    calendarAPI.getUserCalendar.mockRejectedValue({
+      response: {
+        status: 404,
+        data: { error: 'Calendar not found' }
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/calendar?user=buddy']}>
+          <Calendar />
+        </MemoryRouter>
+      );
+    });
+
+    expect(calendarAPI.getUserCalendar).toHaveBeenCalledWith('buddy');
+    expect(calendarAPI.getUserCalendarEvents).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('This user has not created a calendar yet.');
   });
 });

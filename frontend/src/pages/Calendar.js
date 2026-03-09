@@ -201,10 +201,8 @@ function Calendar() {
         setIsOwner(true);
         setViewMode(VIEW_OPTIONS.includes(calendarData?.calendar?.defaultView) ? calendarData.calendar.defaultView : 'month');
       } else {
-        const [{ data: calendarData }, { data: eventsData }] = await Promise.all([
-          calendarAPI.getUserCalendar(requestedUser),
-          calendarAPI.getUserCalendarEvents(requestedUser, dateRange)
-        ]);
+        const { data: calendarData } = await calendarAPI.getUserCalendar(requestedUser);
+        const { data: eventsData } = await calendarAPI.getUserCalendarEvents(requestedUser, dateRange);
         setCalendar(calendarData.calendar);
         setEvents(eventsData.events || []);
         setOwner(calendarData.owner || null);
@@ -212,11 +210,16 @@ function Calendar() {
         setViewMode(VIEW_OPTIONS.includes(calendarData?.calendar?.defaultView) ? calendarData.calendar.defaultView : 'month');
       }
     } catch (error) {
-      const message = error.response?.data?.error || 'Failed to load calendar';
+      const statusCode = Number(error?.response?.status || 0);
+      const message = statusCode === 404 && requestedUser
+        ? 'This user has not created a calendar yet.'
+        : (error.response?.data?.error || 'Failed to load calendar');
       setErrorMessage(message);
       setCalendar(null);
       setEvents([]);
-      toast.error(message);
+      if (statusCode !== 404) {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
       setLoadingEvents(false);
