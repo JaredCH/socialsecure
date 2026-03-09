@@ -333,11 +333,21 @@ const inferLocationTokensFromText = (input = '') => {
 
 const buildArticleLocationTokens = ({ source = {}, item = {}, query = null }) => {
   const baseTokens = [
-    source.name,
-    source.category,
-    query,
-    ...(Array.isArray(item.categories) ? item.categories : [])
+    source.city,
+    source.county,
+    source.state,
+    source.country,
+    source.countryCode,
+    source.zipCode,
+    source.postalCode,
+    source.location,
+    source.address,
+    item.geoLat,
+    item.geoLong
   ];
+  if (isLikelyLocationQuery(query)) {
+    baseTokens.push(query);
+  }
 
   const textTokens = inferLocationTokensFromText(getTextContent(item));
   return toUniqueNonEmptyLocationTokens([...baseTokens, ...textTokens]);
