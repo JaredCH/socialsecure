@@ -3209,7 +3209,10 @@ const Social = () => {
           id: `event-${event._id || startAt.toISOString()}`,
           title: event.title || 'Untitled event',
           date: startAt,
-          type: 'event'
+          type: 'event',
+          location: event.location || '',
+          dateLabel: startAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+          timeLabel: startAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
         };
       })
       .filter((entry) => entry && entry.date >= startOfToday);
@@ -3220,7 +3223,10 @@ const Social = () => {
         id: holiday.id,
         title: holiday.name,
         date: holiday.date,
-        type: holiday.category
+        type: holiday.category,
+        location: '',
+        dateLabel: holiday.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        timeLabel: 'All day'
       }));
 
     return [...upcomingEvents, ...upcomingHolidays]
@@ -3446,13 +3452,31 @@ const Social = () => {
                 {upcomingCalendarItems.length === 0 ? (
                   <p className="text-xs text-slate-500">No upcoming events or holidays in this window.</p>
                 ) : (
-                  <ul className="space-y-1.5">
+                  <ul className="space-y-2">
                     {upcomingCalendarItems.map((item) => (
-                      <li key={item.id} className="flex items-center justify-between gap-2 text-xs text-slate-700">
-                        <span className="truncate">{item.title}</span>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 ${item.type === 'event' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
-                          {item.type === 'event' ? 'Event' : 'Holiday'} • {item.date.toLocaleDateString()}
-                        </span>
+                      <li key={item.id}>
+                        {item.type === 'event' ? (
+                          <Link
+                            to={socialCalendarPath}
+                            data-testid={`social-upcoming-${item.id}`}
+                            className="group flex items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-gradient-to-r from-white to-blue-50/80 px-3 py-2 text-xs text-slate-700 transition hover:border-blue-200 hover:from-blue-50 hover:to-blue-100/70"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate font-semibold text-slate-900">{item.title}</p>
+                              <p className="mt-0.5 truncate text-[11px] text-slate-500">{item.dateLabel} • {item.timeLabel}</p>
+                              {item.location ? <p className="mt-0.5 truncate text-[11px] text-slate-500">📍 {item.location}</p> : null}
+                            </div>
+                            <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-700">Event</span>
+                          </Link>
+                        ) : (
+                          <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-100 bg-gradient-to-r from-white to-rose-50/70 px-3 py-2 text-xs text-slate-700">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate font-semibold text-slate-900">{item.title}</p>
+                              <p className="mt-0.5 truncate text-[11px] text-slate-500">{item.dateLabel} • {item.timeLabel}</p>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 font-semibold text-rose-700">Holiday</span>
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>
