@@ -1119,11 +1119,11 @@ function Chat() {
         </div>
       </header>
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-12">
+      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[1.5fr_9fr_1.5fr]">
         <aside
           className={[
             mobileWorkspaceOpen ? 'hidden' : 'flex',
-            'min-h-0 flex-col border-b p-2 md:p-3 lg:col-span-3 lg:flex lg:border-b-0 lg:border-r',
+            'min-h-0 flex-col border-b p-2 md:p-3 lg:flex lg:border-b-0 lg:border-r',
             activeTheme.panel
           ].join(' ')}
         >
@@ -1268,7 +1268,7 @@ function Chat() {
         <section
           className={[
             mobileWorkspaceOpen ? 'flex' : 'hidden',
-            'min-h-0 flex-col border-b px-2 pb-2 pt-1 md:p-3 lg:col-span-6 lg:flex lg:border-b-0 lg:border-r',
+            'min-h-0 flex-col border-b px-2 pb-2 pt-1 md:p-3 lg:flex lg:border-b-0 lg:border-r',
             activeTheme.panel
           ].join(' ')}
         >
@@ -1450,7 +1450,7 @@ function Chat() {
           </div>
         </section>
 
-        <aside className={`hidden min-h-0 flex-col p-2 md:p-3 lg:col-span-3 lg:flex ${activeTheme.panel}`}>
+        <aside className={`hidden min-h-0 flex-col p-2 md:p-3 lg:flex ${activeTheme.panel}`}>
           <div className={`sticky top-0 z-10 rounded border p-3 ${activeTheme.panelGlass}`}>
             <h3 className="font-semibold">Conversation Details</h3>
             {activeConversation ? (
