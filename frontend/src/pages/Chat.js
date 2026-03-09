@@ -1388,7 +1388,7 @@ function Chat() {
             </div>
             {activeConversation?.type === 'dm' && dmOfflineState === 'ready_offline' && isOnline ? (
               <div className={`mt-2 rounded border px-2 py-1 text-[10px] ${activeTheme.panelGlass}`}>
-                Offline package ready. Disconnect from the internet, then use “Decrypt Offline Messages”. After reviewing, fully close your browser and optionally clear cache before returning online.
+                Offline package ready. Disconnect from the internet, then use “Decrypt Offline Messages”.
               </div>
             ) : null}
           </header>
@@ -1549,7 +1549,7 @@ function Chat() {
           <div className={`w-full max-w-sm rounded border p-3 ${activeTheme.panelGlass}`}>
             <h3 className="text-sm font-semibold">Unlock DM encryption</h3>
             <p className="mt-1 text-xs opacity-80">
-              Enter your encryption password to unlock and decrypt now, or use offline mode to cache encrypted DM data first.
+              Enter your encryption password to unlock and decrypt now, or use offline mode to prepare messages for offline decryption.
             </p>
             <input
               type="password"
