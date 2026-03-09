@@ -1,17 +1,18 @@
 import React from 'react';
 
-const VISIBILITY_OPTIONS = [
+const VISIBILITY_PRESET_OPTIONS = [
   { value: 'public', label: 'Public' },
-  { value: 'friends', label: 'Friends' },
-  { value: 'circles', label: 'Specific Circles' },
-  { value: 'specific_users', label: 'Specific Users' },
-  { value: 'private', label: 'Private' }
-];
-const RELATIONSHIP_AUDIENCE_OPTIONS = [
   { value: 'social', label: 'Social' },
-  { value: 'secure', label: 'Secure (secure friends only)' }
+  { value: 'secure', label: 'Secure' },
+  { value: 'circles', label: 'Circle Specific' }
 ];
-const SECURE_ALLOWED_VISIBILITY = new Set(['friends']);
+
+const resolveVisibilityPreset = (form) => {
+  if (form.visibility === 'public') return 'public';
+  if (form.visibility === 'circles') return 'circles';
+  if (form.relationshipAudience === 'secure' && form.visibility === 'friends') return 'secure';
+  return 'social';
+};
 
 function PrivacySelector({
   form,
@@ -19,56 +20,76 @@ function PrivacySelector({
   friends,
   onChange,
   onToggleCircle,
-  onToggleVisibleUser,
-  onToggleExcludeUser
+  onAddExcludeUser,
+  onRemoveExcludeUser
 }) {
-  const relationshipAudience = form.relationshipAudience || 'social';
+  const visibilityPreset = resolveVisibilityPreset(form);
+  const [excludeQuery, setExcludeQuery] = React.useState('');
+  const friendById = React.useMemo(
+    () => new Map(friends.map((friend) => [String(friend._id), friend])),
+    [friends]
+  );
+  const excludedSet = React.useMemo(
+    () => new Set((form.excludeUsers || []).map((entry) => String(entry))),
+    [form.excludeUsers]
+  );
+  const excludeSuggestions = React.useMemo(() => {
+    const query = excludeQuery.trim().toLowerCase();
+    if (!query) return [];
+    return friends
+      .filter((friend) => !excludedSet.has(String(friend._id)))
+      .filter((friend) => {
+        const username = String(friend.username || '').toLowerCase();
+        const realName = String(friend.realName || '').toLowerCase();
+        return username.includes(query) || realName.includes(query);
+      })
+      .slice(0, 6);
+  }, [friends, excludeQuery, excludedSet]);
+
+  const applyVisibilityPreset = (preset) => {
+    if (preset === 'public') {
+      onChange('relationshipAudience', 'social');
+      onChange('visibility', 'public');
+      return;
+    }
+    if (preset === 'circles') {
+      onChange('relationshipAudience', 'social');
+      onChange('visibility', 'circles');
+      return;
+    }
+    if (preset === 'secure') {
+      onChange('relationshipAudience', 'secure');
+      onChange('visibility', 'friends');
+      return;
+    }
+    onChange('relationshipAudience', 'social');
+    onChange('visibility', 'friends');
+  };
+
+  const addExcludedUser = (friend) => {
+    if (!friend?._id) return;
+    onAddExcludeUser(String(friend._id));
+    setExcludeQuery('');
+  };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Visibility</label>
         <select
-          value={relationshipAudience}
-          onChange={(event) => onChange('relationshipAudience', event.target.value)}
-          className="w-full border rounded p-2"
+          value={visibilityPreset}
+          onChange={(event) => applyVisibilityPreset(event.target.value)}
+          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
         >
-          {RELATIONSHIP_AUDIENCE_OPTIONS.map((option) => (
+          {VISIBILITY_PRESET_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Visibility</label>
-        <select
-          value={form.visibility}
-          onChange={(event) => onChange('visibility', event.target.value)}
-          className="w-full border rounded p-2"
-        >
-          {VISIBILITY_OPTIONS.map((option) => (
-            <option
-              key={option.value}
-              value={option.value}
-              disabled={
-                relationshipAudience === 'secure'
-                && !SECURE_ALLOWED_VISIBILITY.has(option.value)
-              }
-            >
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {relationshipAudience === 'secure' && !SECURE_ALLOWED_VISIBILITY.has(form.visibility) ? (
-          <p className="mt-1 text-xs text-amber-700">
-            Secure audience currently supports only Friends visibility.
-          </p>
-        ) : null}
-      </div>
-
-      {form.visibility === 'circles' && (
+      {visibilityPreset === 'circles' && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Circles</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Circles</label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {circles.map((circle) => (
               <label key={circle.name} className="flex items-center gap-2 text-sm text-gray-700">
@@ -84,37 +105,55 @@ function PrivacySelector({
         </div>
       )}
 
-      {form.visibility === 'specific_users' && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Specific Users</label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-auto border rounded p-2">
-            {friends.map((friend) => (
-              <label key={friend._id} className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={form.visibleToUsers.includes(friend._id)}
-                  onChange={() => onToggleVisibleUser(friend._id)}
-                />
-                <span>{friend.realName || friend.username}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Exclude Users</label>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-auto border rounded p-2">
-          {friends.map((friend) => (
-            <label key={`exclude-${friend._id}`} className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={form.excludeUsers.includes(friend._id)}
-                onChange={() => onToggleExcludeUser(friend._id)}
-              />
-              <span>{friend.realName || friend.username}</span>
-            </label>
-          ))}
+        <label className="mb-1 block text-sm font-medium text-gray-700">Exclude Users</label>
+        <input
+          type="text"
+          data-testid="exclude-user-search-input"
+          value={excludeQuery}
+          onChange={(event) => setExcludeQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            if (excludeSuggestions[0]) {
+              addExcludedUser(excludeSuggestions[0]);
+            }
+          }}
+          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+          placeholder="Search friends to exclude"
+        />
+        {excludeSuggestions.length > 0 ? (
+          <ul className="mt-2 space-y-1 rounded-xl border border-slate-200 bg-white p-2">
+            {excludeSuggestions.map((friend) => (
+              <li key={`exclude-suggestion-${friend._id}`} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate">{friend.realName || friend.username}</span>
+                <button
+                  type="button"
+                  onClick={() => addExcludedUser(friend)}
+                  className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  Add
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {(form.excludeUsers || []).map((userId) => {
+            const friend = friendById.get(String(userId));
+            return (
+              <button
+                key={`excluded-chip-${userId}`}
+                type="button"
+                onClick={() => onRemoveExcludeUser(String(userId))}
+                className="rounded-full border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                title="Remove excluded user"
+                aria-label={`Remove ${friend?.realName || friend?.username || 'excluded user'}`}
+              >
+                {(friend?.realName || friend?.username || 'Unknown user')} ×
+              </button>
+            );
+          })}
         </div>
       </div>
 
