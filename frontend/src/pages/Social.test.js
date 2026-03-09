@@ -353,6 +353,14 @@ describe('Social page hero background rendering', () => {
       worksAtInput.dispatchEvent(new Event('input', { bubbles: true }));
       worksAtInput.dispatchEvent(new Event('change', { bubbles: true }));
     });
+    const hobbiesInput = container.querySelector('input#personal-info-hobbies');
+    expect(hobbiesInput).toBeTruthy();
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(hobbiesInput, 'h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12');
+      hobbiesInput.dispatchEvent(new Event('input', { bubbles: true }));
+      hobbiesInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Save');
     expect(saveButton).toBeTruthy();
@@ -364,6 +372,7 @@ describe('Social page hero background rendering', () => {
     const updatePayload = authAPI.updateProfile.mock.calls[0][0];
     expect(updatePayload.worksAt).toBe('Blue Team');
     expect(updatePayload.profileFieldVisibility?.worksAt).toBe('social');
+    expect(updatePayload.hobbies).toEqual(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'h7', 'h8', 'h9', 'h10']);
   });
 
   it('loads profile chat thread/messages for guest viewers when read access allows guests', async () => {
