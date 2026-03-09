@@ -102,7 +102,8 @@ function News() {
     city: '',
     zipCode: '',
     state: '',
-    country: ''
+    country: '',
+    isPrimary: false
   });
   
   // Hidden categories state (from preferences)
@@ -176,6 +177,19 @@ function News() {
     }
   };
 
+  const refreshFeed = async (scope = activeScope, topic = activeFilter) => {
+    const refreshedFeed = await newsAPI.getFeed({
+      page: 1,
+      limit: 20,
+      topic: topic !== 'all' ? topic : undefined,
+      scope
+    });
+    setArticles(refreshedFeed.data.articles);
+    setPagination(refreshedFeed.data.pagination);
+    setActiveScope(refreshedFeed.data.personalization?.activeScope || scope);
+    setScopeFallbackMessage(getScopeFallbackMessage(refreshedFeed.data.personalization));
+  };
+
   // Load more articles
   const loadMore = async () => {
     if (pagination.page >= pagination.pages) return;
@@ -202,16 +216,7 @@ function News() {
     setLoading(true);
     
     try {
-      const res = await newsAPI.getFeed({ 
-        page: 1, 
-        limit: 20,
-        topic: topic !== 'all' ? topic : undefined,
-        scope: activeScope
-      });
-      
-      setArticles(res.data.articles);
-      setPagination(res.data.pagination);
-      setScopeFallbackMessage(getScopeFallbackMessage(res.data.personalization));
+      await refreshFeed(activeScope, topic);
       await loadPromoted(topic);
     } catch (err) {
       console.error('Error filtering:', err);
@@ -229,6 +234,7 @@ function News() {
       const res = await newsAPI.addKeyword(newKeyword.trim());
       setPreferences(res.data.preferences);
       setNewKeyword('');
+      await refreshFeed();
     } catch (err) {
       console.error('Error adding keyword:', err);
     }
@@ -239,6 +245,7 @@ function News() {
     try {
       const res = await newsAPI.removeKeyword(keyword);
       setPreferences(res.data.preferences);
+      await refreshFeed();
     } catch (err) {
       console.error('Error removing keyword:', err);
     }
@@ -248,16 +255,7 @@ function News() {
     setActiveScope(scope);
     setLoading(true);
     try {
-      const res = await newsAPI.getFeed({
-        page: 1,
-        limit: 20,
-        topic: activeFilter !== 'all' ? activeFilter : undefined,
-        scope
-      });
-      setArticles(res.data.articles);
-      setPagination(res.data.pagination);
-      setActiveScope(res.data.personalization?.activeScope || scope);
-      setScopeFallbackMessage(getScopeFallbackMessage(res.data.personalization));
+      await refreshFeed(scope, activeFilter);
       await loadPromoted(activeFilter);
     } catch (err) {
       console.error('Error updating feed scope:', err);
@@ -285,6 +283,7 @@ function News() {
         googleNewsEnabled: !preferences.googleNewsEnabled
       });
       setPreferences(res.data.preferences);
+      await refreshFeed();
     } catch (err) {
       console.error('Error updating preferences:', err);
     }
@@ -298,7 +297,8 @@ function News() {
     try {
       const res = await newsAPI.addLocation(newLocation);
       setPreferences(res.data.preferences);
-      setNewLocation({ city: '', zipCode: '', state: '', country: '' });
+      setNewLocation({ city: '', zipCode: '', state: '', country: '', isPrimary: false });
+      await refreshFeed();
     } catch (err) {
       console.error('Error adding location:', err);
     }
@@ -309,8 +309,24 @@ function News() {
     try {
       const res = await newsAPI.removeLocation(locationId);
       setPreferences(res.data.preferences);
+      await refreshFeed();
     } catch (err) {
       console.error('Error removing location:', err);
+    }
+  };
+
+  const handleSetPrimaryLocation = async (locationId) => {
+    if (!preferences?.locations?.length) return;
+    const updatedLocations = preferences.locations.map((location) => ({
+      ...location,
+      isPrimary: String(location._id) === String(locationId)
+    }));
+    try {
+      const res = await newsAPI.updatePreferences({ locations: updatedLocations });
+      setPreferences(res.data.preferences);
+      await refreshFeed();
+    } catch (err) {
+      console.error('Error setting primary location:', err);
     }
   };
 
@@ -336,6 +352,7 @@ function News() {
     try {
       const res = await newsAPI.updatePreferences({ rssSources: updatedSources });
       setPreferences(res.data.preferences);
+      await refreshFeed();
     } catch (err) {
       console.error('Error updating source:', err);
     }
@@ -389,6 +406,7 @@ function News() {
     try {
       const res = await newsAPI.updateHiddenCategories(newHidden);
       setPreferences(res.data.preferences);
+      await refreshFeed();
     } catch (err) {
       console.error('Error updating hidden categories:', err);
       // Revert on error
@@ -731,7 +749,7 @@ function News() {
                 {preferences?.locations?.map((loc) => {
                   const parts = [loc.city, loc.zipCode, loc.county, loc.state, loc.country].filter(Boolean);
                   return (
-                    <div 
+                  <div 
                       key={loc._id}
                       className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
                     >
@@ -739,12 +757,22 @@ function News() {
                         {parts.join(', ') || 'Unknown location'}
                         {loc.isPrimary && <span className="ml-2 text-xs text-blue-600 font-medium">Primary</span>}
                       </span>
-                      <button
-                        onClick={() => handleRemoveLocation(loc._id)}
-                        className="text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        ×
-                      </button>
+                      <div className="flex items-center gap-3">
+                        {!loc.isPrimary && (
+                          <button
+                            onClick={() => handleSetPrimaryLocation(loc._id)}
+                            className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                          >
+                            Set primary
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleRemoveLocation(loc._id)}
+                          className="text-gray-400 hover:text-red-500 transition-colors"
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -785,6 +813,15 @@ function News() {
                     className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   />
                 </div>
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={newLocation.isPrimary}
+                    onChange={(e) => setNewLocation({ ...newLocation, isPrimary: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Make this my primary location
+                </label>
                 <button
                   type="submit"
                   className="w-full px-4 py-1.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors"

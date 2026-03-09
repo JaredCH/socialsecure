@@ -2271,6 +2271,12 @@ router.get('/feed', authenticateToken, async (req, res) => {
         return enabledSources.has(sourceIdMatch) || enabledSources.has(sourceNameMatch);
       });
     }
+    if (preferences?.googleNewsEnabled === false) {
+      articles = articles.filter((article) => article.sourceType !== 'googleNews');
+    }
+    if (preferences?.gdletEnabled === false) {
+      articles = articles.filter((article) => article.sourceType !== 'gdlet');
+    }
     
     const topicAliases = getTopicAliases(topic);
     const hiddenCategorySet = new Set((preferences?.hiddenCategories || []).map((category) => normalizeTopicToken(category)));

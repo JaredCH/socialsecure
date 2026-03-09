@@ -356,6 +356,67 @@ describe('News scope routing', () => {
     expect(response.body.articles[0]._id).toBe('local-ai-1');
   });
 
+  it('removes disabled google and gdelt sources from the feed results', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'google-1',
+        title: 'Google News result',
+        description: '',
+        source: 'Google News',
+        sourceType: 'googleNews',
+        sourceId: 'google-news',
+        topics: ['technology'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-02T00:00:00.000Z')
+      },
+      {
+        _id: 'gdelt-1',
+        title: 'GDELT result',
+        description: '',
+        source: 'GDELT',
+        sourceType: 'gdlet',
+        sourceId: 'gdelt-tech',
+        topics: ['technology'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      },
+      {
+        _id: 'rss-1',
+        title: 'RSS result',
+        description: '',
+        source: 'Yahoo News',
+        sourceType: 'rss',
+        sourceId: 'yahoo-news',
+        topics: ['technology'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-03T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'global',
+      locations: [],
+      followedKeywords: [],
+      hiddenCategories: [],
+      googleNewsEnabled: false,
+      gdletEnabled: false
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: null, zipCode: null }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=global')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.articles).toHaveLength(1);
+    expect(response.body.articles[0]._id).toBe('rss-1');
+  });
+
   it('uses zip geocoding to keep regional scope active and match state-level news', async () => {
     const app = buildApp();
     const feedArticles = [
