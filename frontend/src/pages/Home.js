@@ -1,8 +1,35 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { userAPI } from '../utils/api';
 
 export const SEARCH_DEBOUNCE_MS = 250;
+const AGE_FILTER_DEFAULT = 35;
+const AGE_FILTER_MIN = 18;
+const AGE_FILTER_MAX = 100;
+const US_STATE_OPTIONS = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
+];
+const SEX_OPTIONS = ['Female', 'Male', 'Non-binary', 'Intersex', 'Other', 'Prefer not to say'];
+const RACE_OPTIONS = [
+  'American Indian or Alaska Native',
+  'Asian',
+  'Black or African American',
+  'Native Hawaiian or Other Pacific Islander',
+  'White',
+  'Other',
+  'Prefer not to say'
+];
+const buildSuggestions = (values = []) => (
+  Array.from(new Set(
+    values
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  )).slice(0, 25)
+);
 
 function Home({ isAuthenticated = false }) {
   const [searching, setSearching] = useState(false);
@@ -26,6 +53,23 @@ function Home({ isAuthenticated = false }) {
     race: ''
   });
   const activeSearchRequestRef = useRef(0);
+  const citySuggestions = useMemo(
+    () => buildSuggestions(searchResults.map((user) => user.city)),
+    [searchResults]
+  );
+  const countySuggestions = useMemo(
+    () => buildSuggestions(searchResults.map((user) => user.county)),
+    [searchResults]
+  );
+  const zipSuggestions = useMemo(
+    () => buildSuggestions(searchResults.map((user) => user.zipCode)),
+    [searchResults]
+  );
+  const ageFilterEnabled = (searchForm.ageFilters || '').trim().length > 0;
+  const parsedAgeFilter = Number.parseInt(searchForm.ageFilters, 10);
+  const ageFilterValue = Number.isFinite(parsedAgeFilter)
+    ? Math.min(Math.max(parsedAgeFilter, AGE_FILTER_MIN), AGE_FILTER_MAX)
+    : AGE_FILTER_DEFAULT;
 
   const onSearchFieldChange = (event) => {
     const { name, value } = event.target;
@@ -278,66 +322,133 @@ function Home({ isAuthenticated = false }) {
           </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <form onSubmit={handleSearch} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-4 lg:col-span-7">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Name First</span>
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <form onSubmit={handleSearch} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-4 xl:col-span-7">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-sm text-slate-700">
+                <span className="mb-1 block font-medium">Name First</span>
                 <input name="firstName" value={searchForm.firstName} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Name Last</span>
+              </label>
+              <label className="text-sm text-slate-700">
+                <span className="mb-1 block font-medium">Name Last</span>
                 <input name="lastName" value={searchForm.lastName} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">City</span>
-                <input name="city" value={searchForm.city} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">State</span>
-                <input name="state" value={searchForm.state} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Zip</span>
-                <input name="zip" value={searchForm.zip} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">County</span>
-                <input name="county" value={searchForm.county} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Phone</span>
-                <input name="phone" value={searchForm.phone} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Street Address</span>
-                <input name="streetAddress" value={searchForm.streetAddress} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Friends of User</span>
-                <input name="friendsOfUser" value={searchForm.friendsOfUser} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Works At</span>
-                <input name="worksAt" value={searchForm.worksAt} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Hobbies</span>
-                <input name="hobbies" value={searchForm.hobbies} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Age Filters</span>
-                <input name="ageFilters" value={searchForm.ageFilters} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="Optional age detail" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Sex</span>
-                <input name="sex" value={searchForm.sex} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="mb-1 block font-medium">Race</span>
-                <input name="race" value={searchForm.race} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-            </label>
+              </label>
+              <label className="text-sm text-slate-700">
+                <span className="mb-1 block font-medium">City</span>
+                <input name="city" list="home-city-suggestions" value={searchForm.city} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm text-slate-700">
+                <span className="mb-1 block font-medium">State</span>
+                <select name="state" value={searchForm.state} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                  <option value="">Any state</option>
+                  {US_STATE_OPTIONS.map((stateCode) => (
+                    <option key={stateCode} value={stateCode}>{stateCode}</option>
+                  ))}
+                </select>
+              </label>
             </div>
+            <datalist id="home-city-suggestions">
+              {citySuggestions.map((city) => (
+                <option key={city} value={city} />
+              ))}
+            </datalist>
+
+            <details className="rounded-xl border border-slate-200 bg-white p-3" open>
+              <summary className="cursor-pointer text-sm font-semibold text-slate-800">More filters</summary>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">Zip</span>
+                  <input name="zip" list="home-zip-suggestions" value={searchForm.zip} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                </label>
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">County</span>
+                  <input name="county" list="home-county-suggestions" value={searchForm.county} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                </label>
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">Phone</span>
+                  <input name="phone" value={searchForm.phone} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                </label>
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">Street Address</span>
+                  <input name="streetAddress" value={searchForm.streetAddress} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                </label>
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">Friends of User</span>
+                  <input name="friendsOfUser" value={searchForm.friendsOfUser} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                </label>
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">Works At</span>
+                  <input name="worksAt" value={searchForm.worksAt} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                </label>
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">Hobbies</span>
+                  <input name="hobbies" value={searchForm.hobbies} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                </label>
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">Sex</span>
+                  <select name="sex" value={searchForm.sex} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                    <option value="">Any</option>
+                    {SEX_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1 block font-medium">Race</span>
+                  <select name="race" value={searchForm.race} onChange={onSearchFieldChange} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                    <option value="">Any</option>
+                    {RACE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm text-slate-700 sm:col-span-2 lg:col-span-3">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="font-medium">Age Filters</span>
+                    <span id="age-filter-status" aria-live="polite" className="text-xs text-slate-500">
+                      {ageFilterEnabled ? `Minimum ${ageFilterValue}` : 'Minimum age (optional)'}
+                    </span>
+                  </div>
+                  <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                    <label className="flex items-center gap-2 text-xs text-slate-600">
+                      <input
+                        type="checkbox"
+                        name="ageFiltersEnabled"
+                        aria-label="Enable age filter"
+                        checked={ageFilterEnabled}
+                        onChange={(event) => {
+                          const nextValue = event.target.checked ? String(ageFilterValue) : '';
+                          setSearchForm((prev) => ({ ...prev, ageFilters: nextValue }));
+                        }}
+                      />
+                      Enable age filter
+                    </label>
+                    <input
+                      type="range"
+                      min={AGE_FILTER_MIN}
+                      max={AGE_FILTER_MAX}
+                      step="1"
+                      name="ageFilters"
+                      aria-describedby="age-filter-status"
+                      disabled={!ageFilterEnabled}
+                      value={ageFilterValue}
+                      onChange={onSearchFieldChange}
+                      className="h-2 w-full cursor-pointer accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </div>
+                </label>
+              </div>
+            </details>
+            <datalist id="home-county-suggestions">
+              {countySuggestions.map((county) => (
+                <option key={county} value={county} />
+              ))}
+            </datalist>
+            <datalist id="home-zip-suggestions">
+              {zipSuggestions.map((zip) => (
+                <option key={zip} value={zip} />
+              ))}
+            </datalist>
 
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <button type="submit" disabled={searching} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60">
