@@ -2007,6 +2007,21 @@ const Social = () => {
     }
   };
 
+  const handleUpdateCircle = async (circleName, payload) => {
+    try {
+      await circlesAPI.updateCircle(circleName, payload);
+      await refreshCircles();
+      if (payload?.name && payload.name !== circleName) {
+        setPostForm((prev) => ({
+          ...prev,
+          visibleToCircles: prev.visibleToCircles.map((entry) => (entry === circleName ? payload.name : entry))
+        }));
+      }
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to update circle.');
+    }
+  };
+
   const handleAddCircleMember = async (circleName, userId) => {
     try {
       await circlesAPI.addMember(circleName, userId);
@@ -2804,7 +2819,7 @@ const Social = () => {
         ) : <p className="text-sm text-slate-500">Post publishing is available only in owner view.</p>;
       case 'circles':
         return isOwnSocialContext && !isGuestPreview ? (
-          <CircleManager circles={circles} friends={friends} onCreateCircle={handleCreateCircle} onDeleteCircle={handleDeleteCircle} onAddMember={handleAddCircleMember} onRemoveMember={handleRemoveCircleMember} />
+          <CircleManager circles={circles} friends={friends} onCreateCircle={handleCreateCircle} onUpdateCircle={handleUpdateCircle} onDeleteCircle={handleDeleteCircle} onAddMember={handleAddCircleMember} onRemoveMember={handleRemoveCircleMember} />
         ) : (
           <div className="space-y-4">
             <CircleSpiderDiagram
