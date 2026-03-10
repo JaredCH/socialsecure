@@ -68,14 +68,45 @@ for (const s of subreddits) {
 }
 
 /**
+ * US state name → abbreviation map for normalizing full state names.
+ */
+const STATE_NAME_TO_ABBREV = new Map([
+  ['alabama','al'],['alaska','ak'],['arizona','az'],['arkansas','ar'],['california','ca'],
+  ['colorado','co'],['connecticut','ct'],['delaware','de'],['florida','fl'],['georgia','ga'],
+  ['hawaii','hi'],['idaho','id'],['illinois','il'],['indiana','in'],['iowa','ia'],
+  ['kansas','ks'],['kentucky','ky'],['louisiana','la'],['maine','me'],['maryland','md'],
+  ['massachusetts','ma'],['michigan','mi'],['minnesota','mn'],['mississippi','ms'],['missouri','mo'],
+  ['montana','mt'],['nebraska','ne'],['nevada','nv'],['new hampshire','nh'],['new jersey','nj'],
+  ['new mexico','nm'],['new york','ny'],['north carolina','nc'],['north dakota','nd'],['ohio','oh'],
+  ['oklahoma','ok'],['oregon','or'],['pennsylvania','pa'],['rhode island','ri'],['south carolina','sc'],
+  ['south dakota','sd'],['tennessee','tn'],['texas','tx'],['utah','ut'],['vermont','vt'],
+  ['virginia','va'],['washington','wa'],['west virginia','wv'],['wisconsin','wi'],['wyoming','wy'],
+  ['district of columbia','dc']
+]);
+
+/**
+ * Resolve a state value (full name or abbreviation) to a 2-letter abbreviation.
+ */
+function resolveStateAbbrev(value) {
+  const trimmed = (value || '').trim().toLowerCase();
+  if (!trimmed) return '';
+  // Already a 2-letter abbreviation
+  if (trimmed.length === 2 && /^[a-z]{2}$/.test(trimmed)) return trimmed;
+  // Look up full name
+  return STATE_NAME_TO_ABBREV.get(trimmed) || trimmed.slice(0, 2);
+}
+
+/**
  * Normalize a location context object into a consistent form.
  * Accepts any combination of { city, state, stateAbbrev, zipCode, country }.
+ * Full state names (e.g. "Texas") are resolved to 2-letter abbreviations.
  */
 function normalizeLocationInput(loc = {}) {
+  const rawState = (loc.stateAbbrev || loc.state || '').trim();
   return {
     city: (loc.city || '').trim(),
     state: (loc.state || '').trim(),
-    stateAbbrev: (loc.stateAbbrev || loc.state || '').trim().toLowerCase().slice(0, 2),
+    stateAbbrev: resolveStateAbbrev(rawState),
     zipCode: (loc.zipCode || '').trim(),
     country: (loc.country || 'US').trim().toUpperCase()
   };

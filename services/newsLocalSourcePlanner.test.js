@@ -43,6 +43,21 @@ describe('newsLocalSourcePlanner', () => {
       expect(result.stateAbbrev).toBe('');
       expect(result.zipCode).toBe('');
     });
+
+    it('resolves full state names to abbreviations', () => {
+      const result = normalizeLocationInput({ city: 'Austin', state: 'Texas' });
+      expect(result.stateAbbrev).toBe('tx');
+    });
+
+    it('resolves multi-word state names', () => {
+      const result = normalizeLocationInput({ city: 'Charlotte', state: 'North Carolina' });
+      expect(result.stateAbbrev).toBe('nc');
+    });
+
+    it('preserves existing abbreviations', () => {
+      const result = normalizeLocationInput({ city: 'Denver', stateAbbrev: 'CO' });
+      expect(result.stateAbbrev).toBe('co');
+    });
   });
 
   describe('buildLocalSourcePlan', () => {

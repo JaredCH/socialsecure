@@ -2345,8 +2345,24 @@ async function ingestLocalSources(locations = []) {
     ...stats
   };
 
+  /**
+   * Parse a locationKey string (format: "zip|city,state" or "city,state") into
+   * its city and stateAbbrev components.
+   */
+  const parseLocationKey = (locationKey) => {
+    if (!locationKey) return { city: '', stateAbbrev: '' };
+    // Strip leading zip portion ("zip|city,state" → "city,state")
+    const withoutZip = locationKey.includes('|') ? locationKey.split('|')[1] : locationKey;
+    const parts = (withoutZip || '').split(',');
+    return {
+      city: (parts[0] || '').trim(),
+      stateAbbrev: (parts[1] || '').trim()
+    };
+  };
+
   for (const src of allSources) {
     const tierKey = `tier_${src.tier}`;
+    const locFromKey = parseLocationKey(src.locationKey);
     try {
       let fetched = [];
       if (src.providerId === 'google-news-local') {
@@ -2364,18 +2380,18 @@ async function ingestLocalSources(locations = []) {
         }
       } else if (src.providerId === 'patch') {
         fetched = await fetchPatchSource({
-          city: src.patchCity || '',
-          stateAbbrev: src.patchState || ''
+          city: src.patchCity || locFromKey.city,
+          stateAbbrev: src.patchState || locFromKey.stateAbbrev
         });
       } else if (src.providerId === 'reddit-local') {
         fetched = await fetchRedditLocalSource(src.subreddit || '', {
-          city: src.locationKey?.split('|')?.[1]?.split(',')?.[0] || '',
-          stateAbbrev: src.locationKey?.split(',')?.[1] || ''
+          city: locFromKey.city,
+          stateAbbrev: locFromKey.stateAbbrev
         });
       } else if (src.providerId === 'tv-affiliate' || src.providerId === 'local-newspaper') {
         fetched = await fetchLocalCatalogRssSource(src, {
-          city: src.market || src.newspaperCity || '',
-          stateAbbrev: src.locationKey?.split(',')?.[1] || ''
+          city: src.market || src.newspaperCity || locFromKey.city,
+          stateAbbrev: locFromKey.stateAbbrev
         });
       }
 
@@ -2881,13 +2897,16 @@ async function ingestAllSources() {
       const locationSet = new Map();
       for (const pref of userPrefs) {
         for (const loc of (pref.locations || [])) {
-          const key = `${(loc.city || '').toLowerCase()}|${(loc.state || loc.zipCode || '').toLowerCase()}`;
+          const city = (loc.city || '').trim();
+          const state = (loc.state || '').trim();
+          const zipCode = (loc.zipCode || '').trim();
+          const key = `${city.toLowerCase()}|${(state || zipCode).toLowerCase()}`;
           if (key !== '|' && !locationSet.has(key)) {
             locationSet.set(key, {
-              city: loc.city || '',
-              state: loc.state || '',
-              stateAbbrev: loc.state || '',
-              zipCode: loc.zipCode || '',
+              city,
+              state,
+              stateAbbrev: state, // normalizeLocationInput in planner resolves full names
+              zipCode,
               country: loc.country || 'US'
             });
           }
