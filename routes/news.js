@@ -127,23 +127,25 @@ const normalizeToStandardCategory = (raw = '') => {
 // ============================================
 
 /**
- * Google News topic map with standardized category and locale-aware RSS URLs.
- * Each entry produces a section-specific RSS feed URL using topic search.
+ * Google News topic map with explicit topic RSS feeds.
+ * Includes the default categories subscribed during ingestion.
  */
 const GOOGLE_NEWS_TOPIC_MAP = {
-  technology: { category: 'technology', label: 'Technology' },
-  science: { category: 'science', label: 'Science' },
-  health: { category: 'health', label: 'Health' },
-  business: { category: 'business', label: 'Business' },
-  sports: { category: 'sports', label: 'Sports' },
-  entertainment: { category: 'entertainment', label: 'Entertainment' },
-  politics: { category: 'politics', label: 'Politics' },
-  finance: { category: 'finance', label: 'Finance' },
-  gaming: { category: 'gaming', label: 'Gaming' },
-  'artificial intelligence': { category: 'ai', label: 'AI & Machine Learning' }
+  'top stories': { category: 'general', label: 'Top Stories', url: 'https://news.google.com/rss' },
+  world: { category: 'world', label: 'World', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNREZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
+  business: { category: 'business', label: 'Business', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRlVnWm9ScQ?hl=en-US&gl=US&ceid=US:en' },
+  technology: { category: 'technology', label: 'Technology', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
+  entertainment: { category: 'entertainment', label: 'Entertainment', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
+  health: { category: 'health', label: 'Health', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
+  science: { category: 'science', label: 'Science', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
+  sports: { category: 'sports', label: 'Sports', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' }
 };
 
 const buildGoogleNewsFeedUrl = (query) => {
+  const topicConfig = GOOGLE_NEWS_TOPIC_MAP[String(query || '').toLowerCase()];
+  if (topicConfig?.url) {
+    return topicConfig.url;
+  }
   const encodedQuery = encodeURIComponent(query);
   return `https://news.google.com/rss/search?q=${encodedQuery}&hl=en-US&gl=US&ceid=US:en`;
 };
@@ -222,6 +224,25 @@ const PBS_ENABLED = String(process.env.PBS_ENABLED || 'true').toLowerCase() !== 
 
 const PBS_FEED_MAP = {
   newsHour: { url: 'https://www.pbs.org/newshour/rss/', category: 'general', label: 'PBS NewsHour' }
+};
+
+// ============================================
+// YAHOO RSS FEED CONFIGURATION
+// ============================================
+
+const YAHOO_ENABLED = String(process.env.YAHOO_ENABLED || 'true').toLowerCase() !== 'false';
+
+const YAHOO_FEED_MAP = {
+  topStories: { url: 'https://news.yahoo.com/rss/', category: 'general', label: 'Yahoo Top Stories' },
+  world: { url: 'https://news.yahoo.com/rss/world', category: 'world', label: 'Yahoo World' },
+  us: { url: 'https://news.yahoo.com/rss/us', category: 'general', label: 'Yahoo US' },
+  politics: { url: 'https://news.yahoo.com/rss/politics', category: 'politics', label: 'Yahoo Politics' },
+  business: { url: 'https://news.yahoo.com/rss/business', category: 'business', label: 'Yahoo Business' },
+  technology: { url: 'https://news.yahoo.com/rss/tech', category: 'technology', label: 'Yahoo Technology' },
+  entertainment: { url: 'https://news.yahoo.com/rss/entertainment', category: 'entertainment', label: 'Yahoo Entertainment' },
+  sports: { url: 'https://sports.yahoo.com/rss/', category: 'sports', label: 'Yahoo Sports' },
+  health: { url: 'https://news.yahoo.com/rss/health', category: 'health', label: 'Yahoo Health' },
+  science: { url: 'https://news.yahoo.com/rss/science', category: 'science', label: 'Yahoo Science' }
 };
 
 // ============================================
