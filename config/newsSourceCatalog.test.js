@@ -210,7 +210,7 @@ describe('newsSourceCatalog', () => {
 
   describe('catalog structure', () => {
     it('has catalog version', () => {
-      expect(CATALOG_VERSION).toBe(1);
+      expect(CATALOG_VERSION).toBe(2);
     });
 
     it('all catalog entries have required fields', () => {
@@ -227,11 +227,10 @@ describe('newsSourceCatalog', () => {
       }
     });
 
-    it('includes both wired and unwired sources', () => {
-      const wired = NEWS_SOURCE_CATALOG.filter(s => s.hasAdapter);
-      const unwired = NEWS_SOURCE_CATALOG.filter(s => !s.hasAdapter);
-      expect(wired.length).toBeGreaterThan(0);
-      expect(unwired.length).toBeGreaterThan(0);
+    it('all non-env-gated sources have adapters wired', () => {
+      const nonGated = NEWS_SOURCE_CATALOG.filter(s => !s.envGated);
+      const wired = nonGated.filter(s => s.hasAdapter);
+      expect(wired.length).toBe(nonGated.length);
     });
   });
 });

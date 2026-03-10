@@ -289,6 +289,73 @@ const YAHOO_FEED_MAP = {
 };
 
 // ============================================
+// CNN RSS FEED CONFIGURATION
+// ============================================
+
+const CNN_ENABLED = String(process.env.CNN_ENABLED || 'true').toLowerCase() !== 'false';
+
+const CNN_FEED_MAP = {
+  topStories: { url: 'https://rss.cnn.com/rss/cnn_topstories.rss', category: 'general', label: 'CNN Top Stories' },
+  world: { url: 'https://rss.cnn.com/rss/cnn_world.rss', category: 'world', label: 'CNN World' },
+  politics: { url: 'https://rss.cnn.com/rss/cnn_allpolitics.rss', category: 'politics', label: 'CNN Politics' },
+  business: { url: 'https://rss.cnn.com/rss/money_latest.rss', category: 'business', label: 'CNN Business' },
+  technology: { url: 'https://rss.cnn.com/rss/cnn_tech.rss', category: 'technology', label: 'CNN Technology' },
+  health: { url: 'https://rss.cnn.com/rss/cnn_health.rss', category: 'health', label: 'CNN Health' },
+  entertainment: { url: 'https://rss.cnn.com/rss/cnn_showbiz.rss', category: 'entertainment', label: 'CNN Entertainment' }
+};
+
+// ============================================
+// GUARDIAN RSS FEED CONFIGURATION
+// ============================================
+
+const GUARDIAN_ENABLED = String(process.env.GUARDIAN_ENABLED || 'true').toLowerCase() !== 'false';
+
+const GUARDIAN_FEED_MAP = {
+  world: { url: 'https://www.theguardian.com/world/rss', category: 'world', label: 'Guardian World' },
+  politics: { url: 'https://www.theguardian.com/us-news/us-politics/rss', category: 'politics', label: 'Guardian Politics' },
+  business: { url: 'https://www.theguardian.com/uk/business/rss', category: 'business', label: 'Guardian Business' },
+  technology: { url: 'https://www.theguardian.com/uk/technology/rss', category: 'technology', label: 'Guardian Technology' },
+  science: { url: 'https://www.theguardian.com/science/rss', category: 'science', label: 'Guardian Science' }
+};
+
+// ============================================
+// NEW YORK TIMES RSS FEED CONFIGURATION
+// ============================================
+
+const NYT_ENABLED = String(process.env.NYT_ENABLED || 'true').toLowerCase() !== 'false';
+
+const NYT_FEED_MAP = {
+  world: { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', category: 'world', label: 'NYT World' },
+  politics: { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml', category: 'politics', label: 'NYT Politics' },
+  business: { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml', category: 'business', label: 'NYT Business' },
+  technology: { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml', category: 'technology', label: 'NYT Technology' },
+  science: { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Science.xml', category: 'science', label: 'NYT Science' }
+};
+
+// ============================================
+// WALL STREET JOURNAL RSS FEED CONFIGURATION
+// ============================================
+
+const WSJ_ENABLED = String(process.env.WSJ_ENABLED || 'true').toLowerCase() !== 'false';
+
+const WSJ_FEED_MAP = {
+  business: { url: 'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml', category: 'business', label: 'WSJ Business' },
+  finance: { url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', category: 'finance', label: 'WSJ Finance' },
+  technology: { url: 'https://feeds.a.dj.com/rss/RSSWSJD.xml', category: 'technology', label: 'WSJ Technology' }
+};
+
+// ============================================
+// TECHCRUNCH RSS FEED CONFIGURATION
+// ============================================
+
+const TECHCRUNCH_ENABLED = String(process.env.TECHCRUNCH_ENABLED || 'true').toLowerCase() !== 'false';
+
+const TECHCRUNCH_FEED_MAP = {
+  latest: { url: 'https://techcrunch.com/feed/', category: 'technology', label: 'TechCrunch Latest' },
+  startups: { url: 'https://techcrunch.com/category/startups/feed/', category: 'business', label: 'TechCrunch Startups' }
+};
+
+// ============================================
 // LOCATION DICTIONARIES
 // ============================================
 
@@ -2049,6 +2116,321 @@ async function fetchPbsSource(section, feedConfig) {
   }
 }
 
+async function fetchCnnSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'CNN', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'CNN',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'cnn',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          cnnSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching CNN source "${section}":`, error.message);
+    return [];
+  }
+}
+
+async function fetchGuardianSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'The Guardian', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'The Guardian',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'guardian',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          guardianSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching Guardian source "${section}":`, error.message);
+    return [];
+  }
+}
+
+async function fetchNytSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'New York Times', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'New York Times',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'nyt',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          nytSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching NYT source "${section}":`, error.message);
+    return [];
+  }
+}
+
+async function fetchWsjSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'Wall Street Journal', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'Wall Street Journal',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'wsj',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          wsjSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching WSJ source "${section}":`, error.message);
+    return [];
+  }
+}
+
+async function fetchTechcrunchSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'TechCrunch', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'TechCrunch',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'techcrunch',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          techcrunchSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching TechCrunch source "${section}":`, error.message);
+    return [];
+  }
+}
+
 /**
  * GDELT 2.0 DOC API Adapter
  * Fetches geolocated articles from GDELT's free document API.
@@ -2899,7 +3281,47 @@ async function ingestAllSources() {
     }
   }
 
-  // 8. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
+  // 8. Fetch CNN sources (gated by CNN_ENABLED)
+  if (CNN_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(CNN_FEED_MAP)) {
+      const articles = await fetchCnnSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 9. Fetch Guardian sources (gated by GUARDIAN_ENABLED)
+  if (GUARDIAN_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(GUARDIAN_FEED_MAP)) {
+      const articles = await fetchGuardianSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 10. Fetch NYT sources (gated by NYT_ENABLED)
+  if (NYT_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(NYT_FEED_MAP)) {
+      const articles = await fetchNytSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 11. Fetch WSJ sources (gated by WSJ_ENABLED)
+  if (WSJ_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(WSJ_FEED_MAP)) {
+      const articles = await fetchWsjSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 12. Fetch TechCrunch sources (gated by TECHCRUNCH_ENABLED)
+  if (TECHCRUNCH_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(TECHCRUNCH_FEED_MAP)) {
+      const articles = await fetchTechcrunchSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 13. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
   if (GDELT_ENABLED) {
     const gdeltQueries = GDELT_DEFAULT_QUERIES;
     for (const query of gdeltQueries) {
@@ -2908,7 +3330,7 @@ async function ingestAllSources() {
     }
   }
 
-  // 9. Fetch local sources (gated by NEWS_LOCAL_SOURCES_ENABLED)
+  // 14. Fetch local sources (gated by NEWS_LOCAL_SOURCES_ENABLED)
   let localMetrics = null;
   if (NEWS_LOCAL_SOURCES_ENABLED) {
     try {
@@ -2955,10 +3377,10 @@ async function ingestAllSources() {
     }
   }
   
-  // 10. Process all articles (deduplication)
+  // 15. Process all articles (deduplication)
   const results = await processArticles(allArticles, { ingestionRunId });
   
-  // 11. Log scope quality metrics
+  // 16. Log scope quality metrics
   const scopeQuality = computeScopeQualityMetrics(allArticles, startTime);
   if (localMetrics) {
     scopeQuality.localPipeline = localMetrics;
@@ -3691,6 +4113,34 @@ router.put('/preferences/hidden-categories', authenticateToken, async (req, res)
 });
 
 /**
+ * PUT /api/news/preferences/source-categories
+ * Toggle a category for a specific source on/off
+ */
+router.put('/preferences/source-categories', authenticateToken, async (req, res) => {
+  try {
+    const { sourceId, category } = req.body;
+
+    if (!sourceId || typeof sourceId !== 'string') {
+      return res.status(400).json({ error: 'sourceId is required' });
+    }
+    if (!category || typeof category !== 'string') {
+      return res.status(400).json({ error: 'category is required' });
+    }
+
+    const preferences = await NewsPreferences.getOrCreate(req.user.userId);
+    await preferences.toggleSourceCategory(sourceId, category);
+
+    res.json({
+      success: true,
+      preferences
+    });
+  } catch (error) {
+    console.error('Error toggling source category:', error);
+    res.status(500).json({ error: 'Failed to toggle source category' });
+  }
+});
+
+/**
  * POST /api/news/sources
  * Add a new RSS source (admin or user-defined)
  */
@@ -4360,6 +4810,11 @@ module.exports = {
     fetchApSource,
     fetchReutersSource,
     fetchPbsSource,
+    fetchCnnSource,
+    fetchGuardianSource,
+    fetchNytSource,
+    fetchWsjSource,
+    fetchTechcrunchSource,
     fetchPatchSource,
     fetchRedditLocalSource,
     fetchLocalCatalogRssSource,
@@ -4391,6 +4846,11 @@ module.exports = {
     AP_FEED_MAP,
     REUTERS_FEED_MAP,
     PBS_FEED_MAP,
+    CNN_FEED_MAP,
+    GUARDIAN_FEED_MAP,
+    NYT_FEED_MAP,
+    WSJ_FEED_MAP,
+    TECHCRUNCH_FEED_MAP,
     COUNTRY_VARIANTS_MAP,
     STANDARDIZED_CATEGORIES,
     SUPPORTED_RSS_PROVIDERS,

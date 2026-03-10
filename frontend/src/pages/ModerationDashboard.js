@@ -102,6 +102,29 @@ const formatAssociatedLocations = (locationAssociations = {}) => {
 const getIngestedTimestamp = (record = {}) => record.ingestedAt || record.createdAt || null;
 const formatTimestampCell = (value) => (value ? new Date(value).toLocaleString() : '—');
 
+function SortableHeader({ label, field, sortBy, sortDir, onSort }) {
+  const isActive = sortBy === field;
+  const handleClick = () => {
+    if (!isActive) {
+      onSort(field, 'asc');
+    } else if (sortDir === 'asc') {
+      onSort(field, 'desc');
+    } else {
+      onSort('createdAt', 'desc');
+    }
+  };
+  const arrow = isActive ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+  return (
+    <th
+      className={`px-3 py-2.5 cursor-pointer select-none hover:text-gray-800 transition-colors ${isActive ? 'text-indigo-600' : ''}`}
+      onClick={handleClick}
+      aria-sort={isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      {label}{arrow}
+    </th>
+  );
+}
+
 function ModerationDashboard() {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -166,6 +189,14 @@ function ModerationDashboard() {
 
   const toggleIngestionRow = useCallback((rowId) => {
     setExpandedIngestionRows((prev) => ({ ...prev, [rowId]: !prev[rowId] }));
+  }, []);
+
+  const handleIngestionSort = useCallback((field, dir) => {
+    setIngestionFilters((prev) => {
+      const updated = { ...prev, sortBy: field, sortDir: dir };
+      loadIngestionRecords(1, updated);
+      return updated;
+    });
   }, []);
 
   const openIngestionDetail = async (recordId) => {
@@ -473,15 +504,15 @@ function ModerationDashboard() {
                   <thead>
                     <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                       <th className="px-3 py-2.5 w-8"></th>
-                      <th className="px-3 py-2.5">Source</th>
-                      <th className="px-3 py-2.5">Category</th>
-                      <th className="px-3 py-2.5">Title</th>
-                      <th className="px-3 py-2.5">Published</th>
-                      <th className="px-3 py-2.5">Scraped</th>
-                      <th className="px-3 py-2.5">Status</th>
-                      <th className="px-3 py-2.5">Scope</th>
+                      <SortableHeader label="Source" field="source.name" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Category" field="normalized.category" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Title" field="normalized.title" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Published" field="normalized.publishedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Scraped" field="scrapedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Status" field="processingStatus" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Scope" field="resolvedScope" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <th className="px-3 py-2.5">Topics</th>
-                      <th className="px-3 py-2.5">Locality</th>
+                      <SortableHeader label="Locality" field="normalized.localityLevel" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <th className="px-3 py-2.5">Raw Location</th>
                       <th className="px-3 py-2.5">Text Match</th>
                       <th className="px-3 py-2.5">ZIP Code</th>

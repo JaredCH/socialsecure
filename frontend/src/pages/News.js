@@ -383,6 +383,16 @@ function News() {
     }
   };
 
+  const handleToggleSourceCategory = async (sourceId, category) => {
+    try {
+      const res = await newsAPI.toggleSourceCategory(sourceId, category);
+      setPreferences(res.data.preferences);
+      await refreshFeed();
+    } catch (err) {
+      console.error('Error toggling source category:', err);
+    }
+  };
+
   const visibleCategories = ALL_CATEGORIES.filter(cat => !hiddenCategories.includes(cat.id));
 
   // Client-side sort
@@ -589,6 +599,7 @@ function News() {
           onToggleSource={handleToggleSource}
           isSourceEnabled={isSourceEnabled}
           onToggleGoogleNews={handleToggleGoogleNews}
+          onToggleSourceCategory={handleToggleSourceCategory}
           onAddKeyword={handleAddKeyword}
           onRemoveKeyword={handleRemoveKeyword}
           newKeyword={newKeyword}
@@ -621,7 +632,7 @@ function News() {
       )}
 
       {/* ── Main Content ──────────────────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex gap-6">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-6 flex gap-6">
 
         {/* Mobile sidebar overlay */}
         {sidebarOpen && <div className="fixed inset-0 bg-black/30 z-30 lg:hidden" onClick={() => setSidebarOpen(false)} />}
