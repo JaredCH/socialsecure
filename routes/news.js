@@ -3675,7 +3675,9 @@ router.post('/preferences/weather-locations', authenticateToken, async (req, res
     // Set as primary if explicitly requested or if it's the first location
     if (isPrimary || (preferences.weatherLocations || []).length === 0) {
       locationData.isPrimary = true;
-      preferences.weatherLocations.forEach(loc => { loc.isPrimary = false; });
+      if (isPrimary && preferences.weatherLocations.length > 0) {
+        preferences.weatherLocations.forEach(loc => { loc.isPrimary = false; });
+      }
     }
 
     preferences.weatherLocations.push(locationData);

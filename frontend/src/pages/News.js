@@ -935,7 +935,7 @@ function News() {
             <SourcesStatusCard
               sources={availableSources}
               enabledCount={enabledSourceCount}
-              totalCount={availableSources.length + 1}
+              totalCount={availableSources.length + 1 /* +1 for Google News */}
               onManageSources={() => { setSidebarOpen(true); togglePanel(PANEL_IDS.sources); }}
             />
             <TrendingCard
