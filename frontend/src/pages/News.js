@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { newsAPI } from '../utils/api';
+import SourcesStatusCard from '../components/news/sidebar/SourcesStatusCard';
+import TrendingCard from '../components/news/sidebar/TrendingCard';
+import KeywordHitsCard from '../components/news/sidebar/KeywordHitsCard';
+import LocalNewsCard from '../components/news/sidebar/LocalNewsCard';
+import WeatherWidget from '../components/news/sidebar/WeatherWidget';
+import ArticleDrawer from '../components/news/ArticleDrawer';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -127,6 +133,8 @@ function News() {
   const [openPanel, setOpenPanel] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState('newest');
+  const [viewMode, setViewMode] = useState('list');
+  const [selectedArticleId, setSelectedArticleId] = useState(null);
 
   const togglePanel = (id) => setOpenPanel(prev => (prev === id ? null : id));
 
@@ -442,6 +450,24 @@ function News() {
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
               </select>
+
+              {/* List/Grid view toggle */}
+              <div className="hidden sm:inline-flex items-center rounded-lg bg-gray-100 p-0.5">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  aria-label="List view"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  aria-label="Grid view"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                </button>
+              </div>
 
               {/* Mobile filter toggle */}
               <button
@@ -814,45 +840,67 @@ function News() {
               <p className="text-gray-600 font-semibold text-lg">No articles found</p>
               <p className="text-gray-400 text-sm mt-1 max-w-xs mx-auto">Try adjusting your filters, scope, or adding more keywords and sources.</p>
             </div>
-          ) : (
-            <div className="space-y-3">
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {sortedArticles.map((article) => (
                 <article key={article._id} className="group bg-white rounded-2xl overflow-hidden hover:shadow-lg hover:shadow-gray-200/60 transition-all duration-300 ring-1 ring-gray-200/70">
-                  <a href={article.url} target="_blank" rel="noopener noreferrer" className="flex flex-col sm:flex-row">
+                  <button onClick={() => setSelectedArticleId(article._id)} className="w-full text-left">
                     {article.imageUrl && (
-                      <div className="sm:w-48 sm:min-h-[130px] shrink-0 overflow-hidden bg-gray-100">
-                        <img
-                          src={article.imageUrl}
-                          alt=""
-                          className="w-full h-44 sm:h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          loading="lazy"
-                          onError={(e) => { e.target.parentElement.style.display = 'none'; }}
-                        />
+                      <div className="w-full h-40 overflow-hidden bg-gray-100">
+                        <img src={article.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.parentElement.style.display = 'none'; }} />
                       </div>
                     )}
-                    <div className="flex-1 min-w-0 p-4 sm:p-5 flex flex-col justify-center">
-                      <h2 className="text-[15px] sm:text-base font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors">
-                        {article.title}
-                      </h2>
-                      {article.description && (
-                        <p className="mt-1.5 text-sm text-gray-500 line-clamp-2 leading-relaxed">
-                          {article.description.length > 200 ? article.description.substring(0, 200) + '…' : article.description}
-                        </p>
-                      )}
-                      <div className="mt-3 flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
+                    <div className="p-4">
+                      <h2 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors">{article.title}</h2>
+                      <div className="mt-2 flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
                         <span className="font-semibold text-gray-600">{article.source}</span>
                         <span className="text-gray-300">·</span>
                         <span>{formatRelativeTime(article.publishedAt)}</span>
                         {article.localityLevel && article.localityLevel !== 'global' && (
-                          <>
-                            <span className="text-gray-300">·</span>
-                            <span className="text-indigo-500 font-medium">{article.localityLevel}</span>
-                          </>
+                          <span className="text-indigo-500 font-medium">{article.localityLevel}</span>
                         )}
-                        <span className="ml-auto px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[11px] font-medium">{getSourceTypeLabel(article.sourceType)}</span>
                       </div>
                     </div>
-                  </a>
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sortedArticles.map((article) => (
+                <article key={article._id} className="group bg-white rounded-2xl overflow-hidden hover:shadow-lg hover:shadow-gray-200/60 transition-all duration-300 ring-1 ring-gray-200/70">
+                  <div className="flex flex-col sm:flex-row">
+                    <a href={article.url} target="_blank" rel="noopener noreferrer" className="flex flex-col sm:flex-row flex-1 min-w-0">
+                      {article.imageUrl && (
+                        <div className="sm:w-48 sm:min-h-[130px] shrink-0 overflow-hidden bg-gray-100">
+                          <img src={article.imageUrl} alt="" className="w-full h-44 sm:h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.parentElement.style.display = 'none'; }} />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0 p-4 sm:p-5 flex flex-col justify-center">
+                        <h2 className="text-[15px] sm:text-base font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors">{article.title}</h2>
+                        {article.description && (
+                          <p className="mt-1.5 text-sm text-gray-500 line-clamp-2 leading-relaxed">{article.description.length > 200 ? article.description.substring(0, 200) + '…' : article.description}</p>
+                        )}
+                        <div className="mt-3 flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
+                          <span className="font-semibold text-gray-600">{article.source}</span>
+                          <span className="text-gray-300">·</span>
+                          <span>{formatRelativeTime(article.publishedAt)}</span>
+                          {article.localityLevel && article.localityLevel !== 'global' && (
+                            <>
+                              <span className="text-gray-300">·</span>
+                              <span className="text-indigo-500 font-medium">{article.localityLevel}</span>
+                            </>
+                          )}
+                          <span className="ml-auto px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[11px] font-medium">{getSourceTypeLabel(article.sourceType)}</span>
+                        </div>
+                      </div>
+                    </a>
+                    <div className="flex items-center gap-1 px-3 py-2 sm:py-0 sm:pr-4 border-t sm:border-t-0 sm:border-l border-gray-100">
+                      <button onClick={() => setSelectedArticleId(article._id)} className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" aria-label="View article details">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      </button>
+                    </div>
+                  </div>
                 </article>
               ))}
             </div>
@@ -881,45 +929,40 @@ function News() {
           </p>
         </main>
 
-        {/* ── Right Sidebar – Trending ───────────────────────────────────────── */}
+        {/* ── Right Sidebar – Information Stack ────────────────────────────── */}
         <aside className="hidden xl:block w-72 shrink-0">
-          <div className="sticky top-[210px] bg-white rounded-2xl shadow-sm ring-1 ring-gray-200/70 p-5">
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">🔥 Trending</h2>
-            {promotedLoading ? (
-              <div className="space-y-3">
-                {[...Array(4)].map((_, index) => (
-                  <div key={index} className="animate-pulse pb-3 border-b border-gray-100 last:border-0">
-                    <div className="h-3 bg-gray-100 rounded w-3/4 mb-2" />
-                    <div className="h-2 bg-gray-100 rounded w-1/2" />
-                  </div>
-                ))}
-              </div>
-            ) : promotedError ? (
-              <p className="text-xs text-red-500">{promotedError}</p>
-            ) : promotedArticles.length === 0 ? (
-              <p className="text-xs text-gray-400">No trending stories right now.</p>
-            ) : (
-              <div className="space-y-1">
-                {promotedArticles.map((item) => (
-                  <a
-                    key={item.article._id}
-                    href={item.article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block py-2.5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
-                  >
-                    <p className="text-sm font-medium text-gray-900 line-clamp-2 leading-snug">{item.article.title}</p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[11px] text-gray-400">{item.article.source} · {formatRelativeTime(item.article.publishedAt)}</span>
-                      <span className="ml-auto text-[11px] font-semibold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded-md">🔥 {Math.round(item.viralScore || 0)}</span>
-                    </div>
-                  </a>
-                ))}
-              </div>
-            )}
+          <div className="sticky top-[210px] space-y-4">
+            <SourcesStatusCard
+              sources={availableSources}
+              enabledCount={enabledSourceCount}
+              totalCount={availableSources.length + 1}
+              onManageSources={() => { setSidebarOpen(true); togglePanel(PANEL_IDS.sources); }}
+            />
+            <TrendingCard
+              items={promotedArticles}
+              loading={promotedLoading}
+              error={promotedError}
+            />
+            <KeywordHitsCard
+              keywords={activeKeywords}
+              articles={articles}
+              onKeywordClick={(kw) => setNewKeyword(kw)}
+            />
+            <LocalNewsCard
+              articles={articles}
+              locations={preferences?.locations || []}
+              onManageLocations={() => setShowSettings(true)}
+            />
+            <WeatherWidget />
           </div>
         </aside>
       </div>
+
+      {/* ── Article Drawer ──────────────────────────────────────────────────── */}
+      <ArticleDrawer
+        articleId={selectedArticleId}
+        onClose={() => setSelectedArticleId(null)}
+      />
     </div>
   );
 }

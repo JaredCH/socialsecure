@@ -3517,11 +3517,11 @@ const US_ZIP_REGEX = /^\d{5}(-\d{4})?$/;
 function normalizeUSState(input) {
   if (!input) return null;
   const trimmed = input.trim();
-  const upper = trimmed.toUpperCase();
-  // Check if it's already a valid state abbreviation
-  if (US_STATE_ABBREVS.has(upper)) return upper;
+  const lower = trimmed.toLowerCase();
+  // Check if it's already a valid state abbreviation (set stores lowercase)
+  if (US_STATE_ABBREVS.has(lower)) return lower.toUpperCase();
   // Try matching full state name using the existing US_STATE_NAMES map
-  const fromName = US_STATE_NAMES.get(trimmed.toLowerCase());
+  const fromName = US_STATE_NAMES.get(lower);
   if (fromName) return fromName.toUpperCase();
   return null;
 }
