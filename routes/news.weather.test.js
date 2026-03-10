@@ -113,62 +113,17 @@ describe('Weather backend internals', () => {
 
 describe('Weather endpoint validation', () => {
   describe('POST /api/news/preferences/weather-locations', () => {
-    it('rejects request without city or zipCode', async () => {
+    it('rejects request without any location hint', async () => {
       const app = buildApp();
       NewsPreferences.findOne.mockResolvedValue({ weatherLocations: [], save: jest.fn() });
 
       const res = await request(app)
         .post('/api/news/preferences/weather-locations')
         .set('Authorization', 'Bearer valid-token')
-        .send({ state: 'TX' });
+        .send({});
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain('City or ZIP code is required');
-    });
-
-    it('rejects invalid US ZIP code', async () => {
-      const app = buildApp();
-
-      const res = await request(app)
-        .post('/api/news/preferences/weather-locations')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ city: 'Austin', zipCode: '1234' });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain('Invalid US ZIP code');
-    });
-
-    it('rejects invalid US state', async () => {
-      const app = buildApp();
-
-      const res = await request(app)
-        .post('/api/news/preferences/weather-locations')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ city: 'Austin', state: 'Narnia' });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain('Invalid US state');
-    });
-
-    it('rejects when already at max 3 locations', async () => {
-      const app = buildApp();
-      const mockPrefs = {
-        weatherLocations: [
-          { _id: 'w1', city: 'Austin', isPrimary: false },
-          { _id: 'w2', city: 'Dallas', isPrimary: false },
-          { _id: 'w3', city: 'Houston', isPrimary: true }
-        ],
-        save: jest.fn()
-      };
-      NewsPreferences.findOne.mockResolvedValue(mockPrefs);
-
-      const res = await request(app)
-        .post('/api/news/preferences/weather-locations')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ city: 'San Antonio', zipCode: '78201' });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain('Maximum 3 weather locations');
+      expect(res.body.error).toContain('Provide city, zip code, coordinates, or label');
     });
 
     it('adds weather location with valid data', async () => {
@@ -188,26 +143,24 @@ describe('Weather endpoint validation', () => {
       expect(res.status).toBe(200);
       expect(mockPrefs.save).toHaveBeenCalled();
       expect(locations.length).toBe(1);
-      expect(locations[0].state).toBe('TX');
+      expect(locations[0].state).toBe('Texas');
       expect(locations[0].isPrimary).toBe(true);
     });
   });
 
   describe('PUT /api/news/preferences/weather-locations', () => {
-    it('rejects more than 3 locations', async () => {
+    it('rejects malformed location entries', async () => {
       const app = buildApp();
 
       const res = await request(app)
         .put('/api/news/preferences/weather-locations')
         .set('Authorization', 'Bearer valid-token')
         .send({
-          locations: [
-            { city: 'A' }, { city: 'B' }, { city: 'C' }, { city: 'D' }
-          ]
+          locations: [{}]
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain('Maximum 3');
+      expect(res.body.error).toContain('Each weather location must include');
     });
 
     it('replaces all weather locations with valid data', async () => {

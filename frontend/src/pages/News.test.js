@@ -21,6 +21,8 @@ jest.mock('../utils/api', () => ({
     addSource: jest.fn(),
     refreshSourceHealth: jest.fn(),
     getWeather: jest.fn(),
+    getSportsTeams: jest.fn(),
+    geocodeWeatherLocations: jest.fn(),
     getArticle: jest.fn(),
     addWeatherLocation: jest.fn(),
     removeWeatherLocation: jest.fn(),
@@ -128,6 +130,19 @@ describe('News inline preferences updates', () => {
         catalogVersion: 1
       }
     });
+    newsAPI.getSportsTeams.mockResolvedValue({
+      data: {
+        leagues: [
+          {
+            id: 'NFL',
+            label: 'NFL',
+            icon: '🏈',
+            teams: [{ id: 'nfl:dallas-cowboys', team: 'Dallas Cowboys', city: 'Dallas', state: 'TX', leagueLabel: 'NFL' }]
+          }
+        ]
+      }
+    });
+    newsAPI.geocodeWeatherLocations.mockResolvedValue({ data: { suggestions: [] } });
     newsAPI.updatePreferences.mockResolvedValue({ data: { preferences: basePreferences } });
     newsAPI.addLocation.mockResolvedValue({ data: { preferences: basePreferences } });
     newsAPI.removeLocation.mockResolvedValue({ data: { preferences: basePreferences } });
@@ -273,12 +288,14 @@ describe('News inline preferences updates', () => {
 
     // Verify tab pills are rendered
     const tabs = container.querySelectorAll('button[role="tab"]');
-    expect(tabs.length).toBe(5);
+    expect(tabs.length).toBe(7);
     const tabLabels = Array.from(tabs).map(t => t.textContent);
     expect(tabLabels).toEqual(expect.arrayContaining([
       expect.stringContaining('Sources'),
       expect.stringContaining('Keywords'),
       expect.stringContaining('Locations'),
+      expect.stringContaining('Sports Teams'),
+      expect.stringContaining('Weather'),
       expect.stringContaining('Schedule'),
       expect.stringContaining('Export')
     ]));

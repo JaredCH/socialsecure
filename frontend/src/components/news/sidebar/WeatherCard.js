@@ -21,6 +21,17 @@ const WeatherCard = ({ location }) => {
   if (!weather) return null;
 
   const { current, high, low, hourly = [], weekly = [], updatedAt } = weather;
+  const iconMap = {
+    sun: '☀️',
+    'cloud-sun': '⛅',
+    cloud: '☁️',
+    'cloud-fog': '🌫️',
+    'cloud-drizzle': '🌦️',
+    'cloud-rain': '🌧️',
+    'cloud-snow': '🌨️',
+    'cloud-lightning': '⛈️'
+  };
+  const currentIcon = iconMap[current?.icon] || '🌤️';
 
   return (
     <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl ring-1 ring-blue-200/60">
@@ -37,20 +48,22 @@ const WeatherCard = ({ location }) => {
 
       {/* Current conditions */}
       <div className="flex items-center gap-3 mb-2">
-        {current?.icon && <img src={current.icon} alt={current.shortForecast || 'Weather'} className="w-10 h-10" />}
+        <span className="text-3xl" aria-hidden="true">{currentIcon}</span>
         <div>
           <p className="text-2xl font-bold text-gray-900">
             {current?.temperature != null ? `${current.temperature}°${current.temperatureUnit || 'F'}` : '--'}
           </p>
-          <p className="text-xs text-gray-600">{current?.shortForecast || ''}</p>
+          <p className="text-xs text-gray-600">{current?.shortForecast || weather.forecastSummary || ''}</p>
         </div>
       </div>
 
       {/* High / Low */}
-      <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
+      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mb-2">
         {high != null && <span>H: {high}°</span>}
         {low != null && <span>L: {low}°</span>}
-        {current?.windSpeed && <span>💨 {current.windSpeed} {current.windDirection || ''}</span>}
+        {current?.humidity != null && <span>Humidity: {current.humidity}%</span>}
+        {current?.windSpeed != null && <span>💨 {current.windSpeed} mph</span>}
+        {current?.precipitationProbability != null && <span>Rain: {current.precipitationProbability}%</span>}
       </div>
 
       {/* Updated timestamp */}
@@ -77,7 +90,7 @@ const WeatherCard = ({ location }) => {
                 <div key={i} className="flex items-center justify-between text-[11px] text-gray-600">
                   <span>{new Date(h.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                   <span className="font-medium">{h.temperature}°</span>
-                  <span className="text-gray-400 truncate max-w-[80px]">{h.shortForecast}</span>
+                  <span className="text-gray-400 truncate max-w-[110px]">{h.shortForecast} · {h.precipitationProbability ?? '--'}%</span>
                 </div>
               ))}
             </div>
@@ -103,8 +116,8 @@ const WeatherCard = ({ location }) => {
               {weekly.map((d, i) => (
                 <div key={i} className="flex items-center justify-between text-[11px] text-gray-600">
                   <span className="font-medium w-20">{d.name}</span>
-                  <span>{d.temperature}°</span>
-                  <span className="text-gray-400 truncate max-w-[80px]">{d.shortForecast}</span>
+                  <span>{d.high}° / {d.low}°</span>
+                  <span className="text-gray-400 truncate max-w-[100px]">{d.shortForecast}</span>
                 </div>
               ))}
             </div>

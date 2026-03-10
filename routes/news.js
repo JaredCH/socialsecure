@@ -45,7 +45,11 @@ const {
   getLocationTaxonomyPayload,
   titleCase
 } = require('../utils/newsLocationTaxonomy');
-const { inferSportsLocationFromText } = require('../data/news/sportsTeamLocationIndex');
+const {
+  getSportsTeamsByLeague,
+  inferSportsTeamsFromText,
+  inferSportsLocationFromText
+} = require('../data/news/sportsTeamLocationIndex');
 const { inferCityLocationFromText } = require('../data/news/cityLocationIndex');
 
 // Initialize RSS parser with timeout
@@ -110,6 +114,9 @@ const NEWS_LOCAL_MAX_LOCATIONS = Math.max(1, parseInt(process.env.NEWS_LOCAL_MAX
 const WEATHER_CACHE_TTL_MS = Math.max(60000, parseInt(process.env.WEATHER_CACHE_TTL_MS || '600000', 10) || 600000); // default 10 min
 const weatherCache = new Map();
 const weatherCacheMetrics = { hits: 0, misses: 0, errors: 0, totalLatencyMs: 0, fetchCount: 0 };
+const OPEN_METEO_FORECAST_BASE = 'https://api.open-meteo.com/v1/forecast';
+const OPEN_METEO_GEOCODING_BASE = 'https://geocoding-api.open-meteo.com/v1/search';
+const WEATHER_WIDGET_REFRESH_SECONDS = Math.max(300, parseInt(process.env.WEATHER_WIDGET_REFRESH_SECONDS || '600', 10) || 600);
 
 const newsGeocoder = NodeGeocoder({
   provider: 'openstreetmap',
@@ -546,8 +553,48 @@ const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase
 const normalizeTopicToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 const normalizeUsZipCode = (value) => normalizeZipCode(value).split('-')[0];
+const normalizeSportsTeamId = (value) => String(value || '').trim().toLowerCase();
+const normalizeFollowedSportsTeams = (teams = []) => [...new Set(
+  (Array.isArray(teams) ? teams : [])
+    .map(normalizeSportsTeamId)
+    .filter(Boolean)
+)];
 const geocodeContextCache = new Map();
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const OPEN_METEO_WEATHER_CODE_MAP = {
+  0: { description: 'Clear sky', icon: 'sun' },
+  1: { description: 'Mainly clear', icon: 'sun' },
+  2: { description: 'Partly cloudy', icon: 'cloud-sun' },
+  3: { description: 'Overcast', icon: 'cloud' },
+  45: { description: 'Fog', icon: 'cloud-fog' },
+  48: { description: 'Depositing rime fog', icon: 'cloud-fog' },
+  51: { description: 'Light drizzle', icon: 'cloud-drizzle' },
+  53: { description: 'Drizzle', icon: 'cloud-drizzle' },
+  55: { description: 'Dense drizzle', icon: 'cloud-drizzle' },
+  56: { description: 'Light freezing drizzle', icon: 'cloud-snow' },
+  57: { description: 'Freezing drizzle', icon: 'cloud-snow' },
+  61: { description: 'Slight rain', icon: 'cloud-rain' },
+  63: { description: 'Rain', icon: 'cloud-rain' },
+  65: { description: 'Heavy rain', icon: 'cloud-rain' },
+  66: { description: 'Light freezing rain', icon: 'cloud-rain' },
+  67: { description: 'Freezing rain', icon: 'cloud-rain' },
+  71: { description: 'Slight snow', icon: 'cloud-snow' },
+  73: { description: 'Snow', icon: 'cloud-snow' },
+  75: { description: 'Heavy snow', icon: 'cloud-snow' },
+  77: { description: 'Snow grains', icon: 'cloud-snow' },
+  80: { description: 'Rain showers', icon: 'cloud-rain' },
+  81: { description: 'Rain showers', icon: 'cloud-rain' },
+  82: { description: 'Violent rain showers', icon: 'cloud-rain' },
+  85: { description: 'Snow showers', icon: 'cloud-snow' },
+  86: { description: 'Heavy snow showers', icon: 'cloud-snow' },
+  95: { description: 'Thunderstorm', icon: 'cloud-lightning' },
+  96: { description: 'Thunderstorm with hail', icon: 'cloud-lightning' },
+  99: { description: 'Severe thunderstorm with hail', icon: 'cloud-lightning' }
+};
+
+const getOpenMeteoWeatherDescriptor = (code) => OPEN_METEO_WEATHER_CODE_MAP[Number(code)]
+  || { description: 'Unknown conditions', icon: 'cloud' };
 
 const CAPITAL_CITY_MATCHERS = US_STATE_CAPITALS.map(([capitalCity, stateName, stateAbbrev]) => ({
   capitalCity,
@@ -3985,8 +4032,10 @@ router.get('/feed', authenticateToken, async (req, res) => {
       req
     });
 
-    // Extract followed keywords for personalization
-    const followedKeywords = preferences?.followedKeywords?.map(k => k.keyword) || [];
+    // Extract followed keywords and sports teams for personalization.
+    const followedKeywords = preferences?.followedKeywords?.map((k) => k.keyword) || [];
+    const followedSportsTeams = normalizeFollowedSportsTeams(preferences?.followedSportsTeams || []);
+    const followedSportsTeamSet = new Set(followedSportsTeams);
     
     // Build base query
     const query = { isActive: true };
@@ -4036,16 +4085,24 @@ router.get('/feed', authenticateToken, async (req, res) => {
     const scopedCandidates = articles.map((article) => {
       const articleText = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
       const matchedKeywords = followedKeywords.filter((keyword) => articleText.includes(keyword.toLowerCase()));
+      const matchedTeamIds = inferSportsTeamsFromText(articleText)
+        .map((team) => normalizeSportsTeamId(team.id))
+        .filter((teamId) => followedSportsTeamSet.has(teamId));
       const locationMatches = articleMatchesLocation(article, locationContext);
+      const normalizedCategory = normalizeTopicToken(article.category);
+      const topicTokens = (article.topics || []).map((item) => normalizeTopicToken(item));
+      const isSportsArticle = normalizedCategory === 'sports' || topicTokens.includes('sports');
 
       return {
         ...article,
         _searchText: articleText,
         _locationMatches: locationMatches,
-        _topicTokens: (article.topics || []).map((item) => normalizeTopicToken(item)),
+        _topicTokens: topicTokens,
         matchedKeywords,
+        matchedTeamIds,
+        isSportsArticle,
         isFollowingMatch: matchedKeywords.length > 0, // kept for existing frontend badge logic
-        _boostScore: matchedKeywords.length
+        _boostScore: matchedKeywords.length + (matchedTeamIds.length * 1.5)
       };
     });
 
@@ -4081,6 +4138,10 @@ router.get('/feed', authenticateToken, async (req, res) => {
           }
 
           if (hiddenCategorySet.size > 0 && article._topicTokens.some((item) => hiddenCategorySet.has(item))) {
+            return false;
+          }
+
+          if (followedSportsTeamSet.size > 0 && article.isSportsArticle && article.matchedTeamIds.length === 0) {
             return false;
           }
 
@@ -4176,6 +4237,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
       },
       personalization: {
         followedKeywords,
+        followedSportsTeams,
         hasKeywordMatches: articles.some(a => a.isFollowingMatch),
         requestedScope,
         activeScope,
@@ -4360,6 +4422,7 @@ router.get('/preferences', authenticateToken, async (req, res) => {
         gdletEnabled: true,
         locations: seededLocations,
         followedKeywords: [],
+        followedSportsTeams: [],
         hiddenCategories: [],
         localPriorityEnabled: true,
         defaultScope: seededLocations.length > 0 ? 'local' : 'global'
@@ -4413,6 +4476,15 @@ router.get('/preferences', authenticateToken, async (req, res) => {
       ));
     }
 
+    const normalizedSportsTeams = normalizeFollowedSportsTeams(preferences.followedSportsTeams || []);
+    if (JSON.stringify(normalizedSportsTeams) !== JSON.stringify(preferences.followedSportsTeams || [])) {
+      preferences = await maybePopulatePreferences(NewsPreferences.findOneAndUpdate(
+        { user: req.user.userId },
+        { $set: { followedSportsTeams: normalizedSportsTeams } },
+        { new: true }
+      ));
+    }
+
     const registrationAlignment = buildRegistrationAlignment({ user, preferences });
     
     res.json({ preferences, registrationAlignment });
@@ -4436,6 +4508,7 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       gdletEnabled,
       locations,
       followedKeywords,
+      followedSportsTeams,
       localPriorityEnabled,
       defaultScope
     } = req.body;
@@ -4460,6 +4533,9 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       updateData.locations = normalizedLocations;
     }
     if (followedKeywords !== undefined) updateData.followedKeywords = followedKeywords;
+    if (followedSportsTeams !== undefined) {
+      updateData.followedSportsTeams = normalizeFollowedSportsTeams(followedSportsTeams);
+    }
     if (defaultScope !== undefined && NEWS_SCOPE_VALUES.includes(defaultScope)) {
       updateData.defaultScope = defaultScope;
     } else if (localPriorityEnabled !== undefined && defaultScope === undefined) {
@@ -5048,6 +5124,20 @@ router.get('/location-taxonomy', authenticateToken, (req, res) => {
   res.json({ taxonomy: getLocationTaxonomyPayload() });
 });
 
+router.get('/sports-teams', authenticateToken, (req, res) => {
+  const leagues = getSportsTeamsByLeague().map((leagueGroup) => ({
+    ...leagueGroup,
+    teams: [...leagueGroup.teams].sort((a, b) => a.team.localeCompare(b.team))
+  }));
+  const totalTeams = leagues.reduce((sum, leagueGroup) => sum + leagueGroup.teams.length, 0);
+
+  res.json({
+    leagues,
+    totalTeams,
+    generatedAt: new Date().toISOString()
+  });
+});
+
 /**
  * GET /api/news/article/:id
  * Get single article by ID
@@ -5095,111 +5185,214 @@ function buildWeatherCacheKey(lat, lon) {
   return `weather:${Number(lat).toFixed(2)}:${Number(lon).toFixed(2)}`;
 }
 
-/**
- * Fetch weather for a single location from NWS, using cache if available.
- * @param {Object} locObj – { lat, lon, ... }
- * @returns {{ weather, error, cacheHit }}
- */
-async function fetchWeatherForLocation(locObj) {
-  if (!locObj.lat || !locObj.lon) {
-    return { weather: null, error: 'Unable to resolve weather data for this location', cacheHit: false };
+const parseCoordinateQuery = (value = '') => {
+  const match = String(value || '').trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lon = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
+};
+
+async function fetchOpenMeteoGeocode(query, count = 8) {
+  const encoded = encodeURIComponent(String(query || '').trim());
+  if (!encoded) return [];
+  const url = `${OPEN_METEO_GEOCODING_BASE}?name=${encoded}&count=${Math.max(1, Math.min(count, 20))}&language=en&format=json`;
+  const data = await fetchJsonWithTimeout(url, 7000);
+  return Array.isArray(data?.results) ? data.results : [];
+}
+
+async function resolveWeatherLocationCoordinates(locObj = {}) {
+  if (Number.isFinite(Number(locObj.lat)) && Number.isFinite(Number(locObj.lon))) {
+    return {
+      lat: Number(locObj.lat),
+      lon: Number(locObj.lon),
+      label: locObj.label || [locObj.city, locObj.state, locObj.country].filter(Boolean).join(', '),
+      city: locObj.city || null,
+      state: locObj.state || null,
+      country: locObj.country || null,
+      countryCode: locObj.countryCode || null,
+      timezone: locObj.timezone || null
+    };
   }
 
-  const cacheKey = buildWeatherCacheKey(locObj.lat, locObj.lon);
+  const query = String(locObj.query || locObj.label || [locObj.city, locObj.state, locObj.zipCode, locObj.country].filter(Boolean).join(' ')).trim();
+  if (!query) return null;
+
+  const coords = parseCoordinateQuery(query);
+  if (coords) {
+    return {
+      ...coords,
+      label: locObj.label || query,
+      city: locObj.city || null,
+      state: locObj.state || null,
+      country: locObj.country || null,
+      countryCode: locObj.countryCode || null,
+      timezone: locObj.timezone || null
+    };
+  }
+
+  const results = await fetchOpenMeteoGeocode(query, 1);
+  const top = results[0];
+  if (!top) return null;
+
+  return {
+    lat: Number(top.latitude),
+    lon: Number(top.longitude),
+    label: locObj.label || [top.name, top.admin1, top.country].filter(Boolean).join(', '),
+    city: top.name || locObj.city || null,
+    state: top.admin1 || locObj.state || null,
+    country: top.country || locObj.country || null,
+    countryCode: top.country_code || locObj.countryCode || null,
+    timezone: top.timezone || null
+  };
+}
+
+router.get('/weather/geocode', authenticateToken, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 2) {
+      return res.json({ suggestions: [] });
+    }
+
+    const coordQuery = parseCoordinateQuery(q);
+    if (coordQuery) {
+      return res.json({
+        suggestions: [{
+          id: `coords:${coordQuery.lat},${coordQuery.lon}`,
+          label: `${coordQuery.lat.toFixed(4)}, ${coordQuery.lon.toFixed(4)}`,
+          city: null,
+          state: null,
+          country: null,
+          countryCode: null,
+          latitude: coordQuery.lat,
+          longitude: coordQuery.lon,
+          timezone: null
+        }]
+      });
+    }
+
+    const suggestions = (await fetchOpenMeteoGeocode(q, 8)).map((item) => ({
+      id: `${item.id || `${item.latitude},${item.longitude}`}`,
+      label: [item.name, item.admin1, item.country].filter(Boolean).join(', '),
+      city: item.name || null,
+      state: item.admin1 || null,
+      country: item.country || null,
+      countryCode: item.country_code || null,
+      latitude: Number(item.latitude),
+      longitude: Number(item.longitude),
+      timezone: item.timezone || null
+    }));
+
+    res.json({ suggestions });
+  } catch (error) {
+    console.error('Error geocoding weather location:', error);
+    res.status(500).json({ error: 'Failed to search weather locations' });
+  }
+});
+
+async function fetchWeatherForLocation(locObj) {
+  const resolved = await resolveWeatherLocationCoordinates(locObj);
+  if (!resolved?.lat || !resolved?.lon) {
+    return { weather: null, error: 'Unable to resolve weather data for this location', cacheHit: false, resolved: null };
+  }
+
+  const cacheKey = buildWeatherCacheKey(resolved.lat, resolved.lon);
   const cached = weatherCache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < WEATHER_CACHE_TTL_MS) {
     weatherCacheMetrics.hits++;
-    return { weather: cached.weather, error: null, cacheHit: true };
+    return { weather: cached.weather, error: null, cacheHit: true, resolved };
   }
 
   weatherCacheMetrics.misses++;
   const startMs = Date.now();
   try {
-    const pointUrl = `https://api.weather.gov/points/${locObj.lat},${locObj.lon}`;
-    const pointData = await fetchJsonWithTimeout(pointUrl);
+    const url = `${OPEN_METEO_FORECAST_BASE}?latitude=${encodeURIComponent(resolved.lat)}&longitude=${encodeURIComponent(resolved.lon)}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=7&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto`;
+    const forecast = await fetchJsonWithTimeout(url, 8000);
 
-    if (pointData?.properties?.forecast) {
-      const forecastData = await fetchJsonWithTimeout(pointData.properties.forecast);
-      const hourlyData = pointData.properties.forecastHourly
-        ? await fetchJsonWithTimeout(pointData.properties.forecastHourly).catch((err) => {
-            console.error('Hourly forecast fetch failed:', err.message);
-            return null;
-          })
-        : null;
+    const current = forecast?.current || {};
+    const hourlyTime = Array.isArray(forecast?.hourly?.time) ? forecast.hourly.time : [];
+    const dailyTime = Array.isArray(forecast?.daily?.time) ? forecast.daily.time : [];
+    const currentDescriptor = getOpenMeteoWeatherDescriptor(current.weather_code);
 
-      const periods = forecastData?.properties?.periods || [];
-      const currentPeriod = periods[0] || {};
-      const todayDay = periods.find(p => p.isDaytime === true) || currentPeriod;
-      const todayNight = periods.find(p => p.isDaytime === false);
-
-      const weather = {
-        current: {
-          temperature: currentPeriod.temperature,
-          temperatureUnit: currentPeriod.temperatureUnit || 'F',
-          shortForecast: currentPeriod.shortForecast,
-          icon: currentPeriod.icon,
-          windSpeed: currentPeriod.windSpeed,
-          windDirection: currentPeriod.windDirection
-        },
-        high: todayDay?.temperature || null,
-        low: todayNight?.temperature || null,
-        hourly: (hourlyData?.properties?.periods || []).slice(0, 12).map(p => ({
-          time: p.startTime,
-          temperature: p.temperature,
-          shortForecast: p.shortForecast,
-          icon: p.icon
-        })),
-        weekly: periods.filter(p => p.isDaytime).slice(0, 7).map(p => ({
-          name: p.name,
-          temperature: p.temperature,
-          shortForecast: p.shortForecast,
-          icon: p.icon
-        })),
-        updatedAt: new Date().toISOString()
+    const hourly = hourlyTime.slice(0, 12).map((time, idx) => {
+      const descriptor = getOpenMeteoWeatherDescriptor(forecast?.hourly?.weather_code?.[idx]);
+      return {
+        time,
+        temperature: forecast?.hourly?.temperature_2m?.[idx] ?? null,
+        humidity: forecast?.hourly?.relative_humidity_2m?.[idx] ?? null,
+        windSpeed: forecast?.hourly?.wind_speed_10m?.[idx] ?? null,
+        precipitationProbability: forecast?.hourly?.precipitation_probability?.[idx] ?? null,
+        shortForecast: descriptor.description,
+        icon: descriptor.icon
       };
+    });
 
-      const elapsedMs = Date.now() - startMs;
-      weatherCacheMetrics.totalLatencyMs += elapsedMs;
-      weatherCacheMetrics.fetchCount++;
-      weatherCache.set(cacheKey, { weather, timestamp: Date.now() });
-      return { weather, error: null, cacheHit: false };
-    }
+    const weekly = dailyTime.slice(0, 5).map((time, idx) => {
+      const descriptor = getOpenMeteoWeatherDescriptor(forecast?.daily?.weather_code?.[idx]);
+      return {
+        date: time,
+        name: new Date(time).toLocaleDateString('en-US', { weekday: 'short' }),
+        high: forecast?.daily?.temperature_2m_max?.[idx] ?? null,
+        low: forecast?.daily?.temperature_2m_min?.[idx] ?? null,
+        precipitationProbability: forecast?.daily?.precipitation_probability_max?.[idx] ?? null,
+        shortForecast: descriptor.description,
+        icon: descriptor.icon
+      };
+    });
 
-    return { weather: null, error: 'Unable to resolve weather data for this location', cacheHit: false };
+    const weather = {
+      provider: 'open-meteo',
+      current: {
+        temperature: current.temperature_2m ?? null,
+        temperatureUnit: 'F',
+        humidity: current.relative_humidity_2m ?? null,
+        windSpeed: current.wind_speed_10m ?? null,
+        precipitationProbability: hourly[0]?.precipitationProbability ?? null,
+        weatherCode: current.weather_code ?? null,
+        shortForecast: currentDescriptor.description,
+        icon: currentDescriptor.icon
+      },
+      high: forecast?.daily?.temperature_2m_max?.[0] ?? null,
+      low: forecast?.daily?.temperature_2m_min?.[0] ?? null,
+      hourly,
+      weekly,
+      forecastSummary: weekly[0]?.shortForecast || currentDescriptor.description,
+      updatedAt: new Date().toISOString(),
+      refreshIntervalSeconds: WEATHER_WIDGET_REFRESH_SECONDS
+    };
+
+    const elapsedMs = Date.now() - startMs;
+    weatherCacheMetrics.totalLatencyMs += elapsedMs;
+    weatherCacheMetrics.fetchCount++;
+    weatherCache.set(cacheKey, { weather, timestamp: Date.now() });
+    return { weather, error: null, cacheHit: false, resolved };
   } catch (fetchErr) {
     weatherCacheMetrics.errors++;
-    return { weather: null, error: 'Weather service temporarily unavailable', cacheHit: false };
+    return { weather: null, error: 'Weather service temporarily unavailable', cacheHit: false, resolved };
   }
 }
 
-/**
- * GET /api/news/weather
- * Fetch weather for user's weather locations using api.weather.gov (NWS).
- * Uses in-memory cache with TTL and supports location fallback chain:
- *   saved weather locations → news primary location → profile location.
- */
 router.get('/weather', authenticateToken, async (req, res) => {
   try {
     const preferences = await NewsPreferences.findOne({ user: req.user.userId });
     let weatherLocations = preferences?.weatherLocations || [];
 
-    // Fallback chain: if no saved weather locations, try news primary location or profile
     let fallbackSource = null;
     if (weatherLocations.length === 0) {
-      // Try news primary location
       const newsLocations = preferences?.locations || [];
-      const primary = newsLocations.find(l => l.isPrimary) || newsLocations[0];
-      if (primary && (primary.lat || primary.city)) {
+      const primary = newsLocations.find((l) => l.isPrimary) || newsLocations[0];
+      if (primary && (primary.lat || primary.city || primary.zipCode)) {
         weatherLocations = [primary];
         fallbackSource = 'newsLocation';
       } else {
-        // Try profile location (user model)
         const user = await User.findById(req.user.userId).lean();
         if (user?.location?.lat && user?.location?.lon) {
           weatherLocations = [{ lat: user.location.lat, lon: user.location.lon, label: 'Profile Location', isPrimary: true }];
           fallbackSource = 'profileLocation';
-        } else if (user?.location?.city || user?.location?.state) {
-          weatherLocations = [{ city: user.location.city, state: user.location.state, label: 'Profile Location', isPrimary: true }];
+        } else if (user?.location?.city || user?.location?.state || user?.location?.zipCode) {
+          weatherLocations = [{ city: user.location.city, state: user.location.state, zipCode: user.location.zipCode, label: 'Profile Location', isPrimary: true }];
           fallbackSource = 'profileLocation';
         }
       }
@@ -5213,7 +5406,21 @@ router.get('/weather', authenticateToken, async (req, res) => {
       weatherLocations.map(async (loc) => {
         const locObj = loc.toObject ? loc.toObject() : loc;
         const result = await fetchWeatherForLocation(locObj);
-        return { ...locObj, weather: result.weather, error: result.error, cacheHit: result.cacheHit };
+        const resolved = result.resolved || {};
+        return {
+          ...locObj,
+          label: locObj.label || resolved.label || [locObj.city, locObj.state, locObj.country].filter(Boolean).join(', '),
+          city: locObj.city || resolved.city || null,
+          state: locObj.state || resolved.state || null,
+          country: locObj.country || resolved.country || null,
+          countryCode: locObj.countryCode || resolved.countryCode || null,
+          lat: Number.isFinite(Number(locObj.lat)) ? Number(locObj.lat) : resolved.lat,
+          lon: Number.isFinite(Number(locObj.lon)) ? Number(locObj.lon) : resolved.lon,
+          timezone: locObj.timezone || resolved.timezone || null,
+          weather: result.weather,
+          error: result.error,
+          cacheHit: result.cacheHit
+        };
       })
     );
 
@@ -5223,6 +5430,7 @@ router.get('/weather', authenticateToken, async (req, res) => {
       const locObj = loc?.toObject ? loc.toObject() : loc;
       return { ...locObj, weather: null, error: 'Weather fetch failed', cacheHit: false };
     });
+
     res.json({
       locations,
       fallbackSource,
@@ -5255,24 +5463,25 @@ async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
 
 /**
  * POST /api/news/preferences/weather-locations
- * Add a weather location (max 3)
+ * Add a weather location
  */
 router.post('/preferences/weather-locations', authenticateToken, async (req, res) => {
   try {
-    const { label, city, state, zipCode, lat, lon, isPrimary } = req.body;
+    const {
+      label,
+      city,
+      state,
+      country,
+      countryCode,
+      zipCode,
+      lat,
+      lon,
+      timezone,
+      isPrimary
+    } = req.body;
 
-    if (!city && !zipCode) {
-      return res.status(400).json({ error: 'City or ZIP code is required' });
-    }
-
-    // US-only validation
-    if (zipCode && !US_ZIP_REGEX.test(zipCode)) {
-      return res.status(400).json({ error: 'Invalid US ZIP code format' });
-    }
-
-    const normalizedState = normalizeUSState(state);
-    if (state && !normalizedState) {
-      return res.status(400).json({ error: 'Invalid US state' });
+    if (!city && !zipCode && (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) && !label) {
+      return res.status(400).json({ error: 'Provide city, zip code, coordinates, or label for weather location' });
     }
 
     let preferences = await NewsPreferences.findOne({ user: req.user.userId });
@@ -5280,17 +5489,16 @@ router.post('/preferences/weather-locations', authenticateToken, async (req, res
       preferences = await NewsPreferences.create({ user: req.user.userId });
     }
 
-    if ((preferences.weatherLocations || []).length >= 3) {
-      return res.status(400).json({ error: 'Maximum 3 weather locations allowed' });
-    }
-
     const locationData = {
-      label: label || [city, normalizedState].filter(Boolean).join(', '),
+      label: label || [city, state, country].filter(Boolean).join(', '),
       city: city || null,
-      state: normalizedState || null,
+      state: state || null,
+      country: country || null,
+      countryCode: countryCode || null,
       zipCode: zipCode || null,
-      lat: lat || null,
-      lon: lon || null,
+      lat: Number.isFinite(Number(lat)) ? Number(lat) : null,
+      lon: Number.isFinite(Number(lon)) ? Number(lon) : null,
+      timezone: timezone || null,
       isPrimary: false
     };
 
@@ -5324,27 +5532,34 @@ router.put('/preferences/weather-locations', authenticateToken, async (req, res)
       return res.status(400).json({ error: 'Locations array is required' });
     }
 
-    if (locations.length > 3) {
-      return res.status(400).json({ error: 'Maximum 3 weather locations allowed' });
-    }
+    const normalizedLocations = locations.map((loc, index) => {
+      const normalized = {
+        label: loc?.label || [loc?.city, loc?.state, loc?.country].filter(Boolean).join(', '),
+        city: loc?.city || null,
+        state: loc?.state || null,
+        country: loc?.country || null,
+        countryCode: loc?.countryCode || null,
+        zipCode: loc?.zipCode || null,
+        lat: Number.isFinite(Number(loc?.lat)) ? Number(loc.lat) : null,
+        lon: Number.isFinite(Number(loc?.lon)) ? Number(loc.lon) : null,
+        timezone: loc?.timezone || null,
+        isPrimary: Boolean(loc?.isPrimary || index === 0)
+      };
 
-    // Validate and normalize each location without mutating input
-    const normalizedLocations = locations.map(loc => {
-      const normalized = { ...loc };
-      if (normalized.zipCode && !US_ZIP_REGEX.test(normalized.zipCode)) {
-        return { error: `Invalid US ZIP code: ${normalized.zipCode}` };
+      if (!normalized.city && !normalized.zipCode && (!normalized.lat || !normalized.lon) && !normalized.label) {
+        return { error: 'Each weather location must include city, zip code, coordinates, or label' };
       }
-      if (normalized.state) {
-        const normalizedState = normalizeUSState(normalized.state);
-        if (!normalizedState) return { error: `Invalid US state: ${normalized.state}` };
-        normalized.state = normalizedState;
-      }
+
       return normalized;
     });
 
     const validationError = normalizedLocations.find(loc => loc.error);
     if (validationError) {
       return res.status(400).json({ error: validationError.error });
+    }
+
+    if (normalizedLocations.length > 0 && !normalizedLocations.some((loc) => loc.isPrimary)) {
+      normalizedLocations[0].isPrimary = true;
     }
 
     const preferences = await NewsPreferences.findOneAndUpdate(

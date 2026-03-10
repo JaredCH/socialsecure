@@ -25,6 +25,13 @@ const WeatherWidget = () => {
     fetchWeather();
   }, [fetchWeather]);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      fetchWeather();
+    }, 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [fetchWeather]);
+
   if (loading) {
     return (
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200/70 p-5">
@@ -58,7 +65,16 @@ const WeatherWidget = () => {
 
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200/70 p-5">
-      <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">🌤️ Weather</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🌤️ Weather</h2>
+        <button
+          type="button"
+          onClick={fetchWeather}
+          className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+        >
+          Refresh
+        </button>
+      </div>
       <div className="space-y-3">
         {weatherData.map((loc, i) => (
           <WeatherCard key={loc._id || i} location={loc} />

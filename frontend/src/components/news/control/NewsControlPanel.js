@@ -3,13 +3,17 @@ import { HealthDot } from './HealthDot';
 import SourcesPanel from './panels/SourcesPanel';
 import KeywordsPanel from './panels/KeywordsPanel';
 import LocationsPanel from './panels/LocationsPanel';
+import SportsTeamsPanel from './panels/SportsTeamsPanel';
 import SchedulePanel from './panels/SchedulePanel';
 import ExportPanel from './panels/ExportPanel';
+import WeatherLocationsPanel from './panels/WeatherLocationsPanel';
 
 const TABS = [
   { id: 'sources', label: 'Sources', icon: '📡' },
   { id: 'keywords', label: 'Keywords', icon: '#' },
   { id: 'locations', label: 'Locations', icon: '📍' },
+  { id: 'sports', label: 'Sports Teams', icon: '🏈' },
+  { id: 'weather', label: 'Weather', icon: '🌦️' },
   { id: 'schedule', label: 'Schedule', icon: '⏰' },
   { id: 'export', label: 'Export', icon: '📤' }
 ];
@@ -33,6 +37,19 @@ export default function NewsControlPanel({
   setNewLocation,
   locationTaxonomy,
   registrationAlignment,
+  sportsLeagues,
+  followedSportsTeams,
+  onSetAllSportsTeams,
+  onSetLeagueSportsTeams,
+  onToggleSportsTeam,
+  weatherLocations,
+  onSearchWeatherLocations,
+  onAddWeatherLocation,
+  onRemoveWeatherLocation,
+  onSetPrimaryWeatherLocation,
+  onReorderWeatherLocations,
+  weatherStatusMessage,
+  setWeatherStatusMessage,
   onUpdatePreferences,
   onRefreshHealth,
   onClose,
@@ -141,6 +158,10 @@ export default function NewsControlPanel({
                 <div className="text-right font-medium text-gray-900">{activeKeywords.length}</div>
                 <div className="text-gray-600">Locations</div>
                 <div className="text-right font-medium text-gray-900">{locations.length}</div>
+                <div className="text-gray-600">Sports Teams</div>
+                <div className="text-right font-medium text-gray-900">{(followedSportsTeams || []).length}</div>
+                <div className="text-gray-600">Weather</div>
+                <div className="text-right font-medium text-gray-900">{(weatherLocations || []).length}</div>
               </div>
               <div className="flex items-center gap-3 pt-1 border-t border-gray-200/60 mt-1">
                 <span className="flex items-center gap-1 text-[10px] text-gray-500">
@@ -235,6 +256,27 @@ export default function NewsControlPanel({
                 preferences={preferences}
                 onUpdatePreferences={onUpdatePreferences}
                 scopes={scopes}
+              />
+            )}
+            {activeTab === 'sports' && (
+              <SportsTeamsPanel
+                leagues={sportsLeagues}
+                followedSportsTeams={followedSportsTeams}
+                onSetAllTeams={onSetAllSportsTeams}
+                onSetLeagueTeams={onSetLeagueSportsTeams}
+                onToggleTeam={onToggleSportsTeam}
+              />
+            )}
+            {activeTab === 'weather' && (
+              <WeatherLocationsPanel
+                locations={weatherLocations}
+                onSearchLocations={onSearchWeatherLocations}
+                onAddLocation={onAddWeatherLocation}
+                onRemoveLocation={onRemoveWeatherLocation}
+                onSetPrimary={onSetPrimaryWeatherLocation}
+                onReorder={onReorderWeatherLocations}
+                statusMessage={weatherStatusMessage}
+                setStatusMessage={setWeatherStatusMessage}
               />
             )}
             {activeTab === 'export' && (

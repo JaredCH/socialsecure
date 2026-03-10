@@ -91,6 +91,8 @@ const getLocationBadgeClasses = (kind) => {
   return 'bg-gray-100 text-gray-600 ring-gray-200';
 };
 
+const normalizeSportsTeamId = (value) => String(value || '').trim().toLowerCase();
+
 // ─── Reusable toggle switch ─────────────────────────────────────────────────────
 
 const Toggle = ({ enabled, onToggle, label, size = 'md' }) => {
@@ -143,6 +145,8 @@ function News() {
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [locationTaxonomy, setLocationTaxonomy] = useState({ country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} });
   const [registrationAlignment, setRegistrationAlignment] = useState(null);
+  const [sportsLeagues, setSportsLeagues] = useState([]);
+  const [weatherStatusMessage, setWeatherStatusMessage] = useState('');
 
   // UI-only state
   const [openPanel, setOpenPanel] = useState(null);
@@ -182,10 +186,11 @@ function News() {
     try {
       setLoading(true);
       setPromotedLoading(true);
-      const [prefsRes, topicsRes, promotedRes] = await Promise.all([
+      const [prefsRes, topicsRes, promotedRes, sportsTeamsRes] = await Promise.all([
         newsAPI.getPreferences().catch(() => ({ data: { preferences: null, registrationAlignment: null } })),
         newsAPI.getTopics(),
-        newsAPI.getPromoted({ limit: 8 }).catch(() => ({ data: { items: [] } }))
+        newsAPI.getPromoted({ limit: 8 }).catch(() => ({ data: { items: [] } })),
+        newsAPI.getSportsTeams().catch(() => ({ data: { leagues: [] } }))
       ]);
       const taxonomyRes = await newsAPI.getLocationTaxonomy().catch(() => ({ data: { taxonomy: { country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} } } }));
       const preferredScope = prefsRes.data.preferences?.defaultScope;
@@ -199,6 +204,7 @@ function News() {
       setActiveScope(normalizeScopeSelection(preferredScope || 'local'));
       setScopeFallbackMessage(getScopeFallbackMessage(feedRes.data.personalization));
       setTopics(topicsRes.data.topics);
+      setSportsLeagues(sportsTeamsRes.data.leagues || []);
       setPromotedArticles(promotedRes.data.items || []);
       setAvailableSources(sourcesRes.data.sources || []);
       setTopUsedSources(sourcesRes.data.topUsedSources || []);
@@ -425,6 +431,91 @@ function News() {
     }
   };
 
+  const saveFollowedSportsTeams = async (teamIds) => {
+    const normalized = [...new Set((teamIds || []).map(normalizeSportsTeamId).filter(Boolean))];
+    try {
+      const res = await newsAPI.updatePreferences({ followedSportsTeams: normalized });
+      setPreferences(res.data.preferences);
+      await refreshFeed();
+    } catch (err) {
+      console.error('Error updating followed sports teams:', err);
+    }
+  };
+
+  const handleToggleSportsTeam = async (teamId, currentlySelected) => {
+    const current = (preferences?.followedSportsTeams || []).map(normalizeSportsTeamId);
+    const targetId = normalizeSportsTeamId(teamId);
+    const next = currentlySelected
+      ? current.filter((id) => id !== targetId)
+      : [...current, targetId];
+    await saveFollowedSportsTeams(next);
+  };
+
+  const handleSetAllSportsTeams = async (teamIds) => {
+    await saveFollowedSportsTeams(teamIds || []);
+  };
+
+  const handleSetLeagueSportsTeams = async (leagueId, selectAll, leagueTeamIds) => {
+    const current = new Set((preferences?.followedSportsTeams || []).map(normalizeSportsTeamId));
+    const ids = (leagueTeamIds || []).map(normalizeSportsTeamId);
+    if (selectAll) {
+      ids.forEach((id) => current.add(id));
+    } else {
+      ids.forEach((id) => current.delete(id));
+    }
+    await saveFollowedSportsTeams(Array.from(current));
+  };
+
+  const handleSearchWeatherLocations = async (query) => {
+    const res = await newsAPI.geocodeWeatherLocations(query);
+    return res.data?.suggestions || [];
+  };
+
+  const handleAddWeatherLocation = async (locationData) => {
+    try {
+      const res = await newsAPI.addWeatherLocation(locationData);
+      setPreferences(res.data.preferences);
+      setWeatherStatusMessage('Weather location added.');
+    } catch (err) {
+      console.error('Error adding weather location:', err);
+      setWeatherStatusMessage('Unable to add weather location.');
+      throw err;
+    }
+  };
+
+  const handleRemoveWeatherLocation = async (locationId) => {
+    try {
+      const res = await newsAPI.removeWeatherLocation(locationId);
+      setPreferences(res.data.preferences);
+      setWeatherStatusMessage('Weather location removed.');
+    } catch (err) {
+      console.error('Error removing weather location:', err);
+      setWeatherStatusMessage('Unable to remove weather location.');
+    }
+  };
+
+  const handleSetPrimaryWeatherLocation = async (locationId) => {
+    try {
+      const res = await newsAPI.setWeatherLocationPrimary(locationId);
+      setPreferences(res.data.preferences);
+      setWeatherStatusMessage('Primary weather location updated.');
+    } catch (err) {
+      console.error('Error setting primary weather location:', err);
+      setWeatherStatusMessage('Unable to set primary weather location.');
+    }
+  };
+
+  const handleReorderWeatherLocations = async (locations) => {
+    try {
+      const res = await newsAPI.updateWeatherLocations(locations);
+      setPreferences(res.data.preferences);
+      setWeatherStatusMessage('Weather location order saved.');
+    } catch (err) {
+      console.error('Error reordering weather locations:', err);
+      setWeatherStatusMessage('Unable to save weather location order.');
+    }
+  };
+
   const visibleCategories = ALL_CATEGORIES.filter(cat => !hiddenCategories.includes(cat.id));
 
   // Client-side sort
@@ -645,6 +736,19 @@ function News() {
           setNewLocation={setNewLocation}
           locationTaxonomy={locationTaxonomy}
           registrationAlignment={registrationAlignment}
+          sportsLeagues={sportsLeagues}
+          followedSportsTeams={preferences?.followedSportsTeams || []}
+          onSetAllSportsTeams={handleSetAllSportsTeams}
+          onSetLeagueSportsTeams={handleSetLeagueSportsTeams}
+          onToggleSportsTeam={handleToggleSportsTeam}
+          weatherLocations={preferences?.weatherLocations || []}
+          onSearchWeatherLocations={handleSearchWeatherLocations}
+          onAddWeatherLocation={handleAddWeatherLocation}
+          onRemoveWeatherLocation={handleRemoveWeatherLocation}
+          onSetPrimaryWeatherLocation={handleSetPrimaryWeatherLocation}
+          onReorderWeatherLocations={handleReorderWeatherLocations}
+          weatherStatusMessage={weatherStatusMessage}
+          setWeatherStatusMessage={setWeatherStatusMessage}
           onUpdatePreferences={async (data) => {
             try {
               const res = await newsAPI.updatePreferences(data);
