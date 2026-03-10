@@ -22,6 +22,12 @@ const {
   findZipLocation,
   findZipLocationByCityState
 } = require('../services/zipLocationIndex');
+const {
+  NEWS_SOURCE_CATALOG,
+  CATALOG_VERSION,
+  computeSourceHealth,
+  buildMergedSources
+} = require('../config/newsSourceCatalog');
 
 // Initialize RSS parser with timeout
 const parser = new Parser({
@@ -2934,14 +2940,21 @@ router.get('/promoted', authenticateToken, async (req, res) => {
 
 /**
  * GET /api/news/sources
- * Get available RSS sources
+ * Get available RSS sources merged with catalog for control panel.
+ * Returns all intended sources (including unwired) with health status.
  */
 router.get('/sources', authenticateToken, async (req, res) => {
   try {
-    const sources = await RssSource.find({ isActive: true })
+    // Load both active and inactive DB sources for full control panel context
+    const dbSources = await RssSource.find({})
       .sort({ priority: -1, name: 1 });
 
-    const topUsedSources = [...sources]
+    // Build merged source list from catalog + DB
+    const mergedSources = buildMergedSources(NEWS_SOURCE_CATALOG, dbSources);
+
+    // Build topUsedSources from active DB sources only (backward compat)
+    const activeSources = dbSources.filter(s => s.isActive);
+    const topUsedSources = [...activeSources]
       .sort((a, b) => {
         if ((b.fetchCount || 0) !== (a.fetchCount || 0)) {
           return (b.fetchCount || 0) - (a.fetchCount || 0);
@@ -2962,13 +2975,34 @@ router.get('/sources', authenticateToken, async (req, res) => {
       }));
     
     res.json({
-      sources,
+      sources: mergedSources,
       topUsedSources,
-      supportedRssProviders: SUPPORTED_RSS_PROVIDERS
+      supportedRssProviders: SUPPORTED_RSS_PROVIDERS,
+      catalogVersion: CATALOG_VERSION
     });
   } catch (error) {
     console.error('Error fetching sources:', error);
     res.status(500).json({ error: 'Failed to fetch sources' });
+  }
+});
+
+/**
+ * POST /api/news/sources/health-check
+ * Refresh health status for all wired sources by checking DB state.
+ * Lightweight – does not re-fetch feeds, just recomputes health from DB records.
+ */
+router.post('/sources/health-check', authenticateToken, async (req, res) => {
+  try {
+    const dbSources = await RssSource.find({}).sort({ priority: -1, name: 1 });
+    const mergedSources = buildMergedSources(NEWS_SOURCE_CATALOG, dbSources);
+    res.json({
+      sources: mergedSources,
+      catalogVersion: CATALOG_VERSION,
+      refreshedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error during health check:', error);
+    res.status(500).json({ error: 'Health check failed' });
   }
 });
 
@@ -3559,6 +3593,8 @@ module.exports = {
     REUTERS_FEED_MAP,
     PBS_FEED_MAP,
     COUNTRY_VARIANTS_MAP,
-    STANDARDIZED_CATEGORIES
+    STANDARDIZED_CATEGORIES,
+    SUPPORTED_RSS_PROVIDERS,
+    detectProviderIdFromUrl
   }
 };
