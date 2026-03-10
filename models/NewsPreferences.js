@@ -53,6 +53,12 @@ const followedKeywordSchema = new mongoose.Schema({
   }
 });
 
+const followedSportsTeamSchema = new mongoose.Schema({
+  type: String,
+  lowercase: true,
+  trim: true
+});
+
 // User's news source preferences
 const sourcePreferenceSchema = new mongoose.Schema({
   sourceId: {
@@ -81,9 +87,12 @@ const weatherLocationSchema = new mongoose.Schema({
   label: { type: String, default: null },
   city: { type: String, default: null },
   state: { type: String, default: null },
+  country: { type: String, default: null },
+  countryCode: { type: String, default: null },
   zipCode: { type: String, default: null },
   lat: { type: Number, default: null },
   lon: { type: Number, default: null },
+  timezone: { type: String, default: null },
   isPrimary: { type: Boolean, default: false }
 });
 
@@ -150,7 +159,13 @@ const newsPreferencesSchema = new mongoose.Schema({
   // Weather location preferences (max 3)
   weatherLocations: {
     type: [weatherLocationSchema],
-    validate: [arr => arr.length <= 3, 'Maximum 3 weather locations allowed']
+    default: []
+  },
+
+  // Followed sports teams (team ids from sportsTeamLocationIndex)
+  followedSportsTeams: {
+    type: [followedSportsTeamSchema],
+    default: []
   },
   
   // General settings
