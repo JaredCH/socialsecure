@@ -768,20 +768,20 @@ const Social = () => {
     }
     return '/chat';
   }, [isAuthenticated, isOwnSocialContext, activeProfile?._id]);
+  const resolvedProfileUsername = activeProfile?.username || currentUser?.username || requestedProfileIdentifier;
   const socialProfilePath = useMemo(() => {
-    const profileUsername = activeProfile?.username || currentUser?.username || requestedProfileIdentifier;
-    if (!profileUsername) {
+    if (!resolvedProfileUsername) {
       return '/social';
     }
-    return `/social?user=${encodeURIComponent(profileUsername)}`;
-  }, [activeProfile?.username, currentUser?.username, requestedProfileIdentifier]);
+    return `/social?user=${encodeURIComponent(resolvedProfileUsername)}`;
+  }, [resolvedProfileUsername]);
   const socialFriendsPath = useMemo(() => {
-    const friendsUsername = activeProfile?.username || requestedProfileIdentifier;
+    const friendsUsername = resolvedProfileUsername;
     if (!friendsUsername || isOwnSocialContext) {
       return '/friends';
     }
     return `/friends?user=${encodeURIComponent(friendsUsername)}`;
-  }, [activeProfile?.username, requestedProfileIdentifier, isOwnSocialContext]);
+  }, [resolvedProfileUsername, isOwnSocialContext]);
   const socialChatLabel = !isOwnSocialContext && activeProfile?.username
     ? `Message @${activeProfile.username}`
     : 'Open chat';
@@ -818,7 +818,7 @@ const Social = () => {
 
     const params = new URLSearchParams(location.search);
     const currentUserParam = String(params.get('user') || '').trim();
-    if (currentUserParam.toLowerCase() === username.toLowerCase()) {
+    if (currentUserParam === username) {
       return;
     }
 
