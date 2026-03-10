@@ -2200,6 +2200,7 @@ const buildIngestionNormalizedPayload = (article = {}, options = {}) => {
     url: safeArticle.url || '',
     imageUrl: safeArticle.imageUrl || null,
     publishedAt: safeArticle.publishedAt || null,
+    category: safeArticle.category || null,
     topics: safeArticle.topics || [],
     locations: safeArticle.locations || [],
     assignedZipCode: safeArticle.assignedZipCode || null,

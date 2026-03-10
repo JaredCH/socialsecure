@@ -855,16 +855,25 @@ router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, asy
     ]);
 
     return res.json({
-      records: records.map((record) => ({
+      records: records.map((record) => {
+        const matchedLocationToken = Array.isArray(record.normalized?.locations) && record.normalized.locations.length > 0
+          ? record.normalized.locations[0]
+          : null;
+        return {
         _id: record._id,
         ingestionRunId: record.ingestionRunId,
         source: record.source,
         scrapedAt: record.scrapedAt,
+        locationDetection: {
+          usedPlainText: Boolean(matchedLocationToken),
+          matchedToken: matchedLocationToken
+        },
         normalized: {
           title: record.normalized?.title || '',
           description: record.normalized?.description || '',
           url: record.normalized?.url || '',
           publishedAt: record.normalized?.publishedAt || null,
+          category: record.normalized?.category || record.tags?.[0] || null,
           topics: record.normalized?.topics || [],
           assignedZipCode: record.normalized?.assignedZipCode || null,
           locations: record.normalized?.locations || [],
@@ -880,7 +889,8 @@ router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, asy
         eventCount: Array.isArray(record.events) ? record.events.length : 0,
         ingestedAt: record.ingestedAt || record.persistence?.persistedAt || record.createdAt || null,
         createdAt: record.createdAt
-      })),
+      };
+      }),
       pagination: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) }
     });
   } catch (error) {

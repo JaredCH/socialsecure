@@ -29,7 +29,7 @@ const SECTION_ICONS = {
 };
 
 const FALLBACK_MUTE_DURATIONS = ['24h', '48h', '72h', '5d', '7d', '1m', 'forever'];
-const INGESTION_TABLE_COL_COUNT = 9;
+const INGESTION_TABLE_COL_COUNT = 15;
 const TOTAL_KEY_TO_SECTION = {
   users: 'users',
   posts: 'posts',
@@ -100,6 +100,7 @@ const formatAssociatedLocations = (locationAssociations = {}) => {
   ];
 };
 const getIngestedTimestamp = (record = {}) => record.ingestedAt || record.createdAt || null;
+const formatTimestampCell = (value) => (value ? new Date(value).toLocaleString() : '—');
 
 function ModerationDashboard() {
   const [overview, setOverview] = useState(null);
@@ -473,9 +474,16 @@ function ModerationDashboard() {
                     <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                       <th className="px-3 py-2.5 w-8"></th>
                       <th className="px-3 py-2.5">Source</th>
+                      <th className="px-3 py-2.5">Category</th>
                       <th className="px-3 py-2.5">Title</th>
-                      <th className="px-3 py-2.5">Timestamp</th>
+                      <th className="px-3 py-2.5">Published</th>
+                      <th className="px-3 py-2.5">Scraped</th>
                       <th className="px-3 py-2.5">Status</th>
+                      <th className="px-3 py-2.5">Scope</th>
+                      <th className="px-3 py-2.5">Topics</th>
+                      <th className="px-3 py-2.5">Locality</th>
+                      <th className="px-3 py-2.5">Raw Location</th>
+                      <th className="px-3 py-2.5">Text Match</th>
                       <th className="px-3 py-2.5">ZIP Code</th>
                       <th className="px-3 py-2.5">City</th>
                       <th className="px-3 py-2.5">State</th>
@@ -496,6 +504,10 @@ function ModerationDashboard() {
                       const isFailed = row.processingStatus === 'failed';
                       const isExpanded = expandedIngestionRows[row._id];
                       const detectedLocations = row.normalized?.locations || [];
+                      const matchedLocationToken = row.locationDetection?.matchedToken || detectedLocations[0] || '';
+                      const usedPlainTextLocation = row.locationDetection?.usedPlainText ?? Boolean(matchedLocationToken);
+                      const category = row.normalized?.category || '';
+                      const topics = row.normalized?.topics || [];
 
                       return (
                         <React.Fragment key={row._id}>
@@ -512,12 +524,38 @@ function ModerationDashboard() {
                               <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
                             </td>
                             <td className="px-3 py-2.5 text-gray-700 font-medium max-w-[120px] truncate">{row.source?.name || 'Unknown'}</td>
+                            <td className="px-3 py-2.5 text-gray-700 max-w-[110px] truncate" title={category}>
+                              {category || <span className="text-gray-400 italic">—</span>}
+                            </td>
                             <td className="px-3 py-2.5 text-gray-900 font-medium max-w-[220px] truncate" title={row.normalized?.title || ''}>
                               {row.normalized?.title || <span className="text-gray-400 italic">untitled</span>}
                             </td>
-                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{new Date(getIngestedTimestamp(row)).toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{formatTimestampCell(row.normalized?.publishedAt)}</td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{formatTimestampCell(row.scrapedAt || getIngestedTimestamp(row))}</td>
                             <td className="px-3 py-2.5">
                               <StatusBadge status={row.processingStatus} />
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <StatusBadge status={row.resolvedScope || 'global'} />
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-700 max-w-[140px] truncate" title={topics.join(', ')}>
+                              {topics.length > 0 ? topics.join(', ') : <span className="text-gray-400 italic">—</span>}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-700">
+                              {row.normalized?.localityLevel || 'global'}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-700 max-w-[140px] truncate" title={detectedLocations.join(', ')}>
+                              {detectedLocations.length > 0 ? detectedLocations.join(', ') : <span className="text-gray-400 italic">—</span>}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-700 max-w-[140px] truncate" title={matchedLocationToken}>
+                              {usedPlainTextLocation
+                                ? (
+                                  <span>
+                                    yes
+                                    {matchedLocationToken ? ` · ${matchedLocationToken}` : ''}
+                                  </span>
+                                )
+                                : <span className="text-gray-400 italic">no</span>}
                             </td>
                             <td className="px-3 py-2.5">
                               {primaryZip ? (
