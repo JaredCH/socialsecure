@@ -2,6 +2,7 @@ const citySubreddits = require('../data/news/us-city-subreddits.json');
 const tvAffiliates = require('../data/news/us-tv-affiliates.json');
 const newspapers = require('../data/news/us-newspapers.json');
 const { SPORTS_TEAMS } = require('../data/news/sportsTeamLocationIndex');
+const { US_CITY_LOCATION_ENTRIES } = require('../data/news/cityLocationIndex');
 
 const US_COUNTRY_CANONICAL = 'US';
 
@@ -114,6 +115,9 @@ for (const row of newspapers) {
 }
 for (const team of SPORTS_TEAMS) {
   addCity(team.city, team.state);
+}
+for (const cityEntry of US_CITY_LOCATION_ENTRIES) {
+  addCity(cityEntry.city, cityEntry.stateAbbrev);
 }
 
 const getCitiesForState = (stateCode) => {

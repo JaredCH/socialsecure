@@ -45,6 +45,10 @@ const NewsPreferences = require('../models/NewsPreferences');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 const User = require('../models/User');
 const newsRoutes = require('./news');
+const {
+  US_CITY_LOCATION_ENTRIES,
+  EUROPE_CITY_LOCATION_ENTRIES
+} = require('../data/news/cityLocationIndex');
 
 const buildApp = () => {
   const app = express();
@@ -387,6 +391,38 @@ describe('News scope routing', () => {
       expect.arrayContaining([expect.objectContaining({ code: 'TX', name: 'Texas' })])
     );
     expect(response.body.taxonomy.citiesByState.TX).toEqual(expect.arrayContaining(['Austin', 'Dallas', 'Houston']));
+  });
+
+  it('ships exactly 250 U.S. city mapping entries and 20 Europe entries', async () => {
+    expect(US_CITY_LOCATION_ENTRIES).toHaveLength(250);
+    expect(EUROPE_CITY_LOCATION_ENTRIES).toHaveLength(20);
+  });
+
+  it('infers U.S. city/state location tags from mapped city mentions', async () => {
+    const result = await newsRoutes.internals.resolveArticleLocationContext({
+      source: { name: 'Local Wire', category: 'general' },
+      item: {
+        title: 'Downtown growth surges in Akron as housing demand rises',
+        contentSnippet: 'Akron leaders approved new zoning plans this week.'
+      }
+    });
+
+    expect(result.locationTags.cities).toContain('akron');
+    expect(result.locationTags.states).toEqual(expect.arrayContaining(['oh', 'ohio']));
+    expect(result.localityLevel).toBe('city');
+  });
+
+  it('infers European city/country tags from mapped city mentions', async () => {
+    const result = await newsRoutes.internals.resolveArticleLocationContext({
+      source: { name: 'World Desk', category: 'world' },
+      item: {
+        title: 'Transit workers strike again in Madrid amid wage talks',
+        contentSnippet: 'Commuters across Madrid reported major delays.'
+      }
+    });
+
+    expect(result.locationTags.cities).toContain('madrid');
+    expect(result.locationTags.countries).toContain('spain');
   });
 
   it('removes disabled google and gdelt sources from the feed results', async () => {

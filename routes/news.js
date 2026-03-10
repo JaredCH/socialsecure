@@ -46,6 +46,7 @@ const {
   titleCase
 } = require('../utils/newsLocationTaxonomy');
 const { inferSportsLocationFromText } = require('../data/news/sportsTeamLocationIndex');
+const { inferCityLocationFromText } = require('../data/news/cityLocationIndex');
 
 // Initialize RSS parser with timeout
 const parser = new Parser({
@@ -1009,6 +1010,45 @@ const inferSportsLocationContext = ({ source = {}, query = null, item = {} }) =>
   };
 };
 
+const inferMappedCityLocationContext = ({ source = {}, query = null, item = {} }) => {
+  const text = `${item.title || ''} ${item.contentSnippet || item.content || item.summary || ''} ${source.location || ''} ${query || ''}`;
+  const matchedCity = inferCityLocationFromText(text);
+  if (!matchedCity) return null;
+
+  const canonical = canonicalizeNewsLocation({
+    city: matchedCity.city,
+    state: matchedCity.stateAbbrev || matchedCity.state,
+    country: matchedCity.country || matchedCity.countryCode
+  });
+  if (!canonical.city) return null;
+
+  const cityToken = canonical.city.toLowerCase();
+  const stateCodeToken = String(canonical.stateCode || '').toLowerCase();
+  const stateNameToken = String(canonical.state || '').toLowerCase();
+  const countryToken = String(canonical.country || '').toLowerCase();
+  const countryCodeToken = String(canonical.countryCode || '').toLowerCase();
+
+  const states = [stateCodeToken, stateNameToken].filter(Boolean);
+  const countries = [countryToken, countryCodeToken].filter(Boolean);
+  const localityLevel = states.length > 0 ? 'city' : 'country';
+  const scopeMetadata = states.length > 0
+    ? { scopeReason: 'city_match', scopeConfidence: 0.88 }
+    : { scopeReason: 'country_match', scopeConfidence: 0.72 };
+
+  return {
+    locationTokens: toUniqueNonEmptyLocationTokens([cityToken, ...states, ...countries]),
+    locationTags: {
+      zipCodes: [],
+      cities: [cityToken],
+      counties: [],
+      states,
+      countries
+    },
+    localityLevel,
+    scopeMetadata
+  };
+};
+
 const resolveArticleLocationContext = async ({ source = {}, item = {}, query = null }) => {
   let locationTokens = buildArticleLocationTokens({ source, item, query });
 
@@ -1038,6 +1078,17 @@ const resolveArticleLocationContext = async ({ source = {}, item = {}, query = n
       locationTags = normalizeLocationTagSet(mergeLocationTags(locationTags, sportsContext.locationTags, assignedZipCode), assignedZipCode);
       localityLevel = sportsContext.localityLevel;
       scopeMetadata = sportsContext.scopeMetadata;
+    }
+  }
+
+  // Non-sports fallback: infer city/country directly from canonical city mappings.
+  if (localityLevel === 'global') {
+    const cityContext = inferMappedCityLocationContext({ source, query, item });
+    if (cityContext) {
+      locationTokens = toUniqueNonEmptyLocationTokens([...locationTokens, ...cityContext.locationTokens]);
+      locationTags = normalizeLocationTagSet(mergeLocationTags(locationTags, cityContext.locationTags, assignedZipCode), assignedZipCode);
+      localityLevel = cityContext.localityLevel;
+      scopeMetadata = cityContext.scopeMetadata;
     }
   }
 
