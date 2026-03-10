@@ -188,10 +188,14 @@ const GOOGLE_NEWS_TOPIC_MAP = {
   world: { category: 'world', label: 'World', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNREZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
   business: { category: 'business', label: 'Business', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRlVnWm9ScQ?hl=en-US&gl=US&ceid=US:en' },
   technology: { category: 'technology', label: 'Technology', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
-  entertainment: { category: 'entertainment', label: 'Entertainment', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
-  health: { category: 'health', label: 'Health', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
-  science: { category: 'science', label: 'Science', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
-  sports: { category: 'sports', label: 'Sports', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' }
+  entertainment: { category: 'entertainment', label: 'Entertainment', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNREp3YUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
+  health: { category: 'health', label: 'Health', url: 'https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNR3QwTlRFU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
+  science: { category: 'science', label: 'Science', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFp0Y1RjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
+  sports: { category: 'sports', label: 'Sports', url: 'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFp1ZEdvU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en' },
+  politics: { category: 'politics', label: 'Politics', url: 'https://news.google.com/rss/search?q=politics&hl=en-US&gl=US&ceid=US:en' },
+  finance: { category: 'finance', label: 'Finance', url: 'https://news.google.com/rss/search?q=finance+stock+market&hl=en-US&gl=US&ceid=US:en' },
+  gaming: { category: 'gaming', label: 'Gaming', url: 'https://news.google.com/rss/search?q=video+games+gaming&hl=en-US&gl=US&ceid=US:en' },
+  ai: { category: 'ai', label: 'AI & Machine Learning', url: 'https://news.google.com/rss/search?q=artificial+intelligence+machine+learning&hl=en-US&gl=US&ceid=US:en' }
 };
 
 const buildGoogleNewsFeedUrl = (query) => {
@@ -1459,18 +1463,27 @@ const articleMentionsLocationToken = (articleLocationToken, userToken) => {
 };
 
 const articleMatchesLocation = (article, locationContext) => {
-  // Combine stored locations with runtime inference from title/description
+  // Combine stored locations, structured locationTags, and runtime inference from title/description
   const storedLocations = Array.isArray(article.locations) ? article.locations : [];
+  const tagTokens = [];
+  if (article.locationTags) {
+    const tags = article.locationTags;
+    if (Array.isArray(tags.cities)) tagTokens.push(...tags.cities);
+    if (Array.isArray(tags.counties)) tagTokens.push(...tags.counties);
+    if (Array.isArray(tags.states)) tagTokens.push(...tags.states);
+    if (Array.isArray(tags.countries)) tagTokens.push(...tags.countries);
+    if (Array.isArray(tags.zipCodes)) tagTokens.push(...tags.zipCodes);
+  }
   const textContent = `${article.title || ''} ${article.description || ''}`;
   const inferredTokens = inferLocationTokensFromText(textContent);
-  const allLocationTokens = toUniqueNonEmptyLocationTokens([...storedLocations, ...inferredTokens]);
+  const allLocationTokens = toUniqueNonEmptyLocationTokens([...storedLocations, ...tagTokens, ...inferredTokens]);
 
   const matchesAnyLocationValue = (values = []) => values
     .map(normalizeLocationToken)
     .filter(Boolean)
     .some((value) => allLocationTokens.some((token) => articleMentionsLocationToken(token, value)));
 
-  const articleZipValues = extractZipTokens([...storedLocations, ...inferredTokens, article.assignedZipCode]);
+  const articleZipValues = extractZipTokens([...storedLocations, ...tagTokens, ...inferredTokens, article.assignedZipCode]);
   const userZipValues = extractZipTokens(locationContext?.zipCodeValues || [locationContext?.zipCode]);
   const hasZipCode = userZipValues.some((userZip) => articleZipValues.some((articleZip) => {
     if (normalizeZipCode(userZip) === normalizeZipCode(articleZip)) return true;
@@ -3826,12 +3839,6 @@ router.get('/feed', authenticateToken, async (req, res) => {
     
     const topicAliases = getTopicAliases(topic);
     const hiddenCategorySet = new Set((preferences?.hiddenCategories || []).map((category) => normalizeTopicToken(category)));
-    const preferredTopicAliases = !topic && (preferences?.googleNewsTopics?.length > 0 || preferences?.gdletCategories?.length > 0)
-      ? [...new Set([
-          ...(preferences.googleNewsTopics || []),
-          ...(preferences.gdletCategories || [])
-        ].flatMap((value) => getTopicAliases(value)))]
-      : [];
 
     const scopedCandidates = articles.map((article) => {
       const articleText = `${article.title || ''} ${article.description || ''} ${(article.topics || []).join(' ')}`.toLowerCase();
@@ -3872,11 +3879,10 @@ router.get('/feed', authenticateToken, async (req, res) => {
         })
         .filter((article) => {
           if (topicAliases.length > 0) {
-            if (!topicAliases.some((alias) => article._searchText.includes(alias.toLowerCase()))) {
-              return false;
-            }
-          } else if (preferredTopicAliases.length > 0) {
-            if (!preferredTopicAliases.some((alias) => article._searchText.includes(alias.toLowerCase()))) {
+            const articleCategory = normalizeTopicToken(article.category);
+            const categoryMatch = topicAliases.some((alias) => articleCategory === alias);
+            const topicsMatch = article._topicTokens.some((token) => topicAliases.includes(token));
+            if (!categoryMatch && !topicsMatch) {
               return false;
             }
           }
