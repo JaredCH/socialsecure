@@ -25,6 +25,7 @@ const newsIngestionRecordSchema = new mongoose.Schema({
     url: { type: String, default: '' },
     imageUrl: { type: String, default: null },
     publishedAt: { type: Date, default: null },
+    category: { type: String, default: null },
     topics: [{ type: String }],
     locations: [{ type: String }],
     assignedZipCode: { type: String, default: null },

@@ -223,6 +223,7 @@ describe('Moderation control panel admin actions', () => {
         source: { name: 'State Wire', sourceType: 'rss' },
         normalized: {
           title: 'Texas emergency update',
+          category: 'politics',
           topics: ['politics'],
           assignedZipCode: '78666',
           locations: ['Texas'],
@@ -248,7 +249,12 @@ describe('Moderation control panel admin actions', () => {
     expect(response.status).toBe(200);
     expect(response.body.records).toHaveLength(1);
     expect(response.body.records[0].resolvedScope).toBe('regional');
+    expect(response.body.records[0].normalized.category).toBe('politics');
     expect(response.body.records[0].locationAssociations.cities).toEqual(['san marcos']);
+    expect(response.body.records[0].locationDetection).toEqual({
+      usedPlainText: true,
+      matchedToken: 'Texas'
+    });
     expect(response.body.records[0].ingestedAt).toBeTruthy();
     expect(response.body.pagination.total).toBe(1);
   });
