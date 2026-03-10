@@ -74,7 +74,7 @@ const NEWS_SOURCE_CATALOG = [
     hostPatterns: ['cnn.com'],
     categories: ['Top Stories', 'World', 'Politics', 'Business', 'Technology', 'Health', 'Entertainment'],
     sourceType: 'rss',
-    hasAdapter: false,
+    hasAdapter: true,
     priority: 7
   },
   {
@@ -84,7 +84,7 @@ const NEWS_SOURCE_CATALOG = [
     hostPatterns: ['theguardian.com'],
     categories: ['World', 'Politics', 'Business', 'Technology', 'Science'],
     sourceType: 'rss',
-    hasAdapter: false,
+    hasAdapter: true,
     priority: 6
   },
   {
@@ -94,7 +94,7 @@ const NEWS_SOURCE_CATALOG = [
     hostPatterns: ['nytimes.com'],
     categories: ['World', 'Politics', 'Business', 'Technology', 'Science'],
     sourceType: 'rss',
-    hasAdapter: false,
+    hasAdapter: true,
     priority: 6
   },
   {
@@ -104,7 +104,7 @@ const NEWS_SOURCE_CATALOG = [
     hostPatterns: ['wsj.com'],
     categories: ['Business', 'Finance', 'Technology'],
     sourceType: 'rss',
-    hasAdapter: false,
+    hasAdapter: true,
     priority: 6
   },
   {
@@ -114,7 +114,7 @@ const NEWS_SOURCE_CATALOG = [
     hostPatterns: ['techcrunch.com'],
     categories: ['Technology', 'Business'],
     sourceType: 'rss',
-    hasAdapter: false,
+    hasAdapter: true,
     priority: 5
   },
   {
@@ -130,7 +130,7 @@ const NEWS_SOURCE_CATALOG = [
   }
 ];
 
-const CATALOG_VERSION = 1;
+const CATALOG_VERSION = 2;
 
 /**
  * Freshness window for health classification (24 hours in ms).
