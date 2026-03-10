@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { moderationAPI } from '../utils/api';
 
@@ -29,6 +29,7 @@ const SECTION_ICONS = {
 };
 
 const FALLBACK_MUTE_DURATIONS = ['24h', '48h', '72h', '5d', '7d', '1m', 'forever'];
+const INGESTION_TABLE_COL_COUNT = 9;
 const TOTAL_KEY_TO_SECTION = {
   users: 'users',
   posts: 'posts',
@@ -123,6 +124,7 @@ function ModerationDashboard() {
   const [ingestionDetail, setIngestionDetail] = useState({ open: false, record: null, loading: false });
   const [ingestionTimeline, setIngestionTimeline] = useState([]);
   const [ingestionLogs, setIngestionLogs] = useState([]);
+  const [expandedIngestionRows, setExpandedIngestionRows] = useState({});
 
   const muteDurations = useMemo(() => overview?.muteDurations || FALLBACK_MUTE_DURATIONS, [overview]);
 
@@ -145,6 +147,7 @@ function ModerationDashboard() {
 
   const loadIngestionRecords = async (page = ingestion.page || 1, filters = ingestionFilters) => {
     setIngestion((prev) => ({ ...prev, loading: true }));
+    setExpandedIngestionRows({});
     try {
       const { data } = await moderationAPI.getNewsIngestionRecords({ ...filters, page, limit: 20 });
       setIngestion({
@@ -159,6 +162,10 @@ function ModerationDashboard() {
       setIngestion((prev) => ({ ...prev, loading: false }));
     }
   };
+
+  const toggleIngestionRow = useCallback((rowId) => {
+    setExpandedIngestionRows((prev) => ({ ...prev, [rowId]: !prev[rowId] }));
+  }, []);
 
   const openIngestionDetail = async (recordId) => {
     setIngestionDetail({ open: true, record: null, loading: true });
@@ -376,7 +383,7 @@ function ModerationDashboard() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-gray-50 px-5 py-3">
           <div>
             <h2 className="text-base font-semibold text-gray-900">📰 News Ingestion Observability</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Inspect scraped records, dedupe outcomes, ingestion timing, associated locations, persistence details, and processing logs.</p>
+            <p className="text-xs text-gray-500 mt-0.5">Monitor the ingestion pipeline — verify article processing, location mapping, and geographic association accuracy.</p>
           </div>
           <button type="button" onClick={() => loadIngestionRecords(1)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition-colors">↻ Refresh</button>
         </div>
@@ -460,49 +467,173 @@ function ModerationDashboard() {
           ) : (
             <div className="space-y-3">
               <div className="text-xs font-medium text-gray-500">Total records: {ingestion.total}</div>
-              <div className="divide-y rounded-xl border border-gray-200 overflow-hidden">
-                {ingestion.rows.map((row) => (
-                  <button
-                    type="button"
-                    key={row._id}
-                    onClick={() => openIngestionDetail(row._id)}
-                    className="w-full px-4 py-3 text-left hover:bg-blue-50/50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{row.normalized?.title || '(untitled)'}</p>
-                        {row.normalized?.description ? (
-                          <p className="text-xs text-gray-500 truncate mt-0.5">{row.normalized.description}</p>
-                        ) : null}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                          <span className="text-xs text-gray-500">{row.source?.name || 'Unknown source'}</span>
-                          <StatusBadge status={row.resolvedScope} />
-                          <StatusBadge status={row.dedupe?.outcome} />
-                          <StatusBadge status={row.processingStatus} />
-                          {row.normalized?.assignedZipCode ? <span className="text-xs text-gray-500">📍 {row.normalized.assignedZipCode}</span> : null}
-                          {row.eventCount > 0 ? <span className="text-xs text-gray-400">{row.eventCount} events</span> : null}
-                        </div>
-                        {formatAssociatedLocations(row.locationAssociations).length > 0 ? (
-                          <p className="text-[11px] text-gray-500 mt-1 truncate">
-                            Associated: {formatAssociatedLocations(row.locationAssociations).join(' • ')}
-                          </p>
-                        ) : null}
-                        {(row.tags || []).length > 0 ? (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {row.tags.slice(0, 5).map((tag) => (
-                              <span key={tag} className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">{tag}</span>
-                            ))}
-                            {row.tags.length > 5 ? <span className="text-[11px] text-gray-400">+{row.tags.length - 5}</span> : null}
-                          </div>
-                        ) : null}
-                      </div>
-                      <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(getIngestedTimestamp(row)).toLocaleString()}</span>
-                    </div>
-                  </button>
-                ))}
-                {ingestion.rows.length === 0 ? (
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="min-w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                      <th className="px-3 py-2.5 w-8"></th>
+                      <th className="px-3 py-2.5">Source</th>
+                      <th className="px-3 py-2.5">Title</th>
+                      <th className="px-3 py-2.5">Timestamp</th>
+                      <th className="px-3 py-2.5">Status</th>
+                      <th className="px-3 py-2.5">ZIP Code</th>
+                      <th className="px-3 py-2.5">City</th>
+                      <th className="px-3 py-2.5">State</th>
+                      <th className="px-3 py-2.5 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {ingestion.rows.map((row) => {
+                      const loc = row.locationAssociations || {};
+                      const zipCodes = (loc.zipCodes || []);
+                      const cities = (loc.cities || []);
+                      const states = (loc.states || []);
+                      const assignedZip = row.normalized?.assignedZipCode || '';
+                      const primaryZip = assignedZip || zipCodes[0] || '';
+                      const primaryCity = cities[0] || '';
+                      const primaryState = states[0] || '';
+                      const hasLocationGap = !primaryZip || !primaryCity || !primaryState;
+                      const isFailed = row.processingStatus === 'failed';
+                      const isExpanded = expandedIngestionRows[row._id];
+                      const detectedLocations = row.normalized?.locations || [];
+
+                      return (
+                        <React.Fragment key={row._id}>
+                          <tr
+                            className={`transition-colors cursor-pointer ${isFailed ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-blue-50/40'}`}
+                            onClick={() => toggleIngestionRow(row._id)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleIngestionRow(row._id); } }}
+                            tabIndex={0}
+                            role="row"
+                            aria-expanded={isExpanded}
+                            aria-label={`${row.normalized?.title || 'Untitled article'} from ${row.source?.name || 'unknown source'}`}
+                          >
+                            <td className="px-3 py-2.5 text-gray-400">
+                              <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-700 font-medium max-w-[120px] truncate">{row.source?.name || 'Unknown'}</td>
+                            <td className="px-3 py-2.5 text-gray-900 font-medium max-w-[220px] truncate" title={row.normalized?.title || ''}>
+                              {row.normalized?.title || <span className="text-gray-400 italic">untitled</span>}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{new Date(getIngestedTimestamp(row)).toLocaleString()}</td>
+                            <td className="px-3 py-2.5">
+                              <StatusBadge status={row.processingStatus} />
+                            </td>
+                            <td className="px-3 py-2.5">
+                              {primaryZip ? (
+                                <span className="text-gray-800 font-mono text-xs">{primaryZip}</span>
+                              ) : (
+                                <span className="text-amber-500 italic" title="No ZIP code detected">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              {primaryCity ? (
+                                <span className="text-gray-700">{primaryCity}</span>
+                              ) : (
+                                <span className="text-amber-500 italic" title="No city detected">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              {primaryState ? (
+                                <span className="text-gray-700">{primaryState}</span>
+                              ) : (
+                                <span className="text-amber-500 italic" title="No state detected">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              {hasLocationGap && (
+                                <span className="inline-block w-2 h-2 rounded-full bg-amber-400" title="Incomplete location data"></span>
+                              )}
+                              {isFailed && (
+                                <span className="inline-block w-2 h-2 rounded-full bg-red-500 ml-1" title="Processing failed"></span>
+                              )}
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className={isFailed ? 'bg-red-50/30' : 'bg-gray-50/50'}>
+                              <td colSpan={INGESTION_TABLE_COL_COUNT} className="px-4 py-3">
+                                <div className="grid gap-3 md:grid-cols-3 text-xs">
+                                  <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
+                                    <h5 className="font-semibold text-gray-500 uppercase tracking-wide text-[10px]">Article Processing</h5>
+                                    <div className="space-y-1">
+                                      <p><span className="font-medium text-gray-500">Source:</span> {row.source?.name || 'Unknown'} <span className="text-gray-400">({row.source?.sourceType || 'N/A'})</span></p>
+                                      <p><span className="font-medium text-gray-500">Scope:</span> <StatusBadge status={row.resolvedScope} /></p>
+                                      <p><span className="font-medium text-gray-500">Dedupe:</span> <StatusBadge status={row.dedupe?.outcome} /></p>
+                                      {row.persistence?.operation ? <p><span className="font-medium text-gray-500">Persistence:</span> <StatusBadge status={row.persistence.operation} /></p> : null}
+                                      {row.eventCount > 0 ? <p><span className="font-medium text-gray-500">Events:</span> {row.eventCount}</p> : null}
+                                      {row.persistence?.errorMessage ? (
+                                        <p className="text-red-600"><span className="font-medium">Error:</span> {row.persistence.errorMessage}</p>
+                                      ) : null}
+                                    </div>
+                                    {(row.tags || []).length > 0 && (
+                                      <div className="flex flex-wrap gap-1 pt-1">
+                                        {row.tags.map((tag) => (
+                                          <span key={tag} className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">{tag}</span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
+                                    <h5 className="font-semibold text-gray-500 uppercase tracking-wide text-[10px]">Detected Location Data</h5>
+                                    <div className="space-y-1">
+                                      {detectedLocations.length > 0 ? (
+                                        <p><span className="font-medium text-gray-500">Raw locations:</span> {detectedLocations.join(', ')}</p>
+                                      ) : (
+                                        <p className="text-gray-400 italic">No raw location tokens detected</p>
+                                      )}
+                                      {(row.normalized?.topics || []).length > 0 && (
+                                        <p><span className="font-medium text-gray-500">Topics:</span> {row.normalized.topics.join(', ')}</p>
+                                      )}
+                                      <p><span className="font-medium text-gray-500">Locality level:</span> {row.normalized?.localityLevel || 'global'}</p>
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
+                                    <h5 className="font-semibold text-gray-500 uppercase tracking-wide text-[10px]">Normalized Location</h5>
+                                    <div className="space-y-1">
+                                      <p>
+                                        <span className="font-medium text-gray-500">ZIP:</span>{' '}
+                                        {primaryZip ? <span className="font-mono">{primaryZip}</span> : <span className="text-amber-500 italic">missing</span>}
+                                        {zipCodes.length > 1 && <span className="text-gray-400 ml-1">(+{zipCodes.length - 1} more)</span>}
+                                      </p>
+                                      <p>
+                                        <span className="font-medium text-gray-500">City:</span>{' '}
+                                        {primaryCity || <span className="text-amber-500 italic">missing</span>}
+                                        {cities.length > 1 && <span className="text-gray-400 ml-1">(+{cities.length - 1} more)</span>}
+                                      </p>
+                                      <p>
+                                        <span className="font-medium text-gray-500">State:</span>{' '}
+                                        {primaryState || <span className="text-amber-500 italic">missing</span>}
+                                        {states.length > 1 && <span className="text-gray-400 ml-1">(+{states.length - 1} more)</span>}
+                                      </p>
+                                      {(loc.counties || []).length > 0 && (
+                                        <p><span className="font-medium text-gray-500">County:</span> {loc.counties.join(', ')}</p>
+                                      )}
+                                      {(loc.countries || []).length > 0 && (
+                                        <p><span className="font-medium text-gray-500">Country:</span> {loc.countries.join(', ')}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); openIngestionDetail(row._id); }}
+                                    className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                                  >
+                                    View full detail →
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {ingestion.rows.length === 0 && (
                   <div className="px-4 py-8 text-center text-sm text-gray-400">No ingestion records match your filters.</div>
-                ) : null}
+                )}
               </div>
               <div className="flex items-center justify-between text-xs">
                 <button
