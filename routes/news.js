@@ -3455,116 +3455,183 @@ async function ingestAllSources() {
     });
   }
   
+  // Helper to upsert RssSource tracking for built-in adapters
+  const trackBuiltInFetch = async (catalogId, articleCount) => {
+    const catalogEntry = NEWS_SOURCE_CATALOG.find(e => e.id === catalogId);
+    if (!catalogEntry) return;
+    try {
+      await RssSource.findOneAndUpdate(
+        { url: catalogEntry.url },
+        {
+          $set: {
+            name: catalogEntry.name,
+            type: catalogEntry.sourceType || 'rss',
+            lastFetchAt: new Date(),
+            lastFetchStatus: 'success',
+            isActive: true,
+            priority: catalogEntry.priority || 5
+          },
+          $inc: { fetchCount: 1 }
+        },
+        { upsert: true }
+      );
+    } catch (err) {
+      console.error(`[track-fetch] Failed to track ${catalogId}:`, err.message);
+    }
+  };
+
   // 2. Fetch default Google News topics - include ALL 10 categories
   const defaultTopics = Object.keys(GOOGLE_NEWS_TOPIC_MAP);
+  let googleNewsArticleCount = 0;
   for (const topic of defaultTopics) {
     const articles = await fetchGoogleNewsSource(topic, 'googleNews');
     allArticles = [...allArticles, ...articles];
+    googleNewsArticleCount += articles.length;
   }
+  await trackBuiltInFetch('google-news', googleNewsArticleCount);
   
   // 3. Fetch NPR sources (gated by NPR_ENABLED)
   if (NPR_ENABLED) {
+    let nprCount = 0;
     for (const [section, feedConfig] of Object.entries(NPR_FEED_MAP)) {
       const articles = await fetchNprSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      nprCount += articles.length;
     }
+    await trackBuiltInFetch('npr', nprCount);
   }
 
   // 4. Fetch BBC sources (gated by BBC_ENABLED)
   if (BBC_ENABLED) {
+    let bbcCount = 0;
     for (const [section, feedConfig] of Object.entries(BBC_FEED_MAP)) {
       const articles = await fetchBbcSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      bbcCount += articles.length;
     }
+    await trackBuiltInFetch('bbc', bbcCount);
   }
 
   // 5. Fetch AP sources (gated by AP_ENABLED)
   if (AP_ENABLED) {
+    let apCount = 0;
     for (const [section, feedConfig] of Object.entries(AP_FEED_MAP)) {
       const articles = await fetchApSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      apCount += articles.length;
     }
+    await trackBuiltInFetch('associated-press', apCount);
   }
 
   // 6. Fetch Reuters sources (gated by REUTERS_ENABLED)
   if (REUTERS_ENABLED) {
+    let reutersCount = 0;
     for (const [section, feedConfig] of Object.entries(REUTERS_FEED_MAP)) {
       const articles = await fetchReutersSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      reutersCount += articles.length;
     }
+    await trackBuiltInFetch('reuters', reutersCount);
   }
 
   // 7. Fetch PBS sources (gated by PBS_ENABLED)
   if (PBS_ENABLED) {
+    let pbsCount = 0;
     for (const [section, feedConfig] of Object.entries(PBS_FEED_MAP)) {
       const articles = await fetchPbsSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      pbsCount += articles.length;
     }
+    await trackBuiltInFetch('pbs', pbsCount);
   }
 
   // 8. Fetch CNN sources (gated by CNN_ENABLED)
   if (CNN_ENABLED) {
+    let cnnCount = 0;
     for (const [section, feedConfig] of Object.entries(CNN_FEED_MAP)) {
       const articles = await fetchCnnSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      cnnCount += articles.length;
     }
+    await trackBuiltInFetch('cnn', cnnCount);
   }
 
   // 9. Fetch Guardian sources (gated by GUARDIAN_ENABLED)
   if (GUARDIAN_ENABLED) {
+    let guardianCount = 0;
     for (const [section, feedConfig] of Object.entries(GUARDIAN_FEED_MAP)) {
       const articles = await fetchGuardianSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      guardianCount += articles.length;
     }
+    await trackBuiltInFetch('guardian', guardianCount);
   }
 
   // 10. Fetch NYT sources (gated by NYT_ENABLED)
   if (NYT_ENABLED) {
+    let nytCount = 0;
     for (const [section, feedConfig] of Object.entries(NYT_FEED_MAP)) {
       const articles = await fetchNytSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      nytCount += articles.length;
     }
+    await trackBuiltInFetch('new-york-times', nytCount);
   }
 
   // 11. Fetch WSJ sources (gated by WSJ_ENABLED)
   if (WSJ_ENABLED) {
+    let wsjCount = 0;
     for (const [section, feedConfig] of Object.entries(WSJ_FEED_MAP)) {
       const articles = await fetchWsjSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      wsjCount += articles.length;
     }
+    await trackBuiltInFetch('wall-street-journal', wsjCount);
   }
 
   // 12. Fetch TechCrunch sources (gated by TECHCRUNCH_ENABLED)
   if (TECHCRUNCH_ENABLED) {
+    let tcCount = 0;
     for (const [section, feedConfig] of Object.entries(TECHCRUNCH_FEED_MAP)) {
       const articles = await fetchTechcrunchSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      tcCount += articles.length;
     }
+    await trackBuiltInFetch('techcrunch', tcCount);
   }
 
   // 13. Fetch Yahoo News sources (gated by YAHOO_ENABLED)
   if (YAHOO_ENABLED) {
+    let yahooCount = 0;
     for (const [section, feedConfig] of Object.entries(YAHOO_FEED_MAP)) {
       const articles = await fetchYahooSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      yahooCount += articles.length;
     }
+    await trackBuiltInFetch('yahoo-news', yahooCount);
   }
 
   // 14. Fetch ESPN sources (gated by ESPN_ENABLED)
   if (ESPN_ENABLED) {
+    let espnCount = 0;
     for (const [section, feedConfig] of Object.entries(ESPN_FEED_MAP)) {
       const articles = await fetchEspnSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
+      espnCount += articles.length;
     }
+    await trackBuiltInFetch('espn', espnCount);
   }
 
   // 15. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
   if (GDELT_ENABLED) {
     const gdeltQueries = GDELT_DEFAULT_QUERIES;
+    let gdeltCount = 0;
     for (const query of gdeltQueries) {
       const articles = await fetchGdeltSource(query);
       allArticles = [...allArticles, ...articles];
+      gdeltCount += articles.length;
     }
+    await trackBuiltInFetch('gdelt', gdeltCount);
   }
 
   // 16. Fetch local sources (gated by NEWS_LOCAL_SOURCES_ENABLED)
@@ -5168,6 +5235,20 @@ router.get('/ingestion-stats', authenticateToken, async (req, res) => {
       Article.countDocuments({ isActive: true }).catch(() => 0)
     ]);
 
+    // Build source display name → adapter key mapping from catalog
+    const sourceAdapterKeys = {
+      'google-news': true, 'npr': true, 'bbc': true, 'associated-press': true,
+      'reuters': true, 'pbs': true, 'cnn': true, 'guardian': true,
+      'new-york-times': true, 'wall-street-journal': true, 'techcrunch': true,
+      'yahoo-news': true, 'espn': true, 'gdelt': true
+    };
+    const nameToAdapterKey = {};
+    for (const entry of NEWS_SOURCE_CATALOG) {
+      if (sourceAdapterKeys[entry.id]) {
+        nameToAdapterKey[entry.name] = entry.id;
+      }
+    }
+
     res.json({
       bySource: bySource.map(s => ({ source: s._id || 'Unknown', total: s.count, processed: s.processed, failed: s.failed })),
       byScope: byScope.reduce((acc, s) => { acc[s._id || 'unknown'] = s.count; return acc; }, {}),
@@ -5176,7 +5257,9 @@ router.get('/ingestion-stats', authenticateToken, async (req, res) => {
         today: totalToday,
         week: totalWeek,
         activeArticles: totalAll
-      }
+      },
+      availableAdapterKeys: Object.keys(sourceAdapterKeys),
+      nameToAdapterKey
     });
   } catch (error) {
     console.error('Error fetching ingestion stats:', error);

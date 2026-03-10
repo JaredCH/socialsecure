@@ -571,20 +571,41 @@ function ModerationDashboard() {
           {ingestionStats?.bySource?.length > 0 && (
             <div className="mt-4">
               <h4 className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Per-Source (24h)</h4>
-              <div className="flex flex-wrap gap-2">
-                {ingestionStats.bySource.map((s) => (
-                  <div key={s.source} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs">
-                    <span className="font-medium text-gray-700">{s.source}</span>
-                    <span className="text-emerald-600">{s.processed} ok</span>
-                    {s.failed > 0 && <span className="text-red-600">{s.failed} err</span>}
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerSourceIngestion(s.source.toLowerCase().replace(/\s+/g, '-'))}
-                      className="text-indigo-500 hover:text-indigo-700 font-medium"
-                      title={`Re-ingest ${s.source}`}
-                    >▶</button>
-                  </div>
-                ))}
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr className="text-left text-gray-500">
+                      <th className="px-3 py-1.5 font-medium">Source</th>
+                      <th className="px-3 py-1.5 font-medium text-right">OK</th>
+                      <th className="px-3 py-1.5 font-medium text-right">Err</th>
+                      <th className="px-3 py-1.5 font-medium text-right">Total</th>
+                      <th className="px-2 py-1.5 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {ingestionStats.bySource.map((s) => {
+                      const adapterKey = ingestionStats.nameToAdapterKey?.[s.source];
+                      return (
+                        <tr key={s.source} className="hover:bg-gray-50">
+                          <td className="px-3 py-1 font-medium text-gray-700 truncate max-w-[180px]">{s.source}</td>
+                          <td className="px-3 py-1 text-right text-emerald-600">{s.processed}</td>
+                          <td className="px-3 py-1 text-right text-red-600">{s.failed || 0}</td>
+                          <td className="px-3 py-1 text-right text-gray-500">{s.total}</td>
+                          <td className="px-2 py-1 text-center">
+                            {adapterKey && (
+                              <button
+                                type="button"
+                                onClick={() => handleTriggerSourceIngestion(adapterKey)}
+                                className="text-indigo-500 hover:text-indigo-700 font-medium"
+                                title={`Re-ingest ${s.source}`}
+                              >▶</button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
