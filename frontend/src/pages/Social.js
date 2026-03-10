@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
@@ -512,6 +512,7 @@ const resolveInitialHeroTab = (pathname = '', search = '') => {
 };
 
 const Social = () => {
+  const location = useLocation();
   const navigate = useNavigate();
   const initialGuestUser = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
@@ -767,13 +768,20 @@ const Social = () => {
     }
     return '/chat';
   }, [isAuthenticated, isOwnSocialContext, activeProfile?._id]);
+  const resolvedProfileUsername = activeProfile?.username || currentUser?.username || requestedProfileIdentifier;
+  const socialProfilePath = useMemo(() => {
+    if (!resolvedProfileUsername) {
+      return '/social';
+    }
+    return `/social?user=${encodeURIComponent(resolvedProfileUsername)}`;
+  }, [resolvedProfileUsername]);
   const socialFriendsPath = useMemo(() => {
-    const friendsUsername = activeProfile?.username || requestedProfileIdentifier;
+    const friendsUsername = resolvedProfileUsername;
     if (!friendsUsername || isOwnSocialContext) {
       return '/friends';
     }
     return `/friends?user=${encodeURIComponent(friendsUsername)}`;
-  }, [activeProfile?.username, requestedProfileIdentifier, isOwnSocialContext]);
+  }, [resolvedProfileUsername, isOwnSocialContext]);
   const socialChatLabel = !isOwnSocialContext && activeProfile?.username
     ? `Message @${activeProfile.username}`
     : 'Open chat';
@@ -797,6 +805,26 @@ const Social = () => {
       };
     });
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || location.pathname !== '/social') {
+      return;
+    }
+
+    const username = String(currentUser?.username || '').trim();
+    if (!username) {
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    const currentUserParam = String(params.get('user') || '').trim();
+    if (currentUserParam === username) {
+      return;
+    }
+
+    params.set('user', username);
+    navigate(`/social?${params.toString()}`, { replace: true });
+  }, [isAuthenticated, currentUser?.username, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     const loadProfileChatThread = async () => {
@@ -2978,7 +3006,7 @@ const Social = () => {
       case 'shortcuts':
         return (
           <ul className="space-y-2 text-sm">
-            <li><Link to="/social" className="block rounded-xl bg-blue-50 px-3 py-2 font-medium text-blue-700">Social Stream</Link></li>
+            <li><Link to={socialProfilePath} className="block rounded-xl bg-blue-50 px-3 py-2 font-medium text-blue-700">Social Stream</Link></li>
             {isModuleVisible('marketplaceShortcut') ? <li><Link to="/market" className="block rounded-xl px-3 py-2 hover:bg-slate-50">Marketplace</Link></li> : null}
             {isModuleVisible('calendarShortcut') ? <li><Link to={socialCalendarPath} className="block rounded-xl px-3 py-2 hover:bg-slate-50">Calendar</Link></li> : null}
             {isModuleVisible('settingsShortcut') ? <li><Link to="/settings" className="block rounded-xl px-3 py-2 hover:bg-slate-50">User Settings</Link></li> : null}
@@ -3848,7 +3876,7 @@ const Social = () => {
     'Navigation',
     <div className="space-y-5 text-sm text-slate-700">
       <ul className="space-y-2">
-        <li><Link to="/social" className="flex items-center justify-between rounded-2xl bg-blue-50 px-3 py-2 font-semibold text-blue-700"><span>Social Hub</span><span aria-hidden="true">↗</span></Link></li>
+        <li><Link to={socialProfilePath} className="flex items-center justify-between rounded-2xl bg-blue-50 px-3 py-2 font-semibold text-blue-700"><span>Social Hub</span><span aria-hidden="true">↗</span></Link></li>
         <li><Link to={socialFriendsPath} className="block rounded-2xl px-3 py-2 hover:bg-white/60">Friends Circles</Link></li>
         {isModuleVisible('marketplaceShortcut') ? <li><Link to="/market" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Marketplace</Link></li> : null}
         {isModuleVisible('calendarShortcut') ? <li><Link to={socialCalendarPath} className="block rounded-2xl px-3 py-2 hover:bg-white/60">Calendar</Link></li> : null}
