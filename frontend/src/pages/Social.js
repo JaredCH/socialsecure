@@ -2394,6 +2394,16 @@ const Social = () => {
     }
   };
 
+  const handleMoveCircleMember = async (fromCircle, toCircle, userId) => {
+    try {
+      await circlesAPI.addMember(toCircle, userId);
+      await circlesAPI.removeMember(fromCircle, userId);
+      await refreshCircles();
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to move circle member.');
+    }
+  };
+
   const refreshModerationState = async () => {
     const [blocksResponse, mutesResponse, reportsResponse] = await Promise.all([
       moderationAPI.getBlocks().catch(() => ({ data: { blockedUsers: [] } })),
@@ -3501,7 +3511,7 @@ const Social = () => {
         ) : <p className="text-sm text-slate-500">Post publishing is available only in owner view.</p>;
       case 'circles':
         return isOwnSocialContext && !isGuestPreview ? (
-          <CircleManager circles={circles} friends={friends} onCreateCircle={handleCreateCircle} onUpdateCircle={handleUpdateCircle} onDeleteCircle={handleDeleteCircle} onAddMember={handleAddCircleMember} onRemoveMember={handleRemoveCircleMember} />
+          <CircleManager circles={circles} friends={friends} onCreateCircle={handleCreateCircle} onUpdateCircle={handleUpdateCircle} onDeleteCircle={handleDeleteCircle} onAddMember={handleAddCircleMember} onRemoveMember={handleRemoveCircleMember} onMoveMember={handleMoveCircleMember} />
         ) : (
           <div className="space-y-4">
             <CircleSpiderDiagram

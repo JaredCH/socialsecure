@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 const STAGE_WIDTH = 760;
 const STAGE_HEIGHT = 460;
@@ -35,7 +36,8 @@ function CircleManager({
   onUpdateCircle,
   onDeleteCircle,
   onAddMember,
-  onRemoveMember
+  onRemoveMember,
+  onMoveMember
 }) {
   const [circleName, setCircleName] = useState('');
   const [circleColor, setCircleColor] = useState('#3B82F6');
@@ -50,6 +52,8 @@ function CircleManager({
   const [draggingCircleName, setDraggingCircleName] = useState('');
   const [showCreateControls, setShowCreateControls] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [memberPreview, setMemberPreview] = useState(null);
+  const [moveTargetCircle, setMoveTargetCircle] = useState('');
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(null);
   const hasCircleCapacity = circles.length < MAX_CIRCLES;
@@ -165,6 +169,19 @@ function CircleManager({
     [circles, activeCircleName]
   );
 
+  const memberCirclesMap = useMemo(() => {
+    const map = new Map();
+    circles.forEach((circle) => {
+      (circle.members || []).forEach((member) => {
+        const id = String(member._id || '');
+        if (!id) return;
+        if (!map.has(id)) map.set(id, []);
+        map.get(id).push(circle.name);
+      });
+    });
+    return map;
+  }, [circles]);
+
   const friendSuggestions = useMemo(() => {
     if (!selectedCircle) return [];
     const memberSet = new Set((selectedCircle.members || []).map((member) => String(member._id)));
@@ -233,6 +250,32 @@ function CircleManager({
       setStatusMessage('');
       onAddMember(circle.name, friendId);
     }
+  };
+
+  const openMemberPreview = (member, fromCircle) => {
+    setMemberPreview({ member, fromCircle: fromCircle || null });
+    setMoveTargetCircle('');
+  };
+
+  const closeMemberPreview = () => {
+    setMemberPreview(null);
+    setMoveTargetCircle('');
+  };
+
+  const handlePreviewRemove = () => {
+    if (!memberPreview) return;
+    const { member, fromCircle } = memberPreview;
+    if (!fromCircle) return;
+    onRemoveMember(fromCircle, member._id || member.id);
+    closeMemberPreview();
+  };
+
+  const handlePreviewMove = () => {
+    if (!memberPreview || !moveTargetCircle) return;
+    const { member, fromCircle } = memberPreview;
+    if (!fromCircle || !onMoveMember) return;
+    onMoveMember(fromCircle, moveTargetCircle, member._id || member.id);
+    closeMemberPreview();
   };
 
   return (
@@ -327,11 +370,13 @@ function CircleManager({
                 const dy = centerY - OWNER_Y;
                 const distance = Math.hypot(dx, dy);
                 const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+                const friendCircles = memberCirclesMap.get(String(friend._id)) || [];
+                const isInActiveCircle = activeCircleName && friendCircles.includes(activeCircleName);
                 return (
                   <React.Fragment key={friend._id}>
                     <div
-                      className="pointer-events-none absolute origin-left bg-slate-200/80"
-                      style={{ left: `${OWNER_X}px`, top: `${OWNER_Y}px`, width: `${distance}px`, height: '2px', transform: `rotate(${angle}deg)` }}
+                      className="pointer-events-none absolute origin-left transition-all duration-200"
+                      style={{ left: `${OWNER_X}px`, top: `${OWNER_Y}px`, width: `${distance}px`, height: isInActiveCircle ? '2px' : '1px', transform: `rotate(${angle}deg)`, backgroundColor: isInActiveCircle ? '#7c3aed' : '#e2e8f0', opacity: isInActiveCircle ? 0.7 : 0.5 }}
                     />
                     <button
                       type="button"
@@ -341,11 +386,16 @@ function CircleManager({
                         event.dataTransfer.setData('application/socialsecure-friend-id', String(friend._id));
                         event.dataTransfer.setData('text/plain', friendName);
                       }}
-                      className="absolute flex items-center justify-center rounded-full border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 shadow-sm"
+                      onClick={() => openMemberPreview(friend, friendCircles[0] || null)}
+                      className={`absolute flex items-center justify-center rounded-full border px-2 text-[11px] font-medium shadow-sm transition hover:scale-105 hover:shadow-md ${isInActiveCircle ? 'border-violet-400 bg-violet-50 text-violet-800' : 'border-slate-200 bg-white text-slate-600'}`}
                       style={{ left: `${x}px`, top: `${y}px`, width: `${FRIEND_NODE_SIZE}px`, height: `${FRIEND_NODE_SIZE}px` }}
-                      title={`Drag ${friendName} onto a circle`}
+                      title={`Click to preview ${friendName} • Drag to add to a circle`}
                     >
-                      <span className="line-clamp-2 text-center leading-tight">{friendName}</span>
+                      {isRenderableCircleImage(friend.avatarUrl) ? (
+                        <img src={friend.avatarUrl} alt={friendName} className="h-full w-full rounded-full object-cover" />
+                      ) : (
+                        <span className="line-clamp-2 text-center leading-tight">{friendName}</span>
+                      )}
                     </button>
                   </React.Fragment>
                 );
@@ -440,9 +490,23 @@ function CircleManager({
                 {(selectedCircle.members || []).length === 0 ? (
                   <p className="text-sm text-slate-500">No members yet.</p>
                 ) : (selectedCircle.members || []).map((member) => (
-                  <div key={member._id} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                    <span>{member.realName || member.username}</span>
-                    <button type="button" className="text-red-600 hover:text-red-700" onClick={() => onRemoveMember(selectedCircle.name, member._id)}>Remove</button>
+                  <div key={member._id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                    <button
+                      type="button"
+                      data-testid={`member-preview-btn-${member._id}`}
+                      className="flex flex-1 items-center gap-2 text-left hover:opacity-80"
+                      onClick={() => openMemberPreview(member, selectedCircle.name)}
+                    >
+                      {isRenderableCircleImage(member.avatarUrl) ? (
+                        <img src={member.avatarUrl} alt="" className="h-6 w-6 flex-shrink-0 rounded-full object-cover" />
+                      ) : (
+                        <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-violet-100 text-[10px] font-semibold text-violet-700">
+                          {(member.realName || member.username || '?').charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                      <span className="truncate font-medium text-slate-800">{member.realName || member.username}</span>
+                    </button>
+                    <button type="button" className="flex-shrink-0 text-xs text-red-600 hover:text-red-700" onClick={() => onRemoveMember(selectedCircle.name, member._id)}>Remove</button>
                   </div>
                 ))}
               </div>
@@ -452,6 +516,98 @@ function CircleManager({
           )}
         </div>
       </div>
+
+      {memberPreview ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Member profile preview"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center"
+          onClick={(event) => { if (event.target === event.currentTarget) closeMemberPreview(); }}
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-start gap-4">
+              {isRenderableCircleImage(memberPreview.member.avatarUrl) ? (
+                <img src={memberPreview.member.avatarUrl} alt="" className="h-14 w-14 rounded-full object-cover ring-2 ring-violet-200" />
+              ) : (
+                <span className="grid h-14 w-14 place-items-center rounded-full bg-violet-100 text-xl font-bold text-violet-700 ring-2 ring-violet-200">
+                  {(memberPreview.member.realName || memberPreview.member.username || '?').charAt(0).toUpperCase()}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-base font-semibold text-slate-900">{memberPreview.member.realName || memberPreview.member.username}</p>
+                <p className="truncate text-sm text-slate-500">@{memberPreview.member.username}</p>
+                {memberPreview.fromCircle ? (
+                  <p className="mt-1 text-xs text-slate-400">in <span className="font-medium text-slate-600">{memberPreview.fromCircle}</span></p>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-400">
+                    {(memberCirclesMap.get(String(memberPreview.member._id)) || []).length > 0
+                      ? `in ${(memberCirclesMap.get(String(memberPreview.member._id)) || []).join(', ')}`
+                      : 'not in any circle yet'}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={closeMemberPreview}
+                aria-label="Close preview"
+                className="flex-shrink-0 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <Link
+                to={`/social?user=${encodeURIComponent(memberPreview.member.username)}`}
+                onClick={closeMemberPreview}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+              >
+                View Full Profile
+              </Link>
+
+              {memberPreview.fromCircle ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePreviewRemove}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 hover:bg-red-100"
+                  >
+                    Remove from {memberPreview.fromCircle}
+                  </button>
+
+                  {onMoveMember && circles.filter((c) => c.name !== memberPreview.fromCircle).length > 0 ? (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-slate-600">Move to another circle:</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={moveTargetCircle}
+                          onChange={(event) => setMoveTargetCircle(event.target.value)}
+                          className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                          aria-label="Select target circle"
+                        >
+                          <option value="">Select circle…</option>
+                          {circles.filter((c) => c.name !== memberPreview.fromCircle).map((c) => (
+                            <option key={c.name} value={c.name}>{c.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!moveTargetCircle}
+                          onClick={handlePreviewMove}
+                          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                          Move
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
