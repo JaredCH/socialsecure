@@ -506,6 +506,8 @@ export const newsAPI = {
   addKeyword: (keyword) => api.post('/news/preferences/keywords', { keyword }),
   // Remove followed keyword
   removeKeyword: (keyword) => api.delete(`/news/preferences/keywords/${encodeURIComponent(keyword)}`),
+  // Rename/edit a followed keyword
+  renameKeyword: (oldKeyword, newKeyword) => api.put(`/news/preferences/keywords/${encodeURIComponent(oldKeyword)}`, { keyword: newKeyword }),
   // Add location preference
   addLocation: (data) => api.post('/news/preferences/locations', data),
   // Remove location preference

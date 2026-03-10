@@ -91,7 +91,16 @@ const NEWS_LOCAL_TV_ENABLED = String(process.env.NEWS_LOCAL_TV_ENABLED || 'true'
 const NEWS_LOCAL_PATCH_ENABLED = String(process.env.NEWS_LOCAL_PATCH_ENABLED || 'true').toLowerCase() !== 'false';
 const NEWS_LOCAL_NEWSPAPER_ENABLED = String(process.env.NEWS_LOCAL_NEWSPAPER_ENABLED || 'true').toLowerCase() !== 'false';
 const NEWS_LOCAL_REDDIT_ENABLED = String(process.env.NEWS_LOCAL_REDDIT_ENABLED || 'true').toLowerCase() !== 'false';
+const NEWS_LOCAL_NEWSAPI_ENABLED = String(process.env.NEWS_LOCAL_NEWSAPI_ENABLED || 'false').toLowerCase() === 'true';
+const NEWS_API_KEY = (process.env.NEWS_API_KEY || '').trim();
 const NEWS_LOCAL_MAX_LOCATIONS = Math.max(1, parseInt(process.env.NEWS_LOCAL_MAX_LOCATIONS || '50', 10) || 50);
+
+// ============================================
+// WEATHER CACHE
+// ============================================
+const WEATHER_CACHE_TTL_MS = Math.max(60000, parseInt(process.env.WEATHER_CACHE_TTL_MS || '600000', 10) || 600000); // default 10 min
+const weatherCache = new Map();
+const weatherCacheMetrics = { hits: 0, misses: 0, errors: 0, totalLatencyMs: 0, fetchCount: 0 };
 
 const newsGeocoder = NodeGeocoder({
   provider: 'openstreetmap',
@@ -2722,6 +2731,69 @@ async function fetchLocalCatalogRssSource(sourceDef, locationHint = {}) {
 }
 
 /**
+ * Tier-5 NewsAPI Local Adapter
+ * Fetches local news from NewsAPI.org's /v2/everything endpoint.
+ * Requires NEWS_API_KEY env variable and NEWS_LOCAL_NEWSAPI_ENABLED=true.
+ *
+ * @param {string} query – search query (e.g. "Austin TX local news")
+ * @param {Object} [locationHint] – { city, stateAbbrev } for location tagging
+ * @returns {Promise<Array>}
+ */
+async function fetchNewsApiSource(query, locationHint = {}) {
+  if (!NEWS_API_KEY || !query) return [];
+  const city = (locationHint.city || '').toLowerCase();
+  const stateAbbrev = (locationHint.stateAbbrev || '').toLowerCase();
+  const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=10&apiKey=${NEWS_API_KEY}`;
+  try {
+    const data = await fetchJsonWithTimeout(url, 8000);
+    if (data?.status !== 'ok' || !Array.isArray(data.articles)) return [];
+    return data.articles.map((item) => ({
+      title: item.title || 'Untitled',
+      description: item.description || '',
+      source: item.source?.name || 'NewsAPI',
+      sourceId: item.url,
+      url: item.url,
+      imageUrl: item.urlToImage || null,
+      publishedAt: item.publishedAt ? new Date(item.publishedAt) : null,
+      category: 'general',
+      topics: toUniqueNonEmptyStrings(['local', city, stateAbbrev].filter(Boolean)),
+      locations: [city, stateAbbrev].filter(Boolean),
+      assignedZipCode: null,
+      sourceType: 'newsApi',
+      sourceTier: 5,
+      sourceProviderId: 'newsapi',
+      localityLevel: 'city',
+      language: 'en',
+      feedSource: 'newsapi',
+      feedCategory: 'local',
+      feedLanguage: 'en',
+      feedMetadata: {
+        newsApiSource: item.source?.name || null,
+        newsApiAuthor: item.author || null,
+        newsApiCity: city || null,
+        newsApiState: stateAbbrev || null,
+        query
+      },
+      scrapeTimestamp: new Date(),
+      ...(NEWS_LOCATION_TAGGER_V2_ENABLED ? {
+        locationTags: {
+          zipCodes: [],
+          cities: city ? [city] : [],
+          counties: [],
+          states: stateAbbrev ? [stateAbbrev] : [],
+          countries: ['us']
+        },
+        scopeReason: 'city_match',
+        scopeConfidence: 0.5
+      } : {})
+    }));
+  } catch (error) {
+    console.error(`Error fetching NewsAPI source for "${query}":`, error.message);
+    return [];
+  }
+}
+
+/**
  * Ingest local sources for a set of locations using the planner.
  * Returns articles and telemetry metrics.
  *
@@ -2735,7 +2807,7 @@ async function ingestLocalSources(locations = []) {
     patch: NEWS_LOCAL_PATCH_ENABLED,
     newspaper: NEWS_LOCAL_NEWSPAPER_ENABLED,
     reddit: NEWS_LOCAL_REDDIT_ENABLED,
-    newsApi: false // disabled unless explicitly configured
+    newsApi: NEWS_LOCAL_NEWSAPI_ENABLED && !!NEWS_API_KEY
   };
 
   const { allSources, stats } = buildBatchLocalSourcePlans(locations, { enabledTiers });
@@ -2796,6 +2868,13 @@ async function ingestLocalSources(locations = []) {
       } else if (src.providerId === 'tv-affiliate' || src.providerId === 'local-newspaper') {
         fetched = await fetchLocalCatalogRssSource(src, {
           city: src.market || src.newspaperCity || locFromKey.city,
+          stateAbbrev: locFromKey.stateAbbrev
+        });
+      } else if (src.providerId === 'newsapi') {
+        const queryMatch = src.url?.match(/[?&]q=([^&]+)/);
+        const query = queryMatch ? decodeURIComponent(queryMatch[1]) : `${locFromKey.city} ${locFromKey.stateAbbrev} local news`;
+        fetched = await fetchNewsApiSource(query, {
+          city: locFromKey.city,
           stateAbbrev: locFromKey.stateAbbrev
         });
       }
@@ -3999,6 +4078,49 @@ router.delete('/preferences/keywords/:keyword', authenticateToken, async (req, r
 });
 
 /**
+ * PUT /api/news/preferences/keywords/:keyword
+ * Rename/edit an existing followed keyword
+ */
+router.put('/preferences/keywords/:keyword', authenticateToken, async (req, res) => {
+  try {
+    const oldKeyword = req.params.keyword.toLowerCase();
+    const { keyword: newKeyword } = req.body;
+
+    if (!newKeyword || !newKeyword.trim()) {
+      return res.status(400).json({ error: 'New keyword is required' });
+    }
+
+    const normalizedNew = newKeyword.toLowerCase().trim();
+    if (normalizedNew === oldKeyword) {
+      return res.status(400).json({ error: 'New keyword must be different from the old keyword' });
+    }
+
+    const preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    if (!preferences) {
+      return res.status(404).json({ error: 'Preferences not found' });
+    }
+
+    const existingIndex = preferences.followedKeywords.findIndex(k => k.keyword === oldKeyword);
+    if (existingIndex === -1) {
+      return res.status(404).json({ error: 'Keyword not found' });
+    }
+
+    // Check if new keyword already exists
+    if (preferences.followedKeywords.some(k => k.keyword === normalizedNew)) {
+      return res.status(409).json({ error: 'New keyword already exists' });
+    }
+
+    preferences.followedKeywords[existingIndex].keyword = normalizedNew;
+    await preferences.save();
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Error renaming keyword:', error);
+    res.status(500).json({ error: 'Failed to rename keyword' });
+  }
+});
+
+/**
  * POST /api/news/preferences/locations
  * Add a location preference
  */
@@ -4489,75 +4611,129 @@ function normalizeUSState(input) {
 }
 
 /**
+ * Build a cache key for a weather location based on lat/lon.
+ */
+function buildWeatherCacheKey(lat, lon) {
+  // Round to 2 decimals to coalesce nearby coordinates
+  return `weather:${Number(lat).toFixed(2)}:${Number(lon).toFixed(2)}`;
+}
+
+/**
+ * Fetch weather for a single location from NWS, using cache if available.
+ * @param {Object} locObj – { lat, lon, ... }
+ * @returns {{ weather, error, cacheHit }}
+ */
+async function fetchWeatherForLocation(locObj) {
+  if (!locObj.lat || !locObj.lon) {
+    return { weather: null, error: 'Unable to resolve weather data for this location', cacheHit: false };
+  }
+
+  const cacheKey = buildWeatherCacheKey(locObj.lat, locObj.lon);
+  const cached = weatherCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < WEATHER_CACHE_TTL_MS) {
+    weatherCacheMetrics.hits++;
+    return { weather: cached.weather, error: null, cacheHit: true };
+  }
+
+  weatherCacheMetrics.misses++;
+  const startMs = Date.now();
+  try {
+    const pointUrl = `https://api.weather.gov/points/${locObj.lat},${locObj.lon}`;
+    const pointData = await fetchJsonWithTimeout(pointUrl);
+
+    if (pointData?.properties?.forecast) {
+      const forecastData = await fetchJsonWithTimeout(pointData.properties.forecast);
+      const hourlyData = pointData.properties.forecastHourly
+        ? await fetchJsonWithTimeout(pointData.properties.forecastHourly).catch(() => null)
+        : null;
+
+      const periods = forecastData?.properties?.periods || [];
+      const currentPeriod = periods[0] || {};
+      const todayDay = periods.find(p => p.isDaytime === true) || currentPeriod;
+      const todayNight = periods.find(p => p.isDaytime === false);
+
+      const weather = {
+        current: {
+          temperature: currentPeriod.temperature,
+          temperatureUnit: currentPeriod.temperatureUnit || 'F',
+          shortForecast: currentPeriod.shortForecast,
+          icon: currentPeriod.icon,
+          windSpeed: currentPeriod.windSpeed,
+          windDirection: currentPeriod.windDirection
+        },
+        high: todayDay?.temperature || null,
+        low: todayNight?.temperature || null,
+        hourly: (hourlyData?.properties?.periods || []).slice(0, 12).map(p => ({
+          time: p.startTime,
+          temperature: p.temperature,
+          shortForecast: p.shortForecast,
+          icon: p.icon
+        })),
+        weekly: periods.filter(p => p.isDaytime).slice(0, 7).map(p => ({
+          name: p.name,
+          temperature: p.temperature,
+          shortForecast: p.shortForecast,
+          icon: p.icon
+        })),
+        updatedAt: new Date().toISOString()
+      };
+
+      const elapsedMs = Date.now() - startMs;
+      weatherCacheMetrics.totalLatencyMs += elapsedMs;
+      weatherCacheMetrics.fetchCount++;
+      weatherCache.set(cacheKey, { weather, timestamp: Date.now() });
+      return { weather, error: null, cacheHit: false };
+    }
+
+    return { weather: null, error: 'Unable to resolve weather data for this location', cacheHit: false };
+  } catch (fetchErr) {
+    weatherCacheMetrics.errors++;
+    return { weather: null, error: 'Weather service temporarily unavailable', cacheHit: false };
+  }
+}
+
+/**
  * GET /api/news/weather
- * Fetch weather for user's weather locations using api.weather.gov (NWS)
+ * Fetch weather for user's weather locations using api.weather.gov (NWS).
+ * Uses in-memory cache with TTL and supports location fallback chain:
+ *   saved weather locations → news primary location → profile location.
  */
 router.get('/weather', authenticateToken, async (req, res) => {
   try {
     const preferences = await NewsPreferences.findOne({ user: req.user.userId });
-    const weatherLocations = preferences?.weatherLocations || [];
-    
+    let weatherLocations = preferences?.weatherLocations || [];
+
+    // Fallback chain: if no saved weather locations, try news primary location or profile
+    let fallbackSource = null;
     if (weatherLocations.length === 0) {
-      return res.json({ locations: [] });
+      // Try news primary location
+      const newsLocations = preferences?.locations || [];
+      const primary = newsLocations.find(l => l.isPrimary) || newsLocations[0];
+      if (primary && (primary.lat || primary.city)) {
+        weatherLocations = [primary];
+        fallbackSource = 'newsLocation';
+      } else {
+        // Try profile location (user model)
+        const user = await User.findById(req.user.userId).lean();
+        if (user?.location?.lat && user?.location?.lon) {
+          weatherLocations = [{ lat: user.location.lat, lon: user.location.lon, label: 'Profile Location', isPrimary: true }];
+          fallbackSource = 'profileLocation';
+        } else if (user?.location?.city || user?.location?.state) {
+          weatherLocations = [{ city: user.location.city, state: user.location.state, label: 'Profile Location', isPrimary: true }];
+          fallbackSource = 'profileLocation';
+        }
+      }
+    }
+
+    if (weatherLocations.length === 0) {
+      return res.json({ locations: [], fallbackSource: null, _cache: { ttlMs: WEATHER_CACHE_TTL_MS, ...weatherCacheMetrics } });
     }
 
     const results = await Promise.allSettled(
       weatherLocations.map(async (loc) => {
         const locObj = loc.toObject ? loc.toObject() : loc;
-        try {
-          // If we have lat/lon, use NWS point lookup
-          if (locObj.lat && locObj.lon) {
-            const pointUrl = `https://api.weather.gov/points/${locObj.lat},${locObj.lon}`;
-            const pointData = await fetchJsonWithTimeout(pointUrl);
-            
-            if (pointData?.properties?.forecast) {
-              const forecastData = await fetchJsonWithTimeout(pointData.properties.forecast);
-              const hourlyData = pointData.properties.forecastHourly 
-                ? await fetchJsonWithTimeout(pointData.properties.forecastHourly).catch(() => null)
-                : null;
-
-              const periods = forecastData?.properties?.periods || [];
-              const currentPeriod = periods[0] || {};
-              const todayDay = periods.find(p => p.isDaytime === true) || currentPeriod;
-              const todayNight = periods.find(p => p.isDaytime === false);
-
-              return {
-                ...locObj,
-                weather: {
-                  current: {
-                    temperature: currentPeriod.temperature,
-                    temperatureUnit: currentPeriod.temperatureUnit || 'F',
-                    shortForecast: currentPeriod.shortForecast,
-                    icon: currentPeriod.icon,
-                    windSpeed: currentPeriod.windSpeed,
-                    windDirection: currentPeriod.windDirection
-                  },
-                  high: todayDay?.temperature || null,
-                  low: todayNight?.temperature || null,
-                  hourly: (hourlyData?.properties?.periods || []).slice(0, 12).map(p => ({
-                    time: p.startTime,
-                    temperature: p.temperature,
-                    shortForecast: p.shortForecast,
-                    icon: p.icon
-                  })),
-                  weekly: periods.filter(p => p.isDaytime).slice(0, 7).map(p => ({
-                    name: p.name,
-                    temperature: p.temperature,
-                    shortForecast: p.shortForecast,
-                    icon: p.icon
-                  })),
-                  updatedAt: new Date().toISOString()
-                },
-                error: null
-              };
-            }
-          }
-          
-          // Fallback: return location without weather data
-          return { ...locObj, weather: null, error: 'Unable to resolve weather data for this location' };
-        } catch (fetchErr) {
-          return { ...locObj, weather: null, error: 'Weather service temporarily unavailable' };
-        }
+        const result = await fetchWeatherForLocation(locObj);
+        return { ...locObj, weather: result.weather, error: result.error, cacheHit: result.cacheHit };
       })
     );
 
@@ -4565,9 +4741,13 @@ router.get('/weather', authenticateToken, async (req, res) => {
       if (r.status === 'fulfilled') return r.value;
       const loc = weatherLocations[i];
       const locObj = loc?.toObject ? loc.toObject() : loc;
-      return { ...locObj, weather: null, error: 'Weather fetch failed' };
+      return { ...locObj, weather: null, error: 'Weather fetch failed', cacheHit: false };
     });
-    res.json({ locations });
+    res.json({
+      locations,
+      fallbackSource,
+      _cache: { ttlMs: WEATHER_CACHE_TTL_MS, ...weatherCacheMetrics }
+    });
   } catch (error) {
     console.error('Error fetching weather:', error);
     res.status(500).json({ error: 'Failed to fetch weather data' });
@@ -4818,6 +4998,7 @@ module.exports = {
     fetchPatchSource,
     fetchRedditLocalSource,
     fetchLocalCatalogRssSource,
+    fetchNewsApiSource,
     ingestLocalSources
   },
   internals: {
@@ -4837,6 +5018,11 @@ module.exports = {
     buildGoogleNewsFeedUrl,
     classifySourceHealth,
     fetchJsonWithTimeout,
+    fetchWeatherForLocation,
+    buildWeatherCacheKey,
+    weatherCache,
+    weatherCacheMetrics,
+    WEATHER_CACHE_TTL_MS,
     normalizeUSState,
     US_ZIP_REGEX,
     GOOGLE_NEWS_TOPIC_MAP,
@@ -4856,6 +5042,8 @@ module.exports = {
     SUPPORTED_RSS_PROVIDERS,
     detectProviderIdFromUrl,
     NEWS_LOCAL_SOURCES_ENABLED,
+    NEWS_LOCAL_NEWSAPI_ENABLED,
+    NEWS_API_KEY,
     LOCAL_SOURCE_TIERS
   }
 };

@@ -23,6 +23,7 @@ export default function NewsControlPanel({
   onToggleSourceCategory,
   onAddKeyword,
   onRemoveKeyword,
+  onRenameKeyword,
   newKeyword,
   setNewKeyword,
   onAddLocation,
@@ -207,6 +208,7 @@ export default function NewsControlPanel({
                 keywords={activeKeywords}
                 onAddKeyword={onAddKeyword}
                 onRemoveKeyword={onRemoveKeyword}
+                onRenameKeyword={onRenameKeyword}
                 newKeyword={newKeyword}
                 setNewKeyword={setNewKeyword}
               />
