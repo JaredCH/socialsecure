@@ -175,15 +175,104 @@ describe('BBC adapter', () => {
   it('exports BBC_FEED_MAP with all sections', () => {
     const map = newsRoutes.internals.BBC_FEED_MAP;
     expect(map).toBeDefined();
+
+    // News sections
     expect(map.top).toBeDefined();
-    expect(map.top.url).toContain('feeds.bbci.co.uk');
+    expect(map.top.url).toBe('https://feeds.bbci.co.uk/news/rss.xml');
     expect(map.top.category).toBe('general');
-    expect(map.technology).toBeDefined();
-    expect(map.technology.category).toBe('technology');
-    expect(map.science).toBeDefined();
-    expect(map.science.category).toBe('science');
+
+    expect(map.world).toBeDefined();
+    expect(map.world.url).toBe('https://feeds.bbci.co.uk/news/world/rss.xml');
+    expect(map.world.category).toBe('world');
+
+    expect(map.uk).toBeDefined();
+    expect(map.uk.url).toBe('https://feeds.bbci.co.uk/news/uk/rss.xml');
+    expect(map.uk.category).toBe('world');
+
+    expect(map.england).toBeDefined();
+    expect(map.england.url).toBe('https://feeds.bbci.co.uk/news/england/rss.xml');
+    expect(map.england.category).toBe('world');
+
+    expect(map.northernIreland).toBeDefined();
+    expect(map.northernIreland.url).toBe('https://feeds.bbci.co.uk/news/northern_ireland/rss.xml');
+    expect(map.northernIreland.category).toBe('world');
+
+    expect(map.scotland).toBeDefined();
+    expect(map.scotland.url).toBe('https://feeds.bbci.co.uk/news/scotland/rss.xml');
+    expect(map.scotland.category).toBe('world');
+
+    expect(map.wales).toBeDefined();
+    expect(map.wales.url).toBe('https://feeds.bbci.co.uk/news/wales/rss.xml');
+    expect(map.wales.category).toBe('world');
+
+    expect(map.business).toBeDefined();
+    expect(map.business.url).toBe('https://feeds.bbci.co.uk/news/business/rss.xml');
+    expect(map.business.category).toBe('business');
+
+    expect(map.politics).toBeDefined();
+    expect(map.politics.url).toBe('https://feeds.bbci.co.uk/news/politics/rss.xml');
+    expect(map.politics.category).toBe('politics');
+
     expect(map.entertainment).toBeDefined();
+    expect(map.entertainment.url).toBe('https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml');
     expect(map.entertainment.category).toBe('entertainment');
+
+    expect(map.health).toBeDefined();
+    expect(map.health.url).toBe('https://feeds.bbci.co.uk/news/health/rss.xml');
+    expect(map.health.category).toBe('health');
+
+    expect(map.education).toBeDefined();
+    expect(map.education.url).toBe('https://feeds.bbci.co.uk/news/education/rss.xml');
+    expect(map.education.category).toBe('general');
+
+    expect(map.science).toBeDefined();
+    expect(map.science.url).toBe('https://feeds.bbci.co.uk/news/science_and_environment/rss.xml');
+    expect(map.science.category).toBe('science');
+
+    expect(map.technology).toBeDefined();
+    expect(map.technology.url).toBe('https://feeds.bbci.co.uk/news/technology/rss.xml');
+    expect(map.technology.category).toBe('technology');
+
+    expect(map.magazine).toBeDefined();
+    expect(map.magazine.url).toBe('https://feeds.bbci.co.uk/news/magazine/rss.xml');
+    expect(map.magazine.category).toBe('general');
+
+    // Sport sections
+    expect(map.sport).toBeDefined();
+    expect(map.sport.url).toBe('https://feeds.bbci.co.uk/sport/rss.xml');
+    expect(map.sport.category).toBe('sports');
+
+    expect(map.football).toBeDefined();
+    expect(map.football.url).toBe('https://feeds.bbci.co.uk/sport/football/rss.xml');
+    expect(map.football.category).toBe('sports');
+
+    expect(map.formula1).toBeDefined();
+    expect(map.formula1.url).toBe('https://feeds.bbci.co.uk/sport/formula1/rss.xml');
+    expect(map.formula1.category).toBe('sports');
+
+    expect(map.olympics).toBeDefined();
+    expect(map.olympics.url).toBe('https://feeds.bbci.co.uk/sport/olympics/rss.xml');
+    expect(map.olympics.category).toBe('sports');
+
+    expect(map.cricket).toBeDefined();
+    expect(map.cricket.url).toBe('https://feeds.bbci.co.uk/sport/cricket/rss.xml');
+    expect(map.cricket.category).toBe('sports');
+
+    expect(map.rugbyUnion).toBeDefined();
+    expect(map.rugbyUnion.url).toBe('https://feeds.bbci.co.uk/sport/rugby-union/rss.xml');
+    expect(map.rugbyUnion.category).toBe('sports');
+
+    expect(map.rugbyLeague).toBeDefined();
+    expect(map.rugbyLeague.url).toBe('https://feeds.bbci.co.uk/sport/rugby-league/rss.xml');
+    expect(map.rugbyLeague.category).toBe('sports');
+
+    expect(map.tennis).toBeDefined();
+    expect(map.tennis.url).toBe('https://feeds.bbci.co.uk/sport/tennis/rss.xml');
+    expect(map.tennis.category).toBe('sports');
+
+    expect(map.golf).toBeDefined();
+    expect(map.golf.url).toBe('https://feeds.bbci.co.uk/sport/golf/rss.xml');
+    expect(map.golf.category).toBe('sports');
   });
 
   it('returns empty array on fetch error', async () => {
@@ -277,5 +366,186 @@ describe('GDELT adapter standardized fields', () => {
     expect(articles[0].feedLanguage).toBe('English');
     expect(articles[0].feedMetadata).toBeDefined();
     expect(articles[0].feedMetadata.gdeltDomain).toBe('technews.com');
+  });
+});
+
+describe('Country variants fallback (inferLocationFromCountryVariants)', () => {
+  it('is exported as an internal', () => {
+    expect(newsRoutes.internals.inferLocationFromCountryVariants).toBeDefined();
+    expect(typeof newsRoutes.internals.inferLocationFromCountryVariants).toBe('function');
+  });
+
+  it('exports COUNTRY_VARIANTS_MAP with major countries', () => {
+    const map = newsRoutes.internals.COUNTRY_VARIANTS_MAP;
+    expect(map).toBeDefined();
+    expect(map instanceof Map).toBe(true);
+    expect(map.has('united states')).toBe(true);
+    expect(map.has('united kingdom')).toBe(true);
+    expect(map.has('australia')).toBe(true);
+    expect(map.has('germany')).toBe(true);
+    expect(map.has('france')).toBe(true);
+    expect(map.get('united states').length).toBeGreaterThanOrEqual(4);
+    expect(map.get('united kingdom').length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('detects country by canonical name in title', () => {
+    const fn = newsRoutes.internals.inferLocationFromCountryVariants;
+    expect(fn('Crisis in Germany', '')).toContain('germany');
+  });
+
+  it('detects country by short alias (usa → united states)', () => {
+    const fn = newsRoutes.internals.inferLocationFromCountryVariants;
+    const tokens = fn('USA trade deal announced', '');
+    expect(tokens).toContain('united states');
+  });
+
+  it('detects country by alternate name (america → united states)', () => {
+    const fn = newsRoutes.internals.inferLocationFromCountryVariants;
+    const tokens = fn('President of America signs bill', '');
+    expect(tokens).toContain('united states');
+  });
+
+  it('detects country mentioned in description', () => {
+    const fn = newsRoutes.internals.inferLocationFromCountryVariants;
+    const tokens = fn('Breaking news', 'The British government responded to the crisis.');
+    expect(tokens).toContain('united kingdom');
+  });
+
+  it('detects multiple countries in title and description', () => {
+    const fn = newsRoutes.internals.inferLocationFromCountryVariants;
+    const tokens = fn('Trade talks between France and Japan', 'Negotiations continue in Tokyo.');
+    expect(tokens).toContain('france');
+    expect(tokens).toContain('japan');
+  });
+
+  it('returns empty array when no country variant is found', () => {
+    const fn = newsRoutes.internals.inferLocationFromCountryVariants;
+    const tokens = fn('Local weather update', 'Clouds expected throughout the day.');
+    expect(tokens).toEqual([]);
+  });
+
+  it('does not produce duplicates for a single country', () => {
+    const fn = newsRoutes.internals.inferLocationFromCountryVariants;
+    const tokens = fn('Australia and the aussie economy', 'Australian officials commented.');
+    const count = tokens.filter(t => t === 'australia').length;
+    expect(count).toBe(1);
+  });
+});
+
+describe('BBC fallback location detection (integration)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGeocode.mockReset();
+    mockGeocode.mockResolvedValue([]);
+    mockParseUrl.mockReset();
+    mockParseUrl.mockRejectedValue(new Error('parse error'));
+    newsRoutes.internals.geocodeContextCache.clear();
+  });
+
+  it('assigns country-level location when title mentions a country variant', async () => {
+    mockParseUrl.mockResolvedValueOnce({
+      language: 'en-gb',
+      items: [
+        {
+          title: 'Chancellor unveils economic plans',
+          contentSnippet: 'The British Prime Minister announced sweeping reforms.',
+          link: 'https://www.bbc.co.uk/news/uk-politics-123',
+          guid: 'https://www.bbc.co.uk/news/uk-politics-123#1',
+          categories: ['politics'],
+          isoDate: '2026-03-03T10:00:00.000Z'
+        }
+      ]
+    });
+
+    const articles = await newsRoutes.adapters.fetchBbcSource('politics', {
+      url: 'https://feeds.bbci.co.uk/news/politics/rss.xml',
+      category: 'politics',
+      label: 'BBC Politics'
+    });
+
+    expect(articles).toHaveLength(1);
+    expect(articles[0].locations).toContain('united kingdom');
+    expect(articles[0].localityLevel).toBe('country');
+  });
+
+  it('assigns country-level location when description mentions a country variant', async () => {
+    mockParseUrl.mockResolvedValueOnce({
+      language: 'en-gb',
+      items: [
+        {
+          title: 'Scientists make new discovery',
+          contentSnippet: 'Researchers in Australia have announced a breakthrough.',
+          link: 'https://www.bbc.co.uk/news/science-456',
+          guid: 'https://www.bbc.co.uk/news/science-456#1',
+          categories: ['science'],
+          isoDate: '2026-03-04T08:30:00.000Z'
+        }
+      ]
+    });
+
+    const articles = await newsRoutes.adapters.fetchBbcSource('science', {
+      url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
+      category: 'science',
+      label: 'BBC Science'
+    });
+
+    expect(articles).toHaveLength(1);
+    expect(articles[0].locations).toContain('australia');
+    expect(articles[0].localityLevel).toBe('country');
+  });
+
+  it('stores the correct category for each BBC section', async () => {
+    const testCases = [
+      { section: 'sport', feedConfig: { url: 'https://feeds.bbci.co.uk/sport/rss.xml', category: 'sports', label: 'BBC Sport' }, expectedCategory: 'sports' },
+      { section: 'football', feedConfig: { url: 'https://feeds.bbci.co.uk/sport/football/rss.xml', category: 'sports', label: 'BBC Football' }, expectedCategory: 'sports' },
+      { section: 'education', feedConfig: { url: 'https://feeds.bbci.co.uk/news/education/rss.xml', category: 'general', label: 'BBC Education' }, expectedCategory: 'general' },
+      { section: 'magazine', feedConfig: { url: 'https://feeds.bbci.co.uk/news/magazine/rss.xml', category: 'general', label: 'BBC Magazine' }, expectedCategory: 'general' }
+    ];
+
+    for (const { section, feedConfig, expectedCategory } of testCases) {
+      mockParseUrl.mockResolvedValueOnce({
+        language: 'en',
+        items: [
+          {
+            title: `Sample ${section} article`,
+            contentSnippet: 'No location signals here.',
+            link: `https://www.bbc.co.uk/${section}/article-1`,
+            guid: `https://www.bbc.co.uk/${section}/article-1#1`,
+            categories: [section],
+            isoDate: '2026-03-05T12:00:00.000Z'
+          }
+        ]
+      });
+
+      const articles = await newsRoutes.adapters.fetchBbcSource(section, feedConfig);
+      expect(articles).toHaveLength(1);
+      expect(articles[0].category).toBe(expectedCategory);
+    }
+  });
+
+  it('stores publication date correctly from isoDate', async () => {
+    mockParseUrl.mockResolvedValueOnce({
+      language: 'en',
+      items: [
+        {
+          title: 'Test article',
+          contentSnippet: 'Test description.',
+          link: 'https://www.bbc.co.uk/news/test-789',
+          guid: 'https://www.bbc.co.uk/news/test-789#1',
+          categories: ['general'],
+          isoDate: '2026-03-07T15:30:00.000Z'
+        }
+      ]
+    });
+
+    const articles = await newsRoutes.adapters.fetchBbcSource('top', {
+      url: 'https://feeds.bbci.co.uk/news/rss.xml',
+      category: 'general',
+      label: 'BBC Top Stories'
+    });
+
+    expect(articles).toHaveLength(1);
+    expect(articles[0].publishedAt).toBeInstanceOf(Date);
+    expect(articles[0].publishedAt.toISOString()).toBe('2026-03-07T15:30:00.000Z');
   });
 });
