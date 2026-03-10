@@ -95,6 +95,10 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: null
   },
+  stripImageMetadataOnUpload: {
+    type: Boolean,
+    default: false
+  },
   location: {
     type: {
       type: String,
@@ -562,6 +566,7 @@ userSchema.methods.toPublicProfile = function() {
     socialPagePreferences: toPublicSocialPagePreferences(this.socialPagePreferences, {
       profileTheme: this.profileTheme || 'default'
     }),
+    stripImageMetadataOnUpload: this.stripImageMetadataOnUpload === true,
     city: this.city,
     state: this.state,
     country: this.country,

@@ -50,6 +50,12 @@ const galleryImageSchema = new mongoose.Schema({
     maxlength: 280,
     default: ''
   },
+  title: {
+    type: String,
+    trim: true,
+    maxlength: 140,
+    default: ''
+  },
   storageFileName: {
     type: String,
     default: null

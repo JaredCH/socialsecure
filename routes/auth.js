@@ -1493,7 +1493,11 @@ router.put('/profile', [
       }
 
       return true;
-    })
+    }),
+  body('stripImageMetadataOnUpload')
+    .optional({ nullable: true })
+    .isBoolean()
+    .withMessage('stripImageMetadataOnUpload must be a boolean')
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -1516,7 +1520,26 @@ router.put('/profile', [
     let addressPendingApproval = false;
 
     // Update allowed fields
-    const { realName, phone, streetAddress, hobbies, ageGroup, sex, race, profileFieldVisibility, city, state, country, bio, avatarUrl, bannerUrl, links, profileTheme, socialPagePreferences } = req.body;
+    const {
+      realName,
+      phone,
+      streetAddress,
+      hobbies,
+      ageGroup,
+      sex,
+      race,
+      profileFieldVisibility,
+      city,
+      state,
+      country,
+      bio,
+      avatarUrl,
+      bannerUrl,
+      links,
+      profileTheme,
+      socialPagePreferences,
+      stripImageMetadataOnUpload
+    } = req.body;
     const now = Date.now();
 
     const requestedLocation = {
@@ -1689,6 +1712,9 @@ router.put('/profile', [
           accentColorToken: normalizedSocialPreferences.value.accentColorToken
         }
       });
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'stripImageMetadataOnUpload')) {
+      user.stripImageMetadataOnUpload = stripImageMetadataOnUpload === true;
     }
     
     user.updatedAt = new Date();

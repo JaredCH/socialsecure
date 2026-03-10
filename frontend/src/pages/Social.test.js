@@ -15,7 +15,8 @@ jest.mock('../utils/api', () => ({
   calendarAPI: {
     getMyEvents: jest.fn(),
     getUserCalendar: jest.fn(),
-    getUserCalendarEvents: jest.fn()
+    getUserCalendarEvents: jest.fn(),
+    deleteEvent: jest.fn()
   },
   chatAPI: {
     getProfileThread: jest.fn(),
@@ -29,7 +30,8 @@ jest.mock('../utils/api', () => ({
   },
   feedAPI: {
     getTimeline: jest.fn(),
-    getPublicUserFeed: jest.fn()
+    getPublicUserFeed: jest.fn(),
+    deletePost: jest.fn()
   },
   friendsAPI: {
     getFriends: jest.fn(),
@@ -37,7 +39,11 @@ jest.mock('../utils/api', () => ({
     getPublicCircles: jest.fn()
   },
   galleryAPI: {
-    getGallery: jest.fn()
+    getGallery: jest.fn(),
+    deleteGalleryItem: jest.fn(),
+    updateGalleryItem: jest.fn(),
+    createGalleryItem: jest.fn(),
+    uploadGalleryItem: jest.fn()
   },
   moderationAPI: {
     getBlocks: jest.fn(),
@@ -133,7 +139,12 @@ describe('Social page hero background rendering', () => {
     moderationAPI.getMyReports.mockResolvedValue({ data: { reports: [] } });
     feedAPI.getTimeline.mockResolvedValue({ data: { posts: [] } });
     feedAPI.getPublicUserFeed.mockResolvedValue({ data: { posts: [], user: null } });
+    feedAPI.deletePost.mockResolvedValue({ data: { success: true } });
     galleryAPI.getGallery.mockResolvedValue({ data: { items: [] } });
+    galleryAPI.deleteGalleryItem.mockResolvedValue({ data: { success: true } });
+    galleryAPI.updateGalleryItem.mockResolvedValue({ data: { item: null } });
+    galleryAPI.createGalleryItem.mockResolvedValue({ data: { item: null } });
+    galleryAPI.uploadGalleryItem.mockResolvedValue({ data: { item: null } });
     socialPageAPI.getConfigs.mockResolvedValue({ data: { configs: [] } });
     socialPageAPI.getSharedByUser.mockResolvedValue({ data: { configs: [] } });
     calendarAPI.getMyEvents.mockResolvedValue({ data: { events: [] } });
@@ -144,6 +155,7 @@ describe('Social page hero background rendering', () => {
       }
     });
     calendarAPI.getUserCalendarEvents.mockResolvedValue({ data: { events: [] } });
+    calendarAPI.deleteEvent.mockResolvedValue({ data: { success: true } });
     chatAPI.getProfileThread.mockResolvedValue({
       data: {
         conversation: {
@@ -379,6 +391,77 @@ describe('Social page hero background rendering', () => {
     expect(updatePayload.worksAt).toBe('Blue Team');
     expect(updatePayload.profileFieldVisibility?.worksAt).toBe('social');
     expect(updatePayload.hobbies).toEqual(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'h7', 'h8', 'h9', 'h10']);
+  });
+
+  it('shows owner-only delete action for owned timeline posts with confirmation', async () => {
+    feedAPI.getTimeline.mockResolvedValue({
+      data: {
+        posts: [
+          {
+            _id: 'post-1',
+            authorId: { _id: 'u-1', username: 'alpha' },
+            targetFeedId: { _id: 'u-1', username: 'alpha' },
+            content: 'Owned post',
+            visibility: 'public',
+            relationshipAudience: 'social',
+            likes: [],
+            comments: [],
+            mediaUrls: []
+          }
+        ]
+      }
+    });
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const deleteButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Delete');
+    expect(deleteButton).toBeTruthy();
+    await act(async () => {
+      deleteButton?.click();
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith('Are you sure you want to delete this?');
+    expect(feedAPI.deletePost).toHaveBeenCalledWith('post-1');
+    confirmSpy.mockRestore();
+  });
+
+  it('persists gallery metadata stripping preference toggle', async () => {
+    authAPI.updateProfile.mockResolvedValue({
+      data: {
+        user: {
+          _id: 'u-1',
+          username: 'alpha',
+          stripImageMetadataOnUpload: true,
+          socialPagePreferences: {
+            hero: {
+              backgroundImageUseRandomGallery: true
+            }
+          }
+        }
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const galleryTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Gallery'));
+    expect(galleryTab).toBeDefined();
+    await act(async () => {
+      galleryTab?.click();
+    });
+
+    const toggleLabel = Array.from(container.querySelectorAll('label')).find((label) =>
+      label.textContent?.includes('Strip image metadata on upload')
+    );
+    const toggle = toggleLabel?.querySelector('input[type="checkbox"]');
+    expect(toggle).toBeTruthy();
+    await act(async () => {
+      toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(authAPI.updateProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ stripImageMetadataOnUpload: true })
+    );
   });
 
   it('loads profile chat thread/messages for guest viewers when read access allows guests', async () => {

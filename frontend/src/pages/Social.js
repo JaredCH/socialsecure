@@ -489,10 +489,23 @@ const normalizeGalleryItem = (item) => ({
   likesCount: typeof item?.likesCount === 'number' ? item.likesCount : 0,
   dislikesCount: typeof item?.dislikesCount === 'number' ? item.dislikesCount : 0,
   viewerReaction: item?.viewerReaction || null,
+  title: item?.title || '',
   caption: item?.caption || '',
   mediaType: item?.mediaType || 'url',
   relationshipAudience: item?.relationshipAudience === 'secure' ? 'secure' : 'social',
 });
+
+const METADATA_STRIP_OUTPUT_EXTENSIONS = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp'
+};
+
+const replaceFileExtension = (fileName = '', extension = '') => {
+  const baseName = String(fileName || '').replace(/\.[^/.]+$/, '');
+  const fallbackBaseName = baseName || 'upload';
+  return `${fallbackBaseName}${extension}`;
+};
 
 const normalizePersonalInfoFieldValue = (profileSource = {}, fieldId) => (
   fieldId === 'hobbies'
@@ -586,8 +599,11 @@ const Social = () => {
   const [galleryTargetInput, setGalleryTargetInput] = useState(initialGuestUser);
   const [galleryTarget, setGalleryTarget] = useState(initialGuestUser.trim());
   const [galleryUrlInput, setGalleryUrlInput] = useState('');
+  const [galleryTitleInput, setGalleryTitleInput] = useState('');
   const [galleryCaptionInput, setGalleryCaptionInput] = useState('');
   const [galleryRelationshipAudience, setGalleryRelationshipAudience] = useState('social');
+  const [stripImageMetadataOnUpload, setStripImageMetadataOnUpload] = useState(false);
+  const [galleryMetadataPreferenceBusy, setGalleryMetadataPreferenceBusy] = useState(false);
   const [galleryError, setGalleryError] = useState('');
   const [galleryBusy, setGalleryBusy] = useState(false);
   const [galleryLoading, setGalleryLoading] = useState(false);
@@ -657,6 +673,10 @@ const Social = () => {
   const composerCodeTextareaRef = useRef(null);
 
   const realtimeEnabled = currentUser?.realtimePreferences?.enabled !== false;
+
+  useEffect(() => {
+    setStripImageMetadataOnUpload(currentUser?.stripImageMetadataOnUpload === true);
+  }, [currentUser?.stripImageMetadataOnUpload]);
 
   const requestedProfileIdentifier = guestUser.trim();
   const normalizedRequestedProfileIdentifier = requestedProfileIdentifier.toLowerCase();
@@ -2759,6 +2779,82 @@ const Social = () => {
     }
   };
 
+  const handleToggleMetadataStripPreference = async (enabled) => {
+    if (!isOwnSocialContext || isGuestPreview) return;
+    setGalleryMetadataPreferenceBusy(true);
+    setGalleryError('');
+    try {
+      const response = await authAPI.updateProfile({ stripImageMetadataOnUpload: enabled });
+      const updatedUser = response.data?.user || null;
+      if (updatedUser) {
+        setCurrentUser(updatedUser);
+      }
+      setStripImageMetadataOnUpload(enabled);
+    } catch (error) {
+      setGalleryError(error.response?.data?.error || 'Failed to update metadata privacy setting.');
+      setStripImageMetadataOnUpload((prev) => !enabled);
+    } finally {
+      setGalleryMetadataPreferenceBusy(false);
+    }
+  };
+
+  const stripMetadataFromImageFile = async (file) => {
+    const outputType = METADATA_STRIP_OUTPUT_EXTENSIONS[file.type] ? file.type : 'image/png';
+    const outputExtension = METADATA_STRIP_OUTPUT_EXTENSIONS[outputType] || '.png';
+
+    const imageBitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = imageBitmap.width;
+    canvas.height = imageBitmap.height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      imageBitmap.close();
+      throw new Error('Failed to process image.');
+    }
+    context.drawImage(imageBitmap, 0, 0);
+    imageBitmap.close();
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, outputType, outputType === 'image/jpeg' || outputType === 'image/webp' ? 0.92 : undefined);
+    });
+    if (!blob) {
+      throw new Error('Failed to process image.');
+    }
+
+    const normalizedFileName = replaceFileExtension(file.name, outputExtension);
+    return new File([blob], normalizedFileName, { type: outputType, lastModified: Date.now() });
+  };
+
+  const handleDeletePost = async (postId) => {
+    if (!postId || !window.confirm('Are you sure you want to delete this?')) return;
+    setPostActionLoading(postId, true);
+    setFeedError('');
+    try {
+      await feedAPI.deletePost(postId);
+      setPosts((prev) => prev.filter((post) => post._id !== postId));
+      setCommentInputs((prev) => {
+        const next = { ...prev };
+        delete next[postId];
+        return next;
+      });
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to delete post.');
+    } finally {
+      setPostActionLoading(postId, false);
+    }
+  };
+
+  const handleDeleteCalendarEvent = async (eventId) => {
+    if (!eventId || !window.confirm('Are you sure you want to delete this?')) return;
+    setCalendarPreviewError('');
+    try {
+      await calendarAPI.deleteEvent(eventId);
+      setCalendarPreviewEvents((prev) => prev.filter((event) => String(event?._id || '') !== String(eventId)));
+    } catch (error) {
+      setCalendarPreviewError(error.response?.data?.error || 'Failed to delete event.');
+    }
+  };
+
   const handleAddGalleryUrl = async () => {
     if (!canManageGallery || !galleryOwnerIdentifier) return;
 
@@ -2780,6 +2876,7 @@ const Social = () => {
     try {
       const response = await galleryAPI.createGalleryItem(galleryOwnerIdentifier, {
         mediaUrl: value,
+        title: galleryTitleInput,
         caption: galleryCaptionInput,
         relationshipAudience: galleryRelationshipAudience,
       });
@@ -2792,6 +2889,7 @@ const Social = () => {
       }
 
       setGalleryUrlInput('');
+      setGalleryTitleInput('');
       setGalleryCaptionInput('');
     } catch (error) {
       setGalleryError(error.response?.data?.error || 'Failed to add gallery URL.');
@@ -2825,11 +2923,15 @@ const Social = () => {
     setGalleryBusy(true);
     setGalleryError('');
     try {
+      const uploadFile = stripImageMetadataOnUpload
+        ? await stripMetadataFromImageFile(file)
+        : file;
       const response = await galleryAPI.uploadGalleryItem(
         galleryOwnerIdentifier,
-        file,
+        uploadFile,
         galleryCaptionInput,
-        galleryRelationshipAudience
+        galleryRelationshipAudience,
+        galleryTitleInput
       );
 
       const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
@@ -2839,6 +2941,7 @@ const Social = () => {
         await loadGallery();
       }
 
+      setGalleryTitleInput('');
       setGalleryCaptionInput('');
     } catch (error) {
       setGalleryError(error.response?.data?.error || 'Failed to upload image.');
@@ -2852,6 +2955,7 @@ const Social = () => {
       ...prev,
       [item._id]: {
         mediaUrl: item.mediaType === 'url' ? item.mediaUrl || '' : '',
+        title: item.title || '',
         caption: item.caption || '',
       },
     }));
@@ -2870,6 +2974,7 @@ const Social = () => {
       ...prev,
       [imageId]: {
         mediaUrl: prev[imageId]?.mediaUrl || '',
+        title: prev[imageId]?.title || '',
         caption: prev[imageId]?.caption || '',
         [field]: value,
       },
@@ -2885,7 +2990,10 @@ const Social = () => {
     setGalleryActionLoading(item._id, true);
     setGalleryError('');
     try {
-      const payload = { caption: editState.caption || '' };
+      const payload = {
+        title: editState.title || '',
+        caption: editState.caption || ''
+      };
       if (item.mediaType === 'url') {
         payload.mediaUrl = editState.mediaUrl || '';
       }
@@ -2909,6 +3017,7 @@ const Social = () => {
 
   const handleRemoveGalleryImage = async (imageId) => {
     if (!canManageGallery || !galleryOwnerIdentifier) return;
+    if (!window.confirm('Are you sure you want to delete this image?')) return;
 
     setGalleryActionLoading(imageId, true);
     setGalleryError('');
@@ -3427,6 +3536,7 @@ const Social = () => {
               const postTarget = post.targetFeedId?.username || postAuthor;
               const hasLiked = currentUser ? post.likes.includes(currentUser._id) : false;
               const postBusy = Boolean(actionLoadingByPost[post._id]);
+              const isPostOwner = postAuthorId && postAuthorId === String(currentUser?._id || '');
               const isBlocked = blockedUserIds.includes(postAuthorId);
               const isMuted = mutedUserIds.includes(postAuthorId);
               const interaction = post.interaction;
@@ -3442,6 +3552,11 @@ const Social = () => {
                     <div className="flex items-center gap-1">
                       <span className="rounded-full bg-gray-100 px-2 py-1 text-xs uppercase tracking-wide">{PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}</span>
                       <span className={`rounded-full px-2 py-1 text-xs uppercase tracking-wide ${post.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>{RELATIONSHIP_AUDIENCE_LABELS[post.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</span>
+                      {isAuthenticated && !isGuestPreview && isPostOwner ? (
+                        <button type="button" onClick={() => handleDeletePost(post._id)} disabled={postBusy} className="rounded-full border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60">
+                          Delete
+                        </button>
+                      ) : null}
                     </div>
                   </header>
                   <div className="flex flex-wrap gap-2 text-xs text-gray-600">
@@ -3519,10 +3634,24 @@ const Social = () => {
             ) : null}
             {canManageGallery ? (
               <div className="space-y-3">
+                <label className="flex items-center justify-between gap-3 rounded-xl border bg-slate-50 px-3 py-2 text-sm text-gray-700">
+                  <span>Strip image metadata on upload (EXIF/GPS/camera info)</span>
+                  <input
+                    type="checkbox"
+                    checked={stripImageMetadataOnUpload}
+                    disabled={galleryMetadataPreferenceBusy}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      setStripImageMetadataOnUpload(enabled);
+                      handleToggleMetadataStripPreference(enabled);
+                    }}
+                  />
+                </label>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input type="url" value={galleryUrlInput} onChange={(event) => setGalleryUrlInput(event.target.value)} placeholder="https://example.com/photo.jpg" className="flex-1 rounded-xl border px-3 py-2" />
                   <button type="button" onClick={handleAddGalleryUrl} disabled={galleryBusy} className="rounded-xl border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50">{galleryBusy ? 'Adding…' : 'Add URL'}</button>
                 </div>
+                <input type="text" value={galleryTitleInput} onChange={(event) => setGalleryTitleInput(event.target.value)} placeholder="Optional title" maxLength={140} className="w-full rounded-xl border px-3 py-2" />
                 <input type="text" value={galleryCaptionInput} onChange={(event) => setGalleryCaptionInput(event.target.value)} placeholder="Optional caption" maxLength={280} className="w-full rounded-xl border px-3 py-2" />
                 <label className="flex flex-col gap-1 text-sm text-gray-700"><span>Audience</span><select value={galleryRelationshipAudience} onChange={(event) => setGalleryRelationshipAudience(event.target.value)} className="rounded-xl border px-3 py-2"><option value="social">Social</option><option value="secure">Secure</option></select></label>
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700"><input type="file" accept="image/*" onChange={handleUploadGalleryImage} disabled={galleryBusy} /></label>
@@ -3539,6 +3668,7 @@ const Social = () => {
                     <article key={image._id} className="overflow-hidden rounded-2xl border bg-white">
                       <img src={image.mediaUrl} alt="Gallery item" className="h-48 w-full object-cover" />
                       <div className="space-y-2 p-3">
+                        {image.title ? <p className="text-sm font-semibold text-gray-900">{image.title}</p> : null}
                         {image.caption ? <p className="whitespace-pre-wrap text-sm text-gray-700">{image.caption}</p> : null}
                         <p className="text-xs font-medium text-gray-500">Audience: {RELATIONSHIP_AUDIENCE_LABELS[image.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</p>
                         <div className="flex items-center gap-2 text-sm">
@@ -3550,6 +3680,7 @@ const Social = () => {
                             {editState ? (
                               <div className="space-y-2">
                                 {image.mediaType === 'url' ? <input type="url" value={editState.mediaUrl} onChange={(event) => handleEditGalleryField(image._id, 'mediaUrl', event.target.value)} placeholder="https://example.com/photo.jpg" className="w-full rounded-xl border px-2 py-1 text-sm" /> : null}
+                                <input type="text" value={editState.title} onChange={(event) => handleEditGalleryField(image._id, 'title', event.target.value)} placeholder="Title" maxLength={140} className="w-full rounded-xl border px-2 py-1 text-sm" />
                                 <input type="text" value={editState.caption} onChange={(event) => handleEditGalleryField(image._id, 'caption', event.target.value)} placeholder="Caption" maxLength={280} className="w-full rounded-xl border px-2 py-1 text-sm" />
                                 <div className="flex gap-2">
                                   <button type="button" onClick={() => handleSaveGalleryItem(image)} disabled={imageBusy} className="rounded-lg bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-60">Save</button>
@@ -3805,6 +3936,7 @@ const Social = () => {
         if (Number.isNaN(startAt.getTime())) return null;
         return {
           id: `event-${event._id || startAt.toISOString()}`,
+          eventId: event?._id ? String(event._id) : '',
           title: event.title || 'Untitled event',
           date: startAt,
           type: 'event',
@@ -4064,7 +4196,21 @@ const Social = () => {
                               <p className="mt-0.5 truncate text-[11px] text-slate-500">{item.dateLabel} • {item.timeLabel}</p>
                               {item.location ? <p className="mt-0.5 truncate text-[11px] text-slate-500">📍 {item.location}</p> : null}
                             </div>
-                            <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-700">Event</span>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <span className="rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-700">Event</span>
+                              {isOwnSocialContext && !isGuestPreview && item.eventId ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    handleDeleteCalendarEvent(item.eventId);
+                                  }}
+                                  className="rounded-full border border-red-200 px-2 py-0.5 font-semibold text-red-700 hover:bg-red-50"
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
+                            </div>
                           </Link>
                         ) : (
                           <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-100 bg-gradient-to-r from-white to-rose-50/70 px-3 py-2 text-xs text-slate-700">

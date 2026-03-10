@@ -84,6 +84,11 @@ const normalizeCaption = (value) => {
   return value.trim().slice(0, 280);
 };
 
+const normalizeTitle = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, 140);
+};
+
 const extractExtensionFromUrl = (urlString) => {
   try {
     const parsed = new URL(urlString);
@@ -161,6 +166,7 @@ const toGalleryItem = (image, viewerId) => {
     ownerId: image.ownerId,
     mediaUrl: image.mediaUrl,
     mediaType: image.mediaType,
+    title: image.title || '',
     caption: image.caption || '',
     likesCount,
     dislikesCount,
@@ -306,6 +312,7 @@ router.post(
   upload.single('image'),
   [
     body('caption').optional().isString().isLength({ max: 280 }),
+    body('title').optional().isString().isLength({ max: 140 }),
     body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES).withMessage('Invalid relationship audience')
   ],
   async (req, res) => {
@@ -331,6 +338,7 @@ router.post(
       }
 
       const caption = normalizeCaption(req.body.caption);
+      const title = normalizeTitle(req.body.title);
       const relationshipAudience = normalizeRelationshipAudience(req.body.relationshipAudience);
       let mediaUrl = null;
       let mediaType = 'url';
@@ -372,6 +380,7 @@ router.post(
         mediaUrl,
         mediaType,
         storageFileName,
+        title,
         caption,
         relationshipAudience
       });
@@ -408,6 +417,7 @@ router.patch(
   authenticateToken,
   [
     body('caption').optional().isString().isLength({ max: 280 }),
+    body('title').optional().isString().isLength({ max: 140 }),
     body('mediaUrl').optional().isString().isLength({ max: URL_MAX_LENGTH }),
     body('relationshipAudience').optional().isIn(RELATIONSHIP_AUDIENCE_VALUES).withMessage('Invalid relationship audience')
   ],
@@ -435,6 +445,10 @@ router.patch(
 
       if (req.body.caption !== undefined) {
         image.caption = normalizeCaption(req.body.caption);
+      }
+
+      if (req.body.title !== undefined) {
+        image.title = normalizeTitle(req.body.title);
       }
 
       if (req.body.mediaUrl !== undefined) {
