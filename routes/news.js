@@ -198,6 +198,25 @@ const BBC_FEED_MAP = {
 };
 
 // ============================================
+// YAHOO RSS FEED CONFIGURATION
+// ============================================
+
+const YAHOO_ENABLED = String(process.env.YAHOO_ENABLED || 'true').toLowerCase() !== 'false';
+
+const YAHOO_FEED_MAP = {
+  topStories: { url: 'https://news.yahoo.com/rss/', category: 'general', label: 'Yahoo Top Stories' },
+  world: { url: 'https://news.yahoo.com/rss/world', category: 'world', label: 'Yahoo World' },
+  us: { url: 'https://news.yahoo.com/rss/us', category: 'general', label: 'Yahoo US' },
+  politics: { url: 'https://news.yahoo.com/rss/politics', category: 'politics', label: 'Yahoo Politics' },
+  business: { url: 'https://news.yahoo.com/rss/business', category: 'business', label: 'Yahoo Business' },
+  technology: { url: 'https://news.yahoo.com/rss/tech', category: 'technology', label: 'Yahoo Technology' },
+  entertainment: { url: 'https://news.yahoo.com/rss/entertainment', category: 'entertainment', label: 'Yahoo Entertainment' },
+  sports: { url: 'https://sports.yahoo.com/rss/', category: 'sports', label: 'Yahoo Sports' },
+  health: { url: 'https://news.yahoo.com/rss/health', category: 'health', label: 'Yahoo Health' },
+  science: { url: 'https://news.yahoo.com/rss/science', category: 'science', label: 'Yahoo Science' }
+};
+
+// ============================================
 // LOCATION DICTIONARIES
 // ============================================
 
@@ -2299,7 +2318,20 @@ async function ingestAllSources() {
     }
   }
 
-  // 5. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
+  // 5. Fetch Yahoo RSS sources (gated by YAHOO_ENABLED)
+  if (YAHOO_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(YAHOO_FEED_MAP)) {
+      const articles = await fetchRssSource({
+        name: feedConfig.label || `Yahoo ${section}`,
+        url: feedConfig.url,
+        category: feedConfig.category,
+        type: 'rss'
+      });
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 6. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
   if (GDELT_ENABLED) {
     const gdeltQueries = GDELT_DEFAULT_QUERIES;
     for (const query of gdeltQueries) {
@@ -2308,10 +2340,10 @@ async function ingestAllSources() {
     }
   }
   
-  // 6. Process all articles (deduplication)
+  // 7. Process all articles (deduplication)
   const results = await processArticles(allArticles, { ingestionRunId });
   
-  // 7. Log scope quality metrics
+  // 8. Log scope quality metrics
   const scopeQuality = computeScopeQualityMetrics(allArticles, startTime);
   console.log('[news-scope-quality]', JSON.stringify(scopeQuality));
   
@@ -3289,6 +3321,7 @@ module.exports = {
     GOOGLE_NEWS_TOPIC_MAP,
     NPR_FEED_MAP,
     BBC_FEED_MAP,
+    YAHOO_FEED_MAP,
     COUNTRY_VARIANTS_MAP,
     STANDARDIZED_CATEGORIES
   }

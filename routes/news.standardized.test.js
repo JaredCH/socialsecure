@@ -311,6 +311,60 @@ describe('BBC adapter', () => {
   });
 });
 
+describe('Yahoo RSS feeds', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGeocode.mockReset();
+    mockGeocode.mockResolvedValue([]);
+    mockParseUrl.mockReset();
+    mockParseUrl.mockRejectedValue(new Error('parse error'));
+    newsRoutes.internals.geocodeContextCache.clear();
+  });
+
+  it('exports YAHOO_FEED_MAP with all required Yahoo sections', () => {
+    const map = newsRoutes.internals.YAHOO_FEED_MAP;
+    expect(map).toBeDefined();
+    expect(map.topStories).toBeDefined();
+    expect(map.topStories.url).toBe('https://news.yahoo.com/rss/');
+    expect(map.world.url).toBe('https://news.yahoo.com/rss/world');
+    expect(map.us.url).toBe('https://news.yahoo.com/rss/us');
+    expect(map.politics.url).toBe('https://news.yahoo.com/rss/politics');
+    expect(map.business.url).toBe('https://news.yahoo.com/rss/business');
+    expect(map.technology.url).toBe('https://news.yahoo.com/rss/tech');
+    expect(map.entertainment.url).toBe('https://news.yahoo.com/rss/entertainment');
+    expect(map.sports.url).toBe('https://sports.yahoo.com/rss/');
+    expect(map.health.url).toBe('https://news.yahoo.com/rss/health');
+    expect(map.science.url).toBe('https://news.yahoo.com/rss/science');
+  });
+
+  it('stores category, publishedAt, and applies country fallback location inference for Yahoo RSS items', async () => {
+    mockParseUrl.mockResolvedValueOnce({
+      language: 'en',
+      items: [
+        {
+          title: 'New technology policy update',
+          contentSnippet: 'American lawmakers debated changes affecting device manufacturers.',
+          link: 'https://news.yahoo.com/technology-policy-123456789.html',
+          guid: 'https://news.yahoo.com/technology-policy-123456789.html#1',
+          categories: [],
+          isoDate: '2026-03-06T12:00:00.000Z'
+        }
+      ]
+    });
+
+    const articles = await newsRoutes.adapters.fetchRssSource({
+      name: 'Yahoo Technology',
+      url: 'https://news.yahoo.com/rss/tech',
+      category: 'technology'
+    });
+
+    expect(articles).toHaveLength(1);
+    expect(articles[0].category).toBe('technology');
+    expect(articles[0].publishedAt).toEqual(new Date('2026-03-06T12:00:00.000Z'));
+    expect(articles[0].locations).toContain('united states');
+  });
+});
+
 describe('Google News adapter standardized fields', () => {
   beforeEach(() => {
     jest.clearAllMocks();
