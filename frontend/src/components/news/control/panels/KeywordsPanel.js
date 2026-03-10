@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 export default function KeywordsPanel({ keywords, onAddKeyword, onRemoveKeyword, onRenameKeyword, newKeyword, setNewKeyword }) {
   const [editingKeyword, setEditingKeyword] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const escPressedRef = useRef(false);
 
   const startEditing = (keyword) => {
     setEditingKeyword(keyword);
     setEditValue(keyword);
+    escPressedRef.current = false;
   };
 
   const cancelEditing = () => {
@@ -15,6 +17,10 @@ export default function KeywordsPanel({ keywords, onAddKeyword, onRemoveKeyword,
   };
 
   const handleRename = async (oldKeyword) => {
+    if (escPressedRef.current) {
+      cancelEditing();
+      return;
+    }
     if (editValue.trim() && editValue.trim().toLowerCase() !== oldKeyword.toLowerCase()) {
       if (onRenameKeyword) {
         await onRenameKeyword(oldKeyword, editValue.trim());
@@ -64,8 +70,8 @@ export default function KeywordsPanel({ keywords, onAddKeyword, onRemoveKeyword,
                     onChange={(e) => setEditValue(e.target.value)}
                     className="w-24 px-1 py-0.5 text-sm bg-white border border-emerald-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
                     autoFocus
-                    onBlur={() => cancelEditing()}
-                    onKeyDown={(e) => { if (e.key === 'Escape') cancelEditing(); }}
+                    onBlur={() => handleRename(item.keyword)}
+                    onKeyDown={(e) => { if (e.key === 'Escape') { escPressedRef.current = true; e.target.blur(); } }}
                   />
                 </form>
               ) : (

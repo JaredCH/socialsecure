@@ -2872,7 +2872,9 @@ async function ingestLocalSources(locations = []) {
         });
       } else if (src.providerId === 'newsapi') {
         const queryMatch = src.url?.match(/[?&]q=([^&]+)/);
-        const query = queryMatch ? decodeURIComponent(queryMatch[1]) : `${locFromKey.city} ${locFromKey.stateAbbrev} local news`;
+        const query = queryMatch
+          ? decodeURIComponent(queryMatch[1])
+          : [locFromKey.city, locFromKey.stateAbbrev, 'local news'].filter(Boolean).join(' ');
         fetched = await fetchNewsApiSource(query, {
           city: locFromKey.city,
           stateAbbrev: locFromKey.stateAbbrev
@@ -4614,7 +4616,7 @@ function normalizeUSState(input) {
  * Build a cache key for a weather location based on lat/lon.
  */
 function buildWeatherCacheKey(lat, lon) {
-  // Round to 2 decimals to coalesce nearby coordinates
+  // Round to 2 decimal places (~1.1 km precision at equator) to coalesce nearby coordinates
   return `weather:${Number(lat).toFixed(2)}:${Number(lon).toFixed(2)}`;
 }
 
@@ -4644,7 +4646,10 @@ async function fetchWeatherForLocation(locObj) {
     if (pointData?.properties?.forecast) {
       const forecastData = await fetchJsonWithTimeout(pointData.properties.forecast);
       const hourlyData = pointData.properties.forecastHourly
-        ? await fetchJsonWithTimeout(pointData.properties.forecastHourly).catch(() => null)
+        ? await fetchJsonWithTimeout(pointData.properties.forecastHourly).catch((err) => {
+            console.error('Hourly forecast fetch failed:', err.message);
+            return null;
+          })
         : null;
 
       const periods = forecastData?.properties?.periods || [];

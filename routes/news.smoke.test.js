@@ -69,6 +69,13 @@ describe('Weather cache internals', () => {
     expect(key).toBe('weather:30.27:-97.74');
   });
 
+  it('buildWeatherCacheKey coalesces nearby coordinates to same key', () => {
+    // 30.271 → 30.27 and 30.274 → 30.27 (same); -97.741 → -97.74 and -97.744 → -97.74 (same)
+    const key1 = internals.buildWeatherCacheKey(30.271, -97.741);
+    const key2 = internals.buildWeatherCacheKey(30.274, -97.744);
+    expect(key1).toBe(key2);
+  });
+
   it('fetchWeatherForLocation returns error when lat/lon missing', async () => {
     const result = await internals.fetchWeatherForLocation({ city: 'Austin' });
     expect(result.weather).toBeNull();
