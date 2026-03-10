@@ -319,8 +319,21 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).not.toContain('Publish Post');
   });
 
-  it('renders compact owner chat access controls with icon tooltips', async () => {
+  it('keeps owner chat access controls collapsed behind a compact toggle', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
+
+    const controlsToggle = container.querySelector('button[aria-label="Toggle chat access controls"]');
+    expect(controlsToggle).toBeTruthy();
+    expect(controlsToggle?.getAttribute('aria-expanded')).toBe('false');
+
+    expect(container.querySelector('button[aria-label="Read access: Friends"]')).toBeFalsy();
+    expect(container.querySelector('button[title="Save chat access"]')).toBeFalsy();
+
+    await act(async () => {
+      controlsToggle?.click();
+    });
+
+    expect(controlsToggle?.getAttribute('aria-expanded')).toBe('true');
     const expectedRoleButtonsPerType = 2;
     expect(container.querySelectorAll('button[title="Friends"]').length).toBe(expectedRoleButtonsPerType);
     expect(container.querySelectorAll('button[title="Circles"]').length).toBe(expectedRoleButtonsPerType);
@@ -503,13 +516,13 @@ describe('Social page hero background rendering', () => {
 
     const messageText = Array.from(container.querySelectorAll('[data-testid="social-mini-chat-message-content"]')).find((node) => node.textContent === 'guest-readable');
     expect(messageText).toBeDefined();
-    expect(messageText.className).toContain('leading-4');
+    expect(messageText.className).toContain('leading-5');
 
     const messageBubble = messageText?.closest('[data-testid="social-mini-chat-bubble"]');
     expect(messageBubble).toBeTruthy();
-    expect(messageBubble?.className).toContain('px-1.5');
-    expect(messageBubble?.className).toContain('py-1');
-    expect(messageBubble?.className).toContain('max-w-[94%]');
+    expect(messageBubble?.className).toContain('px-2.5');
+    expect(messageBubble?.className).toContain('py-2');
+    expect(messageBubble?.className).toContain('max-w-[88%]');
 
     expect(messageText?.closest('div.overflow-y-auto')).toBe(messageViewport);
   });
