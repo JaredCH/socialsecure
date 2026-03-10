@@ -105,9 +105,11 @@ describe('News inline preferences updates', () => {
   it('refreshes feed after toggling a source', async () => {
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    // Open the Sources accordion in the sidebar
+    const sourcesAccordion = Array.from(container.querySelectorAll('button'))
+      .find((btn) => btn.textContent.includes('Sources'));
     await act(async () => {
-      openSettingsButton.click();
+      sourcesAccordion.click();
     });
 
     const sourceToggle = container.querySelector('button[aria-label="Toggle Yahoo News"]');
