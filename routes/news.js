@@ -158,12 +158,12 @@ const NPR_ENABLED = String(process.env.NPR_ENABLED || 'true').toLowerCase() !== 
 
 const NPR_FEED_MAP = {
   news: { url: 'https://feeds.npr.org/1001/rss.xml', category: 'general', label: 'NPR News' },
-  politics: { url: 'https://feeds.npr.org/1014/rss.xml', category: 'politics', label: 'NPR Politics' },
-  business: { url: 'https://feeds.npr.org/1006/rss.xml', category: 'business', label: 'NPR Business' },
+  us: { url: 'https://feeds.npr.org/1019/rss.xml', category: 'general', label: 'NPR U.S. News' },
+  world: { url: 'https://feeds.npr.org/1004/rss.xml', category: 'world', label: 'NPR World' },
+  politics: { url: 'https://feeds.npr.org/1017/rss.xml', category: 'politics', label: 'NPR Politics' },
   technology: { url: 'https://feeds.npr.org/1019/rss.xml', category: 'technology', label: 'NPR Technology' },
-  science: { url: 'https://feeds.npr.org/1007/rss.xml', category: 'science', label: 'NPR Science' },
   health: { url: 'https://feeds.npr.org/1128/rss.xml', category: 'health', label: 'NPR Health' },
-  world: { url: 'https://feeds.npr.org/1004/rss.xml', category: 'world', label: 'NPR World' }
+  nprPolitics: { url: 'https://feeds.npr.org/1017/rss.xml', category: 'politics', label: 'NPR Politics' }
 };
 
 // ============================================
@@ -197,6 +197,33 @@ const BBC_FEED_MAP = {
   rugbyLeague: { url: 'https://feeds.bbci.co.uk/sport/rugby-league/rss.xml', category: 'sports', label: 'BBC Rugby League' },
   tennis: { url: 'https://feeds.bbci.co.uk/sport/tennis/rss.xml', category: 'sports', label: 'BBC Tennis' },
   golf: { url: 'https://feeds.bbci.co.uk/sport/golf/rss.xml', category: 'sports', label: 'BBC Golf' }
+};
+
+const AP_ENABLED = String(process.env.AP_ENABLED || 'true').toLowerCase() !== 'false';
+
+const AP_FEED_MAP = {
+  top: { url: 'https://apnews.com/hub/ap-top-news/rss', category: 'general', label: 'AP Top Headlines' },
+  us: { url: 'https://apnews.com/hub/us-news/rss', category: 'general', label: 'AP U.S.' },
+  world: { url: 'https://apnews.com/hub/world-news/rss', category: 'world', label: 'AP World' },
+  politics: { url: 'https://apnews.com/hub/politics/rss', category: 'politics', label: 'AP Politics' },
+  technology: { url: 'https://apnews.com/hub/technology/rss', category: 'technology', label: 'AP Technology' },
+  health: { url: 'https://apnews.com/hub/health/rss', category: 'health', label: 'AP Health' }
+};
+
+const REUTERS_ENABLED = String(process.env.REUTERS_ENABLED || 'true').toLowerCase() !== 'false';
+
+const REUTERS_FEED_MAP = {
+  top: { url: 'https://www.reutersagency.com/feed/?best-topics=topNews', category: 'general', label: 'Reuters Top News' },
+  world: { url: 'https://www.reutersagency.com/feed/?best-topics=worldNews', category: 'world', label: 'Reuters World' },
+  us: { url: 'https://www.reutersagency.com/feed/?best-topics=usNews', category: 'general', label: 'Reuters U.S.' },
+  business: { url: 'https://www.reutersagency.com/feed/?best-topics=businessNews', category: 'business', label: 'Reuters Business' },
+  technology: { url: 'https://www.reutersagency.com/feed/?best-topics=technologyNews', category: 'technology', label: 'Reuters Technology' }
+};
+
+const PBS_ENABLED = String(process.env.PBS_ENABLED || 'true').toLowerCase() !== 'false';
+
+const PBS_FEED_MAP = {
+  newsHour: { url: 'https://www.pbs.org/newshour/rss/', category: 'general', label: 'PBS NewsHour' }
 };
 
 // ============================================
@@ -367,11 +394,12 @@ const LOCAL_STORY_SIGNAL_PATTERNS = [
 
 const SUPPORTED_RSS_PROVIDERS = [
   { id: 'google-news', label: 'Google News', hostPatterns: ['news.google.com'] },
-  { id: 'reuters', label: 'Reuters', hostPatterns: ['reuters.com'] },
+  { id: 'reuters', label: 'Reuters', hostPatterns: ['reuters.com', 'reutersagency.com'] },
   { id: 'bbc', label: 'BBC', hostPatterns: ['bbc.co.uk', 'bbc.com'] },
   { id: 'cnn', label: 'CNN', hostPatterns: ['cnn.com'] },
   { id: 'npr', label: 'NPR', hostPatterns: ['npr.org'] },
   { id: 'associated-press', label: 'Associated Press', hostPatterns: ['apnews.com'] },
+  { id: 'pbs', label: 'PBS', hostPatterns: ['pbs.org'] },
   { id: 'guardian', label: 'The Guardian', hostPatterns: ['theguardian.com'] },
   { id: 'new-york-times', label: 'New York Times', hostPatterns: ['nytimes.com'] },
   { id: 'wall-street-journal', label: 'Wall Street Journal', hostPatterns: ['wsj.com'] },
@@ -1789,6 +1817,195 @@ async function fetchBbcSource(section, feedConfig) {
   }
 }
 
+async function fetchApSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'Associated Press', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'Associated Press',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'associated-press',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          apSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching AP source "${section}":`, error.message);
+    return [];
+  }
+}
+
+async function fetchReutersSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'Reuters', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'Reuters',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'reuters',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          reutersSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching Reuters source "${section}":`, error.message);
+    return [];
+  }
+}
+
+async function fetchPbsSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'PBS NewsHour', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'PBS NewsHour',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'pbs',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          pbsSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching PBS source "${section}":`, error.message);
+    return [];
+  }
+}
+
 /**
  * GDELT 2.0 DOC API Adapter
  * Fetches geolocated articles from GDELT's free document API.
@@ -2320,20 +2537,31 @@ async function ingestAllSources() {
     }
   }
 
-  // 5. Fetch Yahoo RSS sources (gated by YAHOO_ENABLED)
-  if (YAHOO_ENABLED) {
-    for (const [section, feedConfig] of Object.entries(YAHOO_FEED_MAP)) {
-      const articles = await fetchRssSource({
-        name: feedConfig.label || `Yahoo ${section}`,
-        url: feedConfig.url,
-        category: feedConfig.category,
-        type: 'rss'
-      });
+  // 5. Fetch AP sources (gated by AP_ENABLED)
+  if (AP_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(AP_FEED_MAP)) {
+      const articles = await fetchApSource(section, feedConfig);
       allArticles = [...allArticles, ...articles];
     }
   }
 
-  // 6. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
+  // 6. Fetch Reuters sources (gated by REUTERS_ENABLED)
+  if (REUTERS_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(REUTERS_FEED_MAP)) {
+      const articles = await fetchReutersSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 7. Fetch PBS sources (gated by PBS_ENABLED)
+  if (PBS_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(PBS_FEED_MAP)) {
+      const articles = await fetchPbsSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 8. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
   if (GDELT_ENABLED) {
     const gdeltQueries = GDELT_DEFAULT_QUERIES;
     for (const query of gdeltQueries) {
@@ -2342,10 +2570,10 @@ async function ingestAllSources() {
     }
   }
   
-  // 7. Process all articles (deduplication)
+  // 9. Process all articles (deduplication)
   const results = await processArticles(allArticles, { ingestionRunId });
   
-  // 8. Log scope quality metrics
+  // 10. Log scope quality metrics
   const scopeQuality = computeScopeQualityMetrics(allArticles, startTime);
   console.log('[news-scope-quality]', JSON.stringify(scopeQuality));
   
@@ -3303,7 +3531,10 @@ module.exports = {
     fetchGovernmentSource,
     fetchGdeltSource,
     fetchNprSource,
-    fetchBbcSource
+    fetchBbcSource,
+    fetchApSource,
+    fetchReutersSource,
+    fetchPbsSource
   },
   internals: {
     processArticles,
@@ -3323,7 +3554,9 @@ module.exports = {
     GOOGLE_NEWS_TOPIC_MAP,
     NPR_FEED_MAP,
     BBC_FEED_MAP,
-    YAHOO_FEED_MAP,
+    AP_FEED_MAP,
+    REUTERS_FEED_MAP,
+    PBS_FEED_MAP,
     COUNTRY_VARIANTS_MAP,
     STANDARDIZED_CATEGORIES
   }
