@@ -147,6 +147,7 @@ describe('Gallery routes', () => {
       ownerId: 'owner-1',
       mediaUrl: 'https://example.com/photo.jpg',
       mediaType: 'url',
+      title: 'Title',
       caption: 'hello',
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
       updatedAt: new Date('2024-01-01T00:00:00.000Z'),
@@ -158,18 +159,20 @@ describe('Gallery routes', () => {
     const response = await request(app)
       .post('/api/gallery/owner-1')
       .set('Authorization', 'Bearer token')
-      .send({ mediaUrl: 'https://example.com/photo.jpg', caption: 'hello' });
+      .send({ mediaUrl: 'https://example.com/photo.jpg', title: 'Title', caption: 'hello' });
 
     expect(response.status).toBe(201);
     expect(response.body.item).toMatchObject({
       _id: 'img-created',
       mediaUrl: 'https://example.com/photo.jpg',
+      title: 'Title',
       caption: 'hello'
     });
     expect(mockGalleryImage.create).toHaveBeenCalledWith(
       expect.objectContaining({
         ownerId: 'owner-1',
         mediaUrl: 'https://example.com/photo.jpg',
+        title: 'Title',
         caption: 'hello'
       })
     );
