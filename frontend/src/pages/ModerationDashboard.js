@@ -191,6 +191,14 @@ function ModerationDashboard() {
     setExpandedIngestionRows((prev) => ({ ...prev, [rowId]: !prev[rowId] }));
   }, []);
 
+  const handleIngestionSort = useCallback((field, dir) => {
+    setIngestionFilters((prev) => {
+      const updated = { ...prev, sortBy: field, sortDir: dir };
+      loadIngestionRecords(1, updated);
+      return updated;
+    });
+  }, []);
+
   const openIngestionDetail = async (recordId) => {
     setIngestionDetail({ open: true, record: null, loading: true });
     try {
@@ -496,15 +504,15 @@ function ModerationDashboard() {
                   <thead>
                     <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                       <th className="px-3 py-2.5 w-8"></th>
-                      <SortableHeader label="Source" field="source.name" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={(field, dir) => { const updated = { ...ingestionFilters, sortBy: field, sortDir: dir }; setIngestionFilters(updated); loadIngestionRecords(1, updated); }} />
-                      <SortableHeader label="Category" field="normalized.category" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={(field, dir) => { const updated = { ...ingestionFilters, sortBy: field, sortDir: dir }; setIngestionFilters(updated); loadIngestionRecords(1, updated); }} />
-                      <SortableHeader label="Title" field="normalized.title" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={(field, dir) => { const updated = { ...ingestionFilters, sortBy: field, sortDir: dir }; setIngestionFilters(updated); loadIngestionRecords(1, updated); }} />
-                      <SortableHeader label="Published" field="normalized.publishedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={(field, dir) => { const updated = { ...ingestionFilters, sortBy: field, sortDir: dir }; setIngestionFilters(updated); loadIngestionRecords(1, updated); }} />
-                      <SortableHeader label="Scraped" field="scrapedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={(field, dir) => { const updated = { ...ingestionFilters, sortBy: field, sortDir: dir }; setIngestionFilters(updated); loadIngestionRecords(1, updated); }} />
-                      <SortableHeader label="Status" field="processingStatus" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={(field, dir) => { const updated = { ...ingestionFilters, sortBy: field, sortDir: dir }; setIngestionFilters(updated); loadIngestionRecords(1, updated); }} />
-                      <SortableHeader label="Scope" field="resolvedScope" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={(field, dir) => { const updated = { ...ingestionFilters, sortBy: field, sortDir: dir }; setIngestionFilters(updated); loadIngestionRecords(1, updated); }} />
+                      <SortableHeader label="Source" field="source.name" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Category" field="normalized.category" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Title" field="normalized.title" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Published" field="normalized.publishedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Scraped" field="scrapedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Status" field="processingStatus" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Scope" field="resolvedScope" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <th className="px-3 py-2.5">Topics</th>
-                      <SortableHeader label="Locality" field="normalized.localityLevel" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={(field, dir) => { const updated = { ...ingestionFilters, sortBy: field, sortDir: dir }; setIngestionFilters(updated); loadIngestionRecords(1, updated); }} />
+                      <SortableHeader label="Locality" field="normalized.localityLevel" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <th className="px-3 py-2.5">Raw Location</th>
                       <th className="px-3 py-2.5">Text Match</th>
                       <th className="px-3 py-2.5">ZIP Code</th>

@@ -295,13 +295,13 @@ const YAHOO_FEED_MAP = {
 const CNN_ENABLED = String(process.env.CNN_ENABLED || 'true').toLowerCase() !== 'false';
 
 const CNN_FEED_MAP = {
-  topStories: { url: 'http://rss.cnn.com/rss/cnn_topstories.rss', category: 'general', label: 'CNN Top Stories' },
-  world: { url: 'http://rss.cnn.com/rss/cnn_world.rss', category: 'world', label: 'CNN World' },
-  politics: { url: 'http://rss.cnn.com/rss/cnn_allpolitics.rss', category: 'politics', label: 'CNN Politics' },
-  business: { url: 'http://rss.cnn.com/rss/money_latest.rss', category: 'business', label: 'CNN Business' },
-  technology: { url: 'http://rss.cnn.com/rss/cnn_tech.rss', category: 'technology', label: 'CNN Technology' },
-  health: { url: 'http://rss.cnn.com/rss/cnn_health.rss', category: 'health', label: 'CNN Health' },
-  entertainment: { url: 'http://rss.cnn.com/rss/cnn_showbiz.rss', category: 'entertainment', label: 'CNN Entertainment' }
+  topStories: { url: 'https://rss.cnn.com/rss/cnn_topstories.rss', category: 'general', label: 'CNN Top Stories' },
+  world: { url: 'https://rss.cnn.com/rss/cnn_world.rss', category: 'world', label: 'CNN World' },
+  politics: { url: 'https://rss.cnn.com/rss/cnn_allpolitics.rss', category: 'politics', label: 'CNN Politics' },
+  business: { url: 'https://rss.cnn.com/rss/money_latest.rss', category: 'business', label: 'CNN Business' },
+  technology: { url: 'https://rss.cnn.com/rss/cnn_tech.rss', category: 'technology', label: 'CNN Technology' },
+  health: { url: 'https://rss.cnn.com/rss/cnn_health.rss', category: 'health', label: 'CNN Health' },
+  entertainment: { url: 'https://rss.cnn.com/rss/cnn_showbiz.rss', category: 'entertainment', label: 'CNN Entertainment' }
 };
 
 // ============================================
