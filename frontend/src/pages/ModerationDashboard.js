@@ -29,6 +29,7 @@ const SECTION_ICONS = {
 };
 
 const FALLBACK_MUTE_DURATIONS = ['24h', '48h', '72h', '5d', '7d', '1m', 'forever'];
+const INGESTION_TABLE_COL_COUNT = 9;
 const TOTAL_KEY_TO_SECTION = {
   users: 'users',
   posts: 'posts',
@@ -501,9 +502,14 @@ function ModerationDashboard() {
                           <tr
                             className={`transition-colors cursor-pointer ${isFailed ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-blue-50/40'}`}
                             onClick={() => toggleIngestionRow(row._id)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleIngestionRow(row._id); } }}
+                            tabIndex={0}
+                            role="row"
+                            aria-expanded={isExpanded}
+                            aria-label={`${row.normalized?.title || 'Untitled article'} from ${row.source?.name || 'unknown source'}`}
                           >
                             <td className="px-3 py-2.5 text-gray-400">
-                              <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                              <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
                             </td>
                             <td className="px-3 py-2.5 text-gray-700 font-medium max-w-[120px] truncate">{row.source?.name || 'Unknown'}</td>
                             <td className="px-3 py-2.5 text-gray-900 font-medium max-w-[220px] truncate" title={row.normalized?.title || ''}>
@@ -545,7 +551,7 @@ function ModerationDashboard() {
                           </tr>
                           {isExpanded && (
                             <tr className={isFailed ? 'bg-red-50/30' : 'bg-gray-50/50'}>
-                              <td colSpan={9} className="px-4 py-3">
+                              <td colSpan={INGESTION_TABLE_COL_COUNT} className="px-4 py-3">
                                 <div className="grid gap-3 md:grid-cols-3 text-xs">
                                   <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
                                     <h5 className="font-semibold text-gray-500 uppercase tracking-wide text-[10px]">Article Processing</h5>
