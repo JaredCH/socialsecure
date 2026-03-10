@@ -71,6 +71,22 @@ const newsGeocoder = NodeGeocoder({
   formatter: null
 });
 
+// ─── Source health classification ──────────────────────────────────────────
+function classifySourceHealth(source) {
+  if (!source.lastFetchAt) return { health: 'unknown', healthReason: 'Never fetched' };
+  const hoursSinceLastFetch = (Date.now() - new Date(source.lastFetchAt).getTime()) / (1000 * 60 * 60);
+  if (source.lastFetchStatus === 'success' && hoursSinceLastFetch < 2) {
+    return { health: 'green', healthReason: 'Healthy' };
+  }
+  if (source.lastFetchStatus === 'success' && hoursSinceLastFetch < 24) {
+    return { health: 'yellow', healthReason: 'Stale — last success ' + Math.round(hoursSinceLastFetch) + 'h ago' };
+  }
+  if (source.lastFetchStatus === 'error') {
+    return { health: 'red', healthReason: source.lastError || 'Last fetch failed' };
+  }
+  return { health: 'yellow', healthReason: 'Last fetched ' + Math.round(hoursSinceLastFetch) + 'h ago' };
+}
+
 const TOPIC_FILTER_ALIASES = {
   technology: ['technology', 'tech'],
   science: ['science'],
@@ -2961,8 +2977,14 @@ router.get('/sources', authenticateToken, async (req, res) => {
         providerId: detectProviderIdFromUrl(source.url)
       }));
     
+    const sourcesWithHealth = sources.map(source => {
+      const s = source.toObject ? source.toObject() : source;
+      const { health, healthReason } = classifySourceHealth(s);
+      return { ...s, health, healthReason };
+    });
+
     res.json({
-      sources,
+      sources: sourcesWithHealth,
       topUsedSources,
       supportedRssProviders: SUPPORTED_RSS_PROVIDERS
     });
@@ -3486,6 +3508,288 @@ router.get('/article/:id', authenticateToken, async (req, res) => {
 });
 
 // ============================================
+// WEATHER ENDPOINTS
+// ============================================
+
+const US_ZIP_REGEX = /^\d{5}(-\d{4})?$/;
+
+function normalizeUSState(input) {
+  if (!input) return null;
+  const trimmed = input.trim();
+  const upper = trimmed.toUpperCase();
+  // Check if it's already a valid state abbreviation
+  if (US_STATE_ABBREVS.has(upper)) return upper;
+  // Try matching full state name using the existing US_STATE_NAMES map
+  const fromName = US_STATE_NAMES.get(trimmed.toLowerCase());
+  if (fromName) return fromName.toUpperCase();
+  return null;
+}
+
+/**
+ * GET /api/news/weather
+ * Fetch weather for user's weather locations using api.weather.gov (NWS)
+ */
+router.get('/weather', authenticateToken, async (req, res) => {
+  try {
+    const preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    const weatherLocations = preferences?.weatherLocations || [];
+    
+    if (weatherLocations.length === 0) {
+      return res.json({ locations: [] });
+    }
+
+    const results = await Promise.allSettled(
+      weatherLocations.map(async (loc) => {
+        const locObj = loc.toObject ? loc.toObject() : loc;
+        try {
+          // If we have lat/lon, use NWS point lookup
+          if (locObj.lat && locObj.lon) {
+            const pointUrl = `https://api.weather.gov/points/${locObj.lat},${locObj.lon}`;
+            const pointData = await fetchJsonWithTimeout(pointUrl);
+            
+            if (pointData?.properties?.forecast) {
+              const forecastData = await fetchJsonWithTimeout(pointData.properties.forecast);
+              const hourlyData = pointData.properties.forecastHourly 
+                ? await fetchJsonWithTimeout(pointData.properties.forecastHourly).catch(() => null)
+                : null;
+
+              const periods = forecastData?.properties?.periods || [];
+              const currentPeriod = periods[0] || {};
+              const todayDay = periods.find(p => p.isDaytime === true) || currentPeriod;
+              const todayNight = periods.find(p => p.isDaytime === false);
+
+              return {
+                ...locObj,
+                weather: {
+                  current: {
+                    temperature: currentPeriod.temperature,
+                    temperatureUnit: currentPeriod.temperatureUnit || 'F',
+                    shortForecast: currentPeriod.shortForecast,
+                    icon: currentPeriod.icon,
+                    windSpeed: currentPeriod.windSpeed,
+                    windDirection: currentPeriod.windDirection
+                  },
+                  high: todayDay?.temperature || null,
+                  low: todayNight?.temperature || null,
+                  hourly: (hourlyData?.properties?.periods || []).slice(0, 12).map(p => ({
+                    time: p.startTime,
+                    temperature: p.temperature,
+                    shortForecast: p.shortForecast,
+                    icon: p.icon
+                  })),
+                  weekly: periods.filter(p => p.isDaytime).slice(0, 7).map(p => ({
+                    name: p.name,
+                    temperature: p.temperature,
+                    shortForecast: p.shortForecast,
+                    icon: p.icon
+                  })),
+                  updatedAt: new Date().toISOString()
+                },
+                error: null
+              };
+            }
+          }
+          
+          // Fallback: return location without weather data
+          return { ...locObj, weather: null, error: 'Unable to resolve weather data for this location' };
+        } catch (fetchErr) {
+          return { ...locObj, weather: null, error: 'Weather service temporarily unavailable' };
+        }
+      })
+    );
+
+    const locations = results.map(r => r.status === 'fulfilled' ? r.value : { weather: null, error: 'Weather fetch failed' });
+    res.json({ locations });
+  } catch (error) {
+    console.error('Error fetching weather:', error);
+    res.status(500).json({ error: 'Failed to fetch weather data' });
+  }
+});
+
+// Helper to fetch JSON with timeout from external APIs
+async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { 
+      headers: { 'User-Agent': 'SocialSecure-Weather/1.0', 'Accept': 'application/geo+json' },
+      timeout: timeoutMs
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } 
+        catch (e) { reject(new Error('Invalid JSON response')); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
+  });
+}
+
+/**
+ * POST /api/news/preferences/weather-locations
+ * Add a weather location (max 3)
+ */
+router.post('/preferences/weather-locations', authenticateToken, async (req, res) => {
+  try {
+    const { label, city, state, zipCode, lat, lon, isPrimary } = req.body;
+
+    if (!city && !zipCode) {
+      return res.status(400).json({ error: 'City or ZIP code is required' });
+    }
+
+    // US-only validation
+    if (zipCode && !US_ZIP_REGEX.test(zipCode)) {
+      return res.status(400).json({ error: 'Invalid US ZIP code format' });
+    }
+
+    const normalizedState = normalizeUSState(state);
+    if (state && !normalizedState) {
+      return res.status(400).json({ error: 'Invalid US state' });
+    }
+
+    let preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    if (!preferences) {
+      preferences = await NewsPreferences.create({ user: req.user.userId });
+    }
+
+    if ((preferences.weatherLocations || []).length >= 3) {
+      return res.status(400).json({ error: 'Maximum 3 weather locations allowed' });
+    }
+
+    const locationData = {
+      label: label || [city, normalizedState].filter(Boolean).join(', '),
+      city: city || null,
+      state: normalizedState || null,
+      zipCode: zipCode || null,
+      lat: lat || null,
+      lon: lon || null,
+      isPrimary: isPrimary === true && (preferences.weatherLocations || []).length === 0
+    };
+
+    // If setting as primary, unset others
+    if (isPrimary) {
+      locationData.isPrimary = true;
+      preferences.weatherLocations.forEach(loc => { loc.isPrimary = false; });
+    }
+
+    // Auto-set first as primary
+    if ((preferences.weatherLocations || []).length === 0) {
+      locationData.isPrimary = true;
+    }
+
+    preferences.weatherLocations.push(locationData);
+    await preferences.save();
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Error adding weather location:', error);
+    res.status(500).json({ error: 'Failed to add weather location' });
+  }
+});
+
+/**
+ * PUT /api/news/preferences/weather-locations
+ * Replace all weather locations
+ */
+router.put('/preferences/weather-locations', authenticateToken, async (req, res) => {
+  try {
+    const { locations } = req.body;
+
+    if (!Array.isArray(locations)) {
+      return res.status(400).json({ error: 'Locations array is required' });
+    }
+
+    if (locations.length > 3) {
+      return res.status(400).json({ error: 'Maximum 3 weather locations allowed' });
+    }
+
+    // Validate each location
+    for (const loc of locations) {
+      if (loc.zipCode && !US_ZIP_REGEX.test(loc.zipCode)) {
+        return res.status(400).json({ error: `Invalid US ZIP code: ${loc.zipCode}` });
+      }
+      if (loc.state) {
+        const normalized = normalizeUSState(loc.state);
+        if (!normalized) return res.status(400).json({ error: `Invalid US state: ${loc.state}` });
+        loc.state = normalized;
+      }
+    }
+
+    const preferences = await NewsPreferences.findOneAndUpdate(
+      { user: req.user.userId },
+      { weatherLocations: locations },
+      { new: true, upsert: true }
+    );
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Error updating weather locations:', error);
+    res.status(500).json({ error: 'Failed to update weather locations' });
+  }
+});
+
+/**
+ * DELETE /api/news/preferences/weather-locations/:locationId
+ * Remove a weather location
+ */
+router.delete('/preferences/weather-locations/:locationId', authenticateToken, async (req, res) => {
+  try {
+    const { locationId } = req.params;
+
+    const preferences = await NewsPreferences.findOneAndUpdate(
+      { user: req.user.userId },
+      { $pull: { weatherLocations: { _id: locationId } } },
+      { new: true }
+    );
+
+    if (!preferences) {
+      return res.status(404).json({ error: 'Preferences not found' });
+    }
+
+    // If primary was removed, make first remaining primary
+    if (preferences.weatherLocations.length > 0 && !preferences.weatherLocations.some(l => l.isPrimary)) {
+      preferences.weatherLocations[0].isPrimary = true;
+      await preferences.save();
+    }
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Error removing weather location:', error);
+    res.status(500).json({ error: 'Failed to remove weather location' });
+  }
+});
+
+/**
+ * PUT /api/news/preferences/weather-locations/:locationId/primary
+ * Set a weather location as primary
+ */
+router.put('/preferences/weather-locations/:locationId/primary', authenticateToken, async (req, res) => {
+  try {
+    const { locationId } = req.params;
+
+    const preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    if (!preferences) {
+      return res.status(404).json({ error: 'Preferences not found' });
+    }
+
+    const targetLocation = preferences.weatherLocations.id(locationId);
+    if (!targetLocation) {
+      return res.status(404).json({ error: 'Weather location not found' });
+    }
+
+    preferences.weatherLocations.forEach(loc => { loc.isPrimary = false; });
+    targetLocation.isPrimary = true;
+    await preferences.save();
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Error setting primary weather location:', error);
+    res.status(500).json({ error: 'Failed to set primary weather location' });
+  }
+});
+
+// ============================================
 // INGESTION SCHEDULER
 // ============================================
 
@@ -3551,6 +3855,10 @@ module.exports = {
     computeScopeQualityMetrics,
     normalizeToStandardCategory,
     buildGoogleNewsFeedUrl,
+    classifySourceHealth,
+    fetchJsonWithTimeout,
+    normalizeUSState,
+    US_ZIP_REGEX,
     GOOGLE_NEWS_TOPIC_MAP,
     NPR_FEED_MAP,
     BBC_FEED_MAP,
