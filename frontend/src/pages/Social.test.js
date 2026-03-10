@@ -263,6 +263,7 @@ describe('Social page hero background rendering', () => {
     expect(previewShell).toBeTruthy();
     expect(previewShell.className).toContain('max-w-xl');
     expect(previewShell.className).toContain('sm:max-h-[34rem]');
+    expect(previewShell.className).toContain('overflow-y-auto');
     expect(container.querySelector('[data-testid="social-calendar-preview-grid"]')).toBeTruthy();
     expect(container.textContent).toContain('Upcoming');
     expect(container.textContent).toContain('US:');
