@@ -173,12 +173,28 @@ const BBC_ENABLED = String(process.env.BBC_ENABLED || 'true').toLowerCase() !== 
 const BBC_FEED_MAP = {
   top: { url: 'https://feeds.bbci.co.uk/news/rss.xml', category: 'general', label: 'BBC Top Stories' },
   world: { url: 'https://feeds.bbci.co.uk/news/world/rss.xml', category: 'world', label: 'BBC World' },
+  uk: { url: 'https://feeds.bbci.co.uk/news/uk/rss.xml', category: 'world', label: 'BBC UK' },
+  england: { url: 'https://feeds.bbci.co.uk/news/england/rss.xml', category: 'world', label: 'BBC England' },
+  northernIreland: { url: 'https://feeds.bbci.co.uk/news/northern_ireland/rss.xml', category: 'world', label: 'BBC Northern Ireland' },
+  scotland: { url: 'https://feeds.bbci.co.uk/news/scotland/rss.xml', category: 'world', label: 'BBC Scotland' },
+  wales: { url: 'https://feeds.bbci.co.uk/news/wales/rss.xml', category: 'world', label: 'BBC Wales' },
   business: { url: 'https://feeds.bbci.co.uk/news/business/rss.xml', category: 'business', label: 'BBC Business' },
   politics: { url: 'https://feeds.bbci.co.uk/news/politics/rss.xml', category: 'politics', label: 'BBC Politics' },
+  entertainment: { url: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml', category: 'entertainment', label: 'BBC Entertainment' },
   health: { url: 'https://feeds.bbci.co.uk/news/health/rss.xml', category: 'health', label: 'BBC Health' },
-  technology: { url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', category: 'technology', label: 'BBC Technology' },
+  education: { url: 'https://feeds.bbci.co.uk/news/education/rss.xml', category: 'general', label: 'BBC Education' },
   science: { url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', category: 'science', label: 'BBC Science' },
-  entertainment: { url: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml', category: 'entertainment', label: 'BBC Entertainment' }
+  technology: { url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', category: 'technology', label: 'BBC Technology' },
+  magazine: { url: 'https://feeds.bbci.co.uk/news/magazine/rss.xml', category: 'general', label: 'BBC Magazine' },
+  sport: { url: 'https://feeds.bbci.co.uk/sport/rss.xml', category: 'sports', label: 'BBC Sport' },
+  football: { url: 'https://feeds.bbci.co.uk/sport/football/rss.xml', category: 'sports', label: 'BBC Football' },
+  formula1: { url: 'https://feeds.bbci.co.uk/sport/formula1/rss.xml', category: 'sports', label: 'BBC Formula 1' },
+  olympics: { url: 'https://feeds.bbci.co.uk/sport/olympics/rss.xml', category: 'sports', label: 'BBC Olympics' },
+  cricket: { url: 'https://feeds.bbci.co.uk/sport/cricket/rss.xml', category: 'sports', label: 'BBC Cricket' },
+  rugbyUnion: { url: 'https://feeds.bbci.co.uk/sport/rugby-union/rss.xml', category: 'sports', label: 'BBC Rugby Union' },
+  rugbyLeague: { url: 'https://feeds.bbci.co.uk/sport/rugby-league/rss.xml', category: 'sports', label: 'BBC Rugby League' },
+  tennis: { url: 'https://feeds.bbci.co.uk/sport/tennis/rss.xml', category: 'sports', label: 'BBC Tennis' },
+  golf: { url: 'https://feeds.bbci.co.uk/sport/golf/rss.xml', category: 'sports', label: 'BBC Golf' }
 };
 
 // ============================================
@@ -210,6 +226,96 @@ const COUNTRY_NAMES = new Set([
   'kenya','philippines','indonesia','thailand','vietnam','malaysia','singapore','taiwan',
   'pakistan','bangladesh','ukraine','chile','peru','venezuela'
 ]);
+
+/**
+ * Country variants map: canonical country name → array of 4–6 name variants.
+ * Used as a secondary fallback when the primary location detection finds no tokens.
+ * Scans article title and description for any variant and assigns the canonical name.
+ */
+const COUNTRY_VARIANTS_MAP = new Map([
+  ['united states', ['united states', 'usa', 'u.s.a.', 'u.s.', 'america', 'american']],
+  ['united kingdom', ['united kingdom', 'uk', 'u.k.', 'great britain', 'britain', 'british']],
+  ['canada', ['canada', 'canadian', 'canadians', 'canuck', 'canucks']],
+  ['australia', ['australia', 'australian', 'australians', 'oz', 'aussie']],
+  ['germany', ['germany', 'german', 'deutschland', 'bundesrepublik', 'federal republic of germany']],
+  ['france', ['france', 'french', 'republique francaise', 'la france', 'gallic']],
+  ['japan', ['japan', 'japanese', 'nippon', 'nihon', 'land of the rising sun']],
+  ['china', ['china', 'chinese', 'prc', "people's republic of china", 'mainland china', 'zhongguo']],
+  ['india', ['india', 'indian', 'bharat', 'republic of india', 'hindustan']],
+  ['brazil', ['brazil', 'brazilian', 'brasil', 'federative republic of brazil', 'brazilians']],
+  ['mexico', ['mexico', 'mexican', 'mexicans', 'estados unidos mexicanos', 'united mexican states']],
+  ['south korea', ['south korea', 'korean', 'republic of korea', 'rok', 'hanguk']],
+  ['russia', ['russia', 'russian', 'russians', 'russian federation', 'rossiya']],
+  ['italy', ['italy', 'italian', 'italians', 'italia', 'republic of italy']],
+  ['spain', ['spain', 'spanish', 'spaniards', 'espana', 'kingdom of spain']],
+  ['netherlands', ['netherlands', 'dutch', 'holland', 'the netherlands', 'kingdom of the netherlands']],
+  ['sweden', ['sweden', 'swedish', 'swedes', 'sverige', 'kingdom of sweden']],
+  ['norway', ['norway', 'norwegian', 'norwegians', 'norge', 'kingdom of norway']],
+  ['switzerland', ['switzerland', 'swiss', 'helvetia', 'swiss confederation', 'confederation helvetique']],
+  ['israel', ['israel', 'israeli', 'israelis', 'state of israel', 'zion']],
+  ['ireland', ['ireland', 'republic of ireland', 'eire', 'emerald isle']],
+  ['new zealand', ['new zealand', 'kiwi', 'kiwis', 'nz', 'aotearoa']],
+  ['south africa', ['south africa', 'south african', 'rsa', 'republic of south africa', 'mzansi']],
+  ['argentina', ['argentina', 'argentinian', 'argentine', 'argentinean', 'republica argentina']],
+  ['colombia', ['colombia', 'colombian', 'colombians', 'republic of colombia', 'republica de colombia']],
+  ['saudi arabia', ['saudi arabia', 'saudi', 'saudis', 'ksa', 'kingdom of saudi arabia']],
+  ['turkey', ['turkey', 'turkish', 'turks', 'turkiye', 'republic of turkey']],
+  ['poland', ['poland', 'polish', 'poles', 'rzeczpospolita', 'republic of poland']],
+  ['ukraine', ['ukraine', 'ukrainian', 'ukrainians', 'ukrayina', 'republic of ukraine']],
+  ['egypt', ['egypt', 'egyptian', 'egyptians', 'arab republic of egypt', 'misr']],
+  ['nigeria', ['nigeria', 'nigerian', 'nigerians', 'federal republic of nigeria', 'naija']],
+  ['kenya', ['kenya', 'kenyan', 'kenyans', 'republic of kenya', 'jamhuri ya kenya']],
+  ['pakistan', ['pakistan', 'pakistani', 'pakistanis', 'islamic republic of pakistan', 'pak']],
+  ['indonesia', ['indonesia', 'indonesian', 'indonesians', 'republic of indonesia', 'nusantara']],
+  ['thailand', ['thailand', 'thai', 'thais', 'kingdom of thailand', 'siam']],
+  ['vietnam', ['vietnam', 'vietnamese', 'viet nam', 'socialist republic of vietnam', 'vn']],
+  ['malaysia', ['malaysia', 'malaysian', 'malaysians', 'federation of malaysia', 'malaya']],
+  ['singapore', ['singapore', 'singaporean', 'singaporeans', 'republic of singapore', 'lion city']],
+  ['taiwan', ['taiwan', 'taiwanese', 'republic of china', 'roc', 'formosa']],
+  ['philippines', ['philippines', 'filipino', 'filipinos', 'philippine', 'republic of the philippines']],
+  ['bangladesh', ['bangladesh', 'bangladeshi', 'bangladeshis', "people's republic of bangladesh", 'dhaka']],
+  ['chile', ['chile', 'chilean', 'chileans', 'republic of chile', 'republica de chile']],
+  ['peru', ['peru', 'peruvian', 'peruvians', 'republic of peru', 'republica del peru']],
+  ['venezuela', ['venezuela', 'venezuelan', 'venezuelans', 'bolivarian republic of venezuela', 'vzla']],
+  ['belgium', ['belgium', 'belgian', 'belgians', 'kingdom of belgium', 'belgique']],
+  ['austria', ['austria', 'austrian', 'austrians', 'republic of austria', 'osterreich']],
+  ['portugal', ['portugal', 'portuguese', 'lusitania', 'republica portuguesa', 'lusophone']],
+  ['denmark', ['denmark', 'danish', 'danes', 'kingdom of denmark', 'danmark']],
+  ['finland', ['finland', 'finnish', 'finns', 'republic of finland', 'suomi']],
+  ['czech republic', ['czech republic', 'czech', 'czechia', 'czechs', 'ceska republika']],
+  ['greece', ['greece', 'greek', 'greeks', 'hellenic republic', 'hellas']],
+  ['romania', ['romania', 'romanian', 'romanians', 'republic of romania', 'rumania']],
+  ['hungary', ['hungary', 'hungarian', 'hungarians', 'magyarorszag', 'republic of hungary']]
+]);
+
+// Pre-compiled patterns for country variant matching to avoid repeated RegExp construction per article.
+const COUNTRY_VARIANT_PATTERNS = new Map(
+  Array.from(COUNTRY_VARIANTS_MAP.entries()).map(([canonical, variants]) => [
+    canonical,
+    variants.map((v) => new RegExp(`\\b${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'))
+  ])
+);
+
+/**
+ * Secondary fallback: scan article title and description for country name variants.
+ * Called when the primary location detection returns no tokens.
+ * Returns an array of canonical country name tokens if any variant is matched.
+ * Does not force an assignment — returns an empty array if nothing is detected.
+ */
+const inferLocationFromCountryVariants = (title = '', description = '') => {
+  const text = `${title || ''} ${description || ''}`;
+  if (!text.trim()) return [];
+  const matched = [];
+  for (const [canonical, patterns] of COUNTRY_VARIANT_PATTERNS) {
+    for (const pattern of patterns) {
+      if (pattern.test(text)) {
+        matched.push(canonical);
+        break;
+      }
+    }
+  }
+  return toUniqueNonEmptyLocationTokens(matched);
+};
 
 const US_STATE_CAPITALS = [
   ['montgomery', 'alabama', 'al'], ['juneau', 'alaska', 'ak'], ['phoenix', 'arizona', 'az'],
@@ -681,7 +787,20 @@ const inferLocalityLevelFromTags = (locationTags = {}) => {
 };
 
 const resolveArticleLocationContext = async ({ source = {}, item = {}, query = null }) => {
-  const locationTokens = buildArticleLocationTokens({ source, item, query });
+  let locationTokens = buildArticleLocationTokens({ source, item, query });
+
+  // Secondary fallback: if primary detection found nothing, scan title + description
+  // for country name variants to improve location coverage.
+  if (locationTokens.length === 0) {
+    const fallbackTokens = inferLocationFromCountryVariants(
+      item.title || '',
+      item.contentSnippet || item.content || item.summary || ''
+    );
+    if (fallbackTokens.length > 0) {
+      locationTokens = fallbackTokens;
+    }
+  }
+
   const assignedZipCode = await resolveAssignedZipCode({ locationTokens, source, item, query });
   const rawLocationTags = buildLocationTags({ locationTokens, assignedZipCode });
   const locationTags = await enrichLocationTagsWithCorrelations({ locationTags: rawLocationTags, assignedZipCode });
@@ -3161,6 +3280,7 @@ module.exports = {
     resolveAssignedZipCode,
     resolveArticleLocationContext,
     inferLocationTokensFromText,
+    inferLocationFromCountryVariants,
     resolveLocationContext,
     geocodeContextCache,
     computeScopeQualityMetrics,
@@ -3169,6 +3289,7 @@ module.exports = {
     GOOGLE_NEWS_TOPIC_MAP,
     NPR_FEED_MAP,
     BBC_FEED_MAP,
+    COUNTRY_VARIANTS_MAP,
     STANDARDIZED_CATEGORIES
   }
 };
