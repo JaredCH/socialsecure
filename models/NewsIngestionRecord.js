@@ -15,7 +15,9 @@ const newsIngestionRecordSchema = new mongoose.Schema({
     sourceType: { type: String, default: '' },
     sourceId: { type: String, default: '' },
     providerId: { type: String, default: '' },
-    url: { type: String, default: '' }
+    url: { type: String, default: '' },
+    tier: { type: Number, default: null },
+    locationKey: { type: String, default: null }
   },
   ingestedAt: { type: Date, default: Date.now, index: true },
   scrapedAt: { type: Date, default: Date.now, index: true },

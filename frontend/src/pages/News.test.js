@@ -18,7 +18,13 @@ jest.mock('../utils/api', () => ({
     removeKeyword: jest.fn(),
     updateHiddenCategories: jest.fn(),
     addSource: jest.fn(),
-    refreshSourceHealth: jest.fn()
+    refreshSourceHealth: jest.fn(),
+    getWeather: jest.fn(),
+    getArticle: jest.fn(),
+    addWeatherLocation: jest.fn(),
+    removeWeatherLocation: jest.fn(),
+    updateWeatherLocations: jest.fn(),
+    setWeatherLocationPrimary: jest.fn()
   }
 }));
 
@@ -104,6 +110,8 @@ describe('News inline preferences updates', () => {
     newsAPI.removeKeyword.mockResolvedValue({ data: { preferences: basePreferences } });
     newsAPI.updateHiddenCategories.mockResolvedValue({ data: { preferences: basePreferences } });
     newsAPI.addSource.mockResolvedValue({ data: {} });
+    newsAPI.getWeather.mockResolvedValue({ data: { locations: [] } });
+    newsAPI.getArticle.mockResolvedValue({ data: { article: { _id: 'article-1', title: 'Test', source: 'Test', publishedAt: '2026-03-01T00:00:00.000Z', url: 'https://example.com' } } });
   };
 
   const renderNews = async () => {
@@ -287,5 +295,79 @@ describe('News inline preferences updates', () => {
     // Health dots should exist in the sidebar
     const healthDots = container.querySelectorAll('[aria-label="Connected"], [aria-label="Not wired"]');
     expect(healthDots.length).toBeGreaterThan(0);
+  });
+
+  it('renders right sidebar with sources status card showing health dots', async () => {
+    newsAPI.getSources.mockResolvedValue({
+      data: {
+        sources: [
+          { _id: 'src-1', name: 'Yahoo News', type: 'rss', category: 'general', health: 'green', healthReason: 'Healthy' },
+          { _id: 'src-2', name: 'CNN', type: 'rss', category: 'general', health: 'red', healthReason: 'Last fetch failed' }
+        ],
+        topUsedSources: []
+      }
+    });
+
+    await renderNews();
+
+    // Sources status card should be in right sidebar
+    const sourceHealthDots = container.querySelectorAll('[aria-label*="Source"][aria-label*="health"]');
+    expect(sourceHealthDots.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders weather widget section in the right sidebar', async () => {
+    await renderNews();
+
+    // Weather widget should be rendered (empty state when no locations)
+    const weatherHeader = Array.from(container.querySelectorAll('h2'))
+      .find(h => h.textContent.includes('Weather'));
+    expect(weatherHeader).toBeTruthy();
+  });
+
+  it('renders list/grid view toggle buttons', async () => {
+    await renderNews();
+
+    const listViewBtn = container.querySelector('button[aria-label="List view"]');
+    const gridViewBtn = container.querySelector('button[aria-label="Grid view"]');
+    expect(listViewBtn).toBeTruthy();
+    expect(gridViewBtn).toBeTruthy();
+  });
+
+  it('switches to grid view when grid button is clicked', async () => {
+    await renderNews();
+
+    const gridViewBtn = container.querySelector('button[aria-label="Grid view"]');
+    await act(async () => {
+      gridViewBtn.click();
+    });
+
+    // In grid view, articles should be in a grid container
+    const gridContainer = container.querySelector('.grid');
+    expect(gridContainer).toBeTruthy();
+  });
+
+  it('renders keyword hits card when keywords are tracked', async () => {
+    newsAPI.getPreferences.mockResolvedValue({
+      data: {
+        preferences: {
+          ...basePreferences,
+          followedKeywords: [{ keyword: 'bitcoin' }, { keyword: 'ai' }]
+        }
+      }
+    });
+
+    await renderNews();
+
+    const keywordHitsHeader = Array.from(container.querySelectorAll('h2'))
+      .find(h => h.textContent.includes('Keyword Hits'));
+    expect(keywordHitsHeader).toBeTruthy();
+  });
+
+  it('renders local news card in the right sidebar', async () => {
+    await renderNews();
+
+    const localNewsHeader = Array.from(container.querySelectorAll('h2'))
+      .find(h => h.textContent.includes('Local News'));
+    expect(localNewsHeader).toBeTruthy();
   });
 });

@@ -5,6 +5,7 @@ const Parser = require('rss-parser');
 const NodeGeocoder = require('node-geocoder');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const https = require('https');
 
 // Import models
 const Article = require('../models/Article');
@@ -28,6 +29,15 @@ const {
   computeSourceHealth,
   buildMergedSources
 } = require('../config/newsSourceCatalog');
+const {
+  buildLocalSourcePlan,
+  buildBatchLocalSourcePlans
+} = require('../services/newsLocalSourcePlanner');
+const {
+  LOCAL_SOURCE_TIERS,
+  buildPatchUrl,
+  buildRedditRssUrl
+} = require('../config/news/localSourceCatalog');
 
 // Initialize RSS parser with timeout
 const parser = new Parser({
@@ -71,11 +81,39 @@ const NEWS_LOCATION_TAGGER_V2_ENABLED = String(process.env.NEWS_LOCATION_TAGGER_
 const GDELT_ENABLED = String(process.env.GDELT_ENABLED || 'false').toLowerCase() === 'true';
 const GDELT_API_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc';
 const GDELT_DEFAULT_QUERIES = ['local news', 'breaking news', 'community news'];
+
+// ============================================
+// LOCAL NEWS INGESTION FEATURE FLAGS
+// ============================================
+const NEWS_LOCAL_SOURCES_ENABLED = String(process.env.NEWS_LOCAL_SOURCES_ENABLED || 'false').toLowerCase() === 'true';
+const NEWS_LOCAL_GOOGLE_ENABLED = String(process.env.NEWS_LOCAL_GOOGLE_ENABLED || 'true').toLowerCase() !== 'false';
+const NEWS_LOCAL_TV_ENABLED = String(process.env.NEWS_LOCAL_TV_ENABLED || 'true').toLowerCase() !== 'false';
+const NEWS_LOCAL_PATCH_ENABLED = String(process.env.NEWS_LOCAL_PATCH_ENABLED || 'true').toLowerCase() !== 'false';
+const NEWS_LOCAL_NEWSPAPER_ENABLED = String(process.env.NEWS_LOCAL_NEWSPAPER_ENABLED || 'true').toLowerCase() !== 'false';
+const NEWS_LOCAL_REDDIT_ENABLED = String(process.env.NEWS_LOCAL_REDDIT_ENABLED || 'true').toLowerCase() !== 'false';
+const NEWS_LOCAL_MAX_LOCATIONS = Math.max(1, parseInt(process.env.NEWS_LOCAL_MAX_LOCATIONS || '50', 10) || 50);
+
 const newsGeocoder = NodeGeocoder({
   provider: 'openstreetmap',
   httpAdapter: 'https',
   formatter: null
 });
+
+// ─── Source health classification ──────────────────────────────────────────
+function classifySourceHealth(source) {
+  if (!source.lastFetchAt) return { health: 'unknown', healthReason: 'Never fetched' };
+  const hoursSinceLastFetch = (Date.now() - new Date(source.lastFetchAt).getTime()) / (1000 * 60 * 60);
+  if (source.lastFetchStatus === 'success' && hoursSinceLastFetch < 2) {
+    return { health: 'green', healthReason: 'Healthy' };
+  }
+  if (source.lastFetchStatus === 'success' && hoursSinceLastFetch < 24) {
+    return { health: 'yellow', healthReason: 'Stale — last success ' + Math.round(hoursSinceLastFetch) + 'h ago' };
+  }
+  if (source.lastFetchStatus === 'error') {
+    return { health: 'red', healthReason: source.lastError || 'Last fetch failed' };
+  }
+  return { health: 'yellow', healthReason: 'Last fetched ' + Math.round(hoursSinceLastFetch) + 'h ago' };
+}
 
 const TOPIC_FILTER_ALIASES = {
   technology: ['technology', 'tech'],
@@ -2099,6 +2137,300 @@ async function fetchGdeltSource(query, options = {}) {
   }
 }
 
+// ============================================
+// LOCAL SOURCE ADAPTERS
+// ============================================
+
+/**
+ * Patch.com RSS Adapter
+ * Fetches hyperlocal articles from Patch.com for a city/state.
+ */
+async function fetchPatchSource(location) {
+  const city = (location.city || '').trim();
+  const stateAbbrev = (location.stateAbbrev || location.state || '').trim().toLowerCase();
+  if (!city || !stateAbbrev) return [];
+  const feedUrl = buildPatchUrl(city, stateAbbrev);
+  try {
+    const feed = await parser.parseURL(feedUrl);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+    return await Promise.all(items.map(async (item) => {
+      const {
+        locationTokens, localityLevel, assignedZipCode, locationTags, scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: `Patch: ${city}`, category: 'general' },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: `Patch: ${city}, ${stateAbbrev.toUpperCase()}`,
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: normalizeToStandardCategory(item.categories?.[0] || 'general'),
+        topics: toUniqueNonEmptyStrings(['local', city.toLowerCase(), stateAbbrev]),
+        locations: locationTokens.length ? locationTokens : [city.toLowerCase(), stateAbbrev],
+        assignedZipCode,
+        sourceType: 'patch',
+        sourceTier: 3,
+        sourceProviderId: 'patch',
+        localityLevel: localityLevel || 'city',
+        language: feed.language || 'en',
+        feedSource: 'patch',
+        feedCategory: 'local',
+        feedLanguage: feed.language || 'en',
+        feedMetadata: {
+          patchCity: city,
+          patchState: stateAbbrev,
+          feedTitle: feed.title || null,
+          categories: item.categories || []
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED ? {
+          locationTags: locationTags.cities?.length ? locationTags : {
+            ...locationTags,
+            cities: [...(locationTags.cities || []), city.toLowerCase()],
+            states: [...(locationTags.states || []), stateAbbrev]
+          },
+          scopeReason: scopeMetadata.scopeReason || 'city_match',
+          scopeConfidence: scopeMetadata.scopeConfidence || 0.8
+        } : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching Patch source for "${city}, ${stateAbbrev}":`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Reddit Local Subreddit RSS Adapter
+ * Fetches local news/discussion from a city subreddit's RSS feed.
+ */
+async function fetchRedditLocalSource(subreddit, location = {}) {
+  if (!subreddit) return [];
+  const feedUrl = buildRedditRssUrl(subreddit);
+  try {
+    const feed = await parser.parseURL(feedUrl);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+    const city = (location.city || '').toLowerCase();
+    const stateAbbrev = (location.stateAbbrev || '').toLowerCase();
+    return items.map((item) => ({
+      title: item.title || 'Untitled',
+      description: getItemDescription(item),
+      source: `Reddit: r/${subreddit}`,
+      sourceId: item.guid || item.link || item.id,
+      url: item.link,
+      imageUrl: getItemImageUrl(item),
+      publishedAt: getItemPublishedAt(item),
+      category: 'general',
+      topics: toUniqueNonEmptyStrings(['local', 'reddit', city, stateAbbrev].filter(Boolean)),
+      locations: [city, stateAbbrev].filter(Boolean),
+      assignedZipCode: null,
+      sourceType: 'redditLocal',
+      sourceTier: 6,
+      sourceProviderId: 'reddit-local',
+      localityLevel: 'city',
+      language: 'en',
+      feedSource: 'reddit',
+      feedCategory: 'local',
+      feedLanguage: 'en',
+      feedMetadata: {
+        subreddit,
+        redditCity: city || null,
+        redditState: stateAbbrev || null,
+        feedTitle: feed.title || null
+      },
+      scrapeTimestamp: new Date(),
+      ...(NEWS_LOCATION_TAGGER_V2_ENABLED ? {
+        locationTags: {
+          zipCodes: [],
+          cities: city ? [city] : [],
+          counties: [],
+          states: stateAbbrev ? [stateAbbrev] : [],
+          countries: ['us']
+        },
+        scopeReason: 'city_match',
+        scopeConfidence: 0.6
+      } : {})
+    }));
+  } catch (error) {
+    console.error(`Error fetching Reddit source r/${subreddit}:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Generic Local Catalog RSS Source Adapter
+ * Fetches articles from a local source definition (TV affiliates, newspapers, etc).
+ *
+ * @param {Object} sourceDef – { url, label, tier, providerId, locationKey, ...meta }
+ * @param {Object} [locationHint] – { city, stateAbbrev } for location tagging fallback
+ */
+async function fetchLocalCatalogRssSource(sourceDef, locationHint = {}) {
+  if (!sourceDef?.url) return [];
+  try {
+    const feed = await parser.parseURL(sourceDef.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+    const city = (locationHint.city || '').toLowerCase();
+    const stateAbbrev = (locationHint.stateAbbrev || '').toLowerCase();
+    const tier = sourceDef.tier || 2;
+    const providerId = sourceDef.providerId || 'local-catalog';
+    const sourceTypeMap = {
+      2: 'tvAffiliate',
+      4: 'localNewspaper'
+    };
+    const resolvedSourceType = sourceTypeMap[tier] || 'rss';
+
+    return await Promise.all(items.map(async (item) => {
+      const {
+        locationTokens, localityLevel, assignedZipCode, locationTags, scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: sourceDef.label || 'Local Source', category: 'general' },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: sourceDef.label || feed.title || 'Local Source',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: normalizeToStandardCategory(item.categories?.[0] || 'general'),
+        topics: toUniqueNonEmptyStrings(['local', city, stateAbbrev].filter(Boolean)),
+        locations: locationTokens.length ? locationTokens : [city, stateAbbrev].filter(Boolean),
+        assignedZipCode,
+        sourceType: resolvedSourceType,
+        sourceTier: tier,
+        sourceProviderId: providerId,
+        localityLevel: localityLevel || 'city',
+        language: feed.language || 'en',
+        feedSource: providerId,
+        feedCategory: 'local',
+        feedLanguage: feed.language || 'en',
+        feedMetadata: {
+          localSourceLabel: sourceDef.label,
+          localSourceTier: tier,
+          localSourceProviderId: providerId,
+          localSourceLocationKey: sourceDef.locationKey || null,
+          categories: item.categories || [],
+          feedTitle: feed.title || null,
+          author: item.dcCreator || item.creator || null,
+          ...(sourceDef.station ? { station: sourceDef.station } : {}),
+          ...(sourceDef.network ? { network: sourceDef.network } : {})
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED ? {
+          locationTags: locationTags.cities?.length ? locationTags : {
+            ...locationTags,
+            cities: [...(locationTags.cities || []), ...(city ? [city] : [])],
+            states: [...(locationTags.states || []), ...(stateAbbrev ? [stateAbbrev] : [])]
+          },
+          scopeReason: scopeMetadata.scopeReason || 'city_match',
+          scopeConfidence: scopeMetadata.scopeConfidence || 0.7
+        } : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching local catalog source "${sourceDef.label}":`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Ingest local sources for a set of locations using the planner.
+ * Returns articles and telemetry metrics.
+ *
+ * @param {Array<Object>} locations – array of { city, state, stateAbbrev, zipCode }
+ * @returns {{ articles: Array, metrics: Object }}
+ */
+async function ingestLocalSources(locations = []) {
+  const enabledTiers = {
+    googleNews: NEWS_LOCAL_GOOGLE_ENABLED,
+    tvAffiliate: NEWS_LOCAL_TV_ENABLED,
+    patch: NEWS_LOCAL_PATCH_ENABLED,
+    newspaper: NEWS_LOCAL_NEWSPAPER_ENABLED,
+    reddit: NEWS_LOCAL_REDDIT_ENABLED,
+    newsApi: false // disabled unless explicitly configured
+  };
+
+  const { allSources, stats } = buildBatchLocalSourcePlans(locations, { enabledTiers });
+
+  const articles = [];
+  const metrics = {
+    totalSources: allSources.length,
+    fetched: 0,
+    errors: 0,
+    articlesByTier: {},
+    errorsByTier: {},
+    ...stats
+  };
+
+  /**
+   * Parse a locationKey string (format: "zip|city,state" or "city,state") into
+   * its city and stateAbbrev components.
+   */
+  const parseLocationKey = (locationKey) => {
+    if (!locationKey) return { city: '', stateAbbrev: '' };
+    // Strip leading zip portion ("zip|city,state" → "city,state")
+    const withoutZip = locationKey.includes('|') ? locationKey.split('|')[1] : locationKey;
+    const parts = (withoutZip || '').split(',');
+    return {
+      city: (parts[0] || '').trim(),
+      stateAbbrev: (parts[1] || '').trim()
+    };
+  };
+
+  for (const src of allSources) {
+    const tierKey = `tier_${src.tier}`;
+    const locFromKey = parseLocationKey(src.locationKey);
+    try {
+      let fetched = [];
+      if (src.providerId === 'google-news-local') {
+        // Use existing Google News adapter with local query
+        const queryMatch = src.url.match(/[?&]q=([^&]+)/);
+        const query = queryMatch ? decodeURIComponent(queryMatch[1]) : '';
+        if (query) {
+          fetched = await fetchGoogleNewsSource(query, 'googleNews');
+          // Tag articles with local tier metadata
+          fetched = fetched.map(a => ({
+            ...a,
+            sourceTier: src.tier,
+            sourceProviderId: src.providerId
+          }));
+        }
+      } else if (src.providerId === 'patch') {
+        fetched = await fetchPatchSource({
+          city: src.patchCity || locFromKey.city,
+          stateAbbrev: src.patchState || locFromKey.stateAbbrev
+        });
+      } else if (src.providerId === 'reddit-local') {
+        fetched = await fetchRedditLocalSource(src.subreddit || '', {
+          city: locFromKey.city,
+          stateAbbrev: locFromKey.stateAbbrev
+        });
+      } else if (src.providerId === 'tv-affiliate' || src.providerId === 'local-newspaper') {
+        fetched = await fetchLocalCatalogRssSource(src, {
+          city: src.market || src.newspaperCity || locFromKey.city,
+          stateAbbrev: locFromKey.stateAbbrev
+        });
+      }
+
+      articles.push(...fetched);
+      metrics.fetched++;
+      metrics.articlesByTier[tierKey] = (metrics.articlesByTier[tierKey] || 0) + fetched.length;
+    } catch (error) {
+      metrics.errors++;
+      metrics.errorsByTier[tierKey] = (metrics.errorsByTier[tierKey] || 0) + 1;
+      console.error(`[local-ingest] Error fetching ${src.providerId} (${src.label}):`, error.message);
+    }
+  }
+
+  return { articles, metrics };
+}
+
 // Helper: Extract image from HTML content
 function extractImageFromContent(content) {
   if (!content) return null;
@@ -2575,12 +2907,62 @@ async function ingestAllSources() {
       allArticles = [...allArticles, ...articles];
     }
   }
+
+  // 9. Fetch local sources (gated by NEWS_LOCAL_SOURCES_ENABLED)
+  let localMetrics = null;
+  if (NEWS_LOCAL_SOURCES_ENABLED) {
+    try {
+      // Gather unique user locations from active news preferences
+      const userPrefs = await NewsPreferences.find({
+        'locations.0': { $exists: true }
+      }).select('locations').limit(NEWS_LOCAL_MAX_LOCATIONS).lean();
+
+      const locationSet = new Map();
+      for (const pref of userPrefs) {
+        for (const loc of (pref.locations || [])) {
+          const city = (loc.city || '').trim();
+          const state = (loc.state || '').trim();
+          const zipCode = (loc.zipCode || '').trim();
+          const key = `${city.toLowerCase()}|${(state || zipCode).toLowerCase()}`;
+          if (key !== '|' && !locationSet.has(key)) {
+            locationSet.set(key, {
+              city,
+              state,
+              stateAbbrev: state, // normalizeLocationInput in planner resolves full names
+              zipCode,
+              country: loc.country || 'US'
+            });
+          }
+        }
+      }
+
+      if (locationSet.size > 0) {
+        const locations = Array.from(locationSet.values()).slice(0, NEWS_LOCAL_MAX_LOCATIONS);
+        const { articles: localArticles, metrics } = await ingestLocalSources(locations);
+        allArticles = [...allArticles, ...localArticles];
+        localMetrics = metrics;
+        console.log('[news-local-ingest]', JSON.stringify({
+          locations: locations.length,
+          sources: metrics.totalSources,
+          fetched: metrics.fetched,
+          errors: metrics.errors,
+          articles: localArticles.length,
+          byTier: metrics.articlesByTier
+        }));
+      }
+    } catch (error) {
+      console.error('[news-local-ingest] Pipeline error:', error.message);
+    }
+  }
   
-  // 9. Process all articles (deduplication)
+  // 10. Process all articles (deduplication)
   const results = await processArticles(allArticles, { ingestionRunId });
   
-  // 10. Log scope quality metrics
+  // 11. Log scope quality metrics
   const scopeQuality = computeScopeQualityMetrics(allArticles, startTime);
+  if (localMetrics) {
+    scopeQuality.localPipeline = localMetrics;
+  }
   console.log('[news-scope-quality]', JSON.stringify(scopeQuality));
   
   console.log(`Ingestion complete: ${results.inserted} inserted, ${results.updated} updated, ${results.duplicates} duplicates in ${Date.now() - startTime}ms`);
@@ -2973,7 +3355,7 @@ router.get('/sources', authenticateToken, async (req, res) => {
         lastFetchStatus: source.lastFetchStatus,
         providerId: detectProviderIdFromUrl(source.url)
       }));
-    
+
     res.json({
       sources: mergedSources,
       topUsedSources,
@@ -3402,6 +3784,125 @@ router.post('/ingest', authenticateToken, async (req, res) => {
 });
 
 /**
+ * POST /api/news/sources/local/sync
+ * Sync/validate local source catalog and run local ingestion for specified locations (admin).
+ */
+router.post('/sources/local/sync', authenticateToken, async (req, res) => {
+  try {
+    const requester = await User.findById(req.user.userId).select('_id isAdmin');
+    if (!requester?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const locations = req.body.locations || [];
+    if (!Array.isArray(locations) || locations.length === 0) {
+      return res.status(400).json({ error: 'Provide an array of locations (city/state/zipCode)' });
+    }
+
+    const capped = locations.slice(0, NEWS_LOCAL_MAX_LOCATIONS);
+    const { articles, metrics } = await ingestLocalSources(capped);
+
+    // Process articles through dedup pipeline
+    const ingestionRunId = uuidv4();
+    const results = await processArticles(articles, { ingestionRunId });
+
+    res.json({
+      message: 'Local source sync completed',
+      locationsProcessed: capped.length,
+      metrics,
+      ingestion: results
+    });
+  } catch (error) {
+    console.error('[local-sync] Error:', error.message);
+    res.status(500).json({ error: 'Local source sync failed' });
+  }
+});
+
+/**
+ * GET /api/news/sources/local/health
+ * Diagnostics endpoint for local pipeline readiness (admin/mod).
+ */
+router.get('/sources/local/health', authenticateToken, async (req, res) => {
+  try {
+    const requester = await User.findById(req.user.userId).select('_id isAdmin');
+    if (!requester?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    // Count user locations configured
+    const userPrefs = await NewsPreferences.find({
+      'locations.0': { $exists: true }
+    }).select('locations').lean();
+
+    const locationSet = new Set();
+    const stateCoverage = {};
+    for (const pref of userPrefs) {
+      for (const loc of (pref.locations || [])) {
+        const key = `${(loc.city || '').toLowerCase()}|${(loc.state || '').toLowerCase()}`;
+        locationSet.add(key);
+        const st = (loc.state || '').toLowerCase();
+        if (st) stateCoverage[st] = (stateCoverage[st] || 0) + 1;
+      }
+    }
+
+    // Build sample plan to show coverage
+    const sampleLocations = Array.from(locationSet).slice(0, 5).map(k => {
+      const [city, state] = k.split('|');
+      return { city, state, stateAbbrev: state, country: 'US' };
+    });
+    const samplePlans = sampleLocations.map(loc => buildLocalSourcePlan(loc));
+
+    // Count recent local articles
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const localArticleCounts = await Article.aggregate([
+      {
+        $match: {
+          sourceType: { $in: ['patch', 'redditLocal', 'tvAffiliate', 'localNewspaper'] },
+          createdAt: { $gte: oneDayAgo }
+        }
+      },
+      { $group: { _id: '$sourceType', count: { $sum: 1 } } }
+    ]).catch(() => []);
+
+    const articlesByType = {};
+    for (const entry of localArticleCounts) {
+      articlesByType[entry._id] = entry.count;
+    }
+
+    res.json({
+      enabled: NEWS_LOCAL_SOURCES_ENABLED,
+      flags: {
+        NEWS_LOCAL_SOURCES_ENABLED,
+        NEWS_LOCAL_GOOGLE_ENABLED,
+        NEWS_LOCAL_TV_ENABLED,
+        NEWS_LOCAL_PATCH_ENABLED,
+        NEWS_LOCAL_NEWSPAPER_ENABLED,
+        NEWS_LOCAL_REDDIT_ENABLED,
+        NEWS_LOCAL_MAX_LOCATIONS
+      },
+      userLocations: {
+        total: locationSet.size,
+        stateCoverage
+      },
+      recentLocalArticles: articlesByType,
+      samplePlans: samplePlans.map(p => ({
+        locationKey: p.locationKey,
+        sourceCount: p.sources.length,
+        tiers: [...new Set(p.sources.map(s => s.tier))]
+      })),
+      catalogStats: {
+        tvAffiliates: require('../data/news/us-tv-affiliates.json').length,
+        newspapers: require('../data/news/us-newspapers.json').length,
+        subreddits: require('../data/news/us-city-subreddits.json').length
+      }
+    });
+  } catch (error) {
+    console.error('[local-health] Error:', error.message);
+    res.status(500).json({ error: 'Health check failed' });
+  }
+});
+
+/**
  * POST /api/news/promoted/rescore
  * Re-score recent articles (admin only)
  */
@@ -3520,6 +4021,296 @@ router.get('/article/:id', authenticateToken, async (req, res) => {
 });
 
 // ============================================
+// WEATHER ENDPOINTS
+// ============================================
+
+const US_ZIP_REGEX = /^\d{5}(-\d{4})?$/;
+
+function normalizeUSState(input) {
+  if (!input) return null;
+  const trimmed = input.trim();
+  const lower = trimmed.toLowerCase();
+  // Check if it's already a valid state abbreviation (set stores lowercase)
+  if (US_STATE_ABBREVS.has(lower)) return lower.toUpperCase();
+  // Try matching full state name using the existing US_STATE_NAMES map
+  const fromName = US_STATE_NAMES.get(lower);
+  if (fromName) return fromName.toUpperCase();
+  return null;
+}
+
+/**
+ * GET /api/news/weather
+ * Fetch weather for user's weather locations using api.weather.gov (NWS)
+ */
+router.get('/weather', authenticateToken, async (req, res) => {
+  try {
+    const preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    const weatherLocations = preferences?.weatherLocations || [];
+    
+    if (weatherLocations.length === 0) {
+      return res.json({ locations: [] });
+    }
+
+    const results = await Promise.allSettled(
+      weatherLocations.map(async (loc) => {
+        const locObj = loc.toObject ? loc.toObject() : loc;
+        try {
+          // If we have lat/lon, use NWS point lookup
+          if (locObj.lat && locObj.lon) {
+            const pointUrl = `https://api.weather.gov/points/${locObj.lat},${locObj.lon}`;
+            const pointData = await fetchJsonWithTimeout(pointUrl);
+            
+            if (pointData?.properties?.forecast) {
+              const forecastData = await fetchJsonWithTimeout(pointData.properties.forecast);
+              const hourlyData = pointData.properties.forecastHourly 
+                ? await fetchJsonWithTimeout(pointData.properties.forecastHourly).catch(() => null)
+                : null;
+
+              const periods = forecastData?.properties?.periods || [];
+              const currentPeriod = periods[0] || {};
+              const todayDay = periods.find(p => p.isDaytime === true) || currentPeriod;
+              const todayNight = periods.find(p => p.isDaytime === false);
+
+              return {
+                ...locObj,
+                weather: {
+                  current: {
+                    temperature: currentPeriod.temperature,
+                    temperatureUnit: currentPeriod.temperatureUnit || 'F',
+                    shortForecast: currentPeriod.shortForecast,
+                    icon: currentPeriod.icon,
+                    windSpeed: currentPeriod.windSpeed,
+                    windDirection: currentPeriod.windDirection
+                  },
+                  high: todayDay?.temperature || null,
+                  low: todayNight?.temperature || null,
+                  hourly: (hourlyData?.properties?.periods || []).slice(0, 12).map(p => ({
+                    time: p.startTime,
+                    temperature: p.temperature,
+                    shortForecast: p.shortForecast,
+                    icon: p.icon
+                  })),
+                  weekly: periods.filter(p => p.isDaytime).slice(0, 7).map(p => ({
+                    name: p.name,
+                    temperature: p.temperature,
+                    shortForecast: p.shortForecast,
+                    icon: p.icon
+                  })),
+                  updatedAt: new Date().toISOString()
+                },
+                error: null
+              };
+            }
+          }
+          
+          // Fallback: return location without weather data
+          return { ...locObj, weather: null, error: 'Unable to resolve weather data for this location' };
+        } catch (fetchErr) {
+          return { ...locObj, weather: null, error: 'Weather service temporarily unavailable' };
+        }
+      })
+    );
+
+    const locations = results.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value;
+      const loc = weatherLocations[i];
+      const locObj = loc?.toObject ? loc.toObject() : loc;
+      return { ...locObj, weather: null, error: 'Weather fetch failed' };
+    });
+    res.json({ locations });
+  } catch (error) {
+    console.error('Error fetching weather:', error);
+    res.status(500).json({ error: 'Failed to fetch weather data' });
+  }
+});
+
+// Helper to fetch JSON with timeout from external APIs
+async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { 
+      headers: { 'User-Agent': 'SocialSecure-Weather/1.0', 'Accept': 'application/geo+json' },
+      timeout: timeoutMs
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } 
+        catch (e) { reject(new Error('Invalid JSON response')); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
+  });
+}
+
+/**
+ * POST /api/news/preferences/weather-locations
+ * Add a weather location (max 3)
+ */
+router.post('/preferences/weather-locations', authenticateToken, async (req, res) => {
+  try {
+    const { label, city, state, zipCode, lat, lon, isPrimary } = req.body;
+
+    if (!city && !zipCode) {
+      return res.status(400).json({ error: 'City or ZIP code is required' });
+    }
+
+    // US-only validation
+    if (zipCode && !US_ZIP_REGEX.test(zipCode)) {
+      return res.status(400).json({ error: 'Invalid US ZIP code format' });
+    }
+
+    const normalizedState = normalizeUSState(state);
+    if (state && !normalizedState) {
+      return res.status(400).json({ error: 'Invalid US state' });
+    }
+
+    let preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    if (!preferences) {
+      preferences = await NewsPreferences.create({ user: req.user.userId });
+    }
+
+    if ((preferences.weatherLocations || []).length >= 3) {
+      return res.status(400).json({ error: 'Maximum 3 weather locations allowed' });
+    }
+
+    const locationData = {
+      label: label || [city, normalizedState].filter(Boolean).join(', '),
+      city: city || null,
+      state: normalizedState || null,
+      zipCode: zipCode || null,
+      lat: lat || null,
+      lon: lon || null,
+      isPrimary: false
+    };
+
+    // Set as primary if explicitly requested or if it's the first location
+    if (isPrimary || (preferences.weatherLocations || []).length === 0) {
+      locationData.isPrimary = true;
+      if (isPrimary && preferences.weatherLocations.length > 0) {
+        preferences.weatherLocations.forEach(loc => { loc.isPrimary = false; });
+      }
+    }
+
+    preferences.weatherLocations.push(locationData);
+    await preferences.save();
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Error adding weather location:', error);
+    res.status(500).json({ error: 'Failed to add weather location' });
+  }
+});
+
+/**
+ * PUT /api/news/preferences/weather-locations
+ * Replace all weather locations
+ */
+router.put('/preferences/weather-locations', authenticateToken, async (req, res) => {
+  try {
+    const { locations } = req.body;
+
+    if (!Array.isArray(locations)) {
+      return res.status(400).json({ error: 'Locations array is required' });
+    }
+
+    if (locations.length > 3) {
+      return res.status(400).json({ error: 'Maximum 3 weather locations allowed' });
+    }
+
+    // Validate and normalize each location without mutating input
+    const normalizedLocations = locations.map(loc => {
+      const normalized = { ...loc };
+      if (normalized.zipCode && !US_ZIP_REGEX.test(normalized.zipCode)) {
+        return { error: `Invalid US ZIP code: ${normalized.zipCode}` };
+      }
+      if (normalized.state) {
+        const normalizedState = normalizeUSState(normalized.state);
+        if (!normalizedState) return { error: `Invalid US state: ${normalized.state}` };
+        normalized.state = normalizedState;
+      }
+      return normalized;
+    });
+
+    const validationError = normalizedLocations.find(loc => loc.error);
+    if (validationError) {
+      return res.status(400).json({ error: validationError.error });
+    }
+
+    const preferences = await NewsPreferences.findOneAndUpdate(
+      { user: req.user.userId },
+      { weatherLocations: normalizedLocations },
+      { new: true, upsert: true }
+    );
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Error updating weather locations:', error);
+    res.status(500).json({ error: 'Failed to update weather locations' });
+  }
+});
+
+/**
+ * DELETE /api/news/preferences/weather-locations/:locationId
+ * Remove a weather location
+ */
+router.delete('/preferences/weather-locations/:locationId', authenticateToken, async (req, res) => {
+  try {
+    const { locationId } = req.params;
+
+    const preferences = await NewsPreferences.findOneAndUpdate(
+      { user: req.user.userId },
+      { $pull: { weatherLocations: { _id: locationId } } },
+      { new: true }
+    );
+
+    if (!preferences) {
+      return res.status(404).json({ error: 'Preferences not found' });
+    }
+
+    // If primary was removed, make first remaining primary
+    if (preferences.weatherLocations.length > 0 && !preferences.weatherLocations.some(l => l.isPrimary)) {
+      preferences.weatherLocations[0].isPrimary = true;
+      await preferences.save();
+    }
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Error removing weather location:', error);
+    res.status(500).json({ error: 'Failed to remove weather location' });
+  }
+});
+
+/**
+ * PUT /api/news/preferences/weather-locations/:locationId/primary
+ * Set a weather location as primary
+ */
+router.put('/preferences/weather-locations/:locationId/primary', authenticateToken, async (req, res) => {
+  try {
+    const { locationId } = req.params;
+
+    const preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    if (!preferences) {
+      return res.status(404).json({ error: 'Preferences not found' });
+    }
+
+    const targetLocation = preferences.weatherLocations.id(locationId);
+    if (!targetLocation) {
+      return res.status(404).json({ error: 'Weather location not found' });
+    }
+
+    preferences.weatherLocations.forEach(loc => { loc.isPrimary = false; });
+    targetLocation.isPrimary = true;
+    await preferences.save();
+
+    res.json({ preferences });
+  } catch (error) {
+    console.error('Error setting primary weather location:', error);
+    res.status(500).json({ error: 'Failed to set primary weather location' });
+  }
+});
+
+// ============================================
 // INGESTION SCHEDULER
 // ============================================
 
@@ -3568,7 +4359,11 @@ module.exports = {
     fetchBbcSource,
     fetchApSource,
     fetchReutersSource,
-    fetchPbsSource
+    fetchPbsSource,
+    fetchPatchSource,
+    fetchRedditLocalSource,
+    fetchLocalCatalogRssSource,
+    ingestLocalSources
   },
   internals: {
     processArticles,
@@ -3585,6 +4380,10 @@ module.exports = {
     computeScopeQualityMetrics,
     normalizeToStandardCategory,
     buildGoogleNewsFeedUrl,
+    classifySourceHealth,
+    fetchJsonWithTimeout,
+    normalizeUSState,
+    US_ZIP_REGEX,
     GOOGLE_NEWS_TOPIC_MAP,
     NPR_FEED_MAP,
     BBC_FEED_MAP,
@@ -3595,6 +4394,8 @@ module.exports = {
     COUNTRY_VARIANTS_MAP,
     STANDARDIZED_CATEGORIES,
     SUPPORTED_RSS_PROVIDERS,
-    detectProviderIdFromUrl
+    detectProviderIdFromUrl,
+    NEWS_LOCAL_SOURCES_ENABLED,
+    LOCAL_SOURCE_TIERS
   }
 };

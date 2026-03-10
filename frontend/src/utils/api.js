@@ -518,6 +518,12 @@ export const newsAPI = {
   getArticle: (id) => api.get(`/news/article/${id}`),
   // Trigger manual ingestion (admin)
   triggerIngestion: () => api.post('/news/ingest'),
+  // Weather
+  getWeather: () => api.get('/news/weather'),
+  addWeatherLocation: (data) => api.post('/news/preferences/weather-locations', data),
+  updateWeatherLocations: (locations) => api.put('/news/preferences/weather-locations', { locations }),
+  removeWeatherLocation: (locationId) => api.delete(`/news/preferences/weather-locations/${locationId}`),
+  setWeatherLocationPrimary: (locationId) => api.put(`/news/preferences/weather-locations/${locationId}/primary`),
 };
 
 // Maps API

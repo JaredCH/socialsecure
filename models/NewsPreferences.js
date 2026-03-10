@@ -64,6 +64,17 @@ const sourcePreferenceSchema = new mongoose.Schema({
   }
 });
 
+// Weather location preferences
+const weatherLocationSchema = new mongoose.Schema({
+  label: { type: String, default: null },
+  city: { type: String, default: null },
+  state: { type: String, default: null },
+  zipCode: { type: String, default: null },
+  lat: { type: Number, default: null },
+  lon: { type: Number, default: null },
+  isPrimary: { type: Boolean, default: false }
+});
+
 // Main user news preferences
 const newsPreferencesSchema = new mongoose.Schema({
   user: {
@@ -116,6 +127,12 @@ const newsPreferencesSchema = new mongoose.Schema({
     type: String,
     lowercase: true
   }],
+
+  // Weather location preferences (max 3)
+  weatherLocations: {
+    type: [weatherLocationSchema],
+    validate: [arr => arr.length <= 3, 'Maximum 3 weather locations allowed']
+  },
   
   // General settings
   refreshInterval: {
