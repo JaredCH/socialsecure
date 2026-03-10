@@ -631,6 +631,7 @@ const Social = () => {
   const [profileChatAccess, setProfileChatAccess] = useState({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] });
   const [profileChatAccessDraft, setProfileChatAccessDraft] = useState({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] });
   const [profileChatSavingAccess, setProfileChatSavingAccess] = useState(false);
+  const [profileChatControlsExpanded, setProfileChatControlsExpanded] = useState(false);
   const [calendarPreviewEvents, setCalendarPreviewEvents] = useState([]);
   const [calendarPreviewLoading, setCalendarPreviewLoading] = useState(false);
   const [calendarPreviewError, setCalendarPreviewError] = useState('');
@@ -785,6 +786,12 @@ const Social = () => {
       write: writeLabels.join(', ') || 'Friends, Circles'
     };
   }, [profileChatAccess]);
+  const isProfileChatOwnMessage = useCallback((message) => Boolean(
+    isAuthenticated
+    && message?.userId?._id
+    && currentUser?._id
+    && String(message.userId._id) === String(currentUser._id)
+  ), [isAuthenticated, currentUser?._id]);
 
   const toggleProfileChatRole = useCallback((field, role) => {
     setProfileChatAccessDraft((prev) => {
@@ -800,6 +807,7 @@ const Social = () => {
 
   useEffect(() => {
     const loadProfileChatThread = async () => {
+      setProfileChatControlsExpanded(false);
       if (!activeProfile?._id) {
         setProfileChatThreadId('');
         setProfileChatMessages([]);
@@ -3545,11 +3553,24 @@ const Social = () => {
           const canPostToProfileThread = isAuthenticated && profileChatPermissions.canWrite;
           return (
             <div className="space-y-3">
-              <div className="rounded-2xl border border-slate-200 bg-white/85 p-3 text-xs text-slate-600 shadow-sm">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Thread Access</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <p className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2"><span className="font-semibold text-slate-800">Read:</span> {profileChatAccessSummary.read}</p>
-                  <p className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2"><span className="font-semibold text-slate-800">Write:</span> {profileChatAccessSummary.write}</p>
+              <div className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-600 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Thread Access</span>
+                  {profileChatPermissions.isOwner ? (
+                    <button
+                      type="button"
+                      onClick={() => setProfileChatControlsExpanded((open) => !open)}
+                      aria-expanded={profileChatControlsExpanded}
+                      aria-label="Toggle chat access controls"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-sm text-slate-600 hover:bg-slate-100"
+                    >
+                      <span aria-hidden="true">⚙️</span>
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5"><span className="font-semibold text-slate-700">Read:</span> {profileChatAccessSummary.read}</p>
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5"><span className="font-semibold text-slate-700">Write:</span> {profileChatAccessSummary.write}</p>
                 </div>
               </div>
               {profileChatLoading ? (
@@ -3557,24 +3578,46 @@ const Social = () => {
               ) : profileChatPermissions.canRead ? (
                 <>
                   <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-900/95 px-2.5 py-2 text-[11px] font-semibold text-slate-100">
+                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-900/95 px-3 py-2 text-[11px] font-semibold text-slate-100">
                       <span className="inline-flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full bg-emerald-400" />
                         {activeProfile?.username ? `@${activeProfile.username}` : 'Profile'} room
                       </span>
                       <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">Live</span>
                     </div>
-                    <div data-testid="social-mini-chat-viewport" className="max-h-72 space-y-1 overflow-y-auto px-2 py-2 [scrollbar-gutter:stable]">
+                    <div data-testid="social-mini-chat-viewport" className="max-h-72 space-y-2 overflow-y-auto px-3 py-3 [scrollbar-gutter:stable]">
                       {profileChatMessages.length === 0 ? (
                         <p className="text-sm text-slate-500">No messages yet. Start the conversation.</p>
-                      ) : profileChatMessages.map((message) => (
-                        <div key={message._id} className="flex justify-start">
-                          <div data-testid="social-mini-chat-bubble" className="max-w-[94%] rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm">
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">@{message?.userId?.username || 'user'}</p>
-                            <p data-testid="social-mini-chat-message-content" className="whitespace-pre-wrap break-words text-[13px] leading-4 text-slate-800">{message?.content || ''}</p>
+                      ) : profileChatMessages.map((message) => {
+                        const isOwnMessage = isProfileChatOwnMessage(message);
+                        return (
+                        <div
+                          key={message._id}
+                          className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            data-testid="social-mini-chat-bubble"
+                            className={`max-w-[88%] rounded-2xl border px-2.5 py-2 shadow-sm ${
+                              isOwnMessage
+                                ? 'border-blue-500 bg-blue-600 text-white'
+                                : 'border-slate-200 bg-white text-slate-800'
+                            }`}
+                          >
+                            <p className={`text-[10px] font-semibold uppercase tracking-wide ${
+                              isOwnMessage
+                                ? 'text-blue-100'
+                                : 'text-slate-500'
+                            }`}
+                            >
+                              {isOwnMessage
+                                ? 'You'
+                                : `@${message?.userId?.username || 'user'}`}
+                            </p>
+                            <p data-testid="social-mini-chat-message-content" className="whitespace-pre-wrap break-words text-[13px] leading-5">{message?.content || ''}</p>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="space-y-2 rounded-2xl border border-slate-200 bg-white/85 p-2 shadow-sm">
@@ -3605,7 +3648,7 @@ const Social = () => {
                   This profile chat room is limited by the owner&apos;s access settings.
                 </div>
               )}
-            {profileChatPermissions.isOwner ? (
+            {profileChatPermissions.isOwner && profileChatControlsExpanded ? (
               <div className="space-y-2 rounded-xl border bg-slate-50 p-2.5">
                 {[
                   { field: 'readRoles', label: 'Read access' },
