@@ -5,6 +5,7 @@ const Parser = require('rss-parser');
 const NodeGeocoder = require('node-geocoder');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const https = require('https');
 
 // Import models
 const Article = require('../models/Article');
@@ -3598,7 +3599,12 @@ router.get('/weather', authenticateToken, async (req, res) => {
       })
     );
 
-    const locations = results.map(r => r.status === 'fulfilled' ? r.value : { weather: null, error: 'Weather fetch failed' });
+    const locations = results.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value;
+      const loc = weatherLocations[i];
+      const locObj = loc?.toObject ? loc.toObject() : loc;
+      return { ...locObj, weather: null, error: 'Weather fetch failed' };
+    });
     res.json({ locations });
   } catch (error) {
     console.error('Error fetching weather:', error);
@@ -3608,7 +3614,6 @@ router.get('/weather', authenticateToken, async (req, res) => {
 
 // Helper to fetch JSON with timeout from external APIs
 async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
-  const https = require('https');
   return new Promise((resolve, reject) => {
     const req = https.get(url, { 
       headers: { 'User-Agent': 'SocialSecure-Weather/1.0', 'Accept': 'application/geo+json' },
@@ -3664,18 +3669,13 @@ router.post('/preferences/weather-locations', authenticateToken, async (req, res
       zipCode: zipCode || null,
       lat: lat || null,
       lon: lon || null,
-      isPrimary: isPrimary === true && (preferences.weatherLocations || []).length === 0
+      isPrimary: false
     };
 
-    // If setting as primary, unset others
-    if (isPrimary) {
+    // Set as primary if explicitly requested or if it's the first location
+    if (isPrimary || (preferences.weatherLocations || []).length === 0) {
       locationData.isPrimary = true;
       preferences.weatherLocations.forEach(loc => { loc.isPrimary = false; });
-    }
-
-    // Auto-set first as primary
-    if ((preferences.weatherLocations || []).length === 0) {
-      locationData.isPrimary = true;
     }
 
     preferences.weatherLocations.push(locationData);
@@ -3704,21 +3704,28 @@ router.put('/preferences/weather-locations', authenticateToken, async (req, res)
       return res.status(400).json({ error: 'Maximum 3 weather locations allowed' });
     }
 
-    // Validate each location
-    for (const loc of locations) {
-      if (loc.zipCode && !US_ZIP_REGEX.test(loc.zipCode)) {
-        return res.status(400).json({ error: `Invalid US ZIP code: ${loc.zipCode}` });
+    // Validate and normalize each location without mutating input
+    const normalizedLocations = locations.map(loc => {
+      const normalized = { ...loc };
+      if (normalized.zipCode && !US_ZIP_REGEX.test(normalized.zipCode)) {
+        return { error: `Invalid US ZIP code: ${normalized.zipCode}` };
       }
-      if (loc.state) {
-        const normalized = normalizeUSState(loc.state);
-        if (!normalized) return res.status(400).json({ error: `Invalid US state: ${loc.state}` });
-        loc.state = normalized;
+      if (normalized.state) {
+        const normalizedState = normalizeUSState(normalized.state);
+        if (!normalizedState) return { error: `Invalid US state: ${normalized.state}` };
+        normalized.state = normalizedState;
       }
+      return normalized;
+    });
+
+    const validationError = normalizedLocations.find(loc => loc.error);
+    if (validationError) {
+      return res.status(400).json({ error: validationError.error });
     }
 
     const preferences = await NewsPreferences.findOneAndUpdate(
       { user: req.user.userId },
-      { weatherLocations: locations },
+      { weatherLocations: normalizedLocations },
       { new: true, upsert: true }
     );
 
