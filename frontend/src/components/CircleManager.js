@@ -54,9 +54,26 @@ function CircleManager({
   const [statusMessage, setStatusMessage] = useState('');
   const [memberPreview, setMemberPreview] = useState(null);
   const [moveTargetCircle, setMoveTargetCircle] = useState('');
+  const [stageScale, setStageScale] = useState(1);
+  const stageWrapperRef = useRef(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(null);
   const hasCircleCapacity = circles.length < MAX_CIRCLES;
+
+  useEffect(() => {
+    const wrapper = stageWrapperRef.current;
+    if (!wrapper || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const containerWidth = entry.contentRect.width;
+      if (containerWidth > 0) {
+        setStageScale(Math.min(1, containerWidth / STAGE_WIDTH));
+      }
+    });
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!hasCircleCapacity) {
@@ -279,87 +296,119 @@ function CircleManager({
   };
 
   return (
-    <div className="space-y-4 rounded-2xl border border-violet-200 bg-gradient-to-b from-white via-violet-50/40 to-sky-50/50 p-5 shadow">
+    <div className="space-y-5 rounded-2xl border border-violet-100 bg-gradient-to-b from-white via-violet-50/30 to-sky-50/40 p-5 shadow-sm">
+
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold text-gray-900">Circle Manager</h3>
-        <p className="text-xs text-slate-500">
-          {circles.length}/{MAX_CIRCLES} circles • drag circles, drop friends, and tap nodes to edit instantly.
-        </p>
-      </div>
-      <div className="rounded-2xl border border-slate-200 bg-white/70 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-slate-500">Quick setup stays tucked away until needed.</p>
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">Circle Manager</h3>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Organise your connections into named circles. Drag bubbles, drop friends, or use search to add members.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">
+            {circles.length} / {MAX_CIRCLES} circles
+          </span>
           {!showCreateControls ? (
             <button
               type="button"
               onClick={() => setShowCreateControls(true)}
               disabled={!hasCircleCapacity}
-              className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="flex items-center gap-1.5 rounded-full bg-violet-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               Add New Circle
             </button>
           ) : null}
         </div>
-        {showCreateControls ? (
-          <form onSubmit={handleCreate} className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-5">
-            <input
-              value={circleName}
-              onChange={(event) => setCircleName(event.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2"
-              placeholder="Circle name"
-              maxLength={50}
-            />
-            <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-              <span className="font-medium text-slate-600">Secure circle</span>
+      </div>
+
+      {/* Create circle form */}
+      {showCreateControls ? (
+        <div className="rounded-2xl border border-violet-100 bg-white/80 p-4 shadow-sm">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Create a new circle</p>
+          <form onSubmit={handleCreate} className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <input
-                aria-label="Create secure circle toggle"
-                type="checkbox"
-                checked={circleAudience === 'secure'}
-                onChange={(event) => setCircleAudience(event.target.checked ? 'secure' : 'social')}
+                value={circleName}
+                onChange={(event) => setCircleName(event.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder-slate-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                placeholder="Circle name"
+                maxLength={50}
               />
-            </label>
-            <input
-              value={circleProfileImageUrl}
-              onChange={(event) => setCircleProfileImageUrl(event.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2"
-              placeholder="Profile image URL (optional)"
-              maxLength={2048}
-            />
-            <input
-              type="color"
-              value={circleColor}
-              onChange={(event) => setCircleColor(event.target.value)}
-              className="h-10 rounded-xl border border-slate-200 bg-white p-1"
-            />
-            <div className="flex gap-2">
-              <button type="submit" className="flex-1 rounded-xl bg-violet-600 px-4 py-2 text-white transition hover:-translate-y-0.5 hover:bg-violet-700">
-                Add
-              </button>
-              <button type="button" onClick={() => setShowCreateControls(false)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
-                Hide
-              </button>
+              <input
+                value={circleProfileImageUrl}
+                onChange={(event) => setCircleProfileImageUrl(event.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder-slate-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                placeholder="Profile image URL (optional)"
+                maxLength={2048}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition hover:bg-slate-50">
+                <span className="font-medium text-slate-600">Circle colour</span>
+                <input
+                  type="color"
+                  value={circleColor}
+                  onChange={(event) => setCircleColor(event.target.value)}
+                  className="h-6 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+                />
+              </label>
+              <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition hover:bg-slate-50">
+                <input
+                  aria-label="Create secure circle toggle"
+                  type="checkbox"
+                  checked={circleAudience === 'secure'}
+                  onChange={(event) => setCircleAudience(event.target.checked ? 'secure' : 'social')}
+                  className="h-4 w-4 rounded accent-amber-500"
+                />
+                <span className="font-medium text-slate-600">Secure circle</span>
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700"><span aria-hidden="true">🔒</span> private</span>
+              </label>
+              <div className="ml-auto flex gap-2">
+                <button type="submit" className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-violet-700 active:translate-y-0">
+                  Add
+                </button>
+                <button type="button" onClick={() => setShowCreateControls(false)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 transition hover:bg-slate-50">
+                  Cancel
+                </button>
+              </div>
             </div>
           </form>
-        ) : null}
-      </div>
-      {statusMessage ? <p className="text-xs font-medium text-amber-700">{statusMessage}</p> : null}
+        </div>
+      ) : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">
+      {/* Status message */}
+      {statusMessage ? (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <span className="text-amber-500" aria-hidden="true">⚠</span>
+          <p className="text-xs font-medium text-amber-700">{statusMessage}</p>
+        </div>
+      ) : null}
+
+      {/* Main content: canvas + sidebar */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+
+        {/* Canvas stage */}
         <div>
           <div
-            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/90"
-            style={{ maxWidth: `${STAGE_WIDTH}px` }}
+            ref={stageWrapperRef}
+            className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm"
+            style={{ height: `${STAGE_HEIGHT * stageScale}px` }}
             onPointerMove={handlePointerMove}
             onPointerUp={() => setDraggingCircleName('')}
             onPointerLeave={() => setDraggingCircleName('')}
           >
-            <div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: STAGE_BACKGROUND }} />
+            <div className="pointer-events-none absolute inset-0" style={{ background: STAGE_BACKGROUND }} />
             <div
-              className="relative mx-auto"
-              style={{ width: `${STAGE_WIDTH}px`, height: `${STAGE_HEIGHT}px` }}
+              className="absolute left-0 top-0 origin-top-left"
+              style={{ width: `${STAGE_WIDTH}px`, height: `${STAGE_HEIGHT}px`, transform: `scale(${stageScale})` }}
               data-testid="circle-spider-stage"
             >
-              <div className="absolute rounded-full border-2 border-violet-200 bg-violet-500 text-xs font-semibold text-white shadow-sm" style={{ left: `${OWNER_X - (OWNER_NODE_SIZE / 2)}px`, top: `${OWNER_Y - (OWNER_NODE_SIZE / 2)}px`, width: `${OWNER_NODE_SIZE}px`, height: `${OWNER_NODE_SIZE}px`, display: 'grid', placeItems: 'center' }}>
+              <div
+                className="absolute rounded-full border-2 border-violet-300 bg-gradient-to-br from-violet-500 to-violet-700 text-xs font-bold text-white shadow-lg"
+                style={{ left: `${OWNER_X - (OWNER_NODE_SIZE / 2)}px`, top: `${OWNER_Y - (OWNER_NODE_SIZE / 2)}px`, width: `${OWNER_NODE_SIZE}px`, height: `${OWNER_NODE_SIZE}px`, display: 'grid', placeItems: 'center' }}
+              >
                 You
               </div>
               {friendPositions.map(({ friend, x, y }) => {
@@ -376,7 +425,7 @@ function CircleManager({
                   <React.Fragment key={friend._id}>
                     <div
                       className="pointer-events-none absolute origin-left transition-all duration-200"
-                      style={{ left: `${OWNER_X}px`, top: `${OWNER_Y}px`, width: `${distance}px`, height: isInActiveCircle ? '2px' : '1px', transform: `rotate(${angle}deg)`, backgroundColor: isInActiveCircle ? '#7c3aed' : '#e2e8f0', opacity: isInActiveCircle ? 0.7 : 0.5 }}
+                      style={{ left: `${OWNER_X}px`, top: `${OWNER_Y}px`, width: `${distance}px`, height: isInActiveCircle ? '2px' : '1px', transform: `rotate(${angle}deg)`, backgroundColor: isInActiveCircle ? '#7c3aed' : '#e2e8f0', opacity: isInActiveCircle ? 0.8 : 0.4 }}
                     />
                     <button
                       type="button"
@@ -387,7 +436,7 @@ function CircleManager({
                         event.dataTransfer.setData('text/plain', friendName);
                       }}
                       onClick={() => openMemberPreview(friend, friendCircles[0] || null)}
-                      className={`absolute flex items-center justify-center rounded-full border px-2 text-[11px] font-medium shadow-sm transition hover:scale-105 hover:shadow-md ${isInActiveCircle ? 'border-violet-400 bg-violet-50 text-violet-800' : 'border-slate-200 bg-white text-slate-600'}`}
+                      className={`absolute flex items-center justify-center rounded-full border-2 px-2 text-[11px] font-semibold shadow-md transition hover:scale-110 hover:shadow-lg ${isInActiveCircle ? 'border-violet-400 bg-violet-50 text-violet-800 ring-2 ring-violet-200' : 'border-slate-200 bg-white text-slate-600'}`}
                       style={{ left: `${x}px`, top: `${y}px`, width: `${FRIEND_NODE_SIZE}px`, height: `${FRIEND_NODE_SIZE}px` }}
                       title={`Click to preview ${friendName} • Drag to add to a circle`}
                     >
@@ -408,7 +457,7 @@ function CircleManager({
                     key={circle.name}
                     type="button"
                     data-testid={`circle-node-${circle.name}`}
-                    className={`absolute flex cursor-grab flex-col items-center justify-center rounded-full border-2 text-xs font-semibold text-white shadow-lg transition ${isActive ? 'scale-105 ring-4 ring-violet-200' : ''}`}
+                    className={`absolute flex cursor-grab flex-col items-center justify-center rounded-full border-2 text-xs font-bold text-white shadow-xl transition hover:scale-105 ${isActive ? 'scale-110 ring-4 ring-white/60 ring-offset-2 ring-offset-transparent' : ''}`}
                     style={{ left: `${position.x}px`, top: `${position.y}px`, width: `${NODE_SIZE}px`, height: `${NODE_SIZE}px`, backgroundColor: circle.color || '#3B82F6', borderColor: circle.relationshipAudience === 'secure' ? SECURE_RING_COLOR : SOCIAL_RING_COLOR }}
                     onClick={() => setActiveCircleName(circle.name)}
                     onPointerDown={(event) => {
@@ -423,47 +472,94 @@ function CircleManager({
                     onDrop={(event) => handleFriendDrop(event, circle)}
                   >
                     {isRenderableCircleImage(circle.profileImageUrl) ? (
-                      <img src={circle.profileImageUrl} alt="" className="mb-1 h-6 w-6 rounded-full border border-white/70 object-cover" />
+                      <img src={circle.profileImageUrl} alt="" className="mb-1 h-7 w-7 rounded-full border-2 border-white/80 object-cover shadow-sm" />
                     ) : null}
-                    <span className="w-full truncate px-1 text-center">{circle.name}</span>
-                    <span className="text-[10px] opacity-90">{circle.memberCount || 0} members</span>
+                    <span className="w-full truncate px-1 text-center leading-tight">{circle.name}</span>
+                    <span className="mt-0.5 text-[9px] font-medium opacity-80">{circle.memberCount || 0} members</span>
                   </button>
                 );
               })}
             </div>
           </div>
-          <p className="mt-2 text-xs text-slate-500">Tip: drag friend chips onto circle bubbles, or use quick-add search.</p>
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+            <span aria-hidden="true">💡</span>
+            Drag friend chips onto a circle bubble to add them, or use the search panel on the right.
+          </p>
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/90 p-4">
+        {/* Edit / detail sidebar */}
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
           {selectedCircle ? (
             <>
-              <div className="group flex items-center justify-between gap-2">
-                <h4 className="font-semibold text-slate-800">Edit Circle</h4>
-                <button type="button" onClick={() => onDeleteCircle(selectedCircle.name)} className="text-sm font-medium text-red-600 opacity-40 transition hover:text-red-700 group-hover:opacity-100">Delete</button>
+              {/* Circle header */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="h-3 w-3 flex-shrink-0 rounded-full shadow-sm" style={{ backgroundColor: selectedCircle.color || '#3B82F6' }} />
+                  <h4 className="truncate font-semibold text-slate-800">{selectedCircle.name}</h4>
+                  {selectedCircle.relationshipAudience === 'secure' ? (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700"><span aria-hidden="true">🔒</span> secure</span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onDeleteCircle(selectedCircle.name)}
+                  className="flex-shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-red-400 transition hover:bg-red-50 hover:text-red-600"
+                >
+                  Delete
+                </button>
               </div>
-              <input value={editName} onChange={(event) => setEditName(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Circle name" maxLength={50} />
-              <input value={editProfileImageUrl} onChange={(event) => setEditProfileImageUrl(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Profile image URL (optional)" maxLength={2048} />
-              <label className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                <span>{editAudience === 'secure' ? 'Secure circle' : 'Social circle'}</span>
-                <input type="checkbox" checked={editAudience === 'secure'} onChange={(event) => setEditAudience(event.target.checked ? 'secure' : 'social')} aria-label="Circle type toggle" />
-              </label>
-              <button type="button" onClick={handleSaveCircle} className="w-full rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">Save Changes</button>
 
+              {/* Edit fields */}
               <div className="space-y-2">
+                <input
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm placeholder-slate-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                  placeholder="Circle name"
+                  maxLength={50}
+                />
+                <input
+                  value={editProfileImageUrl}
+                  onChange={(event) => setEditProfileImageUrl(event.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm placeholder-slate-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                  placeholder="Profile image URL (optional)"
+                  maxLength={2048}
+                />
+                <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5 text-sm transition hover:bg-slate-50">
+                  <span className="font-medium text-slate-600">{editAudience === 'secure' ? <><span aria-hidden="true">🔒</span> Secure circle</> : <><span aria-hidden="true">🌐</span> Social circle</>}</span>
+                  <input
+                    type="checkbox"
+                    checked={editAudience === 'secure'}
+                    onChange={(event) => setEditAudience(event.target.checked ? 'secure' : 'social')}
+                    aria-label="Circle type toggle"
+                    className="h-4 w-4 rounded accent-amber-500"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSaveCircle}
+                  className="w-full rounded-xl bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 active:scale-95"
+                >
+                  Save Changes
+                </button>
+              </div>
+
+              {/* Add member search */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Add members</p>
                 <input
                   value={suggestQuery}
                   onChange={(event) => setSuggestQuery(event.target.value)}
                   placeholder="Search friends to add…"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm placeholder-slate-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-200"
                 />
                 {suggestQuery.trim() ? (
-                  <div className="max-h-32 overflow-auto rounded-xl border border-slate-200">
+                  <div className="max-h-40 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
                     {friendSuggestions.length > 0 ? friendSuggestions.map((friend) => (
                       <button
                         key={friend._id}
                         type="button"
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                        className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition hover:bg-violet-50"
                         onClick={() => {
                           const memberCount = Array.isArray(selectedCircle.members) ? selectedCircle.members.length : 0;
                           if (memberCount >= MAX_MEMBERS_PER_CIRCLE) {
@@ -475,44 +571,72 @@ function CircleManager({
                           setSuggestQuery('');
                         }}
                       >
-                        <span>{friend.realName || friend.username}</span>
+                        <span className="font-medium text-slate-800">{friend.realName || friend.username}</span>
                         <span className="text-xs text-slate-500">@{friend.username}</span>
                       </button>
-                    )) : <p className="px-3 py-2 text-xs text-slate-500">No matching friends.</p>}
+                    )) : <p className="px-3 py-2 text-xs text-slate-500">No matching friends found.</p>}
                   </div>
                 ) : null}
               </div>
 
-              <div className="space-y-2">
-                <p className="text-xs text-slate-500">
-                  {Array.isArray(selectedCircle.members) ? selectedCircle.members.length : 0}/{MAX_MEMBERS_PER_CIRCLE} members
-                </p>
-                {(selectedCircle.members || []).length === 0 ? (
-                  <p className="text-sm text-slate-500">No members yet.</p>
-                ) : (selectedCircle.members || []).map((member) => (
-                  <div key={member._id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                    <button
-                      type="button"
-                      data-testid={`member-preview-btn-${member._id}`}
-                      className="flex flex-1 items-center gap-2 text-left hover:opacity-80"
-                      onClick={() => openMemberPreview(member, selectedCircle.name)}
-                    >
-                      {isRenderableCircleImage(member.avatarUrl) ? (
-                        <img src={member.avatarUrl} alt="" className="h-6 w-6 flex-shrink-0 rounded-full object-cover" />
-                      ) : (
-                        <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-violet-100 text-[10px] font-semibold text-violet-700">
-                          {(member.realName || member.username || '?').charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                      <span className="truncate font-medium text-slate-800">{member.realName || member.username}</span>
-                    </button>
-                    <button type="button" className="flex-shrink-0 text-xs text-red-600 hover:text-red-700" onClick={() => onRemoveMember(selectedCircle.name, member._id)}>Remove</button>
-                  </div>
-                ))}
+              {/* Members list */}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Members</p>
+                  <span className="text-xs text-slate-400">
+                    {Array.isArray(selectedCircle.members) ? selectedCircle.members.length : 0} / {MAX_MEMBERS_PER_CIRCLE}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {(selectedCircle.members || []).length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-slate-200 py-4 text-center text-xs text-slate-400">
+                      No members yet — search above to add people.
+                    </p>
+                  ) : (selectedCircle.members || []).map((member) => (
+                    <div key={member._id} className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm transition hover:bg-violet-50/50">
+                      <button
+                        type="button"
+                        data-testid={`member-preview-btn-${member._id}`}
+                        className="flex flex-1 items-center gap-2 text-left hover:opacity-80"
+                        onClick={() => openMemberPreview(member, selectedCircle.name)}
+                      >
+                        {isRenderableCircleImage(member.avatarUrl) ? (
+                          <img src={member.avatarUrl} alt="" className="h-7 w-7 flex-shrink-0 rounded-full object-cover ring-1 ring-slate-200" />
+                        ) : (
+                          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-violet-100 text-[11px] font-bold text-violet-700">
+                            {(member.realName || member.username || '?').charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="truncate font-medium text-slate-800">{member.realName || member.username}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="flex-shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                        onClick={() => onRemoveMember(selectedCircle.name, member._id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           ) : (
-            <p className="text-sm text-slate-500">{circles.length === 0 ? 'No circles yet. Add one to get started.' : 'Select a circle bubble to edit details.'}</p>
+            <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+              {circles.length === 0 ? (
+                <>
+                  <span className="mb-3 text-4xl" aria-hidden="true">⭕</span>
+                  <p className="text-sm font-semibold text-slate-700">No circles yet</p>
+                  <p className="mt-1 text-xs text-slate-400">Click <strong>Add New Circle</strong> above to create your first circle.</p>
+                </>
+              ) : (
+                <>
+                  <span className="mb-3 text-3xl" aria-hidden="true">👆</span>
+                  <p className="text-sm font-semibold text-slate-700">Select a circle</p>
+                  <p className="mt-1 text-xs text-slate-400">Tap a circle bubble on the canvas to view and edit it here.</p>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -522,13 +646,13 @@ function CircleManager({
           role="dialog"
           aria-modal="true"
           aria-label="Member profile preview"
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 backdrop-blur-sm sm:items-center"
           onClick={(event) => { if (event.target === event.currentTarget) closeMemberPreview(); }}
         >
           <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-start gap-4">
               {isRenderableCircleImage(memberPreview.member.avatarUrl) ? (
-                <img src={memberPreview.member.avatarUrl} alt="" className="h-14 w-14 rounded-full object-cover ring-2 ring-violet-200" />
+                <img src={memberPreview.member.avatarUrl} alt="" className="h-14 w-14 rounded-full object-cover ring-2 ring-violet-300" />
               ) : (
                 <span className="grid h-14 w-14 place-items-center rounded-full bg-violet-100 text-xl font-bold text-violet-700 ring-2 ring-violet-200">
                   {(memberPreview.member.realName || memberPreview.member.username || '?').charAt(0).toUpperCase()}
