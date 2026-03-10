@@ -685,6 +685,7 @@ const Social = () => {
   const normalizedCurrentUsername = String(currentUser?.username || '').trim().toLowerCase();
   const isViewingAnotherProfile = Boolean(
     isAuthenticated
+      && currentUser
       && normalizedRequestedProfileIdentifier
       && normalizedRequestedProfileIdentifier !== normalizedCurrentUserId
       && normalizedRequestedProfileIdentifier !== normalizedCurrentUsername
