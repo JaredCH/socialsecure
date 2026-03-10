@@ -2,11 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { newsAPI } from '../utils/api';
 import NewsControlPanel from '../components/news/control/NewsControlPanel';
 import { HealthDot } from '../components/news/control/HealthDot';
-import SourcesStatusCard from '../components/news/sidebar/SourcesStatusCard';
-import TrendingCard from '../components/news/sidebar/TrendingCard';
-import KeywordHitsCard from '../components/news/sidebar/KeywordHitsCard';
-import LocalNewsCard from '../components/news/sidebar/LocalNewsCard';
-import WeatherWidget from '../components/news/sidebar/WeatherWidget';
 import ArticleDrawer from '../components/news/ArticleDrawer';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
@@ -124,9 +119,6 @@ function News() {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [promotedArticles, setPromotedArticles] = useState([]);
-  const [promotedLoading, setPromotedLoading] = useState(true);
-  const [promotedError, setPromotedError] = useState(null);
   const [preferences, setPreferences] = useState(null);
   const [topics, setTopics] = useState([]);
   const [activeFilter, setActiveFilter] = useState('all');
@@ -155,22 +147,8 @@ function News() {
 
   // ─── Data fetching (unchanged API contracts) ────────────────────────────────
 
-  const loadPromoted = useCallback(async (topicFilter = activeFilter) => {
-    try {
-      setPromotedLoading(true);
-      const promotedRes = await newsAPI.getPromoted({ limit: 8, topic: topicFilter !== 'all' ? topicFilter : undefined });
-      setPromotedArticles(promotedRes.data.items || []);
-      setPromotedError(null);
-    } catch (err) {
-      console.error('Error loading promoted news:', err);
-      setPromotedError('Failed to load promoted news');
-    } finally {
-      setPromotedLoading(false);
-    }
-  }, [activeFilter]);
-
-  const refreshFeed = useCallback(async (scope = activeScope, topic = activeFilter) => {
-    const refreshedFeed = await newsAPI.getFeed({ page: 1, limit: 20, topic: topic !== 'all' ? topic : undefined, scope });
+  const refreshFeed = useCallback(async (scope = activeScope, topic = activeFilter, page = 1) => {
+    const refreshedFeed = await newsAPI.getFeed({ page, limit: 15, topic: topic !== 'all' ? topic : undefined, scope });
     setArticles(refreshedFeed.data.articles);
     setPagination(refreshedFeed.data.pagination);
     // Keep the selected scope sticky in UI; backend fallback should not change user selection.
@@ -181,15 +159,13 @@ function News() {
   const bootstrap = useCallback(async () => {
     try {
       setLoading(true);
-      setPromotedLoading(true);
-      const [prefsRes, topicsRes, promotedRes] = await Promise.all([
+      const [prefsRes, topicsRes] = await Promise.all([
         newsAPI.getPreferences().catch(() => ({ data: { preferences: null, registrationAlignment: null } })),
         newsAPI.getTopics(),
-        newsAPI.getPromoted({ limit: 8 }).catch(() => ({ data: { items: [] } }))
       ]);
       const taxonomyRes = await newsAPI.getLocationTaxonomy().catch(() => ({ data: { taxonomy: { country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} } } }));
       const preferredScope = prefsRes.data.preferences?.defaultScope;
-      const feedRes = await newsAPI.getFeed({ page: 1, limit: 20, scope: preferredScope || undefined });
+      const feedRes = await newsAPI.getFeed({ page: 1, limit: 15, scope: preferredScope || undefined });
       const sourcesRes = await newsAPI.getSources().catch(() => ({ data: { sources: [] } }));
       setArticles(feedRes.data.articles);
       setPagination(feedRes.data.pagination);
@@ -199,10 +175,8 @@ function News() {
       setActiveScope(normalizeScopeSelection(preferredScope || 'local'));
       setScopeFallbackMessage(getScopeFallbackMessage(feedRes.data.personalization));
       setTopics(topicsRes.data.topics);
-      setPromotedArticles(promotedRes.data.items || []);
       setAvailableSources(sourcesRes.data.sources || []);
       setTopUsedSources(sourcesRes.data.topUsedSources || []);
-      setPromotedError(null);
       if (prefsRes.data.preferences?.hiddenCategories) setHiddenCategories(prefsRes.data.preferences.hiddenCategories);
       setError(null);
     } catch (err) {
@@ -210,7 +184,6 @@ function News() {
       setError('Failed to load news feed');
     } finally {
       setLoading(false);
-      setPromotedLoading(false);
     }
   }, []);
 
@@ -218,15 +191,18 @@ function News() {
 
   // ─── Handlers (same business logic, same API calls) ─────────────────────────
 
-  const loadMore = async () => {
-    if (pagination.page >= pagination.pages) return;
+  const goToPage = async (page) => {
+    if (page < 1 || page > Math.min(pagination.pages, 10)) return;
+    setLoading(true);
     try {
-      const nextPage = pagination.page + 1;
-      const res = await newsAPI.getFeed({ page: nextPage, limit: 20, topic: activeFilter !== 'all' ? activeFilter : undefined, scope: activeScope });
-      setArticles(prev => [...prev, ...res.data.articles]);
+      const res = await newsAPI.getFeed({ page, limit: 15, topic: activeFilter !== 'all' ? activeFilter : undefined, scope: activeScope });
+      setArticles(res.data.articles);
       setPagination(res.data.pagination);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      console.error('Error loading more:', err);
+      console.error('Error loading page:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -234,8 +210,7 @@ function News() {
     setActiveFilter(topic);
     setLoading(true);
     try {
-      await refreshFeed(activeScope, topic);
-      await loadPromoted(topic);
+      await refreshFeed(activeScope, topic, 1);
     } catch (err) {
       console.error('Error filtering:', err);
     } finally {
@@ -280,8 +255,7 @@ function News() {
     setActiveScope(scope);
     setLoading(true);
     try {
-      await refreshFeed(scope, activeFilter);
-      await loadPromoted(activeFilter);
+      await refreshFeed(scope, activeFilter, 1);
     } catch (err) {
       console.error('Error updating feed scope:', err);
     } finally {
@@ -872,90 +846,76 @@ function News() {
               <p className="text-gray-400 text-sm mt-1 max-w-xs mx-auto">Try adjusting your filters, scope, or adding more keywords and sources.</p>
             </div>
           ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {sortedArticles.map((article) => (
-                <article key={article._id} className="group bg-white rounded-2xl overflow-hidden hover:shadow-lg hover:shadow-gray-200/60 transition-all duration-300 ring-1 ring-gray-200/70">
+                <article key={article._id} className="group bg-white rounded-xl overflow-hidden hover:shadow-md hover:shadow-gray-200/60 transition-all duration-200 ring-1 ring-gray-200/70">
                   <button onClick={() => setSelectedArticleId(article._id)} className="w-full text-left">
                     {article.imageUrl ? (
-                      <div className="w-full h-40 overflow-hidden bg-gray-100">
-                        <img src={article.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('flex', 'items-center', 'justify-center'); e.target.parentElement.innerHTML = '<span class="text-3xl text-gray-300">📰</span>'; }} />
+                      <div className="w-full h-24 overflow-hidden bg-gray-100">
+                        <img src={article.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('flex', 'items-center', 'justify-center'); e.target.parentElement.innerHTML = '<span class="text-2xl text-gray-300">📰</span>'; }} />
                       </div>
                     ) : (
-                      <div className="w-full h-28 bg-gradient-to-br from-gray-100 to-gray-50 flex items-center justify-center text-3xl text-gray-300">📰</div>
+                      <div className="w-full h-16 bg-gradient-to-br from-gray-100 to-gray-50 flex items-center justify-center text-2xl text-gray-300">📰</div>
                     )}
-                    <div className="p-4">
-                      <h2 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors">{article.title}</h2>
-                      <div className="mt-2 flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
-                        <span className="font-semibold text-gray-600">{article.source}</span>
+                    <div className="p-3">
+                      <h2 className="text-xs font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors">{article.title}</h2>
+                      <div className="mt-1.5 flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] text-gray-400">
+                        <span className="font-semibold text-gray-600 truncate">{article.source}</span>
                         <span className="text-gray-300">·</span>
-                        <span>{formatRelativeTime(article.publishedAt)}</span>
+                        <span className="shrink-0">{formatRelativeTime(article.publishedAt)}</span>
                         {article.resolvedLocation?.label && (
-                          <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ring-1 ${getLocationBadgeClasses(article.resolvedLocation.kind)}`}>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ring-1 ${getLocationBadgeClasses(article.resolvedLocation.kind)}`}>
                             {article.resolvedLocation.label}
                           </span>
                         )}
-                        <span className="ml-auto px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[11px] font-medium">{getSourceTypeLabel(article.sourceType)}</span>
                       </div>
-                      {article.feedMetadata?.author && (
-                        <p className="mt-1 text-[11px] text-gray-400 truncate">By {article.feedMetadata.author}</p>
-                      )}
-                      {article.topics?.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {article.topics.slice(0, 3).map((topic) => (
-                            <span key={topic} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] font-medium">{topic}</span>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </button>
                 </article>
               ))}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {sortedArticles.map((article) => (
-                <article key={article._id} className="group bg-white rounded-2xl overflow-hidden hover:shadow-lg hover:shadow-gray-200/60 transition-all duration-300 ring-1 ring-gray-200/70">
-                  <div className="flex flex-col sm:flex-row">
-                    <a href={article.url} target="_blank" rel="noopener noreferrer" className="flex flex-col sm:flex-row flex-1 min-w-0">
+                <article key={article._id} className="group bg-white rounded-xl overflow-hidden hover:shadow-md hover:shadow-gray-200/60 transition-all duration-200 ring-1 ring-gray-200/70">
+                  <div className="flex">
+                    <a href={article.url} target="_blank" rel="noopener noreferrer" className="flex flex-1 min-w-0">
                       {article.imageUrl ? (
-                        <div className="sm:w-48 sm:min-h-[130px] shrink-0 overflow-hidden bg-gray-100">
-                          <img src={article.imageUrl} alt="" className="w-full h-44 sm:h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('flex', 'items-center', 'justify-center'); e.target.parentElement.innerHTML = '<span class="text-4xl text-gray-300">📰</span>'; }} />
+                        <div className="w-20 sm:w-28 shrink-0 overflow-hidden bg-gray-100">
+                          <img src={article.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('flex', 'items-center', 'justify-center'); e.target.parentElement.innerHTML = '<span class="text-2xl text-gray-300">📰</span>'; }} />
                         </div>
                       ) : (
-                        <div className="hidden sm:flex sm:w-48 sm:min-h-[130px] shrink-0 bg-gradient-to-br from-gray-100 to-gray-50 items-center justify-center text-4xl text-gray-300">📰</div>
+                        <div className="hidden sm:flex w-28 shrink-0 bg-gradient-to-br from-gray-100 to-gray-50 items-center justify-center text-2xl text-gray-300">📰</div>
                       )}
-                      <div className="flex-1 min-w-0 p-4 sm:p-5 flex flex-col justify-center">
-                        <h2 className="text-[15px] sm:text-base font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors">{article.title}</h2>
-                        {article.description && (
-                          <p className="mt-1.5 text-sm text-gray-500 line-clamp-2 leading-relaxed">{article.description.length > 200 ? article.description.substring(0, 200) + '…' : article.description}</p>
-                        )}
-                        <div className="mt-3 flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
+                      <div className="flex-1 min-w-0 px-3 py-2.5 flex flex-col justify-center">
+                        <h2 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors">{article.title}</h2>
+                        <div className="mt-1 flex items-center flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-gray-400">
                           <span className="font-semibold text-gray-600">{article.source}</span>
                           {article.feedMetadata?.author && (
                             <>
                               <span className="text-gray-300">·</span>
-                              <span className="text-gray-500">{article.feedMetadata.author}</span>
+                              <span className="text-gray-500 truncate max-w-[120px]">{article.feedMetadata.author}</span>
                             </>
                           )}
                           <span className="text-gray-300">·</span>
-                          <span>{formatRelativeTime(article.publishedAt)}</span>
+                          <span className="shrink-0">{formatRelativeTime(article.publishedAt)}</span>
                           {article.resolvedLocation?.label && (
-                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ring-1 ${getLocationBadgeClasses(article.resolvedLocation.kind)}`}>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ring-1 ${getLocationBadgeClasses(article.resolvedLocation.kind)}`}>
                               {article.resolvedLocation.label}
                             </span>
                           )}
-                          <span className="ml-auto px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[11px] font-medium">{getSourceTypeLabel(article.sourceType)}</span>
+                          <span className="ml-auto px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-medium shrink-0">{getSourceTypeLabel(article.sourceType)}</span>
                         </div>
                         {article.topics?.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {article.topics.slice(0, 5).map((topic) => (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {article.topics.slice(0, 3).map((topic) => (
                               <span key={topic} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] font-medium">{topic}</span>
                             ))}
                           </div>
                         )}
                       </div>
                     </a>
-                    <div className="flex items-center gap-1 px-3 py-2 sm:py-0 sm:pr-4 border-t sm:border-t-0 sm:border-l border-gray-100">
+                    <div className="flex items-center px-2 border-l border-gray-100 shrink-0">
                       <button onClick={() => setSelectedArticleId(article._id)} className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" aria-label="View article details">
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                       </button>
@@ -966,56 +926,66 @@ function News() {
             </div>
           )}
 
-          {/* Load more */}
-          {pagination.page < pagination.pages && (
-            <div className="mt-8 text-center">
-              <button
-                onClick={loadMore}
-                disabled={loading}
-                className="px-8 py-2.5 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 text-gray-700 text-sm font-semibold rounded-xl transition-all duration-200 disabled:opacity-50 hover:shadow-sm ring-1 ring-gray-200/60"
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2 justify-center">
-                    <span className="w-3.5 h-3.5 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
-                    Loading…
-                  </span>
-                ) : 'Load More'}
-              </button>
-            </div>
-          )}
-
-          <p className="mt-4 text-center text-xs text-gray-400">
-            {articles.length} of {pagination.total} articles
-          </p>
+          {/* ── Pagination ────────────────────────────────────────────────────── */}
+          {(() => {
+            const totalPages = Math.min(pagination.pages, 10);
+            if (totalPages <= 1) return null;
+            const currentPage = pagination.page;
+            const getPageNumbers = () => {
+              const pages = [];
+              const delta = 2;
+              const left = Math.max(1, currentPage - delta);
+              const right = Math.min(totalPages, currentPage + delta);
+              if (left > 1) { pages.push(1); if (left > 2) pages.push('…'); }
+              for (let i = left; i <= right; i++) pages.push(i);
+              if (right < totalPages) { if (right < totalPages - 1) pages.push('…'); pages.push(totalPages); }
+              return pages;
+            };
+            return (
+              <div className="mt-6 flex items-center justify-between border-t border-gray-200 pt-4">
+                <p className="text-xs text-gray-400">
+                  Page {currentPage} of {totalPages} · {pagination.total} articles
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage <= 1 || loading}
+                    className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-label="Previous page"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                  </button>
+                  {getPageNumbers().map((pg, idx) =>
+                    pg === '…' ? (
+                      <span key={`ellipsis-${idx}`} className="px-2 py-1 text-xs text-gray-400">…</span>
+                    ) : (
+                      <button
+                        key={pg}
+                        onClick={() => goToPage(pg)}
+                        disabled={loading}
+                        className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+                          pg === currentPage
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        {pg}
+                      </button>
+                    )
+                  )}
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage >= totalPages || loading}
+                    className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-label="Next page"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </main>
-
-        {/* ── Right Sidebar – Information Stack ────────────────────────────── */}
-        <aside className="hidden xl:block w-72 shrink-0">
-          <div className="sticky top-[210px] space-y-4">
-            <SourcesStatusCard
-              sources={availableSources}
-              enabledCount={enabledSourceCount}
-              totalCount={availableSources.length + 1 /* +1 for Google News */}
-              onManageSources={() => { setSidebarOpen(true); togglePanel(PANEL_IDS.sources); }}
-            />
-            <TrendingCard
-              items={promotedArticles}
-              loading={promotedLoading}
-              error={promotedError}
-            />
-            <KeywordHitsCard
-              keywords={activeKeywords}
-              articles={articles}
-              onKeywordClick={(kw) => setNewKeyword(kw)}
-            />
-            <LocalNewsCard
-              articles={articles}
-              locations={preferences?.locations || []}
-              onManageLocations={() => setShowSettings(true)}
-            />
-            <WeatherWidget />
-          </div>
-        </aside>
       </div>
 
       {/* ── Article Drawer ──────────────────────────────────────────────────── */}
