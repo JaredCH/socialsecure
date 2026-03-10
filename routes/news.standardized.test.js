@@ -101,19 +101,28 @@ describe('Google News topic configuration', () => {
   it('exports GOOGLE_NEWS_TOPIC_MAP', () => {
     const map = newsRoutes.internals.GOOGLE_NEWS_TOPIC_MAP;
     expect(map).toBeDefined();
+    expect(map['top stories']).toBeDefined();
+    expect(map['top stories'].url).toBe('https://news.google.com/rss');
+    expect(map.world.url).toBe('https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNREZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en');
+    expect(map.business.url).toBe('https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRlVnWm9ScQ?hl=en-US&gl=US&ceid=US:en');
     expect(map.technology.category).toBe('technology');
     expect(map.science.category).toBe('science');
-    expect(map['artificial intelligence'].category).toBe('ai');
+    expect(map.health.category).toBe('health');
+    expect(map.entertainment.category).toBe('entertainment');
+    expect(map.sports.category).toBe('sports');
   });
 
-  it('buildGoogleNewsFeedUrl includes locale params', () => {
+  it('buildGoogleNewsFeedUrl uses configured feed URLs and search fallback', () => {
     const buildUrl = newsRoutes.internals.buildGoogleNewsFeedUrl;
-    const url = buildUrl('technology');
-    expect(url).toContain('news.google.com/rss/search');
-    expect(url).toContain('hl=en-US');
-    expect(url).toContain('gl=US');
-    expect(url).toContain('ceid=US:en');
-    expect(url).toContain('q=technology');
+    const topicUrl = buildUrl('technology');
+    expect(topicUrl).toBe('https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en');
+
+    const fallbackUrl = buildUrl('football');
+    expect(fallbackUrl).toContain('news.google.com/rss/search');
+    expect(fallbackUrl).toContain('hl=en-US');
+    expect(fallbackUrl).toContain('gl=US');
+    expect(fallbackUrl).toContain('ceid=US:en');
+    expect(fallbackUrl).toContain('q=football');
   });
 });
 
@@ -379,6 +388,37 @@ describe('Google News adapter standardized fields', () => {
     // The adapter calls parser.parseURL which will fail on invalid URLs
     const articles = await newsRoutes.adapters.fetchGoogleNewsSource('nonexistent_query_test');
     expect(articles).toEqual([]);
+  });
+
+  it('stores category, publication date, and location fallback tokens from Google feed content', async () => {
+    mockParseUrl.mockResolvedValueOnce({
+      title: 'Google News Technology',
+      language: 'en',
+      items: [
+        {
+          title: 'Major launch expands service in Canada - Example Source',
+          contentSnippet: 'Analysts in Ottawa expect broader adoption across Canada this year.',
+          link: 'https://example.com/google-news-tech-1',
+          guid: 'https://example.com/google-news-tech-1#1',
+          categories: ['Technology'],
+          isoDate: '2026-03-07T15:30:00.000Z',
+          source: { _url: 'https://example.com' }
+        }
+      ]
+    });
+
+    const articles = await newsRoutes.adapters.fetchGoogleNewsSource('technology');
+
+    expect(mockParseUrl).toHaveBeenCalledWith(
+      'https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZxYUdjU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US:en'
+    );
+    expect(articles).toHaveLength(1);
+    expect(articles[0].category).toBe('technology');
+    expect(articles[0].feedCategory).toBe('Technology');
+    expect(articles[0].publishedAt).toBeInstanceOf(Date);
+    expect(articles[0].publishedAt.toISOString()).toBe('2026-03-07T15:30:00.000Z');
+    expect(articles[0].locations).toContain('canada');
+    expect(articles[0].localityLevel).toBe('country');
   });
 });
 
