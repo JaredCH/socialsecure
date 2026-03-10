@@ -417,7 +417,8 @@ function News() {
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   const activeKeywords = preferences?.followedKeywords || [];
-  const enabledSourceCount = availableSources.filter(s => isSourceEnabled(s._id)).length;
+  const googleNewsEnabled = preferences?.googleNewsEnabled !== false;
+  const enabledSourceCount = availableSources.filter(s => isSourceEnabled(s._id)).length + (googleNewsEnabled ? 1 : 0);
   const enabledCategoryCount = ALL_CATEGORIES.length - hiddenCategories.length;
 
   return (
