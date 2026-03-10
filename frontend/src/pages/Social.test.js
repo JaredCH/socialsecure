@@ -182,6 +182,12 @@ describe('Social page hero background rendering', () => {
     expect(container.firstChild).not.toBeNull();
   });
 
+  it('normalizes owner social route to username-based URL', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+    const locationProbe = container.querySelector('[data-testid="location-probe"]');
+    expect(locationProbe?.textContent).toBe('/social?user=alpha');
+  });
+
   it('builds social chat and calendar links for friend profile context', async () => {
     window.history.replaceState({}, '', '/social?user=buddy');
     feedAPI.getPublicUserFeed.mockResolvedValue({

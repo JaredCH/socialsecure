@@ -128,6 +128,10 @@ function App() {
   const featuresMenuCloseTimeoutRef = useRef(null);
 
   const isAuthenticated = useMemo(() => Boolean(localStorage.getItem('token') && user), [user]);
+  const socialProfilePath = useMemo(() => {
+    const username = String(user?.username || '').trim();
+    return username ? `/social?user=${encodeURIComponent(username)}` : '/social';
+  }, [user?.username]);
   const onboardingRequired = isAuthenticated && onboardingStatus.status !== 'completed';
   const encryptionPasswordRequired = isAuthenticated && !encryptionPasswordStatus.hasEncryptionPassword;
   const passwordResetRequired = isAuthenticated && !!user?.mustResetPassword;
@@ -506,7 +510,7 @@ function App() {
               className={`${isMobileMenuOpen ? 'flex' : 'hidden'} absolute right-0 top-full z-[1300] mt-2 w-64 flex-col gap-2 overflow-visible rounded-2xl border border-slate-200 bg-white p-2 shadow-lg md:static md:z-auto md:mt-3 md:flex md:w-auto md:flex-row md:flex-wrap md:items-center md:justify-end md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
             >
               {!encryptionPasswordRequired && <Link to="/" onClick={closeNavMenus} className={navLinkClass}>Home</Link>}
-              {canUseProtectedFeatures && <Link to="/social" onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
+              {canUseProtectedFeatures && <Link to={socialProfilePath} onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
               {canUseProtectedFeatures && <Link to="/chat" onClick={closeNavMenus} className={navLinkClass}>Chat</Link>}
               <div
                 className="relative"
@@ -763,7 +767,7 @@ function App() {
                   passwordResetRequired={passwordResetRequired}
                   allowWhenPasswordResetRequired={false}
                 >
-                  {user?.isAdmin ? <ModerationDashboard /> : <Navigate to="/social" replace />}
+                  {user?.isAdmin ? <ModerationDashboard /> : <Navigate to={socialProfilePath} replace />}
                 </ProtectedRoute>
               )}
             />
@@ -820,7 +824,7 @@ function App() {
                 </ProtectedRoute>
               )}
             />
-            <Route path="/feed" element={<Navigate to="/social" replace />} />
+            <Route path="/feed" element={<Navigate to={socialProfilePath} replace />} />
             <Route
               path="/chat"
               element={(
@@ -887,7 +891,7 @@ function App() {
               )}
             />
             <Route path="/pgp" element={<Navigate to="/settings?deprecated=pgp" replace />} />
-            <Route path="*" element={<Navigate to={isAuthenticated ? (passwordResetRequired ? '/settings#account' : '/social') : '/'} replace />} />
+            <Route path="*" element={<Navigate to={isAuthenticated ? (passwordResetRequired ? '/settings#account' : socialProfilePath) : '/'} replace />} />
           </Routes>
         </RouteMain>
         
