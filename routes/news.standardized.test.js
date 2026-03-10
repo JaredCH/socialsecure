@@ -148,18 +148,17 @@ describe('NPR adapter', () => {
     expect(map.news.url).toContain('feeds.npr.org');
     expect(map.news.category).toBe('general');
     expect(map.us).toBeDefined();
-    expect(map.us.url).toBe('https://feeds.npr.org/1019/rss.xml');
+    expect(map.us.url).toBe('https://feeds.npr.org/1003/rss.xml');
     expect(map.us.category).toBe('general');
-    expect(map.technology).toBeDefined();
-    expect(map.technology.category).toBe('technology');
+    expect(map.business).toBeDefined();
+    expect(map.business.url).toBe('https://feeds.npr.org/1019/rss.xml');
+    expect(map.business.category).toBe('business');
     expect(map.politics).toBeDefined();
     expect(map.politics.url).toBe('https://feeds.npr.org/1017/rss.xml');
     expect(map.politics.category).toBe('politics');
     expect(map.world).toBeDefined();
     expect(map.world.category).toBe('world');
-    expect(map.nprPolitics).toBeDefined();
-    expect(map.nprPolitics.url).toBe('https://feeds.npr.org/1017/rss.xml');
-    expect(map.nprPolitics.category).toBe('politics');
+    expect(map.nprPolitics).toBeUndefined();
   });
 
   it('returns empty array on fetch error', async () => {

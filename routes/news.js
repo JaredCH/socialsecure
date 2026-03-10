@@ -158,12 +158,11 @@ const NPR_ENABLED = String(process.env.NPR_ENABLED || 'true').toLowerCase() !== 
 
 const NPR_FEED_MAP = {
   news: { url: 'https://feeds.npr.org/1001/rss.xml', category: 'general', label: 'NPR News' },
-  us: { url: 'https://feeds.npr.org/1019/rss.xml', category: 'general', label: 'NPR U.S. News' },
+  us: { url: 'https://feeds.npr.org/1003/rss.xml', category: 'general', label: 'NPR U.S. News' },
   world: { url: 'https://feeds.npr.org/1004/rss.xml', category: 'world', label: 'NPR World' },
   politics: { url: 'https://feeds.npr.org/1017/rss.xml', category: 'politics', label: 'NPR Politics' },
-  technology: { url: 'https://feeds.npr.org/1019/rss.xml', category: 'technology', label: 'NPR Technology' },
-  health: { url: 'https://feeds.npr.org/1128/rss.xml', category: 'health', label: 'NPR Health' },
-  nprPolitics: { url: 'https://feeds.npr.org/1017/rss.xml', category: 'politics', label: 'NPR Politics' }
+  business: { url: 'https://feeds.npr.org/1019/rss.xml', category: 'business', label: 'NPR Business' },
+  health: { url: 'https://feeds.npr.org/1128/rss.xml', category: 'health', label: 'NPR Health' }
 };
 
 // ============================================
@@ -3554,6 +3553,7 @@ module.exports = {
     GOOGLE_NEWS_TOPIC_MAP,
     NPR_FEED_MAP,
     BBC_FEED_MAP,
+    YAHOO_FEED_MAP,
     AP_FEED_MAP,
     REUTERS_FEED_MAP,
     PBS_FEED_MAP,
