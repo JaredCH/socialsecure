@@ -18,6 +18,7 @@ const {
   THEME_TO_ALLOWED_ACCENTS,
   normalizeSocialPagePreferences
 } = require('../utils/socialPagePreferences');
+const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
 
 const PROFILE_THEMES = [...SOCIAL_THEME_PRESETS];
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
@@ -1542,11 +1543,11 @@ router.put('/profile', [
     } = req.body;
     const now = Date.now();
 
-    const requestedLocation = {
+    const requestedLocation = canonicalizeNewsLocation({
       city: normalizeLocationValue(city),
       state: normalizeLocationValue(state),
       country: normalizeLocationValue(country)
-    };
+    });
     const hasLocationFieldsInRequest = LOCATION_CHANGE_FIELDS.some((field) =>
       Object.prototype.hasOwnProperty.call(req.body, field)
     );
@@ -1559,8 +1560,8 @@ router.put('/profile', [
       };
       const nextLocation = {
         city: requestedLocation.city || currentLocation.city,
-        state: requestedLocation.state || currentLocation.state,
-        country: requestedLocation.country || currentLocation.country
+        state: requestedLocation.stateCode || requestedLocation.state || currentLocation.state,
+        country: requestedLocation.countryCode || requestedLocation.country || currentLocation.country
       };
       const locationChanged = LOCATION_CHANGE_FIELDS.some((field) => nextLocation[field] !== currentLocation[field]);
 

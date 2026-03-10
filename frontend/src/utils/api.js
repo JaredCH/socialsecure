@@ -518,6 +518,8 @@ export const newsAPI = {
   toggleSourceCategory: (sourceId, category) => api.put('/news/preferences/source-categories', { sourceId, category }),
   // Get available topics
   getTopics: () => api.get('/news/topics'),
+  // Get canonical location taxonomy for state/city selectors
+  getLocationTaxonomy: () => api.get('/news/location-taxonomy'),
   // Get single article
   getArticle: (id) => api.get(`/news/article/${id}`),
   // Trigger manual ingestion (admin)

@@ -18,7 +18,19 @@ const newsLocationSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  stateCode: {
+    type: String,
+    default: null
+  },
   country: {
+    type: String,
+    default: null
+  },
+  countryCode: {
+    type: String,
+    default: null
+  },
+  cityKey: {
     type: String,
     default: null
   },

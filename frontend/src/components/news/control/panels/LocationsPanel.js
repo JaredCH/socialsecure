@@ -6,14 +6,50 @@ export default function LocationsPanel({
   onRemoveLocation,
   onSetPrimaryLocation,
   newLocation,
-  setNewLocation
+  setNewLocation,
+  locationTaxonomy,
+  registrationAlignment
 }) {
+  const states = Array.isArray(locationTaxonomy?.states) ? locationTaxonomy.states : [];
+  const cityOptions = newLocation.stateCode
+    ? (locationTaxonomy?.citiesByState?.[newLocation.stateCode] || [])
+    : [];
+
+  const handleStateChange = (value) => {
+    const selectedState = states.find((state) => state.code === value);
+    setNewLocation({
+      ...newLocation,
+      stateCode: value,
+      state: selectedState?.name || '',
+      city: '',
+      cityKey: ''
+    });
+  };
+
+  const handleCityChange = (value) => {
+    const normalized = String(value || '').trim();
+    setNewLocation({
+      ...newLocation,
+      city: normalized,
+      cityKey: normalized && newLocation.stateCode
+        ? `${newLocation.stateCode}:${normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        : ''
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-gray-900">Location Preferences</h3>
         <span className="text-xs text-gray-400">{locations?.length || 0} locations</span>
       </div>
+
+      {registrationAlignment?.needsConfirmation && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-semibold">Location verification needed</p>
+          <p className="mt-1">{registrationAlignment.message}</p>
+        </div>
+      )}
 
       {/* Existing locations */}
       <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -54,13 +90,30 @@ export default function LocationsPanel({
       <form onSubmit={onAddLocation} className="space-y-3 pt-2 border-t border-gray-100">
         <p className="text-xs text-gray-500 font-medium">Add New Location</p>
         <div className="grid grid-cols-2 gap-2">
+          <select
+            value={newLocation.stateCode}
+            onChange={(e) => handleStateChange(e.target.value)}
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all"
+          >
+            <option value="">Select state</option>
+            {states.map((state) => (
+              <option key={state.code} value={state.code}>{state.name}</option>
+            ))}
+          </select>
           <input
             type="text"
             value={newLocation.city}
-            onChange={(e) => setNewLocation({ ...newLocation, city: e.target.value })}
-            placeholder="City"
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all"
+            list="news-location-city-options"
+            onChange={(e) => handleCityChange(e.target.value)}
+            placeholder={newLocation.stateCode ? 'Select or search city' : 'Select state first'}
+            disabled={!newLocation.stateCode}
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all disabled:opacity-60"
           />
+          <datalist id="news-location-city-options">
+            {cityOptions.map((city) => (
+              <option key={city} value={city} />
+            ))}
+          </datalist>
           <input
             type="text"
             value={newLocation.zipCode}
@@ -70,17 +123,9 @@ export default function LocationsPanel({
           />
           <input
             type="text"
-            value={newLocation.state}
-            onChange={(e) => setNewLocation({ ...newLocation, state: e.target.value })}
-            placeholder="State"
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all"
-          />
-          <input
-            type="text"
-            value={newLocation.country}
-            onChange={(e) => setNewLocation({ ...newLocation, country: e.target.value })}
-            placeholder="Country"
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all"
+            value={locationTaxonomy?.country?.name || 'United States'}
+            readOnly
+            className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600"
           />
         </div>
         <label className="flex items-center gap-2 text-xs text-gray-600">

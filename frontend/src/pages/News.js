@@ -80,6 +80,13 @@ const getScopeFallbackMessage = (personalization = {}) => {
   return `Showing ${activeScope} scope — ${requestedScope} scope is unavailable for your current location.`;
 };
 
+const getLocationBadgeClasses = (kind) => {
+  if (kind === 'local') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+  if (kind === 'state') return 'bg-sky-50 text-sky-700 ring-sky-200';
+  if (kind === 'country' || kind === 'national') return 'bg-amber-50 text-amber-700 ring-amber-200';
+  return 'bg-gray-100 text-gray-600 ring-gray-200';
+};
+
 // ─── Reusable toggle switch ─────────────────────────────────────────────────────
 
 const Toggle = ({ enabled, onToggle, label, size = 'md' }) => {
@@ -127,9 +134,11 @@ function News() {
   const [topUsedSources, setTopUsedSources] = useState([]);
   const [newSource, setNewSource] = useState({ name: '', url: '', type: 'rss', category: 'general' });
   const [sourceStatusMessage, setSourceStatusMessage] = useState('');
-  const [newLocation, setNewLocation] = useState({ city: '', zipCode: '', state: '', country: '', isPrimary: false });
+  const [newLocation, setNewLocation] = useState({ city: '', cityKey: '', zipCode: '', state: '', stateCode: '', country: 'United States', countryCode: 'US', isPrimary: false });
   const [hiddenCategories, setHiddenCategories] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [locationTaxonomy, setLocationTaxonomy] = useState({ country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} });
+  const [registrationAlignment, setRegistrationAlignment] = useState(null);
 
   // UI-only state
   const [openPanel, setOpenPanel] = useState(null);
@@ -169,16 +178,19 @@ function News() {
       setLoading(true);
       setPromotedLoading(true);
       const [prefsRes, topicsRes, promotedRes] = await Promise.all([
-        newsAPI.getPreferences().catch(() => ({ data: { preferences: null } })),
+        newsAPI.getPreferences().catch(() => ({ data: { preferences: null, registrationAlignment: null } })),
         newsAPI.getTopics(),
         newsAPI.getPromoted({ limit: 8 }).catch(() => ({ data: { items: [] } }))
       ]);
+      const taxonomyRes = await newsAPI.getLocationTaxonomy().catch(() => ({ data: { taxonomy: { country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} } } }));
       const preferredScope = prefsRes.data.preferences?.defaultScope;
       const feedRes = await newsAPI.getFeed({ page: 1, limit: 20, scope: preferredScope || undefined });
       const sourcesRes = await newsAPI.getSources().catch(() => ({ data: { sources: [] } }));
       setArticles(feedRes.data.articles);
       setPagination(feedRes.data.pagination);
       setPreferences(prefsRes.data.preferences);
+      setRegistrationAlignment(prefsRes.data.registrationAlignment || null);
+      setLocationTaxonomy(taxonomyRes.data.taxonomy || { country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} });
       setActiveScope(feedRes.data.personalization?.activeScope || 'local');
       setScopeFallbackMessage(getScopeFallbackMessage(feedRes.data.personalization));
       setTopics(topicsRes.data.topics);
@@ -299,7 +311,8 @@ function News() {
     try {
       const res = await newsAPI.addLocation(newLocation);
       setPreferences(res.data.preferences);
-      setNewLocation({ city: '', zipCode: '', state: '', country: '', isPrimary: false });
+      setRegistrationAlignment(res.data.registrationAlignment || null);
+      setNewLocation({ city: '', cityKey: '', zipCode: '', state: '', stateCode: '', country: 'United States', countryCode: 'US', isPrimary: false });
       await refreshFeed();
     } catch (err) {
       console.error('Error adding location:', err);
@@ -310,6 +323,7 @@ function News() {
     try {
       const res = await newsAPI.removeLocation(locationId);
       setPreferences(res.data.preferences);
+      setRegistrationAlignment(res.data.registrationAlignment || null);
       await refreshFeed();
     } catch (err) {
       console.error('Error removing location:', err);
@@ -325,6 +339,7 @@ function News() {
     try {
       const res = await newsAPI.updatePreferences({ locations: updatedLocations });
       setPreferences(res.data.preferences);
+      setRegistrationAlignment(res.data.registrationAlignment || null);
       await refreshFeed();
     } catch (err) {
       console.error('Error setting primary location:', err);
@@ -623,10 +638,13 @@ function News() {
           onSetPrimaryLocation={handleSetPrimaryLocation}
           newLocation={newLocation}
           setNewLocation={setNewLocation}
+          locationTaxonomy={locationTaxonomy}
+          registrationAlignment={registrationAlignment}
           onUpdatePreferences={async (data) => {
             try {
               const res = await newsAPI.updatePreferences(data);
               setPreferences(res.data.preferences);
+              setRegistrationAlignment(res.data.registrationAlignment || null);
             } catch (err) {
               console.error('Error updating preferences:', err);
             }
@@ -866,8 +884,10 @@ function News() {
                         <span className="font-semibold text-gray-600">{article.source}</span>
                         <span className="text-gray-300">·</span>
                         <span>{formatRelativeTime(article.publishedAt)}</span>
-                        {article.localityLevel && article.localityLevel !== 'global' && (
-                          <span className="text-indigo-500 font-medium">{article.localityLevel}</span>
+                        {article.resolvedLocation?.label && (
+                          <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ring-1 ${getLocationBadgeClasses(article.resolvedLocation.kind)}`}>
+                            {article.resolvedLocation.label}
+                          </span>
                         )}
                         <span className="ml-auto px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[11px] font-medium">{getSourceTypeLabel(article.sourceType)}</span>
                       </div>
@@ -914,11 +934,10 @@ function News() {
                           )}
                           <span className="text-gray-300">·</span>
                           <span>{formatRelativeTime(article.publishedAt)}</span>
-                          {article.localityLevel && article.localityLevel !== 'global' && (
-                            <>
-                              <span className="text-gray-300">·</span>
-                              <span className="text-indigo-500 font-medium">{article.localityLevel}</span>
-                            </>
+                          {article.resolvedLocation?.label && (
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ring-1 ${getLocationBadgeClasses(article.resolvedLocation.kind)}`}>
+                              {article.resolvedLocation.label}
+                            </span>
                           )}
                           <span className="ml-auto px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[11px] font-medium">{getSourceTypeLabel(article.sourceType)}</span>
                         </div>

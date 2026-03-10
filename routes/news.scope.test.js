@@ -254,6 +254,7 @@ describe('News scope routing', () => {
     User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'Austin', state: 'Texas', country: 'USA' }) });
     NewsPreferences.findOne.mockReturnValue({ populate: jest.fn().mockResolvedValue(null) });
     NewsPreferences.create.mockResolvedValue(seededPrefs);
+    NewsPreferences.findOneAndUpdate.mockResolvedValue(seededPrefs);
 
     const response = await request(app)
       .get('/api/news/preferences')
@@ -269,7 +270,9 @@ describe('News scope routing', () => {
           expect.objectContaining({
             city: 'Austin',
             state: 'Texas',
-            country: 'USA',
+            stateCode: 'TX',
+            country: 'United States',
+            countryCode: 'US',
             isPrimary: true
           })
         ]
@@ -290,6 +293,7 @@ describe('News scope routing', () => {
     User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, state: null, country: 'US', zipCode: '10001' }) });
     NewsPreferences.findOne.mockReturnValue({ populate: jest.fn().mockResolvedValue(null) });
     NewsPreferences.create.mockResolvedValue(seededPrefs);
+    NewsPreferences.findOneAndUpdate.mockResolvedValue(seededPrefs);
 
     const response = await request(app)
       .get('/api/news/preferences')
@@ -301,7 +305,8 @@ describe('News scope routing', () => {
         locations: [
           expect.objectContaining({
             zipCode: '10001',
-            country: 'US'
+            country: 'United States',
+            countryCode: 'US'
           })
         ]
       })
@@ -354,6 +359,34 @@ describe('News scope routing', () => {
     expect(response.body.personalization.activeScope).toBe('local');
     expect(response.body.articles.length).toBeGreaterThanOrEqual(1);
     expect(response.body.articles[0]._id).toBe('local-ai-1');
+  });
+
+  it('infers city/state from sports team mention when no explicit location exists', async () => {
+    const result = await newsRoutes.internals.resolveArticleLocationContext({
+      source: { name: 'ESPN', category: 'sports' },
+      item: {
+        title: 'Dallas Cowboys sign veteran linebacker',
+        contentSnippet: 'The Cowboys added depth ahead of training camp.'
+      }
+    });
+
+    expect(result.localityLevel).toBe('city');
+    expect(result.locationTags.cities).toContain('dallas');
+    expect(result.locationTags.states).toEqual(expect.arrayContaining(['tx', 'texas']));
+  });
+
+  it('returns canonical state/city taxonomy for location selectors', async () => {
+    const app = buildApp();
+    const response = await request(app)
+      .get('/api/news/location-taxonomy')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.taxonomy.country.code).toBe('US');
+    expect(response.body.taxonomy.states).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'TX', name: 'Texas' })])
+    );
+    expect(response.body.taxonomy.citiesByState.TX).toEqual(expect.arrayContaining(['Austin', 'Dallas', 'Houston']));
   });
 
   it('removes disabled google and gdelt sources from the feed results', async () => {

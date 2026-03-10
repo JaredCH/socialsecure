@@ -31,6 +31,8 @@ export default function NewsControlPanel({
   onSetPrimaryLocation,
   newLocation,
   setNewLocation,
+  locationTaxonomy,
+  registrationAlignment,
   onUpdatePreferences,
   onRefreshHealth,
   onClose,
@@ -224,6 +226,8 @@ export default function NewsControlPanel({
                 onSetPrimaryLocation={onSetPrimaryLocation}
                 newLocation={newLocation}
                 setNewLocation={setNewLocation}
+                locationTaxonomy={locationTaxonomy}
+                registrationAlignment={registrationAlignment}
               />
             )}
             {activeTab === 'schedule' && (

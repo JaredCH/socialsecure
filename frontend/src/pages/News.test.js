@@ -8,6 +8,7 @@ jest.mock('../utils/api', () => ({
   newsAPI: {
     getPreferences: jest.fn(),
     getTopics: jest.fn(),
+    getLocationTaxonomy: jest.fn(),
     getPromoted: jest.fn(),
     getFeed: jest.fn(),
     getSources: jest.fn(),
@@ -48,6 +49,15 @@ describe('News inline preferences updates', () => {
     newsAPI.getPreferences.mockResolvedValue({ data: { preferences: basePreferences } });
     newsAPI.getTopics.mockResolvedValue({ data: { topics: ['technology'] } });
     newsAPI.getPromoted.mockResolvedValue({ data: { items: [] } });
+    newsAPI.getLocationTaxonomy.mockResolvedValue({
+      data: {
+        taxonomy: {
+          country: { code: 'US', name: 'United States' },
+          states: [{ code: 'TX', name: 'Texas' }, { code: 'NY', name: 'New York' }],
+          citiesByState: { TX: ['Austin', 'Dallas', 'Houston'], NY: ['New York'] }
+        }
+      }
+    });
     newsAPI.getFeed.mockResolvedValue({
       data: {
         articles: [
@@ -212,7 +222,8 @@ describe('News inline preferences updates', () => {
       locationsTab.click();
     });
 
-    const cityInput = container.querySelector('input[placeholder="City"]');
+    const stateSelect = container.querySelector('select');
+    const cityInput = container.querySelector('input[list="news-location-city-options"]');
     const zipInput = container.querySelector('input[placeholder="ZIP"]');
     const primaryCheckbox = Array.from(container.querySelectorAll('input[type="checkbox"]'))
       .find((input) => input.closest('label')?.textContent?.includes('Make this my primary location'));
@@ -222,8 +233,14 @@ describe('News inline preferences updates', () => {
       window.HTMLInputElement.prototype,
       'value'
     ).set;
+    const nativeSelectValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      'value'
+    ).set;
 
     await act(async () => {
+      nativeSelectValueSetter.call(stateSelect, 'TX');
+      stateSelect.dispatchEvent(new Event('change', { bubbles: true }));
       nativeInputValueSetter.call(cityInput, 'Dallas');
       cityInput.dispatchEvent(new Event('input', { bubbles: true }));
       nativeInputValueSetter.call(zipInput, '75201');

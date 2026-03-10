@@ -38,6 +38,14 @@ const {
   buildPatchUrl,
   buildRedditRssUrl
 } = require('../config/news/localSourceCatalog');
+const {
+  US_STATES_AND_TERRITORIES,
+  canonicalizeNewsLocation,
+  canonicalizeStateCode,
+  getLocationTaxonomyPayload,
+  titleCase
+} = require('../utils/newsLocationTaxonomy');
+const { inferSportsLocationFromText } = require('../data/news/sportsTeamLocationIndex');
 
 // Initialize RSS parser with timeout
 const parser = new Parser({
@@ -386,19 +394,9 @@ const ESPN_FEED_MAP = {
 // LOCATION DICTIONARIES
 // ============================================
 
-const US_STATE_NAMES = new Map([
-  ['alabama','al'],['alaska','ak'],['arizona','az'],['arkansas','ar'],['california','ca'],
-  ['colorado','co'],['connecticut','ct'],['delaware','de'],['florida','fl'],['georgia','ga'],
-  ['hawaii','hi'],['idaho','id'],['illinois','il'],['indiana','in'],['iowa','ia'],
-  ['kansas','ks'],['kentucky','ky'],['louisiana','la'],['maine','me'],['maryland','md'],
-  ['massachusetts','ma'],['michigan','mi'],['minnesota','mn'],['mississippi','ms'],['missouri','mo'],
-  ['montana','mt'],['nebraska','ne'],['nevada','nv'],['new hampshire','nh'],['new jersey','nj'],
-  ['new mexico','nm'],['new york','ny'],['north carolina','nc'],['north dakota','nd'],['ohio','oh'],
-  ['oklahoma','ok'],['oregon','or'],['pennsylvania','pa'],['rhode island','ri'],['south carolina','sc'],
-  ['south dakota','sd'],['tennessee','tn'],['texas','tx'],['utah','ut'],['vermont','vt'],
-  ['virginia','va'],['washington','wa'],['west virginia','wv'],['wisconsin','wi'],['wyoming','wy'],
-  ['district of columbia','dc']
-]);
+const US_STATE_NAMES = new Map(
+  US_STATES_AND_TERRITORIES.map((entry) => [String(entry.name || '').toLowerCase(), String(entry.code || '').toLowerCase()])
+);
 
 const US_STATE_ABBREVS = new Set([...US_STATE_NAMES.values()]);
 
@@ -972,6 +970,45 @@ const inferLocalityLevelFromTags = (locationTags = {}) => {
   return 'global';
 };
 
+const isSportsContext = ({ source = {}, query = null, item = {} }) => {
+  const directCategory = normalizeToStandardCategory(source.category || query || '');
+  if (directCategory === 'sports') return true;
+  const text = `${item.title || ''} ${item.contentSnippet || item.content || item.summary || ''}`.toLowerCase();
+  return /\b(nfl|nba|wnba|mls|nwsl|nhl|mlb|ncaa|college football|march madness)\b/.test(text);
+};
+
+const inferSportsLocationContext = ({ source = {}, query = null, item = {} }) => {
+  if (!isSportsContext({ source, query, item })) return null;
+  const text = `${item.title || ''} ${item.contentSnippet || item.content || item.summary || ''}`;
+  const matchedTeam = inferSportsLocationFromText(text);
+  if (!matchedTeam) return null;
+
+  const canonical = canonicalizeNewsLocation({
+    city: matchedTeam.city,
+    state: matchedTeam.state,
+    country: 'US'
+  });
+
+  if (!canonical.city || !canonical.stateCode) return null;
+
+  const cityToken = canonical.city.toLowerCase();
+  const stateCodeToken = canonical.stateCode.toLowerCase();
+  const stateNameToken = String(canonical.state || '').toLowerCase();
+
+  return {
+    locationTokens: toUniqueNonEmptyLocationTokens([cityToken, stateCodeToken, stateNameToken, 'united states', 'us']),
+    locationTags: {
+      zipCodes: [],
+      cities: [cityToken],
+      counties: [],
+      states: toUniqueNonEmptyStrings([stateCodeToken, stateNameToken]),
+      countries: ['united states', 'us']
+    },
+    localityLevel: 'city',
+    scopeMetadata: { scopeReason: 'city_match', scopeConfidence: 0.92 }
+  };
+};
+
 const resolveArticleLocationContext = async ({ source = {}, item = {}, query = null }) => {
   let locationTokens = buildArticleLocationTokens({ source, item, query });
 
@@ -989,9 +1026,21 @@ const resolveArticleLocationContext = async ({ source = {}, item = {}, query = n
 
   const assignedZipCode = await resolveAssignedZipCode({ locationTokens, source, item, query });
   const rawLocationTags = buildLocationTags({ locationTokens, assignedZipCode });
-  const locationTags = await enrichLocationTagsWithCorrelations({ locationTags: rawLocationTags, assignedZipCode });
-  const localityLevel = inferLocalityLevelFromTags(locationTags);
-  const scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
+  let locationTags = await enrichLocationTagsWithCorrelations({ locationTags: rawLocationTags, assignedZipCode });
+  let localityLevel = inferLocalityLevelFromTags(locationTags);
+  let scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
+
+  // For sports coverage with no explicit location, infer city/state from team references.
+  if (localityLevel === 'global') {
+    const sportsContext = inferSportsLocationContext({ source, query, item });
+    if (sportsContext) {
+      locationTokens = toUniqueNonEmptyLocationTokens([...locationTokens, ...sportsContext.locationTokens]);
+      locationTags = normalizeLocationTagSet(mergeLocationTags(locationTags, sportsContext.locationTags, assignedZipCode), assignedZipCode);
+      localityLevel = sportsContext.localityLevel;
+      scopeMetadata = sportsContext.scopeMetadata;
+    }
+  }
+
   return {
     locationTokens,
     assignedZipCode,
@@ -1447,6 +1496,99 @@ const summarizeLocationContextForTelemetry = (locationContext = {}) => {
     zipCount: zipValues.length,
     hasAnyLocation: hasLocationContext(locationContext)
   };
+};
+
+const canonicalizePreferenceLocation = (location = {}) => {
+  const canonical = canonicalizeNewsLocation(location || {});
+  return {
+    city: canonical.city,
+    county: canonical.county,
+    zipCode: canonical.zipCode,
+    state: canonical.state,
+    stateCode: canonical.stateCode,
+    country: canonical.country,
+    countryCode: canonical.countryCode,
+    cityKey: canonical.cityKey,
+    isPrimary: Boolean(location?.isPrimary)
+  };
+};
+
+const getPrimaryPreferenceLocation = (preferences = {}) => {
+  const locations = Array.isArray(preferences?.locations) ? preferences.locations : [];
+  return locations.find((location) => location?.isPrimary) || locations[0] || null;
+};
+
+const buildRegistrationAlignment = ({ user, preferences }) => {
+  const registrationLocation = canonicalizeNewsLocation({
+    city: user?.city,
+    state: user?.state,
+    country: user?.country,
+    zipCode: user?.zipCode
+  });
+  const primaryPreferenceRaw = getPrimaryPreferenceLocation(preferences);
+  const primaryPreference = primaryPreferenceRaw ? canonicalizeNewsLocation(primaryPreferenceRaw) : null;
+
+  if (!primaryPreference || !registrationLocation.cityKey) {
+    return {
+      needsConfirmation: false,
+      isAligned: true,
+      registrationLocation,
+      preferenceLocation: primaryPreference,
+      message: ''
+    };
+  }
+
+  const sameCity = registrationLocation.cityKey && primaryPreference.cityKey
+    ? registrationLocation.cityKey === primaryPreference.cityKey
+    : false;
+  const sameState = registrationLocation.stateCode && primaryPreference.stateCode
+    ? registrationLocation.stateCode === primaryPreference.stateCode
+    : false;
+  const isAligned = sameCity || (sameState && !registrationLocation.cityKey && !primaryPreference.cityKey);
+
+  return {
+    needsConfirmation: !isAligned,
+    isAligned,
+    registrationLocation,
+    preferenceLocation: primaryPreference,
+    message: !isAligned
+      ? 'Your news location differs from your registration location. Confirm or update to keep local content accurate.'
+      : ''
+  };
+};
+
+const firstNonEmpty = (values = []) => values.find((value) => String(value || '').trim().length > 0) || null;
+
+const formatArticleLocationMetadata = (article = {}) => {
+  const tags = article.locationTags || {};
+  const canonicalCountry = canonicalizeNewsLocation({ country: firstNonEmpty(tags.countries) }).country;
+  const canonicalStateCode = canonicalizeStateCode(firstNonEmpty(tags.states) || article.state);
+  const canonicalStateName = canonicalStateCode
+    ? US_STATES_AND_TERRITORIES.find((entry) => entry.code === canonicalStateCode)?.name || null
+    : null;
+  const canonicalCity = firstNonEmpty(tags.cities) ? titleCase(firstNonEmpty(tags.cities)) : null;
+
+  if (canonicalCity && canonicalStateCode) {
+    return { kind: 'local', label: `${canonicalCity}, ${canonicalStateCode}`, city: canonicalCity, state: canonicalStateName, stateCode: canonicalStateCode };
+  }
+  if (canonicalStateName) {
+    return { kind: 'state', label: canonicalStateName, state: canonicalStateName, stateCode: canonicalStateCode };
+  }
+  if (canonicalCountry && canonicalCountry !== 'US') {
+    return { kind: 'country', label: canonicalCountry, country: canonicalCountry };
+  }
+  if (canonicalCountry === 'US' || article.localityLevel === 'country') {
+    return { kind: 'national', label: 'United States', country: 'United States' };
+  }
+  return { kind: 'global', label: 'Global' };
+};
+
+const maybePopulatePreferences = async (queryOrDoc) => {
+  if (!queryOrDoc) return queryOrDoc;
+  if (typeof queryOrDoc.populate === 'function') {
+    return queryOrDoc.populate('rssSources.sourceId');
+  }
+  return queryOrDoc;
 };
 
 const scoreRecency = (publishedAt, freshnessScore = 0) => {
@@ -3947,6 +4089,10 @@ router.get('/feed', authenticateToken, async (req, res) => {
     const total = articles.length;
     const startIndex = Math.max(0, skip);
     articles = articles.slice(startIndex, startIndex + parsedLimit);
+    articles = articles.map((article) => ({
+      ...article,
+      resolvedLocation: formatArticleLocationMetadata(article)
+    }));
 
     const promotedLimit = Math.min(DEFAULT_PROMOTED_ITEMS, FEED_PROMOTED_MAX_ITEMS);
     const promotedArticles = await Article.find({ isActive: true, isPromoted: true })
@@ -4128,18 +4274,21 @@ router.get('/preferences', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('city county state country zipCode');
     const userFallbackLocation = getUserLocationFallback(user);
-    let preferences = await NewsPreferences.findOne({ user: req.user.userId })
-      .populate('rssSources.sourceId');
+    let preferences = await maybePopulatePreferences(
+      NewsPreferences.findOne({ user: req.user.userId })
+    );
     
     // Create default preferences if none exist
     if (!preferences) {
       const seededLocations = userFallbackLocation
         ? [{
-            city: userFallbackLocation.city,
-            zipCode: userFallbackLocation.zipCode,
-            state: userFallbackLocation.state,
-            country: userFallbackLocation.country,
-            isPrimary: true
+            ...canonicalizePreferenceLocation({
+              city: userFallbackLocation.city,
+              zipCode: userFallbackLocation.zipCode,
+              state: userFallbackLocation.state,
+              country: userFallbackLocation.country,
+              isPrimary: true
+            })
           }]
         : [];
       preferences = await NewsPreferences.create({
@@ -4158,32 +4307,54 @@ router.get('/preferences', authenticateToken, async (req, res) => {
       const updatePayload = {};
       if (!preferences.locations?.length) {
         updatePayload.locations = [{
-          city: userFallbackLocation.city,
-          zipCode: userFallbackLocation.zipCode,
-          state: userFallbackLocation.state,
-          country: userFallbackLocation.country,
-          isPrimary: true
+          ...canonicalizePreferenceLocation({
+            city: userFallbackLocation.city,
+            zipCode: userFallbackLocation.zipCode,
+            state: userFallbackLocation.state,
+            country: userFallbackLocation.country,
+            isPrimary: true
+          })
         }];
       }
       if (!NEWS_SCOPE_VALUES.includes(preferences.defaultScope)) {
         updatePayload.defaultScope = hasLocationContext(userFallbackLocation) ? 'local' : 'global';
       }
       if (Object.keys(updatePayload).length > 0) {
-        preferences = await NewsPreferences.findOneAndUpdate(
+        preferences = await maybePopulatePreferences(NewsPreferences.findOneAndUpdate(
           { user: req.user.userId },
           { $set: updatePayload },
           { new: true }
-        ).populate('rssSources.sourceId');
+        ));
       }
     } else if (!NEWS_SCOPE_VALUES.includes(preferences.defaultScope)) {
-      preferences = await NewsPreferences.findOneAndUpdate(
+      preferences = await maybePopulatePreferences(NewsPreferences.findOneAndUpdate(
         { user: req.user.userId },
         { $set: { defaultScope: preferences.locations?.length ? 'local' : 'global' } },
         { new: true }
-      ).populate('rssSources.sourceId');
+      ));
     }
+
+    const normalizedLocations = Array.isArray(preferences.locations)
+      ? preferences.locations.map((location, index) => canonicalizePreferenceLocation({
+          ...(location?.toObject?.() || location),
+          isPrimary: Boolean(location?.isPrimary || index === 0)
+        }))
+      : [];
+    if (normalizedLocations.length > 0 && !normalizedLocations.some((location) => location.isPrimary)) {
+      normalizedLocations[0].isPrimary = true;
+    }
+
+    if (JSON.stringify(normalizedLocations) !== JSON.stringify((preferences.locations || []).map((location) => (location?.toObject?.() || location)))) {
+      preferences = await maybePopulatePreferences(NewsPreferences.findOneAndUpdate(
+        { user: req.user.userId },
+        { $set: { locations: normalizedLocations } },
+        { new: true }
+      ));
+    }
+
+    const registrationAlignment = buildRegistrationAlignment({ user, preferences });
     
-    res.json({ preferences });
+    res.json({ preferences, registrationAlignment });
   } catch (error) {
     console.error('Error fetching preferences:', error);
     res.status(500).json({ error: 'Failed to fetch preferences' });
@@ -4215,7 +4386,18 @@ router.put('/preferences', authenticateToken, async (req, res) => {
     if (googleNewsEnabled !== undefined) updateData.googleNewsEnabled = googleNewsEnabled;
     if (gdletCategories !== undefined) updateData.gdletCategories = gdletCategories;
     if (gdletEnabled !== undefined) updateData.gdletEnabled = gdletEnabled;
-    if (locations !== undefined) updateData.locations = locations;
+    if (locations !== undefined) {
+      const normalizedLocations = Array.isArray(locations)
+        ? locations.map((location, index) => canonicalizePreferenceLocation({
+            ...(location || {}),
+            isPrimary: Boolean(location?.isPrimary || index === 0)
+          }))
+        : [];
+      if (normalizedLocations.length > 0 && !normalizedLocations.some((location) => location.isPrimary)) {
+        normalizedLocations[0].isPrimary = true;
+      }
+      updateData.locations = normalizedLocations;
+    }
     if (followedKeywords !== undefined) updateData.followedKeywords = followedKeywords;
     if (defaultScope !== undefined && NEWS_SCOPE_VALUES.includes(defaultScope)) {
       updateData.defaultScope = defaultScope;
@@ -4231,6 +4413,8 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       { $set: updateData },
       { new: true, upsert: true }
     );
+    const user = await User.findById(req.user.userId).select('city state country zipCode');
+    const registrationAlignment = buildRegistrationAlignment({ user, preferences });
 
     if (updateData.defaultScope) {
       logNewsScopeEvent({
@@ -4244,7 +4428,7 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       });
     }
     
-    res.json({ preferences });
+    res.json({ preferences, registrationAlignment });
   } catch (error) {
     console.error('Error updating preferences:', error);
     res.status(500).json({ error: 'Failed to update preferences' });
@@ -4363,14 +4547,7 @@ router.post('/preferences/locations', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'At least one location field is required' });
     }
     
-    const locationData = {
-      city: city || null,
-      zipCode: zipCode || null,
-      county: county || null,
-      state: state || null,
-      country: country || null,
-      isPrimary
-    };
+    const locationData = canonicalizePreferenceLocation({ city, zipCode, county, state, country, isPrimary });
     
     // If setting as primary, unset other primaries
     if (isPrimary) {
@@ -4387,8 +4564,10 @@ router.post('/preferences/locations', authenticateToken, async (req, res) => {
       },
       { new: true, upsert: true }
     );
+    const user = await User.findById(req.user.userId).select('city state country zipCode');
+    const registrationAlignment = buildRegistrationAlignment({ user, preferences });
     
-    res.json({ preferences });
+    res.json({ preferences, registrationAlignment });
   } catch (error) {
     console.error('Error adding location:', error);
     res.status(500).json({ error: 'Failed to add location' });
@@ -4412,8 +4591,10 @@ router.delete('/preferences/locations/:locationId', authenticateToken, async (re
       },
       { new: true }
     );
+    const user = await User.findById(req.user.userId).select('city state country zipCode');
+    const registrationAlignment = buildRegistrationAlignment({ user, preferences });
     
-    res.json({ preferences });
+    res.json({ preferences, registrationAlignment });
   } catch (error) {
     console.error('Error removing location:', error);
     res.status(500).json({ error: 'Failed to remove location' });
@@ -4800,6 +4981,10 @@ router.get('/topics', (req, res) => {
   ];
   
   res.json({ topics });
+});
+
+router.get('/location-taxonomy', authenticateToken, (req, res) => {
+  res.json({ taxonomy: getLocationTaxonomyPayload() });
 });
 
 /**
