@@ -138,12 +138,19 @@ describe('NPR adapter', () => {
     expect(map.news).toBeDefined();
     expect(map.news.url).toContain('feeds.npr.org');
     expect(map.news.category).toBe('general');
+    expect(map.us).toBeDefined();
+    expect(map.us.url).toBe('https://feeds.npr.org/1019/rss.xml');
+    expect(map.us.category).toBe('general');
     expect(map.technology).toBeDefined();
     expect(map.technology.category).toBe('technology');
     expect(map.politics).toBeDefined();
+    expect(map.politics.url).toBe('https://feeds.npr.org/1017/rss.xml');
     expect(map.politics.category).toBe('politics');
     expect(map.world).toBeDefined();
     expect(map.world.category).toBe('world');
+    expect(map.nprPolitics).toBeDefined();
+    expect(map.nprPolitics.url).toBe('https://feeds.npr.org/1017/rss.xml');
+    expect(map.nprPolitics.category).toBe('politics');
   });
 
   it('returns empty array on fetch error', async () => {
@@ -366,6 +373,125 @@ describe('GDELT adapter standardized fields', () => {
     expect(articles[0].feedLanguage).toBe('English');
     expect(articles[0].feedMetadata).toBeDefined();
     expect(articles[0].feedMetadata.gdeltDomain).toBe('technews.com');
+  });
+});
+
+describe('AP, Reuters, and PBS adapters', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGeocode.mockReset();
+    mockGeocode.mockResolvedValue([]);
+    mockParseUrl.mockReset();
+    mockParseUrl.mockRejectedValue(new Error('parse error'));
+    newsRoutes.internals.geocodeContextCache.clear();
+  });
+
+  it('exports AP, Reuters, and PBS feed maps and adapters', () => {
+    expect(newsRoutes.adapters.fetchApSource).toBeDefined();
+    expect(newsRoutes.adapters.fetchReutersSource).toBeDefined();
+    expect(newsRoutes.adapters.fetchPbsSource).toBeDefined();
+
+    const apMap = newsRoutes.internals.AP_FEED_MAP;
+    expect(apMap.top.url).toBe('https://apnews.com/hub/ap-top-news/rss');
+    expect(apMap.world.category).toBe('world');
+    expect(apMap.technology.category).toBe('technology');
+
+    const reutersMap = newsRoutes.internals.REUTERS_FEED_MAP;
+    expect(reutersMap.top.url).toBe('https://www.reutersagency.com/feed/?best-topics=topNews');
+    expect(reutersMap.business.category).toBe('business');
+    expect(reutersMap.technology.category).toBe('technology');
+
+    const pbsMap = newsRoutes.internals.PBS_FEED_MAP;
+    expect(pbsMap.newsHour.url).toBe('https://www.pbs.org/newshour/rss/');
+    expect(pbsMap.newsHour.category).toBe('general');
+  });
+
+  it('stores category, metadata, publication date, and fallback location for AP article', async () => {
+    mockParseUrl.mockResolvedValueOnce({
+      language: 'en',
+      title: 'AP News Feed',
+      items: [
+        {
+          title: 'America announces new policy',
+          contentSnippet: 'Officials shared additional details.',
+          link: 'https://apnews.com/article/abc123',
+          guid: 'ap-abc123',
+          categories: ['politics'],
+          isoDate: '2026-03-08T12:00:00.000Z'
+        }
+      ]
+    });
+
+    const articles = await newsRoutes.adapters.fetchApSource('politics', {
+      url: 'https://apnews.com/hub/politics/rss',
+      category: 'politics',
+      label: 'AP Politics'
+    });
+
+    expect(articles).toHaveLength(1);
+    expect(articles[0].category).toBe('politics');
+    expect(articles[0].feedSource).toBe('associated-press');
+    expect(articles[0].feedCategory).toBe('AP Politics');
+    expect(articles[0].publishedAt.toISOString()).toBe('2026-03-08T12:00:00.000Z');
+    expect(articles[0].locations).toContain('united states');
+  });
+
+  it('stores category and publication date for Reuters article', async () => {
+    mockParseUrl.mockResolvedValueOnce({
+      language: 'en',
+      title: 'Reuters Feed',
+      items: [
+        {
+          title: 'Markets rally worldwide',
+          contentSnippet: 'Investors reacted positively in Tokyo and London.',
+          link: 'https://www.reuters.com/world/xyz',
+          guid: 'reuters-xyz',
+          categories: ['business'],
+          isoDate: '2026-03-09T07:30:00.000Z'
+        }
+      ]
+    });
+
+    const articles = await newsRoutes.adapters.fetchReutersSource('business', {
+      url: 'https://www.reutersagency.com/feed/?best-topics=businessNews',
+      category: 'business',
+      label: 'Reuters Business'
+    });
+
+    expect(articles).toHaveLength(1);
+    expect(articles[0].category).toBe('business');
+    expect(articles[0].feedSource).toBe('reuters');
+    expect(articles[0].feedCategory).toBe('Reuters Business');
+    expect(articles[0].publishedAt.toISOString()).toBe('2026-03-09T07:30:00.000Z');
+  });
+
+  it('stores category and publication date for PBS article', async () => {
+    mockParseUrl.mockResolvedValueOnce({
+      language: 'en',
+      title: 'PBS NewsHour',
+      items: [
+        {
+          title: 'PBS evening update',
+          contentSnippet: 'Top stories from the day.',
+          link: 'https://www.pbs.org/newshour/show/sample',
+          guid: 'pbs-sample',
+          categories: ['news'],
+          isoDate: '2026-03-09T22:15:00.000Z'
+        }
+      ]
+    });
+
+    const articles = await newsRoutes.adapters.fetchPbsSource('newsHour', {
+      url: 'https://www.pbs.org/newshour/rss/',
+      category: 'general',
+      label: 'PBS NewsHour'
+    });
+
+    expect(articles).toHaveLength(1);
+    expect(articles[0].category).toBe('general');
+    expect(articles[0].feedSource).toBe('pbs');
+    expect(articles[0].feedCategory).toBe('PBS NewsHour');
+    expect(articles[0].publishedAt.toISOString()).toBe('2026-03-09T22:15:00.000Z');
   });
 });
 
