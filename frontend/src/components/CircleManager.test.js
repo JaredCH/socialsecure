@@ -1,8 +1,11 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import CircleManager from './CircleManager';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+const renderWithRouter = (ui, root) => root.render(<MemoryRouter>{ui}</MemoryRouter>);
 
 describe('CircleManager', () => {
   let container;
@@ -46,7 +49,7 @@ describe('CircleManager', () => {
     const onCreateCircle = jest.fn();
 
     await act(async () => {
-      root.render(
+      renderWithRouter(
         <CircleManager
           circles={[]}
           friends={baseFriends}
@@ -55,7 +58,8 @@ describe('CircleManager', () => {
           onDeleteCircle={jest.fn()}
           onAddMember={jest.fn()}
           onRemoveMember={jest.fn()}
-        />
+        />,
+        root
       );
     });
 
@@ -95,7 +99,7 @@ describe('CircleManager', () => {
     }));
 
     await act(async () => {
-      root.render(
+      renderWithRouter(
         <CircleManager
           circles={tenCircles}
           friends={baseFriends}
@@ -104,7 +108,8 @@ describe('CircleManager', () => {
           onDeleteCircle={jest.fn()}
           onAddMember={jest.fn()}
           onRemoveMember={jest.fn()}
-        />
+        />,
+        root
       );
     });
 
@@ -129,7 +134,7 @@ describe('CircleManager', () => {
     }];
 
     await act(async () => {
-      root.render(
+      renderWithRouter(
         <CircleManager
           circles={fullCircle}
           friends={baseFriends}
@@ -138,7 +143,8 @@ describe('CircleManager', () => {
           onDeleteCircle={jest.fn()}
           onAddMember={onAddMember}
           onRemoveMember={jest.fn()}
-        />
+        />,
+        root
       );
     });
 
@@ -162,7 +168,7 @@ describe('CircleManager', () => {
     const onRemoveMember = jest.fn();
 
     await act(async () => {
-      root.render(
+      renderWithRouter(
         <CircleManager
           circles={baseCircles}
           friends={baseFriends}
@@ -171,7 +177,8 @@ describe('CircleManager', () => {
           onDeleteCircle={jest.fn()}
           onAddMember={onAddMember}
           onRemoveMember={onRemoveMember}
-        />
+        />,
+        root
       );
     });
 
@@ -220,7 +227,7 @@ describe('CircleManager', () => {
 
   it('renders friends as connected circle nodes around the owner node', async () => {
     await act(async () => {
-      root.render(
+      renderWithRouter(
         <CircleManager
           circles={baseCircles}
           friends={baseFriends}
@@ -229,7 +236,8 @@ describe('CircleManager', () => {
           onDeleteCircle={jest.fn()}
           onAddMember={jest.fn()}
           onRemoveMember={jest.fn()}
-        />
+        />,
+        root
       );
     });
 
@@ -239,5 +247,100 @@ describe('CircleManager', () => {
     expect(bobNode).toBeTruthy();
     expect(aliceNode.textContent).toContain('Alice');
     expect(bobNode.textContent).toContain('Bob');
+  });
+
+  it('opens member preview with remove and move actions when clicking a member chip', async () => {
+    const onRemoveMember = jest.fn();
+    const onMoveMember = jest.fn();
+    const twoCircles = [
+      {
+        name: 'Trusted',
+        color: '#3B82F6',
+        relationshipAudience: 'social',
+        profileImageUrl: '',
+        members: [{ _id: 'f-1', username: 'alice', realName: 'Alice' }]
+      },
+      {
+        name: 'VIP',
+        color: '#7c3aed',
+        relationshipAudience: 'secure',
+        profileImageUrl: '',
+        members: []
+      }
+    ];
+
+    await act(async () => {
+      renderWithRouter(
+        <CircleManager
+          circles={twoCircles}
+          friends={baseFriends}
+          onCreateCircle={jest.fn()}
+          onUpdateCircle={jest.fn()}
+          onDeleteCircle={jest.fn()}
+          onAddMember={jest.fn()}
+          onRemoveMember={onRemoveMember}
+          onMoveMember={onMoveMember}
+        />,
+        root
+      );
+    });
+
+    const previewBtn = container.querySelector('[data-testid="member-preview-btn-f-1"]');
+    expect(previewBtn).toBeTruthy();
+
+    await act(async () => {
+      previewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Alice');
+    expect(container.textContent).toContain('@alice');
+    expect(container.textContent).toContain('Remove from Trusted');
+
+    const viewProfileLink = container.querySelector('a[href*="alice"]');
+    expect(viewProfileLink).toBeTruthy();
+    expect(viewProfileLink.textContent).toContain('View Full Profile');
+
+    const moveSelect = container.querySelector('select[aria-label="Select target circle"]');
+    expect(moveSelect).toBeTruthy();
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(moveSelect, 'VIP');
+      moveSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const moveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Move');
+    await act(async () => {
+      moveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onMoveMember).toHaveBeenCalledWith('Trusted', 'VIP', 'f-1');
+  });
+
+  it('opens member preview when clicking a friend node in the graph', async () => {
+    await act(async () => {
+      renderWithRouter(
+        <CircleManager
+          circles={baseCircles}
+          friends={baseFriends}
+          onCreateCircle={jest.fn()}
+          onUpdateCircle={jest.fn()}
+          onDeleteCircle={jest.fn()}
+          onAddMember={jest.fn()}
+          onRemoveMember={jest.fn()}
+        />,
+        root
+      );
+    });
+
+    const aliceNode = container.querySelector('[data-testid="friend-node-f-1"]');
+    await act(async () => {
+      aliceNode.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Alice');
+    expect(container.textContent).toContain('@alice');
+    const viewProfileLink = container.querySelector('a[href*="alice"]');
+    expect(viewProfileLink).toBeTruthy();
   });
 });
