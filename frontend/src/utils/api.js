@@ -490,12 +490,14 @@ export const newsAPI = {
   getFeed: (params = {}) => api.get('/news/feed', { params }),
   // Get promoted news ranked by viral potential
   getPromoted: (params = {}) => api.get('/news/promoted', { params }),
-  // Get available RSS sources
+  // Get available RSS sources (merged with catalog)
   getSources: () => api.get('/news/sources'),
   // Add new RSS source
   addSource: (data) => api.post('/news/sources', data),
   // Remove RSS source
   removeSource: (sourceId) => api.delete(`/news/sources/${sourceId}`),
+  // Refresh source health status
+  refreshSourceHealth: () => api.post('/news/sources/health-check'),
   // Get user's news preferences
   getPreferences: () => api.get('/news/preferences'),
   // Update user's news preferences

@@ -17,7 +17,8 @@ jest.mock('../utils/api', () => ({
     addKeyword: jest.fn(),
     removeKeyword: jest.fn(),
     updateHiddenCategories: jest.fn(),
-    addSource: jest.fn()
+    addSource: jest.fn(),
+    refreshSourceHealth: jest.fn()
   }
 }));
 
@@ -60,8 +61,40 @@ describe('News inline preferences updates', () => {
     });
     newsAPI.getSources.mockResolvedValue({
       data: {
-        sources: [{ _id: 'src-1', name: 'Yahoo News', type: 'rss', category: 'general' }],
-        topUsedSources: []
+        sources: [
+          {
+            id: 'google-news',
+            _id: null,
+            name: 'Google News',
+            url: 'https://news.google.com/rss',
+            providerId: 'google-news',
+            type: 'googleNews',
+            category: 'general',
+            categories: ['Top Stories'],
+            wired: false,
+            wiringState: 'catalog_only',
+            enabled: false,
+            health: 'yellow',
+            healthReason: 'not_wired'
+          },
+          {
+            id: 'yahoo-src',
+            _id: 'src-1',
+            name: 'Yahoo News',
+            url: 'https://news.yahoo.com/rss',
+            providerId: 'custom-rss',
+            type: 'rss',
+            category: 'general',
+            categories: ['general'],
+            wired: true,
+            wiringState: 'wired',
+            enabled: true,
+            health: 'green',
+            healthReason: 'last_fetch_success_recent'
+          }
+        ],
+        topUsedSources: [],
+        catalogVersion: 1
       }
     });
     newsAPI.updatePreferences.mockResolvedValue({ data: { preferences: basePreferences } });
@@ -131,6 +164,13 @@ describe('News inline preferences updates', () => {
       openSettingsButton.click();
     });
 
+    // Click the Locations tab in the control panel
+    const locationsTab = Array.from(container.querySelectorAll('button[role="tab"]'))
+      .find((btn) => btn.textContent.includes('Locations'));
+    await act(async () => {
+      locationsTab.click();
+    });
+
     const cityInput = container.querySelector('input[placeholder="City"]');
     const zipInput = container.querySelector('input[placeholder="ZIP"]');
     const primaryCheckbox = Array.from(container.querySelectorAll('input[type="checkbox"]'))
@@ -160,5 +200,92 @@ describe('News inline preferences updates', () => {
       isPrimary: true
     }));
     expect(newsAPI.getFeed).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders control panel with tabs when settings opened', async () => {
+    await renderNews();
+
+    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    await act(async () => {
+      openSettingsButton.click();
+    });
+
+    // Verify control panel header
+    expect(container.textContent).toContain('News Control Panel');
+
+    // Verify tab pills are rendered
+    const tabs = container.querySelectorAll('button[role="tab"]');
+    expect(tabs.length).toBe(5);
+    const tabLabels = Array.from(tabs).map(t => t.textContent);
+    expect(tabLabels).toEqual(expect.arrayContaining([
+      expect.stringContaining('Sources'),
+      expect.stringContaining('Keywords'),
+      expect.stringContaining('Locations'),
+      expect.stringContaining('Schedule'),
+      expect.stringContaining('Export')
+    ]));
+  });
+
+  it('renders source cards with health dots for wired and unwired sources', async () => {
+    await renderNews();
+
+    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    await act(async () => {
+      openSettingsButton.click();
+    });
+
+    // Sources tab is active by default – both Google News and Yahoo News should render
+    expect(container.textContent).toContain('Google News');
+    expect(container.textContent).toContain('Yahoo News');
+
+    // Health dots should be present with aria-labels
+    const healthDots = container.querySelectorAll('[aria-label="Connected"], [aria-label="Not wired"], [aria-label="Failing"]');
+    expect(healthDots.length).toBeGreaterThan(0);
+  });
+
+  it('switches tabs in control panel', async () => {
+    await renderNews();
+
+    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    await act(async () => {
+      openSettingsButton.click();
+    });
+
+    // Click Keywords tab
+    const keywordsTab = Array.from(container.querySelectorAll('button[role="tab"]'))
+      .find((btn) => btn.textContent.includes('Keywords'));
+    await act(async () => {
+      keywordsTab.click();
+    });
+
+    expect(container.textContent).toContain('Tracked Keywords');
+
+    // Click Locations tab
+    const locationsTab = Array.from(container.querySelectorAll('button[role="tab"]'))
+      .find((btn) => btn.textContent.includes('Locations'));
+    await act(async () => {
+      locationsTab.click();
+    });
+
+    expect(container.textContent).toContain('Location Preferences');
+  });
+
+  it('sidebar shows sources with health dots', async () => {
+    await renderNews();
+
+    // Open the Sources accordion in the sidebar
+    const sourcesAccordion = Array.from(container.querySelectorAll('button'))
+      .find((btn) => btn.textContent.includes('Sources'));
+    await act(async () => {
+      sourcesAccordion.click();
+    });
+
+    // Both merged sources should be visible in sidebar
+    expect(container.textContent).toContain('Yahoo News');
+    expect(container.textContent).toContain('Google News');
+
+    // Health dots should exist in the sidebar
+    const healthDots = container.querySelectorAll('[aria-label="Connected"], [aria-label="Not wired"]');
+    expect(healthDots.length).toBeGreaterThan(0);
   });
 });

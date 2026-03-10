@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { newsAPI } from '../utils/api';
+import NewsControlPanel from '../components/news/control/NewsControlPanel';
+import { HealthDot } from '../components/news/control/HealthDot';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -418,7 +420,10 @@ function News() {
 
   const activeKeywords = preferences?.followedKeywords || [];
   const googleNewsEnabled = preferences?.googleNewsEnabled !== false;
-  const enabledSourceCount = availableSources.filter(s => isSourceEnabled(s._id)).length + (googleNewsEnabled ? 1 : 0);
+  const enabledSourceCount = availableSources.filter(s => {
+    if (s.id === 'google-news') return googleNewsEnabled;
+    return s._id ? isSourceEnabled(s._id) : false;
+  }).length;
   const enabledCategoryCount = ALL_CATEGORIES.length - hiddenCategories.length;
 
   return (
@@ -550,75 +555,43 @@ function News() {
         </div>
       </header>
 
-      {/* ── Settings Panel (expanded below header) ────────────────────────────── */}
+      {/* ── Control Panel (expanded below header) ─────────────────────────────── */}
       {showSettings && (
-        <div className="bg-white border-b border-gray-200/60 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-gray-900">Preferences</h2>
-              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close preferences">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Default scope */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-gray-900">Default Scope</h3>
-                <p className="text-xs text-gray-500">Scope that loads when you open News</p>
-                <select value={preferences?.defaultScope || 'local'} onChange={(e) => handleDefaultScopeChange(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all">
-                  {NEWS_SCOPES.map((s) => <option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}
-                </select>
-              </div>
-
-              {/* Google News toggle */}
-              <div className="flex items-center justify-between bg-gray-50 rounded-xl p-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Google News</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Include Google News results</p>
-                </div>
-                <Toggle enabled={preferences?.googleNewsEnabled !== false} onToggle={handleToggleGoogleNews} label="Toggle Google News" />
-              </div>
-
-              {/* Location preferences */}
-              <div className="space-y-2 sm:col-span-2 lg:col-span-1">
-                <h3 className="text-sm font-semibold text-gray-900">Locations</h3>
-                <p className="text-xs text-gray-500">For local &amp; regional coverage</p>
-                <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                  {preferences?.locations?.map((loc) => {
-                    const parts = [loc.city, loc.zipCode, loc.county, loc.state, loc.country].filter(Boolean);
-                    return (
-                      <div key={loc._id} className="flex items-center justify-between px-3 py-1.5 bg-white rounded-lg text-sm ring-1 ring-gray-200">
-                        <span className="text-gray-700 truncate">
-                          {parts.join(', ') || 'Unknown'}
-                          {loc.isPrimary && <span className="ml-1.5 text-xs text-indigo-600 font-semibold">Primary</span>}
-                        </span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {!loc.isPrimary && <button onClick={() => handleSetPrimaryLocation(loc._id)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Primary</button>}
-                          <button onClick={() => handleRemoveLocation(loc._id)} className="text-gray-400 hover:text-red-500 transition-colors">×</button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {(!preferences?.locations || preferences.locations.length === 0) && <p className="text-xs text-gray-400">No locations added yet.</p>}
-                </div>
-                <form onSubmit={handleAddLocation} className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <input type="text" value={newLocation.city} onChange={(e) => setNewLocation({ ...newLocation, city: e.target.value })} placeholder="City" className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all" />
-                    <input type="text" value={newLocation.zipCode} onChange={(e) => setNewLocation({ ...newLocation, zipCode: e.target.value })} placeholder="ZIP" className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all" />
-                    <input type="text" value={newLocation.state} onChange={(e) => setNewLocation({ ...newLocation, state: e.target.value })} placeholder="State" className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all" />
-                    <input type="text" value={newLocation.country} onChange={(e) => setNewLocation({ ...newLocation, country: e.target.value })} placeholder="Country" className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all" />
-                  </div>
-                  <label className="flex items-center gap-2 text-xs text-gray-600">
-                    <input type="checkbox" checked={newLocation.isPrimary} onChange={(e) => setNewLocation({ ...newLocation, isPrimary: e.target.checked })} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                    Make this my primary location
-                  </label>
-                  <button type="submit" className="w-full px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">Add Location</button>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
+        <NewsControlPanel
+          sources={availableSources}
+          preferences={preferences}
+          onToggleSource={handleToggleSource}
+          isSourceEnabled={isSourceEnabled}
+          onToggleGoogleNews={handleToggleGoogleNews}
+          onAddKeyword={handleAddKeyword}
+          onRemoveKeyword={handleRemoveKeyword}
+          newKeyword={newKeyword}
+          setNewKeyword={setNewKeyword}
+          onAddLocation={handleAddLocation}
+          onRemoveLocation={handleRemoveLocation}
+          onSetPrimaryLocation={handleSetPrimaryLocation}
+          newLocation={newLocation}
+          setNewLocation={setNewLocation}
+          onUpdatePreferences={async (data) => {
+            try {
+              const res = await newsAPI.updatePreferences(data);
+              setPreferences(res.data.preferences);
+            } catch (err) {
+              console.error('Error updating preferences:', err);
+            }
+          }}
+          onRefreshHealth={async () => {
+            try {
+              const res = await newsAPI.refreshSourceHealth();
+              setAvailableSources(res.data.sources || []);
+            } catch (err) {
+              console.error('Error refreshing health:', err);
+            }
+          }}
+          onClose={() => setShowSettings(false)}
+          onRestore={bootstrap}
+          scopes={NEWS_SCOPES}
+        />
       )}
 
       {/* ── Main Content ──────────────────────────────────────────────────────── */}
@@ -654,34 +627,43 @@ function News() {
                   <span className="text-sm font-semibold text-gray-800">Sources</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">{enabledSourceCount}/{availableSources.length + 1}</span>
+                  <span className="text-xs text-gray-400">{enabledSourceCount}/{availableSources.length}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${openPanel === PANEL_IDS.sources ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                 </div>
               </button>
               {openPanel === PANEL_IDS.sources && (
                 <div className="px-4 pb-4 space-y-2 border-t border-gray-100 pt-3 max-h-72 overflow-y-auto">
-                  {/* Google News as first-class source toggle */}
-                  <div className="flex items-center justify-between py-1.5">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800">Google News</p>
-                      <p className="text-[11px] text-gray-400">Aggregated results</p>
-                    </div>
-                    <Toggle enabled={preferences?.googleNewsEnabled !== false} onToggle={handleToggleGoogleNews} label="Toggle Google News" size="sm" />
-                  </div>
                   {availableSources.map((source) => {
-                    const enabled = isSourceEnabled(source._id);
+                    const isGoogleNews = source.id === 'google-news';
+                    const enabled = isGoogleNews
+                      ? (preferences?.googleNewsEnabled !== false)
+                      : (source._id ? isSourceEnabled(source._id) : false);
                     return (
-                      <div key={source._id} className="flex items-center justify-between py-1.5">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{source.name}</p>
-                          <p className="text-[11px] text-gray-400">{getSourceTypeLabel(source.type)} · {source.category || 'general'}</p>
+                      <div key={source.id} className="flex items-center justify-between py-1.5">
+                        <div className="min-w-0 flex items-center gap-1.5">
+                          <HealthDot health={source.health} healthReason={source.healthReason} size={7} />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{source.name}</p>
+                            <p className="text-[11px] text-gray-400">{getSourceTypeLabel(source.type)} · {source.category || 'general'}</p>
+                          </div>
                         </div>
-                        <Toggle enabled={enabled} onToggle={() => handleToggleSource(source._id, enabled)} label={`Toggle ${source.name}`} size="sm" />
+                        <Toggle
+                          enabled={enabled}
+                          onToggle={() => {
+                            if (isGoogleNews) {
+                              handleToggleGoogleNews();
+                            } else if (source._id) {
+                              handleToggleSource(source._id, enabled);
+                            }
+                          }}
+                          label={`Toggle ${source.name}`}
+                          size="sm"
+                        />
                       </div>
                     );
                   })}
                   {availableSources.length === 0 && (
-                    <p className="text-xs text-gray-400 py-1">No shared sources available yet.</p>
+                    <p className="text-xs text-gray-400 py-1">No sources available yet.</p>
                   )}
                 </div>
               )}
