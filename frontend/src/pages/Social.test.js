@@ -200,6 +200,17 @@ describe('Social page hero background rendering', () => {
     expect(locationProbe?.textContent).toBe('/social?user=alpha');
   });
 
+  it('shows owner controls when visiting own profile with username in URL', async () => {
+    window.history.replaceState({}, '', '/social?user=alpha');
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const guestViewButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Guest View');
+    expect(guestViewButton).toBeTruthy();
+    expect(container.textContent).toContain('Compose');
+    expect(container.textContent).not.toContain('Post publishing is available only in owner view.');
+  });
+
   it('builds social chat and calendar links for friend profile context', async () => {
     window.history.replaceState({}, '', '/social?user=buddy');
     feedAPI.getPublicUserFeed.mockResolvedValue({
