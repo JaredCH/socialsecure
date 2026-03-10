@@ -16,7 +16,14 @@ const SOURCE_ABBR = {
   'gdelt': 'GD'
 };
 
-export default function SourcesPanel({ sources, onToggleSource, isSourceEnabled, onToggleGoogleNews, googleNewsEnabled, preferences }) {
+export default function SourcesPanel({ sources, onToggleSource, isSourceEnabled, onToggleGoogleNews, googleNewsEnabled, preferences, onToggleSourceCategory }) {
+  const disabledSourceCategories = preferences?.disabledSourceCategories || {};
+
+  const isCategoryDisabled = (sourceId, category) => {
+    const disabled = disabledSourceCategories[sourceId] || [];
+    return disabled.includes(category.toLowerCase());
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between mb-2">
@@ -67,19 +74,28 @@ export default function SourcesPanel({ sources, onToggleSource, isSourceEnabled,
                     {reasonLabel}
                   </p>
 
-                  {/* Category chips */}
+                  {/* Category chips – clickable to toggle */}
                   {source.categories && source.categories.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
-                      {source.categories.slice(0, 4).map((cat) => (
-                        <span key={cat} className="px-1.5 py-0.5 bg-gray-50 text-gray-500 rounded text-[10px] font-medium">
-                          {cat}
-                        </span>
-                      ))}
-                      {source.categories.length > 4 && (
-                        <span className="px-1.5 py-0.5 text-gray-400 text-[10px]">
-                          +{source.categories.length - 4}
-                        </span>
-                      )}
+                      {source.categories.map((cat) => {
+                        const disabled = isCategoryDisabled(source.id, cat);
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            aria-pressed={!disabled}
+                            aria-label={`${disabled ? 'Enable' : 'Disable'} ${cat} for ${source.name}`}
+                            onClick={() => onToggleSourceCategory && onToggleSourceCategory(source.id, cat)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                              disabled
+                                ? 'bg-gray-100 text-gray-300 line-through'
+                                : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

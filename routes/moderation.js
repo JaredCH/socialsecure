@@ -798,7 +798,11 @@ router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, asy
     const search = String(req.query.search || '').trim();
     const fromDate = req.query.from ? new Date(req.query.from) : null;
     const toDate = req.query.to ? new Date(req.query.to) : null;
-    const sortBy = ['createdAt', 'scrapedAt', 'resolvedScope', 'processingStatus'].includes(req.query.sortBy)
+    const sortBy = [
+      'createdAt', 'scrapedAt', 'resolvedScope', 'processingStatus',
+      'source.name', 'normalized.category', 'normalized.title',
+      'normalized.publishedAt', 'normalized.localityLevel'
+    ].includes(req.query.sortBy)
       ? req.query.sortBy
       : 'createdAt';
     const sortDir = normalizeSortDirection(req.query.sortDir);

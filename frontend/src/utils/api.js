@@ -512,6 +512,8 @@ export const newsAPI = {
   removeLocation: (locationId) => api.delete(`/news/preferences/locations/${locationId}`),
   // Update hidden categories
   updateHiddenCategories: (hiddenCategories) => api.put('/news/preferences/hidden-categories', { hiddenCategories }),
+  // Toggle a category for a specific source
+  toggleSourceCategory: (sourceId, category) => api.put('/news/preferences/source-categories', { sourceId, category }),
   // Get available topics
   getTopics: () => api.get('/news/topics'),
   // Get single article

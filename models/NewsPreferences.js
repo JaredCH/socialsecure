@@ -128,6 +128,13 @@ const newsPreferencesSchema = new mongoose.Schema({
     lowercase: true
   }],
 
+  // Per-source disabled categories (sourceId → [category1, category2, ...])
+  disabledSourceCategories: {
+    type: Map,
+    of: [String],
+    default: () => new Map()
+  },
+
   // Weather location preferences (max 3)
   weatherLocations: {
     type: [weatherLocationSchema],
@@ -237,6 +244,23 @@ newsPreferencesSchema.methods.hideCategory = async function(category) {
 newsPreferencesSchema.methods.showCategory = async function(category) {
   const normalized = category.toLowerCase().trim();
   this.hiddenCategories = this.hiddenCategories.filter(c => c !== normalized);
+  await this.save();
+  return this;
+};
+
+// Method to toggle a category for a specific source
+newsPreferencesSchema.methods.toggleSourceCategory = async function(sourceId, category) {
+  const normalized = category.toLowerCase().trim();
+  if (!this.disabledSourceCategories) {
+    this.disabledSourceCategories = new Map();
+  }
+  const current = this.disabledSourceCategories.get(sourceId) || [];
+  if (current.includes(normalized)) {
+    this.disabledSourceCategories.set(sourceId, current.filter(c => c !== normalized));
+  } else {
+    this.disabledSourceCategories.set(sourceId, [...current, normalized]);
+  }
+  this.markModified('disabledSourceCategories');
   await this.save();
   return this;
 };

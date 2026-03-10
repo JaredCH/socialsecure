@@ -20,6 +20,7 @@ export default function NewsControlPanel({
   onToggleSource,
   isSourceEnabled,
   onToggleGoogleNews,
+  onToggleSourceCategory,
   onAddKeyword,
   onRemoveKeyword,
   newKeyword,
@@ -198,6 +199,7 @@ export default function NewsControlPanel({
                 onToggleGoogleNews={onToggleGoogleNews}
                 googleNewsEnabled={googleNewsEnabled}
                 preferences={preferences}
+                onToggleSourceCategory={onToggleSourceCategory}
               />
             )}
             {activeTab === 'keywords' && (

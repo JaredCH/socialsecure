@@ -4113,6 +4113,34 @@ router.put('/preferences/hidden-categories', authenticateToken, async (req, res)
 });
 
 /**
+ * PUT /api/news/preferences/source-categories
+ * Toggle a category for a specific source on/off
+ */
+router.put('/preferences/source-categories', authenticateToken, async (req, res) => {
+  try {
+    const { sourceId, category } = req.body;
+
+    if (!sourceId || typeof sourceId !== 'string') {
+      return res.status(400).json({ error: 'sourceId is required' });
+    }
+    if (!category || typeof category !== 'string') {
+      return res.status(400).json({ error: 'category is required' });
+    }
+
+    const preferences = await NewsPreferences.getOrCreate(req.user.userId);
+    await preferences.toggleSourceCategory(sourceId, category);
+
+    res.json({
+      success: true,
+      preferences
+    });
+  } catch (error) {
+    console.error('Error toggling source category:', error);
+    res.status(500).json({ error: 'Failed to toggle source category' });
+  }
+});
+
+/**
  * POST /api/news/sources
  * Add a new RSS source (admin or user-defined)
  */
