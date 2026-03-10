@@ -249,6 +249,16 @@ function News() {
     }
   };
 
+  const handleRenameKeyword = async (oldKeyword, newKeyword) => {
+    try {
+      const res = await newsAPI.renameKeyword(oldKeyword, newKeyword);
+      setPreferences(res.data.preferences);
+      await refreshFeed();
+    } catch (err) {
+      console.error('Error renaming keyword:', err);
+    }
+  };
+
   const handleScopeChange = async (scope) => {
     setActiveScope(scope);
     setLoading(true);
@@ -602,6 +612,7 @@ function News() {
           onToggleSourceCategory={handleToggleSourceCategory}
           onAddKeyword={handleAddKeyword}
           onRemoveKeyword={handleRemoveKeyword}
+          onRenameKeyword={handleRenameKeyword}
           newKeyword={newKeyword}
           setNewKeyword={setNewKeyword}
           onAddLocation={handleAddLocation}

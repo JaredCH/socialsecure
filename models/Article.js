@@ -93,7 +93,7 @@ const articleSchema = new mongoose.Schema({
   },
   sourceType: {
     type: String,
-    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'gdlet', 'npr', 'bbc', 'patch', 'redditLocal', 'tvAffiliate', 'localNewspaper'],
+    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'gdlet', 'npr', 'bbc', 'patch', 'redditLocal', 'tvAffiliate', 'localNewspaper', 'newsApi'],
     default: 'rss'
   },
   // Local source tier metadata (populated by local ingestion pipeline)

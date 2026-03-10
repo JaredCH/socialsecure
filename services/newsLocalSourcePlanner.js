@@ -198,6 +198,16 @@ function buildLocalSourcePlan(location, options = {}) {
     }
   }
 
+  // --- Tier 5: NewsAPI (optional) ---
+  if (isTierEnabled('newsApi') && (loc.city || loc.stateAbbrev)) {
+    const query = [loc.city, loc.stateAbbrev ? loc.stateAbbrev.toUpperCase() : '', 'local news'].filter(Boolean).join(' ');
+    addSource(5, 'newsapi', `NewsAPI: ${query}`,
+      LOCAL_SOURCE_TIERS.newsApi.baseUrlTemplate
+        .replace('${query}', encodeURIComponent(query))
+        .replace('${apiKey}', ''),
+      { queryType: 'city_state' });
+  }
+
   // --- Tier 6: Reddit subreddits ---
   if (isTierEnabled('reddit') && loc.city && loc.stateAbbrev) {
     const key = `${loc.city.toLowerCase()}|${loc.stateAbbrev}`;
