@@ -118,6 +118,26 @@ const NEWS_SOURCE_CATALOG = [
     priority: 5
   },
   {
+    id: 'yahoo-news',
+    name: 'Yahoo News',
+    url: 'https://news.yahoo.com',
+    hostPatterns: ['news.yahoo.com', 'sports.yahoo.com'],
+    categories: ['Top Stories', 'World', 'Politics', 'Business', 'Technology', 'Entertainment', 'Sports', 'Health', 'Science'],
+    sourceType: 'rss',
+    hasAdapter: true,
+    priority: 7
+  },
+  {
+    id: 'espn',
+    name: 'ESPN',
+    url: 'https://www.espn.com',
+    hostPatterns: ['espn.com'],
+    categories: ['Sports'],
+    sourceType: 'rss',
+    hasAdapter: true,
+    priority: 6
+  },
+  {
     id: 'gdelt',
     name: 'GDELT Project',
     url: 'https://api.gdeltproject.org',

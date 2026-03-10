@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { moderationAPI } from '../utils/api';
+import { moderationAPI, newsAPI } from '../utils/api';
 
 const SECTION_LABELS = {
   users: 'Users',
@@ -137,10 +137,14 @@ function ModerationDashboard() {
   const [ingestionFilters, setIngestionFilters] = useState({
     source: '',
     tag: '',
+    category: '',
+    dedupeOutcome: '',
     location: '',
     zipCode: '',
     region: '',
     processingStatus: '',
+    publishedFrom: '',
+    publishedTo: '',
     sortBy: 'createdAt',
     sortDir: 'desc'
   });
@@ -149,6 +153,9 @@ function ModerationDashboard() {
   const [ingestionTimeline, setIngestionTimeline] = useState([]);
   const [ingestionLogs, setIngestionLogs] = useState([]);
   const [expandedIngestionRows, setExpandedIngestionRows] = useState({});
+  const [scheduleInfo, setScheduleInfo] = useState(null);
+  const [ingestionStats, setIngestionStats] = useState(null);
+  const [countdownMs, setCountdownMs] = useState(null);
 
   const muteDurations = useMemo(() => overview?.muteDurations || FALLBACK_MUTE_DURATIONS, [overview]);
 
@@ -167,7 +174,91 @@ function ModerationDashboard() {
   useEffect(() => {
     loadOverview();
     loadIngestionRecords(1);
+    loadScheduleInfo();
+    loadIngestionStats();
   }, []);
+
+  // Countdown timer
+  useEffect(() => {
+    if (!scheduleInfo?.nextRunAt || !scheduleInfo?.schedulerRunning) {
+      setCountdownMs(null);
+      return;
+    }
+    const tick = () => {
+      const remaining = new Date(scheduleInfo.nextRunAt).getTime() - Date.now();
+      setCountdownMs(Math.max(0, remaining));
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [scheduleInfo?.nextRunAt, scheduleInfo?.schedulerRunning]);
+
+  const loadScheduleInfo = async () => {
+    try {
+      const { data } = await newsAPI.getScheduleInfo();
+      setScheduleInfo(data);
+    } catch (error) {
+      // Non-critical, fail silently
+    }
+  };
+
+  const loadIngestionStats = async () => {
+    try {
+      const { data } = await newsAPI.getIngestionStats();
+      setIngestionStats(data);
+    } catch (error) {
+      // Non-critical, fail silently
+    }
+  };
+
+  const handleTriggerIngestion = async () => {
+    try {
+      toast.loading('Running full ingestion...', { id: 'ingest' });
+      await newsAPI.triggerIngestion();
+      toast.success('Ingestion completed', { id: 'ingest' });
+      await Promise.all([loadIngestionRecords(1), loadScheduleInfo(), loadIngestionStats()]);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Ingestion failed', { id: 'ingest' });
+    }
+  };
+
+  const handleTriggerSourceIngestion = async (sourceKey) => {
+    try {
+      toast.loading(`Ingesting ${sourceKey}...`, { id: `ingest-${sourceKey}` });
+      await newsAPI.triggerSourceIngestion(sourceKey);
+      toast.success(`${sourceKey} ingestion completed`, { id: `ingest-${sourceKey}` });
+      await Promise.all([loadIngestionRecords(1), loadIngestionStats()]);
+    } catch (error) {
+      toast.error(error.response?.data?.error || `${sourceKey} ingestion failed`, { id: `ingest-${sourceKey}` });
+    }
+  };
+
+  const resetIngestionFilters = () => {
+    const defaults = {
+      source: '',
+      tag: '',
+      category: '',
+      dedupeOutcome: '',
+      location: '',
+      zipCode: '',
+      region: '',
+      processingStatus: '',
+      publishedFrom: '',
+      publishedTo: '',
+      sortBy: 'createdAt',
+      sortDir: 'desc'
+    };
+    setIngestionFilters(defaults);
+    loadIngestionRecords(1, defaults);
+  };
+
+  const formatCountdown = (ms) => {
+    if (ms == null) return '--:--';
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
 
   const loadIngestionRecords = async (page = ingestion.page || 1, filters = ingestionFilters) => {
     setIngestion((prev) => ({ ...prev, loading: true }));
@@ -240,7 +331,9 @@ function ModerationDashboard() {
     await Promise.all([
       loadOverview(),
       details.open ? openDetails(details.section, details.page) : Promise.resolve(),
-      loadIngestionRecords(ingestion.page || 1)
+      loadIngestionRecords(ingestion.page || 1),
+      loadScheduleInfo(),
+      loadIngestionStats()
     ]);
   };
 
@@ -417,16 +510,126 @@ function ModerationDashboard() {
             <h2 className="text-base font-semibold text-gray-900">📰 News Ingestion Observability</h2>
             <p className="text-xs text-gray-500 mt-0.5">Monitor the ingestion pipeline — verify article processing, location mapping, and geographic association accuracy.</p>
           </div>
-          <button type="button" onClick={() => loadIngestionRecords(1)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition-colors">↻ Refresh</button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => loadIngestionRecords(1)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition-colors">↻ Refresh</button>
+            <button type="button" onClick={handleTriggerIngestion} className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors">▶ Run Full Ingestion</button>
+          </div>
         </div>
+
+        {/* Schedule & Stats Dashboard */}
+        <div className="border-b border-gray-100 px-5 py-4">
+          <div className="grid gap-4 md:grid-cols-4">
+            {/* Schedule Info */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <h4 className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Scheduler</h4>
+              <div className="space-y-1 text-xs">
+                <p className="flex items-center gap-1.5">
+                  <span className={`inline-block w-2 h-2 rounded-full ${scheduleInfo?.schedulerRunning ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                  {scheduleInfo?.schedulerRunning ? 'Running' : 'Stopped'}
+                </p>
+                {scheduleInfo?.lastIngestionRunAt && (
+                  <p><span className="text-gray-500">Last run:</span> {new Date(scheduleInfo.lastIngestionRunAt).toLocaleTimeString()}</p>
+                )}
+                {scheduleInfo?.schedulerRunning && (
+                  <p><span className="text-gray-500">Next run:</span> <span className="font-mono font-semibold text-indigo-600">{formatCountdown(countdownMs)}</span></p>
+                )}
+              </div>
+            </div>
+
+            {/* Totals */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <h4 className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Article Totals</h4>
+              <div className="space-y-1 text-xs">
+                <p><span className="text-gray-500">Today:</span> <span className="font-semibold">{ingestionStats?.totals?.today ?? '—'}</span></p>
+                <p><span className="text-gray-500">This week:</span> <span className="font-semibold">{ingestionStats?.totals?.week ?? '—'}</span></p>
+                <p><span className="text-gray-500">Active articles:</span> <span className="font-semibold">{ingestionStats?.totals?.activeArticles ?? '—'}</span></p>
+              </div>
+            </div>
+
+            {/* By Scope */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <h4 className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">By Scope (24h)</h4>
+              <div className="space-y-1 text-xs">
+                {ingestionStats?.byScope ? Object.entries(ingestionStats.byScope).map(([scope, count]) => (
+                  <p key={scope}><span className="text-gray-500">{scope}:</span> <span className="font-semibold">{count}</span></p>
+                )) : <p className="text-gray-400 italic">No data</p>}
+              </div>
+            </div>
+
+            {/* By Dedupe Outcome */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <h4 className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Dedupe (24h)</h4>
+              <div className="space-y-1 text-xs">
+                {ingestionStats?.byStatus ? Object.entries(ingestionStats.byStatus).map(([outcome, count]) => (
+                  <p key={outcome}><span className="text-gray-500">{outcome}:</span> <span className="font-semibold">{count}</span></p>
+                )) : <p className="text-gray-400 italic">No data</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Per-Source Stats */}
+          {ingestionStats?.bySource?.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Per-Source (24h)</h4>
+              <div className="flex flex-wrap gap-2">
+                {ingestionStats.bySource.map((s) => (
+                  <div key={s.source} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs">
+                    <span className="font-medium text-gray-700">{s.source}</span>
+                    <span className="text-emerald-600">{s.processed} ok</span>
+                    {s.failed > 0 && <span className="text-red-600">{s.failed} err</span>}
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerSourceIngestion(s.source.toLowerCase().replace(/\s+/g, '-'))}
+                      className="text-indigo-500 hover:text-indigo-700 font-medium"
+                      title={`Re-ingest ${s.source}`}
+                    >▶</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="p-4 space-y-4">
           <div className="grid gap-2 md:grid-cols-5">
-            <input
+            <select
               value={ingestionFilters.source}
               onChange={(e) => setIngestionFilters((prev) => ({ ...prev, source: e.target.value }))}
-              placeholder="Source"
               className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
-            />
+            >
+              <option value="">All sources</option>
+              <option value="Google News">Google News</option>
+              <option value="Reuters">Reuters</option>
+              <option value="BBC News">BBC News</option>
+              <option value="NPR">NPR</option>
+              <option value="Associated Press">Associated Press</option>
+              <option value="PBS NewsHour">PBS NewsHour</option>
+              <option value="CNN">CNN</option>
+              <option value="The Guardian">The Guardian</option>
+              <option value="New York Times">New York Times</option>
+              <option value="Wall Street Journal">Wall Street Journal</option>
+              <option value="TechCrunch">TechCrunch</option>
+              <option value="Yahoo News">Yahoo News</option>
+              <option value="ESPN">ESPN</option>
+              <option value="GDELT">GDELT</option>
+            </select>
+            <select
+              value={ingestionFilters.category}
+              onChange={(e) => setIngestionFilters((prev) => ({ ...prev, category: e.target.value }))}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+            >
+              <option value="">All categories</option>
+              <option value="general">General</option>
+              <option value="world">World</option>
+              <option value="politics">Politics</option>
+              <option value="business">Business</option>
+              <option value="technology">Technology</option>
+              <option value="science">Science</option>
+              <option value="health">Health</option>
+              <option value="entertainment">Entertainment</option>
+              <option value="sports">Sports</option>
+              <option value="finance">Finance</option>
+            </select>
             <input
               value={ingestionFilters.tag}
               onChange={(e) => setIngestionFilters((prev) => ({ ...prev, tag: e.target.value }))}
@@ -466,6 +669,31 @@ function ModerationDashboard() {
               <option value="failed">Failed</option>
             </select>
             <select
+              value={ingestionFilters.dedupeOutcome}
+              onChange={(e) => setIngestionFilters((prev) => ({ ...prev, dedupeOutcome: e.target.value }))}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+            >
+              <option value="">Any dedupe outcome</option>
+              <option value="inserted">Inserted</option>
+              <option value="updated">Updated</option>
+              <option value="duplicate">Duplicate</option>
+              <option value="error">Error</option>
+            </select>
+            <input
+              type="date"
+              value={ingestionFilters.publishedFrom}
+              onChange={(e) => setIngestionFilters((prev) => ({ ...prev, publishedFrom: e.target.value }))}
+              title="Published from"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+            />
+            <input
+              type="date"
+              value={ingestionFilters.publishedTo}
+              onChange={(e) => setIngestionFilters((prev) => ({ ...prev, publishedTo: e.target.value }))}
+              title="Published to"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+            />
+            <select
               value={ingestionFilters.sortBy}
               onChange={(e) => setIngestionFilters((prev) => ({ ...prev, sortBy: e.target.value }))}
               className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
@@ -483,13 +711,23 @@ function ModerationDashboard() {
               <option value="desc">Newest first</option>
               <option value="asc">Oldest first</option>
             </select>
-            <button
-              type="button"
-              onClick={() => loadIngestionRecords(1)}
-              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
-            >
-              Apply Filters
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => loadIngestionRecords(1)}
+                className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors flex-1"
+              >
+                Apply Filters
+              </button>
+              <button
+                type="button"
+                onClick={resetIngestionFilters}
+                className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                title="Reset all filters"
+              >
+                Reset
+              </button>
+            </div>
           </div>
           {ingestion.loading ? (
             <div className="flex items-center gap-2 py-8 justify-center">

@@ -365,6 +365,20 @@ const TECHCRUNCH_FEED_MAP = {
 };
 
 // ============================================
+// ESPN RSS FEED CONFIGURATION
+// ============================================
+
+const ESPN_ENABLED = String(process.env.ESPN_ENABLED || 'true').toLowerCase() !== 'false';
+
+const ESPN_FEED_MAP = {
+  topHeadlines: { url: 'https://www.espn.com/espn/rss/news', category: 'sports', label: 'ESPN Top Headlines' },
+  nfl: { url: 'https://www.espn.com/espn/rss/nfl/news', category: 'sports', label: 'ESPN NFL' },
+  nba: { url: 'https://www.espn.com/espn/rss/nba/news', category: 'sports', label: 'ESPN NBA' },
+  mlb: { url: 'https://www.espn.com/espn/rss/mlb/news', category: 'sports', label: 'ESPN MLB' },
+  soccer: { url: 'https://www.espn.com/espn/rss/soccer/news', category: 'sports', label: 'ESPN Soccer' }
+};
+
+// ============================================
 // LOCATION DICTIONARIES
 // ============================================
 
@@ -2440,6 +2454,132 @@ async function fetchTechcrunchSource(section, feedConfig) {
   }
 }
 
+async function fetchYahooSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'Yahoo News', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'Yahoo News',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'yahoo-news',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          yahooSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching Yahoo source "${section}":`, error.message);
+    return [];
+  }
+}
+
+async function fetchEspnSource(section, feedConfig) {
+  try {
+    const feed = await parser.parseURL(feedConfig.url);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+
+    return await Promise.all(items.map(async (item) => {
+      const rawCategories = Array.isArray(item.categories) ? item.categories : [];
+      const standardCategory = feedConfig.category || normalizeToStandardCategory(rawCategories[0] || section);
+      const {
+        locationTokens,
+        localityLevel,
+        assignedZipCode,
+        locationTags,
+        scopeMetadata
+      } = await resolveArticleLocationContext({
+        source: { name: 'ESPN', category: section },
+        item
+      });
+      return {
+        title: item.title || 'Untitled',
+        description: getItemDescription(item),
+        source: 'ESPN',
+        sourceId: item.guid || item.link,
+        url: item.link,
+        imageUrl: getItemImageUrl(item),
+        publishedAt: getItemPublishedAt(item),
+        category: standardCategory,
+        topics: toUniqueNonEmptyStrings([
+          standardCategory,
+          section,
+          ...rawCategories.map(c => normalizeTopicToken(c))
+        ]),
+        locations: locationTokens,
+        assignedZipCode,
+        sourceType: 'rss',
+        localityLevel,
+        language: feed.language || feed.feedLanguage || 'en',
+        feedSource: 'espn',
+        feedCategory: feedConfig.label || section,
+        feedLanguage: feed.language || feed.feedLanguage || 'en',
+        feedMetadata: {
+          espnSection: section,
+          author: item.dcCreator || item.creator || null,
+          categories: rawCategories,
+          feedTitle: feed.title || null,
+          subject: item.dcSubject || null
+        },
+        scrapeTimestamp: new Date(),
+        ...(NEWS_LOCATION_TAGGER_V2_ENABLED
+          ? {
+              locationTags,
+              scopeReason: scopeMetadata.scopeReason,
+              scopeConfidence: scopeMetadata.scopeConfidence
+            }
+          : {})
+      };
+    }));
+  } catch (error) {
+    console.error(`Error fetching ESPN source "${section}":`, error.message);
+    return [];
+  }
+}
+
 /**
  * GDELT 2.0 DOC API Adapter
  * Fetches geolocated articles from GDELT's free document API.
@@ -3402,7 +3542,23 @@ async function ingestAllSources() {
     }
   }
 
-  // 13. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
+  // 13. Fetch Yahoo News sources (gated by YAHOO_ENABLED)
+  if (YAHOO_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(YAHOO_FEED_MAP)) {
+      const articles = await fetchYahooSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 14. Fetch ESPN sources (gated by ESPN_ENABLED)
+  if (ESPN_ENABLED) {
+    for (const [section, feedConfig] of Object.entries(ESPN_FEED_MAP)) {
+      const articles = await fetchEspnSource(section, feedConfig);
+      allArticles = [...allArticles, ...articles];
+    }
+  }
+
+  // 15. Fetch GDELT sources (optional, gated by GDELT_ENABLED)
   if (GDELT_ENABLED) {
     const gdeltQueries = GDELT_DEFAULT_QUERIES;
     for (const query of gdeltQueries) {
@@ -3411,7 +3567,7 @@ async function ingestAllSources() {
     }
   }
 
-  // 14. Fetch local sources (gated by NEWS_LOCAL_SOURCES_ENABLED)
+  // 16. Fetch local sources (gated by NEWS_LOCAL_SOURCES_ENABLED)
   let localMetrics = null;
   if (NEWS_LOCAL_SOURCES_ENABLED) {
     try {
@@ -3458,10 +3614,10 @@ async function ingestAllSources() {
     }
   }
   
-  // 15. Process all articles (deduplication)
+  // 17. Process all articles (deduplication)
   const results = await processArticles(allArticles, { ingestionRunId });
   
-  // 16. Log scope quality metrics
+  // 18. Log scope quality metrics
   const scopeQuality = computeScopeQualityMetrics(allArticles, startTime);
   if (localMetrics) {
     scopeQuality.localPipeline = localMetrics;
@@ -4945,25 +5101,231 @@ router.put('/preferences/weather-locations/:locationId/primary', authenticateTok
   }
 });
 
+/**
+ * GET /api/news/schedule-info
+ * Returns scheduler status, last/next run times, and recent ingestion result (admin)
+ */
+router.get('/schedule-info', authenticateToken, async (req, res) => {
+  try {
+    const requester = await User.findById(req.user.userId).select('_id isAdmin');
+    if (!requester?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const now = new Date();
+    let nextRunAt = null;
+    if (lastIngestionRunAt && ingestionInterval) {
+      nextRunAt = new Date(lastIngestionRunAt.getTime() + INGESTION_INTERVAL_MS);
+    } else if (schedulerStartedAt && ingestionInterval) {
+      nextRunAt = new Date(schedulerStartedAt.getTime() + INGESTION_INTERVAL_MS);
+    }
+
+    res.json({
+      schedulerRunning: !!ingestionInterval,
+      intervalMs: INGESTION_INTERVAL_MS,
+      schedulerStartedAt,
+      lastIngestionRunAt,
+      nextRunAt,
+      msUntilNextRun: nextRunAt ? Math.max(0, nextRunAt.getTime() - now.getTime()) : null,
+      lastResult: lastIngestionResult || null
+    });
+  } catch (error) {
+    console.error('Error fetching schedule info:', error);
+    res.status(500).json({ error: 'Failed to fetch schedule info' });
+  }
+});
+
+/**
+ * GET /api/news/ingestion-stats
+ * Returns aggregated ingestion statistics per source, per scope, per status (admin)
+ */
+router.get('/ingestion-stats', authenticateToken, async (req, res) => {
+  try {
+    const requester = await User.findById(req.user.userId).select('_id isAdmin');
+    if (!requester?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [bySource, byScope, byStatus, totalToday, totalWeek, totalAll] = await Promise.all([
+      NewsIngestionRecord.aggregate([
+        { $match: { createdAt: { $gte: oneDayAgo } } },
+        { $group: { _id: '$source.name', count: { $sum: 1 }, processed: { $sum: { $cond: [{ $eq: ['$processingStatus', 'processed'] }, 1, 0] } }, failed: { $sum: { $cond: [{ $eq: ['$processingStatus', 'failed'] }, 1, 0] } } } },
+        { $sort: { count: -1 } }
+      ]).catch(() => []),
+      NewsIngestionRecord.aggregate([
+        { $match: { createdAt: { $gte: oneDayAgo } } },
+        { $group: { _id: '$resolvedScope', count: { $sum: 1 } } }
+      ]).catch(() => []),
+      NewsIngestionRecord.aggregate([
+        { $match: { createdAt: { $gte: oneDayAgo } } },
+        { $group: { _id: '$dedupe.outcome', count: { $sum: 1 } } }
+      ]).catch(() => []),
+      NewsIngestionRecord.countDocuments({ createdAt: { $gte: oneDayAgo } }).catch(() => 0),
+      NewsIngestionRecord.countDocuments({ createdAt: { $gte: sevenDaysAgo } }).catch(() => 0),
+      Article.countDocuments({ isActive: true }).catch(() => 0)
+    ]);
+
+    res.json({
+      bySource: bySource.map(s => ({ source: s._id || 'Unknown', total: s.count, processed: s.processed, failed: s.failed })),
+      byScope: byScope.reduce((acc, s) => { acc[s._id || 'unknown'] = s.count; return acc; }, {}),
+      byStatus: byStatus.reduce((acc, s) => { acc[s._id || 'unknown'] = s.count; return acc; }, {}),
+      totals: {
+        today: totalToday,
+        week: totalWeek,
+        activeArticles: totalAll
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching ingestion stats:', error);
+    res.status(500).json({ error: 'Failed to fetch ingestion stats' });
+  }
+});
+
+/**
+ * POST /api/news/ingest/:sourceKey
+ * Trigger ingestion for a single source (admin)
+ */
+router.post('/ingest/:sourceKey', authenticateToken, async (req, res) => {
+  try {
+    const requester = await User.findById(req.user.userId).select('_id isAdmin');
+    if (!requester?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { sourceKey } = req.params;
+    const sourceAdapters = {
+      'google-news': async () => {
+        let articles = [];
+        for (const topic of Object.keys(GOOGLE_NEWS_TOPIC_MAP)) {
+          articles = [...articles, ...await fetchGoogleNewsSource(topic, 'googleNews')];
+        }
+        return articles;
+      },
+      'npr': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(NPR_FEED_MAP)) articles = [...articles, ...await fetchNprSource(s, fc)];
+        return articles;
+      },
+      'bbc': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(BBC_FEED_MAP)) articles = [...articles, ...await fetchBbcSource(s, fc)];
+        return articles;
+      },
+      'associated-press': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(AP_FEED_MAP)) articles = [...articles, ...await fetchApSource(s, fc)];
+        return articles;
+      },
+      'reuters': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(REUTERS_FEED_MAP)) articles = [...articles, ...await fetchReutersSource(s, fc)];
+        return articles;
+      },
+      'pbs': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(PBS_FEED_MAP)) articles = [...articles, ...await fetchPbsSource(s, fc)];
+        return articles;
+      },
+      'cnn': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(CNN_FEED_MAP)) articles = [...articles, ...await fetchCnnSource(s, fc)];
+        return articles;
+      },
+      'guardian': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(GUARDIAN_FEED_MAP)) articles = [...articles, ...await fetchGuardianSource(s, fc)];
+        return articles;
+      },
+      'new-york-times': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(NYT_FEED_MAP)) articles = [...articles, ...await fetchNytSource(s, fc)];
+        return articles;
+      },
+      'wall-street-journal': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(WSJ_FEED_MAP)) articles = [...articles, ...await fetchWsjSource(s, fc)];
+        return articles;
+      },
+      'techcrunch': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(TECHCRUNCH_FEED_MAP)) articles = [...articles, ...await fetchTechcrunchSource(s, fc)];
+        return articles;
+      },
+      'yahoo-news': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(YAHOO_FEED_MAP)) articles = [...articles, ...await fetchYahooSource(s, fc)];
+        return articles;
+      },
+      'espn': async () => {
+        let articles = [];
+        for (const [s, fc] of Object.entries(ESPN_FEED_MAP)) articles = [...articles, ...await fetchEspnSource(s, fc)];
+        return articles;
+      },
+      'gdelt': async () => {
+        let articles = [];
+        for (const query of GDELT_DEFAULT_QUERIES) articles = [...articles, ...await fetchGdeltSource(query)];
+        return articles;
+      }
+    };
+
+    const adapter = sourceAdapters[sourceKey];
+    if (!adapter) {
+      return res.status(400).json({ error: `Unknown source key: ${sourceKey}`, availableSources: Object.keys(sourceAdapters) });
+    }
+
+    const articles = await adapter();
+    const ingestionRunId = uuidv4();
+    const results = await processArticles(articles, { ingestionRunId });
+
+    res.json({
+      message: `Ingestion for ${sourceKey} completed`,
+      sourceKey,
+      articlesScraped: articles.length,
+      results
+    });
+  } catch (error) {
+    console.error(`Error during source-specific ingestion (${req.params.sourceKey}):`, error);
+    res.status(500).json({ error: 'Source-specific ingestion failed' });
+  }
+});
+
 // ============================================
 // INGESTION SCHEDULER
 // ============================================
 
-// Start ingestion scheduler (every 10 minutes)
+const INGESTION_INTERVAL_MS = 10 * 60 * 1000;
 let ingestionInterval = null;
+let lastIngestionRunAt = null;
+let lastIngestionResult = null;
+let schedulerStartedAt = null;
 
 function startIngestionScheduler() {
   if (ingestionInterval) {
     clearInterval(ingestionInterval);
   }
   
+  schedulerStartedAt = new Date();
+
   // Initial ingestion
-  ingestAllSources().catch(console.error);
+  ingestAllSources()
+    .then((result) => {
+      lastIngestionRunAt = new Date();
+      lastIngestionResult = result;
+    })
+    .catch(console.error);
   
   // Schedule every 10 minutes
   ingestionInterval = setInterval(() => {
-    ingestAllSources().catch(console.error);
-  }, 10 * 60 * 1000);
+    ingestAllSources()
+      .then((result) => {
+        lastIngestionRunAt = new Date();
+        lastIngestionResult = result;
+      })
+      .catch(console.error);
+  }, INGESTION_INTERVAL_MS);
   
   console.log('News ingestion scheduler started (10-minute cadence)');
 }
@@ -5000,6 +5362,8 @@ module.exports = {
     fetchNytSource,
     fetchWsjSource,
     fetchTechcrunchSource,
+    fetchYahooSource,
+    fetchEspnSource,
     fetchPatchSource,
     fetchRedditLocalSource,
     fetchLocalCatalogRssSource,
@@ -5042,6 +5406,7 @@ module.exports = {
     NYT_FEED_MAP,
     WSJ_FEED_MAP,
     TECHCRUNCH_FEED_MAP,
+    ESPN_FEED_MAP,
     COUNTRY_VARIANTS_MAP,
     STANDARDIZED_CATEGORIES,
     SUPPORTED_RSS_PROVIDERS,

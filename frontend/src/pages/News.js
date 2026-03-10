@@ -853,10 +853,12 @@ function News() {
               {sortedArticles.map((article) => (
                 <article key={article._id} className="group bg-white rounded-2xl overflow-hidden hover:shadow-lg hover:shadow-gray-200/60 transition-all duration-300 ring-1 ring-gray-200/70">
                   <button onClick={() => setSelectedArticleId(article._id)} className="w-full text-left">
-                    {article.imageUrl && (
+                    {article.imageUrl ? (
                       <div className="w-full h-40 overflow-hidden bg-gray-100">
-                        <img src={article.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.parentElement.style.display = 'none'; }} />
+                        <img src={article.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('flex', 'items-center', 'justify-center'); e.target.parentElement.innerHTML = '<span class="text-3xl text-gray-300">📰</span>'; }} />
                       </div>
+                    ) : (
+                      <div className="w-full h-28 bg-gradient-to-br from-gray-100 to-gray-50 flex items-center justify-center text-3xl text-gray-300">📰</div>
                     )}
                     <div className="p-4">
                       <h2 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors">{article.title}</h2>
@@ -867,7 +869,18 @@ function News() {
                         {article.localityLevel && article.localityLevel !== 'global' && (
                           <span className="text-indigo-500 font-medium">{article.localityLevel}</span>
                         )}
+                        <span className="ml-auto px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[11px] font-medium">{getSourceTypeLabel(article.sourceType)}</span>
                       </div>
+                      {article.feedMetadata?.author && (
+                        <p className="mt-1 text-[11px] text-gray-400 truncate">By {article.feedMetadata.author}</p>
+                      )}
+                      {article.topics?.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {article.topics.slice(0, 3).map((topic) => (
+                            <span key={topic} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] font-medium">{topic}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </button>
                 </article>
@@ -879,10 +892,12 @@ function News() {
                 <article key={article._id} className="group bg-white rounded-2xl overflow-hidden hover:shadow-lg hover:shadow-gray-200/60 transition-all duration-300 ring-1 ring-gray-200/70">
                   <div className="flex flex-col sm:flex-row">
                     <a href={article.url} target="_blank" rel="noopener noreferrer" className="flex flex-col sm:flex-row flex-1 min-w-0">
-                      {article.imageUrl && (
+                      {article.imageUrl ? (
                         <div className="sm:w-48 sm:min-h-[130px] shrink-0 overflow-hidden bg-gray-100">
-                          <img src={article.imageUrl} alt="" className="w-full h-44 sm:h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.parentElement.style.display = 'none'; }} />
+                          <img src={article.imageUrl} alt="" className="w-full h-44 sm:h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('flex', 'items-center', 'justify-center'); e.target.parentElement.innerHTML = '<span class="text-4xl text-gray-300">📰</span>'; }} />
                         </div>
+                      ) : (
+                        <div className="hidden sm:flex sm:w-48 sm:min-h-[130px] shrink-0 bg-gradient-to-br from-gray-100 to-gray-50 items-center justify-center text-4xl text-gray-300">📰</div>
                       )}
                       <div className="flex-1 min-w-0 p-4 sm:p-5 flex flex-col justify-center">
                         <h2 className="text-[15px] sm:text-base font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors">{article.title}</h2>
@@ -891,6 +906,12 @@ function News() {
                         )}
                         <div className="mt-3 flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
                           <span className="font-semibold text-gray-600">{article.source}</span>
+                          {article.feedMetadata?.author && (
+                            <>
+                              <span className="text-gray-300">·</span>
+                              <span className="text-gray-500">{article.feedMetadata.author}</span>
+                            </>
+                          )}
                           <span className="text-gray-300">·</span>
                           <span>{formatRelativeTime(article.publishedAt)}</span>
                           {article.localityLevel && article.localityLevel !== 'global' && (
@@ -901,6 +922,13 @@ function News() {
                           )}
                           <span className="ml-auto px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[11px] font-medium">{getSourceTypeLabel(article.sourceType)}</span>
                         </div>
+                        {article.topics?.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {article.topics.slice(0, 5).map((topic) => (
+                              <span key={topic} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] font-medium">{topic}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </a>
                     <div className="flex items-center gap-1 px-3 py-2 sm:py-0 sm:pr-4 border-t sm:border-t-0 sm:border-l border-gray-100">

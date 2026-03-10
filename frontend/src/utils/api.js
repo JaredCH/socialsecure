@@ -522,6 +522,12 @@ export const newsAPI = {
   getArticle: (id) => api.get(`/news/article/${id}`),
   // Trigger manual ingestion (admin)
   triggerIngestion: () => api.post('/news/ingest'),
+  // Trigger single-source ingestion (admin)
+  triggerSourceIngestion: (sourceKey) => api.post(`/news/ingest/${encodeURIComponent(sourceKey)}`),
+  // Get scheduler info (admin)
+  getScheduleInfo: () => api.get('/news/schedule-info'),
+  // Get ingestion stats (admin)
+  getIngestionStats: () => api.get('/news/ingestion-stats'),
   // Weather
   getWeather: () => api.get('/news/weather'),
   addWeatherLocation: (data) => api.post('/news/preferences/weather-locations', data),
