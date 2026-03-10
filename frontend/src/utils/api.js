@@ -520,6 +520,7 @@ export const newsAPI = {
   getTopics: () => api.get('/news/topics'),
   // Get canonical location taxonomy for state/city selectors
   getLocationTaxonomy: () => api.get('/news/location-taxonomy'),
+  getSportsTeams: () => api.get('/news/sports-teams'),
   // Get single article
   getArticle: (id) => api.get(`/news/article/${id}`),
   // Trigger manual ingestion (admin)
@@ -532,6 +533,7 @@ export const newsAPI = {
   getIngestionStats: () => api.get('/news/ingestion-stats'),
   // Weather
   getWeather: () => api.get('/news/weather'),
+  geocodeWeatherLocations: (q) => api.get('/news/weather/geocode', { params: { q } }),
   addWeatherLocation: (data) => api.post('/news/preferences/weather-locations', data),
   updateWeatherLocations: (locations) => api.put('/news/preferences/weather-locations', { locations }),
   removeWeatherLocation: (locationId) => api.delete(`/news/preferences/weather-locations/${locationId}`),

@@ -1,151 +1,381 @@
-const SPORTS_TEAMS = [
-  // NFL
-  { league: 'NFL', sport: 'football', team: 'Arizona Cardinals', city: 'Phoenix', state: 'AZ', variants: ['Arizona Cardinals', 'Cardinals', 'ARI'] },
-  { league: 'NFL', sport: 'football', team: 'Atlanta Falcons', city: 'Atlanta', state: 'GA', variants: ['Atlanta Falcons', 'Falcons', 'ATL'] },
-  { league: 'NFL', sport: 'football', team: 'Baltimore Ravens', city: 'Baltimore', state: 'MD', variants: ['Baltimore Ravens', 'Ravens', 'BAL'] },
-  { league: 'NFL', sport: 'football', team: 'Buffalo Bills', city: 'Buffalo', state: 'NY', variants: ['Buffalo Bills', 'Bills', 'BUF'] },
-  { league: 'NFL', sport: 'football', team: 'Carolina Panthers', city: 'Charlotte', state: 'NC', variants: ['Carolina Panthers', 'Panthers', 'CAR'] },
-  { league: 'NFL', sport: 'football', team: 'Chicago Bears', city: 'Chicago', state: 'IL', variants: ['Chicago Bears', 'Bears', 'CHI'] },
-  { league: 'NFL', sport: 'football', team: 'Cincinnati Bengals', city: 'Cincinnati', state: 'OH', variants: ['Cincinnati Bengals', 'Bengals', 'CIN'] },
-  { league: 'NFL', sport: 'football', team: 'Cleveland Browns', city: 'Cleveland', state: 'OH', variants: ['Cleveland Browns', 'Browns', 'CLE'] },
-  { league: 'NFL', sport: 'football', team: 'Dallas Cowboys', city: 'Dallas', state: 'TX', variants: ['Dallas Cowboys', 'Cowboys', 'DAL', "America's Team", 'Big D'] },
-  { league: 'NFL', sport: 'football', team: 'Denver Broncos', city: 'Denver', state: 'CO', variants: ['Denver Broncos', 'Broncos', 'DEN'] },
-  { league: 'NFL', sport: 'football', team: 'Detroit Lions', city: 'Detroit', state: 'MI', variants: ['Detroit Lions', 'Lions', 'DET'] },
-  { league: 'NFL', sport: 'football', team: 'Green Bay Packers', city: 'Green Bay', state: 'WI', variants: ['Green Bay Packers', 'Packers', 'GB'] },
-  { league: 'NFL', sport: 'football', team: 'Houston Texans', city: 'Houston', state: 'TX', variants: ['Houston Texans', 'Texans', 'HOU'] },
-  { league: 'NFL', sport: 'football', team: 'Indianapolis Colts', city: 'Indianapolis', state: 'IN', variants: ['Indianapolis Colts', 'Colts', 'IND'] },
-  { league: 'NFL', sport: 'football', team: 'Jacksonville Jaguars', city: 'Jacksonville', state: 'FL', variants: ['Jacksonville Jaguars', 'Jaguars', 'Jags', 'JAX'] },
-  { league: 'NFL', sport: 'football', team: 'Kansas City Chiefs', city: 'Kansas City', state: 'MO', variants: ['Kansas City Chiefs', 'Chiefs', 'KC'] },
-  { league: 'NFL', sport: 'football', team: 'Las Vegas Raiders', city: 'Las Vegas', state: 'NV', variants: ['Las Vegas Raiders', 'Raiders', 'LV'] },
-  { league: 'NFL', sport: 'football', team: 'Los Angeles Chargers', city: 'Los Angeles', state: 'CA', variants: ['Los Angeles Chargers', 'Chargers', 'LAC'] },
-  { league: 'NFL', sport: 'football', team: 'Los Angeles Rams', city: 'Los Angeles', state: 'CA', variants: ['Los Angeles Rams', 'Rams', 'LAR'] },
-  { league: 'NFL', sport: 'football', team: 'Miami Dolphins', city: 'Miami', state: 'FL', variants: ['Miami Dolphins', 'Dolphins', 'MIA'] },
-  { league: 'NFL', sport: 'football', team: 'Minnesota Vikings', city: 'Minneapolis', state: 'MN', variants: ['Minnesota Vikings', 'Vikings', 'MIN'] },
-  { league: 'NFL', sport: 'football', team: 'New England Patriots', city: 'Boston', state: 'MA', variants: ['New England Patriots', 'Patriots', 'Pats', 'NE'] },
-  { league: 'NFL', sport: 'football', team: 'New Orleans Saints', city: 'New Orleans', state: 'LA', variants: ['New Orleans Saints', 'Saints', 'NO'] },
-  { league: 'NFL', sport: 'football', team: 'New York Giants', city: 'New York', state: 'NY', variants: ['New York Giants', 'Giants', 'NYG'] },
-  { league: 'NFL', sport: 'football', team: 'New York Jets', city: 'New York', state: 'NY', variants: ['New York Jets', 'Jets', 'NYJ'] },
-  { league: 'NFL', sport: 'football', team: 'Philadelphia Eagles', city: 'Philadelphia', state: 'PA', variants: ['Philadelphia Eagles', 'Eagles', 'PHI'] },
-  { league: 'NFL', sport: 'football', team: 'Pittsburgh Steelers', city: 'Pittsburgh', state: 'PA', variants: ['Pittsburgh Steelers', 'Steelers', 'PIT'] },
-  { league: 'NFL', sport: 'football', team: 'San Francisco 49ers', city: 'San Francisco', state: 'CA', variants: ['San Francisco 49ers', '49ers', 'Niners', 'SF'] },
-  { league: 'NFL', sport: 'football', team: 'Seattle Seahawks', city: 'Seattle', state: 'WA', variants: ['Seattle Seahawks', 'Seahawks', 'SEA'] },
-  { league: 'NFL', sport: 'football', team: 'Tampa Bay Buccaneers', city: 'Tampa', state: 'FL', variants: ['Tampa Bay Buccaneers', 'Buccaneers', 'Bucs', 'TB'] },
-  { league: 'NFL', sport: 'football', team: 'Tennessee Titans', city: 'Nashville', state: 'TN', variants: ['Tennessee Titans', 'Titans', 'TEN'] },
-  { league: 'NFL', sport: 'football', team: 'Washington Commanders', city: 'Washington', state: 'DC', variants: ['Washington Commanders', 'Commanders', 'WAS'] },
+const league = (id, label, icon, sport, teams) => ({ id, label, icon, sport, teams });
 
-  // NBA / WNBA
-  { league: 'NBA', sport: 'basketball', team: 'Boston Celtics', city: 'Boston', state: 'MA', variants: ['Boston Celtics', 'Celtics', 'BOS'] },
-  { league: 'NBA', sport: 'basketball', team: 'Los Angeles Lakers', city: 'Los Angeles', state: 'CA', variants: ['Los Angeles Lakers', 'Lakers', 'LAL'] },
-  { league: 'NBA', sport: 'basketball', team: 'Golden State Warriors', city: 'San Francisco', state: 'CA', variants: ['Golden State Warriors', 'Warriors', 'GSW'] },
-  { league: 'NBA', sport: 'basketball', team: 'Dallas Mavericks', city: 'Dallas', state: 'TX', variants: ['Dallas Mavericks', 'Mavericks', 'Mavs', 'DAL'] },
-  { league: 'NBA', sport: 'basketball', team: 'Houston Rockets', city: 'Houston', state: 'TX', variants: ['Houston Rockets', 'Rockets', 'HOU'] },
-  { league: 'NBA', sport: 'basketball', team: 'San Antonio Spurs', city: 'San Antonio', state: 'TX', variants: ['San Antonio Spurs', 'Spurs', 'SAS'] },
-  { league: 'NBA', sport: 'basketball', team: 'New York Knicks', city: 'New York', state: 'NY', variants: ['New York Knicks', 'Knicks', 'NYK'] },
-  { league: 'NBA', sport: 'basketball', team: 'Brooklyn Nets', city: 'New York', state: 'NY', variants: ['Brooklyn Nets', 'Nets', 'BKN'] },
-  { league: 'NBA', sport: 'basketball', team: 'Miami Heat', city: 'Miami', state: 'FL', variants: ['Miami Heat', 'Heat', 'MIA'] },
-  { league: 'NBA', sport: 'basketball', team: 'Chicago Bulls', city: 'Chicago', state: 'IL', variants: ['Chicago Bulls', 'Bulls', 'CHI'] },
-  { league: 'WNBA', sport: 'basketball', team: 'Dallas Wings', city: 'Dallas', state: 'TX', variants: ['Dallas Wings', 'Wings'] },
-  { league: 'WNBA', sport: 'basketball', team: 'New York Liberty', city: 'New York', state: 'NY', variants: ['New York Liberty', 'Liberty'] },
-  { league: 'WNBA', sport: 'basketball', team: 'Las Vegas Aces', city: 'Las Vegas', state: 'NV', variants: ['Las Vegas Aces', 'Aces'] },
-  { league: 'WNBA', sport: 'basketball', team: 'Seattle Storm', city: 'Seattle', state: 'WA', variants: ['Seattle Storm', 'Storm'] },
-  { league: 'WNBA', sport: 'basketball', team: 'Indiana Fever', city: 'Indianapolis', state: 'IN', variants: ['Indiana Fever', 'Fever'] },
-
-  // MLB
-  { league: 'MLB', sport: 'baseball', team: 'New York Yankees', city: 'New York', state: 'NY', variants: ['New York Yankees', 'Yankees', 'NYY'] },
-  { league: 'MLB', sport: 'baseball', team: 'New York Mets', city: 'New York', state: 'NY', variants: ['New York Mets', 'Mets', 'NYM'] },
-  { league: 'MLB', sport: 'baseball', team: 'Boston Red Sox', city: 'Boston', state: 'MA', variants: ['Boston Red Sox', 'Red Sox', 'BOS'] },
-  { league: 'MLB', sport: 'baseball', team: 'Houston Astros', city: 'Houston', state: 'TX', variants: ['Houston Astros', 'Astros', 'HOU'] },
-  { league: 'MLB', sport: 'baseball', team: 'Texas Rangers', city: 'Arlington', state: 'TX', variants: ['Texas Rangers', 'Rangers', 'TEX'] },
-  { league: 'MLB', sport: 'baseball', team: 'Los Angeles Dodgers', city: 'Los Angeles', state: 'CA', variants: ['Los Angeles Dodgers', 'Dodgers', 'LAD'] },
-  { league: 'MLB', sport: 'baseball', team: 'San Francisco Giants', city: 'San Francisco', state: 'CA', variants: ['San Francisco Giants', 'Giants', 'SF'] },
-  { league: 'MLB', sport: 'baseball', team: 'Chicago Cubs', city: 'Chicago', state: 'IL', variants: ['Chicago Cubs', 'Cubs', 'CHC'] },
-  { league: 'MLB', sport: 'baseball', team: 'Atlanta Braves', city: 'Atlanta', state: 'GA', variants: ['Atlanta Braves', 'Braves', 'ATL'] },
-  { league: 'MLB', sport: 'baseball', team: 'Seattle Mariners', city: 'Seattle', state: 'WA', variants: ['Seattle Mariners', 'Mariners', 'SEA'] },
-
-  // NHL
-  { league: 'NHL', sport: 'hockey', team: 'Dallas Stars', city: 'Dallas', state: 'TX', variants: ['Dallas Stars', 'Stars', 'DAL'] },
-  { league: 'NHL', sport: 'hockey', team: 'New York Rangers', city: 'New York', state: 'NY', variants: ['New York Rangers', 'Rangers', 'NYR'] },
-  { league: 'NHL', sport: 'hockey', team: 'New York Islanders', city: 'New York', state: 'NY', variants: ['New York Islanders', 'Islanders', 'NYI'] },
-  { league: 'NHL', sport: 'hockey', team: 'Boston Bruins', city: 'Boston', state: 'MA', variants: ['Boston Bruins', 'Bruins', 'BOS'] },
-  { league: 'NHL', sport: 'hockey', team: 'Chicago Blackhawks', city: 'Chicago', state: 'IL', variants: ['Chicago Blackhawks', 'Blackhawks', 'CHI'] },
-  { league: 'NHL', sport: 'hockey', team: 'Detroit Red Wings', city: 'Detroit', state: 'MI', variants: ['Detroit Red Wings', 'Red Wings', 'DET'] },
-  { league: 'NHL', sport: 'hockey', team: 'Colorado Avalanche', city: 'Denver', state: 'CO', variants: ['Colorado Avalanche', 'Avalanche', 'Avs', 'COL'] },
-  { league: 'NHL', sport: 'hockey', team: 'Vegas Golden Knights', city: 'Las Vegas', state: 'NV', variants: ['Vegas Golden Knights', 'Golden Knights', 'VGK'] },
-  { league: 'NHL', sport: 'hockey', team: 'Seattle Kraken', city: 'Seattle', state: 'WA', variants: ['Seattle Kraken', 'Kraken', 'SEA'] },
-
-  // MLS / NWSL
-  { league: 'MLS', sport: 'soccer', team: 'Austin FC', city: 'Austin', state: 'TX', variants: ['Austin FC', 'Verde', 'ATXFC'] },
-  { league: 'MLS', sport: 'soccer', team: 'Houston Dynamo FC', city: 'Houston', state: 'TX', variants: ['Houston Dynamo', 'Houston Dynamo FC', 'Dynamo'] },
-  { league: 'MLS', sport: 'soccer', team: 'FC Dallas', city: 'Dallas', state: 'TX', variants: ['FC Dallas', 'FCD'] },
-  { league: 'MLS', sport: 'soccer', team: 'LA Galaxy', city: 'Los Angeles', state: 'CA', variants: ['LA Galaxy', 'Galaxy'] },
-  { league: 'MLS', sport: 'soccer', team: 'Inter Miami CF', city: 'Miami', state: 'FL', variants: ['Inter Miami', 'Inter Miami CF'] },
-  { league: 'MLS', sport: 'soccer', team: 'Seattle Sounders FC', city: 'Seattle', state: 'WA', variants: ['Seattle Sounders', 'Sounders'] },
-  { league: 'NWSL', sport: 'soccer', team: 'Houston Dash', city: 'Houston', state: 'TX', variants: ['Houston Dash', 'Dash'] },
-  { league: 'NWSL', sport: 'soccer', team: 'Kansas City Current', city: 'Kansas City', state: 'MO', variants: ['Kansas City Current', 'Current'] },
-  { league: 'NWSL', sport: 'soccer', team: 'NJ/NY Gotham FC', city: 'New York', state: 'NY', variants: ['Gotham FC', 'NJ/NY Gotham FC'] },
-  { league: 'NWSL', sport: 'soccer', team: 'Orlando Pride', city: 'Orlando', state: 'FL', variants: ['Orlando Pride', 'Pride'] },
-
-  // NCAA Division I - notable programs across football, basketball, baseball, women's basketball
-  { league: 'NCAA-DI', sport: 'football', team: 'Texas Longhorns', city: 'Austin', state: 'TX', variants: ['Texas Longhorns', 'Longhorns', 'UT Austin', 'UT'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'Texas A&M Aggies', city: 'College Station', state: 'TX', variants: ['Texas A&M Aggies', 'Aggies', 'A&M'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'LSU Tigers', city: 'Baton Rouge', state: 'LA', variants: ['LSU Tigers', 'LSU', 'Tigers'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'Houston Cougars', city: 'Houston', state: 'TX', variants: ['Houston Cougars', 'Cougars', 'UH'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'Baylor Bears', city: 'Waco', state: 'TX', variants: ['Baylor Bears', 'Baylor'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'TCU Horned Frogs', city: 'Fort Worth', state: 'TX', variants: ['TCU Horned Frogs', 'TCU', 'Horned Frogs'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'Texas Tech Red Raiders', city: 'Lubbock', state: 'TX', variants: ['Texas Tech Red Raiders', 'Texas Tech', 'Red Raiders'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'Alabama Crimson Tide', city: 'Tuscaloosa', state: 'AL', variants: ['Alabama Crimson Tide', 'Alabama', 'Crimson Tide', 'Bama'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'Georgia Bulldogs', city: 'Athens', state: 'GA', variants: ['Georgia Bulldogs', 'Georgia', 'Bulldogs', 'UGA'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'Michigan Wolverines', city: 'Ann Arbor', state: 'MI', variants: ['Michigan Wolverines', 'Michigan', 'Wolverines'] },
-  { league: 'NCAA-DI', sport: 'football', team: 'Ohio State Buckeyes', city: 'Columbus', state: 'OH', variants: ['Ohio State Buckeyes', 'Ohio State', 'Buckeyes', 'OSU'] },
-  { league: 'NCAA-DI', sport: 'basketball', team: 'Duke Blue Devils', city: 'Durham', state: 'NC', variants: ['Duke Blue Devils', 'Duke', 'Blue Devils'] },
-  { league: 'NCAA-DI', sport: 'basketball', team: 'North Carolina Tar Heels', city: 'Chapel Hill', state: 'NC', variants: ['North Carolina Tar Heels', 'Tar Heels', 'UNC'] },
-  { league: 'NCAA-DI', sport: 'basketball', team: 'Kentucky Wildcats', city: 'Lexington', state: 'KY', variants: ['Kentucky Wildcats', 'Kentucky', 'Wildcats'] },
-  { league: 'NCAA-DI', sport: 'basketball', team: 'Kansas Jayhawks', city: 'Lawrence', state: 'KS', variants: ['Kansas Jayhawks', 'Kansas', 'Jayhawks'] },
-  { league: 'NCAA-DI', sport: 'basketball', team: 'UConn Huskies', city: 'Storrs', state: 'CT', variants: ['UConn Huskies', 'UConn', 'Huskies'] },
-  { league: 'NCAA-DI', sport: 'basketball', team: 'Gonzaga Bulldogs', city: 'Spokane', state: 'WA', variants: ['Gonzaga Bulldogs', 'Gonzaga', 'Zags'] },
-  { league: 'NCAA-DI', sport: 'women-basketball', team: 'South Carolina Gamecocks', city: 'Columbia', state: 'SC', variants: ['South Carolina Gamecocks', 'Gamecocks', 'South Carolina'] },
-  { league: 'NCAA-DI', sport: 'women-basketball', team: 'Iowa Hawkeyes', city: 'Iowa City', state: 'IA', variants: ['Iowa Hawkeyes', 'Iowa', 'Hawkeyes'] },
-  { league: 'NCAA-DI', sport: 'baseball', team: 'Vanderbilt Commodores', city: 'Nashville', state: 'TN', variants: ['Vanderbilt Commodores', 'Vanderbilt', 'Commodores'] },
-  { league: 'NCAA-DI', sport: 'baseball', team: 'Tennessee Volunteers', city: 'Knoxville', state: 'TN', variants: ['Tennessee Volunteers', 'Tennessee', 'Volunteers', 'Vols'] }
+const LEAGUE_CATALOG = [
+  league('NFL', 'NFL', '🏈', 'football', [
+    ['Arizona Cardinals', 'Phoenix', 'AZ', ['Cardinals', 'ARI']],
+    ['Atlanta Falcons', 'Atlanta', 'GA', ['Falcons', 'ATL']],
+    ['Baltimore Ravens', 'Baltimore', 'MD', ['Ravens', 'BAL']],
+    ['Buffalo Bills', 'Buffalo', 'NY', ['Bills', 'BUF']],
+    ['Carolina Panthers', 'Charlotte', 'NC', ['Panthers', 'CAR']],
+    ['Chicago Bears', 'Chicago', 'IL', ['Bears', 'CHI']],
+    ['Cincinnati Bengals', 'Cincinnati', 'OH', ['Bengals', 'CIN']],
+    ['Cleveland Browns', 'Cleveland', 'OH', ['Browns', 'CLE']],
+    ['Dallas Cowboys', 'Dallas', 'TX', ['Cowboys', 'DAL']],
+    ['Denver Broncos', 'Denver', 'CO', ['Broncos', 'DEN']],
+    ['Detroit Lions', 'Detroit', 'MI', ['Lions', 'DET']],
+    ['Green Bay Packers', 'Green Bay', 'WI', ['Packers', 'GB']],
+    ['Houston Texans', 'Houston', 'TX', ['Texans', 'HOU']],
+    ['Indianapolis Colts', 'Indianapolis', 'IN', ['Colts', 'IND']],
+    ['Jacksonville Jaguars', 'Jacksonville', 'FL', ['Jaguars', 'Jags', 'JAX']],
+    ['Kansas City Chiefs', 'Kansas City', 'MO', ['Chiefs', 'KC']],
+    ['Las Vegas Raiders', 'Las Vegas', 'NV', ['Raiders', 'LV']],
+    ['Los Angeles Chargers', 'Los Angeles', 'CA', ['Chargers', 'LAC']],
+    ['Los Angeles Rams', 'Los Angeles', 'CA', ['Rams', 'LAR']],
+    ['Miami Dolphins', 'Miami', 'FL', ['Dolphins', 'MIA']],
+    ['Minnesota Vikings', 'Minneapolis', 'MN', ['Vikings', 'MIN']],
+    ['New England Patriots', 'Foxborough', 'MA', ['Patriots', 'Pats', 'NE']],
+    ['New Orleans Saints', 'New Orleans', 'LA', ['Saints', 'NO']],
+    ['New York Giants', 'East Rutherford', 'NJ', ['Giants', 'NYG']],
+    ['New York Jets', 'East Rutherford', 'NJ', ['Jets', 'NYJ']],
+    ['Philadelphia Eagles', 'Philadelphia', 'PA', ['Eagles', 'PHI']],
+    ['Pittsburgh Steelers', 'Pittsburgh', 'PA', ['Steelers', 'PIT']],
+    ['San Francisco 49ers', 'Santa Clara', 'CA', ['49ers', 'Niners', 'SF']],
+    ['Seattle Seahawks', 'Seattle', 'WA', ['Seahawks', 'SEA']],
+    ['Tampa Bay Buccaneers', 'Tampa', 'FL', ['Buccaneers', 'Bucs', 'TB']],
+    ['Tennessee Titans', 'Nashville', 'TN', ['Titans', 'TEN']],
+    ['Washington Commanders', 'Washington', 'DC', ['Commanders', 'WAS']]
+  ]),
+  league('NBA', 'NBA', '🏀', 'basketball', [
+    ['Atlanta Hawks', 'Atlanta', 'GA', ['Hawks', 'ATL']],
+    ['Boston Celtics', 'Boston', 'MA', ['Celtics', 'BOS']],
+    ['Brooklyn Nets', 'Brooklyn', 'NY', ['Nets', 'BKN']],
+    ['Charlotte Hornets', 'Charlotte', 'NC', ['Hornets', 'CHA']],
+    ['Chicago Bulls', 'Chicago', 'IL', ['Bulls', 'CHI']],
+    ['Cleveland Cavaliers', 'Cleveland', 'OH', ['Cavaliers', 'Cavs', 'CLE']],
+    ['Dallas Mavericks', 'Dallas', 'TX', ['Mavericks', 'Mavs', 'DAL']],
+    ['Denver Nuggets', 'Denver', 'CO', ['Nuggets', 'DEN']],
+    ['Detroit Pistons', 'Detroit', 'MI', ['Pistons', 'DET']],
+    ['Golden State Warriors', 'San Francisco', 'CA', ['Warriors', 'GSW']],
+    ['Houston Rockets', 'Houston', 'TX', ['Rockets', 'HOU']],
+    ['Indiana Pacers', 'Indianapolis', 'IN', ['Pacers', 'IND']],
+    ['LA Clippers', 'Los Angeles', 'CA', ['Clippers', 'LAC']],
+    ['Los Angeles Lakers', 'Los Angeles', 'CA', ['Lakers', 'LAL']],
+    ['Memphis Grizzlies', 'Memphis', 'TN', ['Grizzlies', 'MEM']],
+    ['Miami Heat', 'Miami', 'FL', ['Heat', 'MIA']],
+    ['Milwaukee Bucks', 'Milwaukee', 'WI', ['Bucks', 'MIL']],
+    ['Minnesota Timberwolves', 'Minneapolis', 'MN', ['Timberwolves', 'Wolves', 'MIN']],
+    ['New Orleans Pelicans', 'New Orleans', 'LA', ['Pelicans', 'NOP']],
+    ['New York Knicks', 'New York', 'NY', ['Knicks', 'NYK']],
+    ['Oklahoma City Thunder', 'Oklahoma City', 'OK', ['Thunder', 'OKC']],
+    ['Orlando Magic', 'Orlando', 'FL', ['Magic', 'ORL']],
+    ['Philadelphia 76ers', 'Philadelphia', 'PA', ['76ers', 'Sixers', 'PHI']],
+    ['Phoenix Suns', 'Phoenix', 'AZ', ['Suns', 'PHX']],
+    ['Portland Trail Blazers', 'Portland', 'OR', ['Trail Blazers', 'Blazers', 'POR']],
+    ['Sacramento Kings', 'Sacramento', 'CA', ['Kings', 'SAC']],
+    ['San Antonio Spurs', 'San Antonio', 'TX', ['Spurs', 'SAS']],
+    ['Toronto Raptors', 'Toronto', 'ON', ['Raptors', 'TOR']],
+    ['Utah Jazz', 'Salt Lake City', 'UT', ['Jazz', 'UTA']],
+    ['Washington Wizards', 'Washington', 'DC', ['Wizards', 'WAS']]
+  ]),
+  league('MLB', 'MLB', '⚾', 'baseball', [
+    ['Arizona Diamondbacks', 'Phoenix', 'AZ', ['Diamondbacks', 'Dbacks', 'ARI']],
+    ['Atlanta Braves', 'Atlanta', 'GA', ['Braves', 'ATL']],
+    ['Baltimore Orioles', 'Baltimore', 'MD', ['Orioles', 'BAL']],
+    ['Boston Red Sox', 'Boston', 'MA', ['Red Sox', 'BOS']],
+    ['Chicago Cubs', 'Chicago', 'IL', ['Cubs', 'CHC']],
+    ['Chicago White Sox', 'Chicago', 'IL', ['White Sox', 'CHW']],
+    ['Cincinnati Reds', 'Cincinnati', 'OH', ['Reds', 'CIN']],
+    ['Cleveland Guardians', 'Cleveland', 'OH', ['Guardians', 'CLE']],
+    ['Colorado Rockies', 'Denver', 'CO', ['Rockies', 'COL']],
+    ['Detroit Tigers', 'Detroit', 'MI', ['Tigers', 'DET']],
+    ['Houston Astros', 'Houston', 'TX', ['Astros', 'HOU']],
+    ['Kansas City Royals', 'Kansas City', 'MO', ['Royals', 'KC']],
+    ['Los Angeles Angels', 'Anaheim', 'CA', ['Angels', 'LAA']],
+    ['Los Angeles Dodgers', 'Los Angeles', 'CA', ['Dodgers', 'LAD']],
+    ['Miami Marlins', 'Miami', 'FL', ['Marlins', 'MIA']],
+    ['Milwaukee Brewers', 'Milwaukee', 'WI', ['Brewers', 'MIL']],
+    ['Minnesota Twins', 'Minneapolis', 'MN', ['Twins', 'MIN']],
+    ['New York Mets', 'New York', 'NY', ['Mets', 'NYM']],
+    ['New York Yankees', 'New York', 'NY', ['Yankees', 'NYY']],
+    ['Oakland Athletics', 'West Sacramento', 'CA', ['Athletics', 'A\'s', 'OAK']],
+    ['Philadelphia Phillies', 'Philadelphia', 'PA', ['Phillies', 'PHI']],
+    ['Pittsburgh Pirates', 'Pittsburgh', 'PA', ['Pirates', 'PIT']],
+    ['San Diego Padres', 'San Diego', 'CA', ['Padres', 'SD']],
+    ['San Francisco Giants', 'San Francisco', 'CA', ['Giants', 'SF']],
+    ['Seattle Mariners', 'Seattle', 'WA', ['Mariners', 'SEA']],
+    ['St. Louis Cardinals', 'St. Louis', 'MO', ['Cardinals', 'STL']],
+    ['Tampa Bay Rays', 'St. Petersburg', 'FL', ['Rays', 'TB']],
+    ['Texas Rangers', 'Arlington', 'TX', ['Rangers', 'TEX']],
+    ['Toronto Blue Jays', 'Toronto', 'ON', ['Blue Jays', 'TOR']],
+    ['Washington Nationals', 'Washington', 'DC', ['Nationals', 'Nats', 'WSH']]
+  ]),
+  league('NHL', 'NHL', '🏒', 'hockey', [
+    ['Anaheim Ducks', 'Anaheim', 'CA', ['Ducks', 'ANA']],
+    ['Boston Bruins', 'Boston', 'MA', ['Bruins', 'BOS']],
+    ['Buffalo Sabres', 'Buffalo', 'NY', ['Sabres', 'BUF']],
+    ['Calgary Flames', 'Calgary', 'AB', ['Flames', 'CGY']],
+    ['Carolina Hurricanes', 'Raleigh', 'NC', ['Hurricanes', 'Canes', 'CAR']],
+    ['Chicago Blackhawks', 'Chicago', 'IL', ['Blackhawks', 'CHI']],
+    ['Colorado Avalanche', 'Denver', 'CO', ['Avalanche', 'Avs', 'COL']],
+    ['Columbus Blue Jackets', 'Columbus', 'OH', ['Blue Jackets', 'CBJ']],
+    ['Dallas Stars', 'Dallas', 'TX', ['Stars', 'DAL']],
+    ['Detroit Red Wings', 'Detroit', 'MI', ['Red Wings', 'DET']],
+    ['Edmonton Oilers', 'Edmonton', 'AB', ['Oilers', 'EDM']],
+    ['Florida Panthers', 'Sunrise', 'FL', ['Panthers', 'FLA']],
+    ['Los Angeles Kings', 'Los Angeles', 'CA', ['Kings', 'LAK']],
+    ['Minnesota Wild', 'Saint Paul', 'MN', ['Wild', 'MIN']],
+    ['Montreal Canadiens', 'Montreal', 'QC', ['Canadiens', 'Habs', 'MTL']],
+    ['Nashville Predators', 'Nashville', 'TN', ['Predators', 'Preds', 'NSH']],
+    ['New Jersey Devils', 'Newark', 'NJ', ['Devils', 'NJD']],
+    ['New York Islanders', 'Elmont', 'NY', ['Islanders', 'NYI']],
+    ['New York Rangers', 'New York', 'NY', ['Rangers', 'NYR']],
+    ['Ottawa Senators', 'Ottawa', 'ON', ['Senators', 'OTT']],
+    ['Philadelphia Flyers', 'Philadelphia', 'PA', ['Flyers', 'PHI']],
+    ['Pittsburgh Penguins', 'Pittsburgh', 'PA', ['Penguins', 'Pens', 'PIT']],
+    ['San Jose Sharks', 'San Jose', 'CA', ['Sharks', 'SJS']],
+    ['Seattle Kraken', 'Seattle', 'WA', ['Kraken', 'SEA']],
+    ['St. Louis Blues', 'St. Louis', 'MO', ['Blues', 'STL']],
+    ['Tampa Bay Lightning', 'Tampa', 'FL', ['Lightning', 'TB']],
+    ['Toronto Maple Leafs', 'Toronto', 'ON', ['Maple Leafs', 'Leafs', 'TOR']],
+    ['Utah Hockey Club', 'Salt Lake City', 'UT', ['Utah HC', 'Utah']],
+    ['Vancouver Canucks', 'Vancouver', 'BC', ['Canucks', 'VAN']],
+    ['Vegas Golden Knights', 'Las Vegas', 'NV', ['Golden Knights', 'VGK']],
+    ['Washington Capitals', 'Washington', 'DC', ['Capitals', 'Caps', 'WSH']],
+    ['Winnipeg Jets', 'Winnipeg', 'MB', ['Jets', 'WPG']]
+  ]),
+  league('MLS', 'MLS', '⚽', 'soccer', [
+    ['Atlanta United FC', 'Atlanta', 'GA', ['Atlanta United']],
+    ['Austin FC', 'Austin', 'TX', ['ATXFC', 'Verde']],
+    ['CF Montreal', 'Montreal', 'QC', ['Montreal']],
+    ['Charlotte FC', 'Charlotte', 'NC', ['Charlotte']],
+    ['Chicago Fire FC', 'Chicago', 'IL', ['Chicago Fire']],
+    ['Colorado Rapids', 'Denver', 'CO', ['Rapids']],
+    ['Columbus Crew', 'Columbus', 'OH', ['Crew']],
+    ['D.C. United', 'Washington', 'DC', ['DC United']],
+    ['FC Cincinnati', 'Cincinnati', 'OH', ['Cincinnati']],
+    ['FC Dallas', 'Dallas', 'TX', ['FCD']],
+    ['Houston Dynamo FC', 'Houston', 'TX', ['Houston Dynamo']],
+    ['Inter Miami CF', 'Miami', 'FL', ['Inter Miami']],
+    ['LA Galaxy', 'Los Angeles', 'CA', ['Galaxy']],
+    ['Los Angeles FC', 'Los Angeles', 'CA', ['LAFC']],
+    ['Minnesota United FC', 'Saint Paul', 'MN', ['Minnesota United']],
+    ['Nashville SC', 'Nashville', 'TN', ['Nashville']],
+    ['New England Revolution', 'Foxborough', 'MA', ['Revolution', 'Revs']],
+    ['New York City FC', 'New York', 'NY', ['NYCFC']],
+    ['New York Red Bulls', 'Harrison', 'NJ', ['Red Bulls']],
+    ['Orlando City SC', 'Orlando', 'FL', ['Orlando City']],
+    ['Philadelphia Union', 'Philadelphia', 'PA', ['Union']],
+    ['Portland Timbers', 'Portland', 'OR', ['Timbers']],
+    ['Real Salt Lake', 'Sandy', 'UT', ['RSL']],
+    ['San Diego FC', 'San Diego', 'CA', ['San Diego']],
+    ['San Jose Earthquakes', 'San Jose', 'CA', ['Earthquakes', 'Quakes']],
+    ['Seattle Sounders FC', 'Seattle', 'WA', ['Sounders']],
+    ['Sporting Kansas City', 'Kansas City', 'KS', ['Sporting KC']],
+    ['St. Louis City SC', 'St. Louis', 'MO', ['St. Louis City']],
+    ['Toronto FC', 'Toronto', 'ON', ['Toronto']],
+    ['Vancouver Whitecaps FC', 'Vancouver', 'BC', ['Whitecaps']]
+  ]),
+  league('NCAA_FOOTBALL', 'NCAA Football', '🏟️', 'football', [
+    ['Alabama Crimson Tide', 'Tuscaloosa', 'AL', ['Alabama', 'Bama']],
+    ['Arkansas Razorbacks', 'Fayetteville', 'AR', ['Arkansas']],
+    ['Auburn Tigers', 'Auburn', 'AL', ['Auburn']],
+    ['Baylor Bears', 'Waco', 'TX', ['Baylor']],
+    ['Clemson Tigers', 'Clemson', 'SC', ['Clemson']],
+    ['Colorado Buffaloes', 'Boulder', 'CO', ['Colorado']],
+    ['Duke Blue Devils', 'Durham', 'NC', ['Duke']],
+    ['Florida Gators', 'Gainesville', 'FL', ['Florida']],
+    ['Florida State Seminoles', 'Tallahassee', 'FL', ['Florida State', 'FSU']],
+    ['Georgia Bulldogs', 'Athens', 'GA', ['Georgia', 'UGA']],
+    ['Georgia Tech Yellow Jackets', 'Atlanta', 'GA', ['Georgia Tech']],
+    ['Iowa Hawkeyes', 'Iowa City', 'IA', ['Iowa']],
+    ['Kansas State Wildcats', 'Manhattan', 'KS', ['Kansas State', 'K-State']],
+    ['Kentucky Wildcats', 'Lexington', 'KY', ['Kentucky']],
+    ['LSU Tigers', 'Baton Rouge', 'LA', ['LSU']],
+    ['Miami Hurricanes', 'Coral Gables', 'FL', ['Miami']],
+    ['Michigan Wolverines', 'Ann Arbor', 'MI', ['Michigan']],
+    ['Michigan State Spartans', 'East Lansing', 'MI', ['Michigan State']],
+    ['Missouri Tigers', 'Columbia', 'MO', ['Missouri', 'Mizzou']],
+    ['North Carolina Tar Heels', 'Chapel Hill', 'NC', ['North Carolina', 'UNC']],
+    ['Notre Dame Fighting Irish', 'South Bend', 'IN', ['Notre Dame']],
+    ['Ohio State Buckeyes', 'Columbus', 'OH', ['Ohio State', 'OSU']],
+    ['Oklahoma Sooners', 'Norman', 'OK', ['Oklahoma']],
+    ['Ole Miss Rebels', 'Oxford', 'MS', ['Ole Miss']],
+    ['Oregon Ducks', 'Eugene', 'OR', ['Oregon']],
+    ['Penn State Nittany Lions', 'State College', 'PA', ['Penn State']],
+    ['South Carolina Gamecocks', 'Columbia', 'SC', ['South Carolina']],
+    ['Tennessee Volunteers', 'Knoxville', 'TN', ['Tennessee', 'Vols']],
+    ['Texas A&M Aggies', 'College Station', 'TX', ['Texas A&M', 'Aggies']],
+    ['Texas Longhorns', 'Austin', 'TX', ['Texas', 'Longhorns']],
+    ['UCLA Bruins', 'Los Angeles', 'CA', ['UCLA']],
+    ['USC Trojans', 'Los Angeles', 'CA', ['USC']],
+    ['Utah Utes', 'Salt Lake City', 'UT', ['Utah']],
+    ['Washington Huskies', 'Seattle', 'WA', ['Washington']],
+    ['Wisconsin Badgers', 'Madison', 'WI', ['Wisconsin']]
+  ]),
+  league('NCAA_BASKETBALL', 'NCAA Basketball', '⛹️', 'basketball', [
+    ['Alabama Crimson Tide', 'Tuscaloosa', 'AL', ['Alabama']],
+    ['Arizona Wildcats', 'Tucson', 'AZ', ['Arizona']],
+    ['Auburn Tigers', 'Auburn', 'AL', ['Auburn']],
+    ['Baylor Bears', 'Waco', 'TX', ['Baylor']],
+    ['Connecticut Huskies', 'Storrs', 'CT', ['UConn', 'Huskies']],
+    ['Creighton Bluejays', 'Omaha', 'NE', ['Creighton']],
+    ['Duke Blue Devils', 'Durham', 'NC', ['Duke']],
+    ['Florida Gators', 'Gainesville', 'FL', ['Florida']],
+    ['Gonzaga Bulldogs', 'Spokane', 'WA', ['Gonzaga', 'Zags']],
+    ['Houston Cougars', 'Houston', 'TX', ['Houston']],
+    ['Illinois Fighting Illini', 'Champaign', 'IL', ['Illinois']],
+    ['Indiana Hoosiers', 'Bloomington', 'IN', ['Indiana']],
+    ['Iowa State Cyclones', 'Ames', 'IA', ['Iowa State']],
+    ['Kansas Jayhawks', 'Lawrence', 'KS', ['Kansas']],
+    ['Kansas State Wildcats', 'Manhattan', 'KS', ['Kansas State']],
+    ['Kentucky Wildcats', 'Lexington', 'KY', ['Kentucky']],
+    ['Marquette Golden Eagles', 'Milwaukee', 'WI', ['Marquette']],
+    ['Michigan State Spartans', 'East Lansing', 'MI', ['Michigan State']],
+    ['North Carolina Tar Heels', 'Chapel Hill', 'NC', ['North Carolina', 'UNC']],
+    ['Ohio State Buckeyes', 'Columbus', 'OH', ['Ohio State']],
+    ['Purdue Boilermakers', 'West Lafayette', 'IN', ['Purdue']],
+    ['Saint John\'s Red Storm', 'New York', 'NY', ['St John\'s', 'Red Storm']],
+    ['Tennessee Volunteers', 'Knoxville', 'TN', ['Tennessee']],
+    ['Texas Longhorns', 'Austin', 'TX', ['Texas']],
+    ['Texas Tech Red Raiders', 'Lubbock', 'TX', ['Texas Tech']],
+    ['UCLA Bruins', 'Los Angeles', 'CA', ['UCLA']],
+    ['USC Trojans', 'Los Angeles', 'CA', ['USC']],
+    ['Villanova Wildcats', 'Villanova', 'PA', ['Villanova']],
+    ['Virginia Cavaliers', 'Charlottesville', 'VA', ['Virginia']],
+    ['Wisconsin Badgers', 'Madison', 'WI', ['Wisconsin']]
+  ]),
+  league('PREMIER_LEAGUE', 'Premier League', '🇬🇧', 'soccer', [
+    ['Arsenal', 'London', 'ENG', ['Arsenal FC']],
+    ['Aston Villa', 'Birmingham', 'ENG', ['Villa']],
+    ['Bournemouth', 'Bournemouth', 'ENG', ['AFC Bournemouth']],
+    ['Brentford', 'London', 'ENG', ['Brentford FC']],
+    ['Brighton & Hove Albion', 'Brighton', 'ENG', ['Brighton']],
+    ['Chelsea', 'London', 'ENG', ['Chelsea FC']],
+    ['Crystal Palace', 'London', 'ENG', ['Palace']],
+    ['Everton', 'Liverpool', 'ENG', ['Everton FC']],
+    ['Fulham', 'London', 'ENG', ['Fulham FC']],
+    ['Ipswich Town', 'Ipswich', 'ENG', ['Ipswich']],
+    ['Leicester City', 'Leicester', 'ENG', ['Leicester']],
+    ['Liverpool', 'Liverpool', 'ENG', ['Liverpool FC']],
+    ['Manchester City', 'Manchester', 'ENG', ['Man City']],
+    ['Manchester United', 'Manchester', 'ENG', ['Man United']],
+    ['Newcastle United', 'Newcastle', 'ENG', ['Newcastle']],
+    ['Nottingham Forest', 'Nottingham', 'ENG', ['Forest']],
+    ['Southampton', 'Southampton', 'ENG', ['Southampton FC']],
+    ['Tottenham Hotspur', 'London', 'ENG', ['Tottenham', 'Spurs']],
+    ['West Ham United', 'London', 'ENG', ['West Ham']],
+    ['Wolverhampton Wanderers', 'Wolverhampton', 'ENG', ['Wolves']]
+  ]),
+  league('LA_LIGA', 'La Liga', '🇪🇸', 'soccer', [
+    ['Alaves', 'Vitoria-Gasteiz', 'ES', ['Deportivo Alaves']],
+    ['Athletic Club', 'Bilbao', 'ES', ['Athletic Bilbao']],
+    ['Atletico Madrid', 'Madrid', 'ES', ['Atletico']],
+    ['Barcelona', 'Barcelona', 'ES', ['FC Barcelona', 'Barca']],
+    ['Celta Vigo', 'Vigo', 'ES', ['Celta']],
+    ['Espanyol', 'Barcelona', 'ES', ['RCD Espanyol']],
+    ['Getafe', 'Getafe', 'ES', ['Getafe CF']],
+    ['Girona', 'Girona', 'ES', ['Girona FC']],
+    ['Las Palmas', 'Las Palmas', 'ES', ['UD Las Palmas']],
+    ['Leganes', 'Leganes', 'ES', ['CD Leganes']],
+    ['Mallorca', 'Palma', 'ES', ['RCD Mallorca']],
+    ['Osasuna', 'Pamplona', 'ES', ['CA Osasuna']],
+    ['Rayo Vallecano', 'Madrid', 'ES', ['Rayo']],
+    ['Real Betis', 'Seville', 'ES', ['Betis']],
+    ['Real Madrid', 'Madrid', 'ES', ['Madrid']],
+    ['Real Sociedad', 'San Sebastian', 'ES', ['Sociedad']],
+    ['Sevilla', 'Seville', 'ES', ['Sevilla FC']],
+    ['Valencia', 'Valencia', 'ES', ['Valencia CF']],
+    ['Valladolid', 'Valladolid', 'ES', ['Real Valladolid']],
+    ['Villarreal', 'Villarreal', 'ES', ['Villarreal CF']]
+  ])
 ];
 
 const normalizeToken = (value) => String(value || '').trim().toLowerCase();
 
-const buildTeamLookup = () => {
-  const tokenToTeam = new Map();
-  for (const team of SPORTS_TEAMS) {
-    const tokens = [team.team, `${team.city} ${team.team.split(' ').slice(-1)[0]}`, ...(team.variants || [])]
-      .map(normalizeToken)
-      .filter(Boolean);
+const toSlug = (value = '') => normalizeToken(value).replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+const SPORTS_TEAMS = LEAGUE_CATALOG.flatMap((group) => group.teams.map(([team, city, state, variants]) => {
+  const id = `${toSlug(group.id)}:${toSlug(team)}`;
+  return {
+    id,
+    league: group.id,
+    leagueLabel: group.label,
+    icon: group.icon,
+    sport: group.sport,
+    team,
+    city,
+    state,
+    country: ['ENG', 'ES'].includes(state) ? state : 'US',
+    variants: [team, city, ...(variants || [])]
+  };
+}));
+
+const SORTED_SPORTS_TEAMS = [...SPORTS_TEAMS].sort((a, b) => {
+  if (a.league !== b.league) return a.league.localeCompare(b.league);
+  return a.team.localeCompare(b.team);
+});
+
+const buildTokenMatchers = () => {
+  const tokenMap = new Map();
+  for (const team of SORTED_SPORTS_TEAMS) {
+    const tokens = [...new Set((team.variants || []).map(normalizeToken).filter(Boolean))];
     for (const token of tokens) {
-      if (!tokenToTeam.has(token)) {
-        tokenToTeam.set(token, team);
-      }
+      if (!tokenMap.has(token)) tokenMap.set(token, []);
+      tokenMap.get(token).push(team);
     }
   }
-  return tokenToTeam;
+  return Array.from(tokenMap.entries()).map(([token, teams]) => ({
+    token,
+    teams,
+    pattern: new RegExp(`\\b${token.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i')
+  }));
 };
 
-const SPORTS_TEAM_LOOKUP = buildTeamLookup();
+const TEAM_TOKEN_MATCHERS = buildTokenMatchers();
 
-const inferSportsLocationFromText = (text = '') => {
+const inferSportsTeamsFromText = (text = '') => {
   const normalizedText = normalizeToken(text);
-  if (!normalizedText) return null;
+  if (!normalizedText) return [];
 
-  let bestMatch = null;
-  for (const [variant, team] of SPORTS_TEAM_LOOKUP.entries()) {
-    const pattern = new RegExp(`\\b${variant.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i');
-    if (pattern.test(normalizedText)) {
-      if (!bestMatch || variant.length > bestMatch.variant.length) {
-        bestMatch = { team, variant };
+  const matches = new Map();
+  for (const matcher of TEAM_TOKEN_MATCHERS) {
+    if (!matcher.pattern.test(normalizedText)) continue;
+    for (const team of matcher.teams) {
+      const existing = matches.get(team.id);
+      if (!existing || matcher.token.length > existing.token.length) {
+        matches.set(team.id, { team, token: matcher.token });
       }
     }
   }
 
-  return bestMatch?.team || null;
+  return Array.from(matches.values())
+    .sort((a, b) => b.token.length - a.token.length)
+    .map((entry) => entry.team);
+};
+
+const inferSportsLocationFromText = (text = '') => inferSportsTeamsFromText(text)[0] || null;
+
+const getSportsTeamsByLeague = () => {
+  const leagues = LEAGUE_CATALOG.map((group) => {
+    const teams = SORTED_SPORTS_TEAMS
+      .filter((team) => team.league === group.id)
+      .sort((a, b) => a.team.localeCompare(b.team))
+      .map((team) => ({
+        id: team.id,
+        league: team.league,
+        leagueLabel: team.leagueLabel,
+        icon: team.icon,
+        team: team.team,
+        city: team.city,
+        state: team.state,
+        country: team.country
+      }));
+    return {
+      id: group.id,
+      label: group.label,
+      icon: group.icon,
+      sport: group.sport,
+      teams
+    };
+  });
+
+  return leagues;
 };
 
 module.exports = {
-  SPORTS_TEAMS,
+  LEAGUE_CATALOG,
+  SPORTS_TEAMS: SORTED_SPORTS_TEAMS,
+  getSportsTeamsByLeague,
+  inferSportsTeamsFromText,
   inferSportsLocationFromText
 };
