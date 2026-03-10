@@ -33,6 +33,8 @@ const NEWS_SCOPES = [
   { id: 'global', label: 'Global', icon: '🌍' }
 ];
 
+const VALID_SCOPE_IDS = new Set(NEWS_SCOPES.map((scopeOption) => scopeOption.id));
+
 const SOURCE_FORMAT_GUIDANCE = {
   rss: 'Standard RSS/Atom feed URL (usually ends in /rss, /feed, or .xml)',
   podcast: 'Podcast RSS feed URL from Apple, Spotify, or publisher-hosted feed',
@@ -79,6 +81,8 @@ const getScopeFallbackMessage = (personalization = {}) => {
   }
   return `Showing ${activeScope} scope — ${requestedScope} scope is unavailable for your current location.`;
 };
+
+const normalizeScopeSelection = (scope) => (VALID_SCOPE_IDS.has(scope) ? scope : 'local');
 
 const getLocationBadgeClasses = (kind) => {
   if (kind === 'local') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
@@ -169,7 +173,8 @@ function News() {
     const refreshedFeed = await newsAPI.getFeed({ page: 1, limit: 20, topic: topic !== 'all' ? topic : undefined, scope });
     setArticles(refreshedFeed.data.articles);
     setPagination(refreshedFeed.data.pagination);
-    setActiveScope(refreshedFeed.data.personalization?.activeScope || scope);
+    // Keep the selected scope sticky in UI; backend fallback should not change user selection.
+    setActiveScope(normalizeScopeSelection(scope));
     setScopeFallbackMessage(getScopeFallbackMessage(refreshedFeed.data.personalization));
   }, [activeScope, activeFilter]);
 
@@ -191,7 +196,7 @@ function News() {
       setPreferences(prefsRes.data.preferences);
       setRegistrationAlignment(prefsRes.data.registrationAlignment || null);
       setLocationTaxonomy(taxonomyRes.data.taxonomy || { country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} });
-      setActiveScope(feedRes.data.personalization?.activeScope || 'local');
+      setActiveScope(normalizeScopeSelection(preferredScope || 'local'));
       setScopeFallbackMessage(getScopeFallbackMessage(feedRes.data.personalization));
       setTopics(topicsRes.data.topics);
       setPromotedArticles(promotedRes.data.items || []);

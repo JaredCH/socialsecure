@@ -211,6 +211,44 @@ describe('News scope routing', () => {
     expect(response.body.personalization.locationContext.hasCountry).toBe(true);
   });
 
+  it('does not broaden sports local scope to national/global when no local or regional sports matches exist', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'sports-national-1',
+        title: 'Patriots sign veteran receiver',
+        description: '',
+        source: 'National Sports Wire',
+        sourceType: 'rss',
+        sourceId: 'national-sports-wire',
+        topics: ['sports'],
+        locations: ['Boston, MA'],
+        localityLevel: 'state',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'local',
+      locations: [{ city: 'San Marcos', state: 'Texas', country: 'US', zipCode: '78666', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'San Marcos', county: 'Hays County', state: 'Texas', country: 'US', zipCode: '78666' }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=local&topic=sports')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.requestedScope).toBe('local');
+    expect(response.body.personalization.activeScope).toBe('local');
+    expect(response.body.personalization.fallbackApplied).toBe(false);
+    expect(Array.isArray(response.body.articles)).toBe(true);
+    expect(response.body.articles).toHaveLength(0);
+  });
+
   it('keeps local scope active when county-only profile data is available', async () => {
     const app = buildApp();
     const feedArticles = [

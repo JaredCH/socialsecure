@@ -4093,7 +4093,16 @@ router.get('/feed', authenticateToken, async (req, res) => {
 
     let scopeFilteredArticles = buildScopedArticles(activeScope);
     if (scopeFilteredArticles.length === 0) {
-      const fallbackChain = getFallbackScopeOrder(activeScope).slice(1);
+      const isSportsTopic = topicAliases.includes('sports');
+      let fallbackChain = getFallbackScopeOrder(activeScope).slice(1);
+      // For sports locality, avoid broadening to national/global when local/regional has no matches.
+      if (isSportsTopic) {
+        if (activeScope === 'local') {
+          fallbackChain = fallbackChain.filter((candidateScope) => candidateScope === 'regional');
+        } else if (activeScope === 'regional') {
+          fallbackChain = [];
+        }
+      }
       for (const fallbackScope of fallbackChain) {
         const fallbackArticles = buildScopedArticles(fallbackScope);
         if (fallbackArticles.length > 0) {
@@ -4108,7 +4117,8 @@ router.get('/feed', authenticateToken, async (req, res) => {
 
     // Mix in national/global articles when viewing local or regional scope
     // so users see their local news first, plus top broader stories
-    if ((activeScope === 'local' || activeScope === 'regional') && scopeFilteredArticles.length > 0) {
+    const allowBroaderMix = !topicAliases.includes('sports');
+    if ((activeScope === 'local' || activeScope === 'regional') && scopeFilteredArticles.length > 0 && allowBroaderMix) {
       const seenIds = new Set(scopeFilteredArticles.map((a) => String(a._id)));
       const globalCandidates = buildScopedArticles('global')
         .filter((a) => !seenIds.has(String(a._id)));
