@@ -143,7 +143,11 @@ describe('newsSourceCatalog', () => {
       const googleNews = result.find(s => s.id === 'google-news');
       expect(googleNews).toBeDefined();
       expect(googleNews.name).toBe('Google News');
+      expect(googleNews.wired).toBe(true);
+      expect(googleNews.wiringState).toBe('wired');
+      expect(googleNews.enabled).toBe(true);
       expect(googleNews.health).toBe('yellow');
+      expect(googleNews.healthReason).toBe('never_fetched');
     });
 
     it('merges DB source with catalog entry', () => {

@@ -259,15 +259,13 @@ function buildMergedSources(catalogEntries, dbSources, { now = new Date() } = {}
         wired = true;
         wiringState = 'wired';
       }
-    } else if (catalogEntry.hasAdapter && dbMatch) {
+    } else if (catalogEntry.hasAdapter) {
+      // First-class adapter is implemented in code, so source is wired even without a DB row
       wired = true;
       wiringState = 'wired';
-    } else if (catalogEntry.hasAdapter && !dbMatch) {
-      // Has adapter but no DB row yet – still catalog_only until first ingestion
-      wiringState = 'catalog_only';
     }
 
-    const enabled = dbMatch ? dbMatch.isActive !== false : false;
+    const enabled = dbMatch ? dbMatch.isActive !== false : wired;
     const fetchStatus = dbMatch?.lastFetchStatus || null;
     const fetchAt = dbMatch?.lastFetchAt || null;
     const fetchCnt = dbMatch?.fetchCount || 0;

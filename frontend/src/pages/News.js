@@ -354,6 +354,8 @@ function News() {
     }
   };
 
+  const getSourcePreferenceId = (source) => source?._id || source?.providerId || source?.id;
+
   const handleAddSource = async (e) => {
     e.preventDefault();
     if (!newSource.name.trim() || !newSource.url.trim()) return;
@@ -418,14 +420,14 @@ function News() {
       <div className="min-h-screen bg-gradient-to-b from-slate-50 to-gray-100">
         {/* skeleton header */}
         <div className="bg-white/80 backdrop-blur border-b border-gray-200/60">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 animate-pulse">
+          <div className="w-full px-4 sm:px-6 lg:px-8 py-4 animate-pulse">
             <div className="h-8 bg-gray-200 rounded-lg w-32 mb-4" />
             <div className="flex gap-2 mb-3">{[...Array(4)].map((_, i) => <div key={i} className="h-9 bg-gray-100 rounded-full w-24" />)}</div>
             <div className="flex gap-2">{[...Array(6)].map((_, i) => <div key={i} className="h-8 bg-gray-100 rounded-full w-20" />)}</div>
           </div>
         </div>
         {/* skeleton body */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
           <div className="animate-pulse space-y-4">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="bg-white rounded-2xl p-5 flex gap-5 shadow-sm">
@@ -450,7 +452,8 @@ function News() {
   const googleNewsEnabled = preferences?.googleNewsEnabled !== false;
   const enabledSourceCount = availableSources.filter(s => {
     if (s.id === 'google-news') return googleNewsEnabled;
-    return s._id ? isSourceEnabled(s._id) : false;
+    const sourcePreferenceId = getSourcePreferenceId(s);
+    return sourcePreferenceId ? isSourceEnabled(sourcePreferenceId) : false;
   }).length;
   const enabledCategoryCount = ALL_CATEGORIES.length - hiddenCategories.length;
 
@@ -459,7 +462,7 @@ function News() {
 
       {/* ── Sticky Top Bar ──────────────────────────────────────────────────────── */}
       <header className="bg-white/80 backdrop-blur-lg border-b border-gray-200/60 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           {/* Row 1 – title + controls */}
           <div className="flex items-center justify-between py-3">
             <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent select-none">
@@ -683,9 +686,10 @@ function News() {
                 <div className="px-4 pb-4 space-y-2 border-t border-gray-100 pt-3 max-h-72 overflow-y-auto">
                   {availableSources.map((source) => {
                     const isGoogleNews = source.id === 'google-news';
+                    const sourcePreferenceId = getSourcePreferenceId(source);
                     const enabled = isGoogleNews
                       ? (preferences?.googleNewsEnabled !== false)
-                      : (source._id ? isSourceEnabled(source._id) : false);
+                      : (sourcePreferenceId ? isSourceEnabled(sourcePreferenceId) : false);
                     return (
                       <div key={source.id} className="flex items-center justify-between py-1.5">
                         <div className="min-w-0 flex items-center gap-1.5">
@@ -700,8 +704,8 @@ function News() {
                           onToggle={() => {
                             if (isGoogleNews) {
                               handleToggleGoogleNews();
-                            } else if (source._id) {
-                              handleToggleSource(source._id, enabled);
+                            } else if (sourcePreferenceId) {
+                              handleToggleSource(sourcePreferenceId, enabled);
                             }
                           }}
                           label={`Toggle ${source.name}`}

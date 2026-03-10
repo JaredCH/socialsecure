@@ -97,6 +97,21 @@ describe('News inline preferences updates', () => {
             enabled: true,
             health: 'green',
             healthReason: 'last_fetch_success_recent'
+          },
+          {
+            id: 'reuters',
+            _id: null,
+            name: 'Reuters',
+            url: 'https://www.reuters.com',
+            providerId: 'reuters',
+            type: 'rss',
+            category: 'general',
+            categories: ['World'],
+            wired: true,
+            wiringState: 'wired',
+            enabled: true,
+            health: 'yellow',
+            healthReason: 'never_fetched'
           }
         ],
         topUsedSources: [],
@@ -162,6 +177,24 @@ describe('News inline preferences updates', () => {
       rssSources: [expect.objectContaining({ sourceId: 'src-1', enabled: false })]
     }));
     expect(newsAPI.getFeed).toHaveBeenCalledTimes(2);
+  });
+
+  it('toggles a catalog source without DB id using provider identifier', async () => {
+    await renderNews();
+
+    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    await act(async () => {
+      openSettingsButton.click();
+    });
+
+    const sourceToggle = container.querySelector('button[aria-label="Toggle Reuters"]');
+    await act(async () => {
+      sourceToggle.click();
+    });
+
+    expect(newsAPI.updatePreferences).toHaveBeenCalledWith(expect.objectContaining({
+      rssSources: [expect.objectContaining({ sourceId: 'reuters', enabled: false })]
+    }));
   });
 
   it('submits primary location selection and refreshes feed', async () => {
@@ -322,6 +355,11 @@ describe('News inline preferences updates', () => {
     const weatherHeader = Array.from(container.querySelectorAll('h2'))
       .find(h => h.textContent.includes('Weather'));
     expect(weatherHeader).toBeTruthy();
+  });
+
+  it('uses full-width layout containers for news content area', async () => {
+    await renderNews();
+    expect(container.querySelector('.max-w-7xl')).toBeNull();
   });
 
   it('renders list/grid view toggle buttons', async () => {

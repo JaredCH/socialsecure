@@ -42,12 +42,14 @@ export default function NewsControlPanel({
   const googleNewsEnabled = preferences?.googleNewsEnabled !== false;
   const activeKeywords = preferences?.followedKeywords || [];
   const locations = preferences?.locations || [];
+  const getSourcePreferenceId = (source) => source?._id || source?.providerId || source?.id;
 
   // Compute sidebar stats
   const stats = useMemo(() => {
     const enabledCount = sources.filter(s => {
       if (s.id === 'google-news') return googleNewsEnabled;
-      return s._id ? isSourceEnabled(s._id) : false;
+      const sourcePreferenceId = getSourcePreferenceId(s);
+      return sourcePreferenceId ? isSourceEnabled(sourcePreferenceId) : false;
     }).length;
     const greenCount = sources.filter(s => s.health === 'green').length;
     const yellowCount = sources.filter(s => s.health === 'yellow').length;
@@ -59,13 +61,14 @@ export default function NewsControlPanel({
   const activeFeeds = useMemo(() => {
     return sources.filter(s => {
       if (s.id === 'google-news') return googleNewsEnabled;
-      return s.enabled || (s._id && isSourceEnabled(s._id));
+      const sourcePreferenceId = getSourcePreferenceId(s);
+      return s.enabled || (sourcePreferenceId && isSourceEnabled(sourcePreferenceId));
     });
   }, [sources, googleNewsEnabled, isSourceEnabled]);
 
   return (
     <div className="bg-white border-b border-gray-200/60 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-4">
 
         {/* Header Row */}
         <div className="flex items-center justify-between mb-4">

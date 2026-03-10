@@ -18,6 +18,7 @@ const SOURCE_ABBR = {
 
 export default function SourcesPanel({ sources, onToggleSource, isSourceEnabled, onToggleGoogleNews, googleNewsEnabled, preferences, onToggleSourceCategory }) {
   const disabledSourceCategories = preferences?.disabledSourceCategories || {};
+  const getSourcePreferenceId = (source) => source?._id || source?.providerId || source?.id;
 
   const isCategoryDisabled = (sourceId, category) => {
     const disabled = disabledSourceCategories[sourceId] || [];
@@ -36,7 +37,8 @@ export default function SourcesPanel({ sources, onToggleSource, isSourceEnabled,
       <div className="grid gap-3 sm:grid-cols-2">
         {sources.map((source) => {
           const isGoogleNews = source.id === 'google-news';
-          const enabled = isGoogleNews ? googleNewsEnabled : (source._id ? isSourceEnabled(source._id) : false);
+          const sourcePreferenceId = getSourcePreferenceId(source);
+          const enabled = isGoogleNews ? googleNewsEnabled : (sourcePreferenceId ? isSourceEnabled(sourcePreferenceId) : false);
           const abbr = SOURCE_ABBR[source.id] || source.name?.substring(0, 2).toUpperCase() || '??';
           const reasonLabel = HEALTH_REASON_LABELS[source.healthReason] || source.healthReason || '';
 
@@ -110,8 +112,8 @@ export default function SourcesPanel({ sources, onToggleSource, isSourceEnabled,
                     onClick={() => {
                       if (isGoogleNews) {
                         onToggleGoogleNews();
-                      } else if (source._id && source.wired) {
-                        onToggleSource(source._id, enabled);
+                      } else if (sourcePreferenceId && source.wired) {
+                        onToggleSource(sourcePreferenceId, enabled);
                       }
                     }}
                     disabled={!source.wired && !isGoogleNews}
