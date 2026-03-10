@@ -3967,7 +3967,7 @@ const Social = () => {
       case 'calendar':
         return renderGlassPanel(
           'Calendar',
-          <div data-testid="social-calendar-preview-shell" className="mx-auto w-full max-w-3xl space-y-4 text-sm text-slate-700">
+          <div data-testid="social-calendar-preview-shell" className="mx-auto w-full max-w-xl space-y-4 overflow-y-auto pr-1 text-sm text-slate-700 [scrollbar-gutter:stable] sm:max-h-[34rem]">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/55 px-4 py-4">
               <div>
                 <p className="font-semibold text-slate-900">Coordinate upcoming events</p>

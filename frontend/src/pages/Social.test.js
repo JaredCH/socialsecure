@@ -261,7 +261,8 @@ describe('Social page hero background rendering', () => {
     expect(calendarAPI.getMyEvents).toHaveBeenCalled();
     const previewShell = container.querySelector('[data-testid="social-calendar-preview-shell"]');
     expect(previewShell).toBeTruthy();
-    expect(previewShell.className).toContain('max-w-3xl');
+    expect(previewShell.className).toContain('max-w-xl');
+    expect(previewShell.className).toContain('sm:max-h-[34rem]');
     expect(container.querySelector('[data-testid="social-calendar-preview-grid"]')).toBeTruthy();
     expect(container.textContent).toContain('Upcoming');
     expect(container.textContent).toContain('US:');
