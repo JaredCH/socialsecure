@@ -53,11 +53,7 @@ const followedKeywordSchema = new mongoose.Schema({
   }
 });
 
-const followedSportsTeamSchema = new mongoose.Schema({
-  type: String,
-  lowercase: true,
-  trim: true
-});
+
 
 // User's news source preferences
 const sourcePreferenceSchema = new mongoose.Schema({
@@ -164,7 +160,7 @@ const newsPreferencesSchema = new mongoose.Schema({
 
   // Followed sports teams (team ids from sportsTeamLocationIndex)
   followedSportsTeams: {
-    type: [followedSportsTeamSchema],
+    type: [String],
     default: []
   },
   

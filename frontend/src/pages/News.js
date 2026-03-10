@@ -161,7 +161,7 @@ function News() {
       setLoading(true);
       const [prefsRes, topicsRes] = await Promise.all([
         newsAPI.getPreferences().catch(() => ({ data: { preferences: null, registrationAlignment: null } })),
-        newsAPI.getTopics(),
+        newsAPI.getTopics().catch(() => ({ data: { topics: [] } })),
       ]);
       const taxonomyRes = await newsAPI.getLocationTaxonomy().catch(() => ({ data: { taxonomy: { country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} } } }));
       const preferredScope = prefsRes.data.preferences?.defaultScope;
