@@ -166,7 +166,7 @@ const newsPreferencesSchema = new mongoose.Schema({
 
   // Followed sports teams (team ids from sportsTeamLocationIndex)
   followedSportsTeams: {
-    type: [followedSportsTeamSchema],
+    type: [String],
     default: []
   },
   
