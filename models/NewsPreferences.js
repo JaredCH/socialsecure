@@ -54,9 +54,11 @@ const followedKeywordSchema = new mongoose.Schema({
 });
 
 const followedSportsTeamSchema = new mongoose.Schema({
-  type: String,
-  lowercase: true,
-  trim: true
+  type: {
+    type: String,
+    lowercase: true,
+    trim: true
+  }
 });
 
 // User's news source preferences
