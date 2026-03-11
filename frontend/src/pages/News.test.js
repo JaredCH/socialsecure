@@ -364,7 +364,7 @@ describe('News inline preferences updates', () => {
     expect(healthDots.length).toBeGreaterThan(0);
   });
 
-  it('renders right sidebar with sources status card showing health dots', async () => {
+  it('does not render right sidebar', async () => {
     newsAPI.getSources.mockResolvedValue({
       data: {
         sources: [
@@ -377,18 +377,19 @@ describe('News inline preferences updates', () => {
 
     await renderNews();
 
-    // Sources status card should be in right sidebar
-    const sourceHealthDots = container.querySelectorAll('[aria-label*="Source"][aria-label*="health"]');
-    expect(sourceHealthDots.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('renders weather widget section in the right sidebar', async () => {
-    await renderNews();
-
-    // Weather widget should be rendered (empty state when no locations)
+    // Right sidebar with SourcesStatusCard has been removed; the page should use full-width layout
     const weatherHeader = Array.from(container.querySelectorAll('h2'))
       .find(h => h.textContent.includes('Weather'));
-    expect(weatherHeader).toBeTruthy();
+    expect(weatherHeader).toBeFalsy();
+  });
+
+  it('does not render weather widget in right sidebar', async () => {
+    await renderNews();
+
+    // Weather widget has been removed from right sidebar
+    const weatherHeader = Array.from(container.querySelectorAll('h2'))
+      .find(h => h.textContent.includes('Weather'));
+    expect(weatherHeader).toBeFalsy();
   });
 
   it('uses full-width layout containers for news content area', async () => {
@@ -418,7 +419,7 @@ describe('News inline preferences updates', () => {
     expect(gridContainer).toBeTruthy();
   });
 
-  it('renders keyword hits card when keywords are tracked', async () => {
+  it('does not render keyword hits card (right sidebar removed)', async () => {
     newsAPI.getPreferences.mockResolvedValue({
       data: {
         preferences: {
@@ -432,14 +433,14 @@ describe('News inline preferences updates', () => {
 
     const keywordHitsHeader = Array.from(container.querySelectorAll('h2'))
       .find(h => h.textContent.includes('Keyword Hits'));
-    expect(keywordHitsHeader).toBeTruthy();
+    expect(keywordHitsHeader).toBeFalsy();
   });
 
-  it('renders local news card in the right sidebar', async () => {
+  it('does not render local news card (right sidebar removed)', async () => {
     await renderNews();
 
     const localNewsHeader = Array.from(container.querySelectorAll('h2'))
       .find(h => h.textContent.includes('Local News'));
-    expect(localNewsHeader).toBeTruthy();
+    expect(localNewsHeader).toBeFalsy();
   });
 });

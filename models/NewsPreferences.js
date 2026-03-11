@@ -53,6 +53,12 @@ const followedKeywordSchema = new mongoose.Schema({
   }
 });
 
+const followedSportsTeamSchema = new mongoose.Schema({
+  type: String,
+  lowercase: true,
+  trim: true
+});
+
 // User's news source preferences
 const sourcePreferenceSchema = new mongoose.Schema({
   sourceId: {
@@ -124,13 +130,6 @@ const newsPreferencesSchema = new mongoose.Schema({
   // Followed keywords
   followedKeywords: [followedKeywordSchema],
 
-  // Followed sports teams (team ids)
-  followedSportsTeams: [{
-    type: String,
-    lowercase: true,
-    trim: true
-  }],
-
   // Default feed scope preference
   defaultScope: {
     type: String,
@@ -157,9 +156,15 @@ const newsPreferencesSchema = new mongoose.Schema({
     default: () => new Map()
   },
 
-  // Weather location preferences
+  // Weather location preferences (max 3)
   weatherLocations: {
     type: [weatherLocationSchema],
+    default: []
+  },
+
+  // Followed sports teams (team ids from sportsTeamLocationIndex)
+  followedSportsTeams: {
+    type: [followedSportsTeamSchema],
     default: []
   },
   

@@ -46,6 +46,7 @@ const {
   titleCase
 } = require('../utils/newsLocationTaxonomy');
 const {
+  SPORTS_TEAMS,
   getSportsTeamsByLeague,
   inferSportsTeamsFromText,
   inferSportsLocationFromText
@@ -4141,6 +4142,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
             return false;
           }
 
+          // If a user follows specific teams, sports stories must match at least one selected team.
           if (followedSportsTeamSet.size > 0 && article.isSportsArticle && article.matchedTeamIds.length === 0) {
             return false;
           }
@@ -5249,6 +5251,10 @@ async function resolveWeatherLocationCoordinates(locObj = {}) {
   };
 }
 
+/**
+ * GET /api/news/weather/geocode
+ * Returns Open-Meteo geocoding suggestions for autocomplete.
+ */
 router.get('/weather/geocode', authenticateToken, async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
@@ -5292,6 +5298,9 @@ router.get('/weather/geocode', authenticateToken, async (req, res) => {
   }
 });
 
+/**
+ * Fetch weather for a single location from Open-Meteo, using cache if available.
+ */
 async function fetchWeatherForLocation(locObj) {
   const resolved = await resolveWeatherLocationCoordinates(locObj);
   if (!resolved?.lat || !resolved?.lon) {
@@ -5314,8 +5323,8 @@ async function fetchWeatherForLocation(locObj) {
     const current = forecast?.current || {};
     const hourlyTime = Array.isArray(forecast?.hourly?.time) ? forecast.hourly.time : [];
     const dailyTime = Array.isArray(forecast?.daily?.time) ? forecast.daily.time : [];
-    const currentDescriptor = getOpenMeteoWeatherDescriptor(current.weather_code);
 
+    const currentDescriptor = getOpenMeteoWeatherDescriptor(current.weather_code);
     const hourly = hourlyTime.slice(0, 12).map((time, idx) => {
       const descriptor = getOpenMeteoWeatherDescriptor(forecast?.hourly?.weather_code?.[idx]);
       return {
@@ -5463,7 +5472,7 @@ async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
 
 /**
  * POST /api/news/preferences/weather-locations
- * Add a weather location
+ * Add a weather location (max 3)
  */
 router.post('/preferences/weather-locations', authenticateToken, async (req, res) => {
   try {
@@ -5558,13 +5567,14 @@ router.put('/preferences/weather-locations', authenticateToken, async (req, res)
       return res.status(400).json({ error: validationError.error });
     }
 
-    if (normalizedLocations.length > 0 && !normalizedLocations.some((loc) => loc.isPrimary)) {
-      normalizedLocations[0].isPrimary = true;
+    const normalizedWithPrimary = [...normalizedLocations];
+    if (normalizedWithPrimary.length > 0 && !normalizedWithPrimary.some((loc) => loc.isPrimary)) {
+      normalizedWithPrimary[0].isPrimary = true;
     }
 
     const preferences = await NewsPreferences.findOneAndUpdate(
       { user: req.user.userId },
-      { weatherLocations: normalizedLocations },
+      { weatherLocations: normalizedWithPrimary },
       { new: true, upsert: true }
     );
 
