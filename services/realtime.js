@@ -38,14 +38,35 @@ const storeReplayEvent = (userId, event, payload) => {
   return enrichedPayload;
 };
 
+const setRealtimeIo = (io) => {
+  ioInstance = io;
+};
+
+const getMissedEvents = (userId, sinceTimestamp = 0) => {
+  const normalizedUserId = String(userId || '').trim();
+  const queue = replayBufferByUser.get(normalizedUserId) || [];
+  return queue
+    .filter((entry) => {
+      const ts = entry.payload?._meta?.timestamp
+        ? new Date(entry.payload._meta.timestamp).getTime()
+        : 0;
+      return ts >= sinceTimestamp;
+    })
+    .map((entry) => ({ eventName: entry.event, payload: entry.payload }));
+};
+
 const emitToUser = (userId, event, payload, options = {}) => {
   const normalizedUserId = String(userId || '').trim();
   if (!normalizedUserId || !ioInstance) return null;
 
-  const shouldStore = options.store !== false;
-  const finalPayload = shouldStore ? storeReplayEvent(normalizedUserId, event, payload) : withMeta(payload);
-  ioInstance.to(`user:${normalizedUserId}`).emit(event, finalPayload);
-  return finalPayload;
+  // Accept either `store: false` or `record: false` to suppress replay buffering.
+  const shouldStore = options.store !== false && options.record !== false;
+  if (shouldStore) {
+    storeReplayEvent(normalizedUserId, event, payload);
+  }
+  // Emit the raw payload to the socket (no _meta wrapper on the wire).
+  ioInstance.to(`user:${normalizedUserId}`).emit(event, payload);
+  return payload;
 };
 
 const emitToUsers = (userIds, event, payloadFactory, options = {}) => {
@@ -339,6 +360,9 @@ const getPresenceMapForUsers = async (userIds) => {
 
 module.exports = {
   initializeRealtime,
+  setRealtimeIo,
+  emitToUsers,
+  getMissedEvents,
   emitFeedPost,
   emitFeedInteraction,
   emitChatMessage,

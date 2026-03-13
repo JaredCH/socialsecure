@@ -13,8 +13,45 @@ const rssSourceSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'npr', 'bbc'],
+    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'npr', 'bbc',
+           'wire', 'national_tv', 'local_tv'],
     default: 'rss'
+  },
+  // Broad editorial scope
+  scope: {
+    type: String,
+    enum: ['wire', 'national', 'local', 'regional'],
+    default: 'national'
+  },
+  // Broadcast/publisher group that owns this feed
+  networkGroup: {
+    type: String,
+    default: null
+  },
+  // Network affiliate brand: ABC, CBS, NBC, FOX, IND, NA
+  affiliate: {
+    type: String,
+    default: null
+  },
+  // Normalized DMA market slug (e.g. "new-york", "tampa-st-petersburg")
+  market: {
+    type: String,
+    default: null
+  },
+  // Station call sign (e.g. "WNBC", "KTLA")
+  stationCallSign: {
+    type: String,
+    default: null
+  },
+  // City the station serves
+  cityName: {
+    type: String,
+    default: null
+  },
+  // Two-letter US state code
+  stateCode: {
+    type: String,
+    default: null
   },
   category: {
     type: String,

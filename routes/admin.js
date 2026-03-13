@@ -24,6 +24,9 @@ const User = require('../models/User');
 const NewsPreferences = require('../models/NewsPreferences');
 const NewsLocation = require('../models/NewsLocation');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
+const RssSource = require('../models/RssSource');
+const { runBulkImport, parseCsv } = require('../services/newsBulkSourceImporter');
+const { upsertZipLocationIndexEntries } = require('../services/zipLocationIndex');
 
 const router = express.Router();
 
@@ -426,6 +429,32 @@ router.get('/zip-location/:zipCode', async (req, res) => {
   }
 });
 
+/**
+ * PUT /api/admin/zip-location/:zipCode
+ * Upserts a ZipLocationIndex record. Accepts a JSON body with the location
+ * fields (city, county, state, stateCode, country, countryCode, latitude,
+ * longitude). zipCode is taken from the URL param and is authoritative.
+ */
+router.put('/zip-location/:zipCode', async (req, res) => {
+  try {
+    const zipCode = String(req.params.zipCode || '').trim().toUpperCase();
+    if (!zipCode) return res.status(400).json({ error: 'zipCode is required' });
+
+    const ALLOWED = ['city', 'county', 'state', 'stateCode', 'country', 'countryCode', 'latitude', 'longitude', 'aliases'];
+    const entry = { zipCode, source: 'admin-seed' };
+    for (const field of ALLOWED) {
+      if (req.body[field] !== undefined) entry[field] = req.body[field];
+    }
+
+    const result = await upsertZipLocationIndexEntries([entry], 'admin-seed');
+    const saved = await ZipLocationIndex.findOne({ zipCode }).lean();
+    res.json({ ok: true, ...result, zipLocation: saved });
+  } catch (err) {
+    console.error('[admin] PUT /zip-location/:zipCode error:', err);
+    res.status(500).json({ error: 'Failed to upsert zip location' });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Migration: admin account preferences
 // ---------------------------------------------------------------------------
@@ -747,6 +776,95 @@ router.get('/migrate/admin-preferences/preview', async (_req, res) => {
   } catch (err) {
     console.error('[admin] GET /migrate/admin-preferences/preview error:', err);
     res.status(500).json({ error: 'Preview failed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// News Sources – read
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/admin/news-sources
+ * Returns RssSource records.  Supports optional query params:
+ *   type, scope, networkGroup, active ("true"/"false")
+ */
+router.get('/news-sources', async (req, res) => {
+  try {
+    const query = {};
+    if (req.query.type) query.type = req.query.type;
+    if (req.query.scope) query.scope = req.query.scope;
+    if (req.query.networkGroup) query.networkGroup = req.query.networkGroup.toUpperCase();
+    if (req.query.active !== undefined) query.isActive = req.query.active !== 'false';
+
+    const sources = await RssSource.find(query).sort({ priority: -1, name: 1 }).lean();
+    res.json({ count: sources.length, sources });
+  } catch (err) {
+    console.error('[admin] GET /news-sources error:', err);
+    res.status(500).json({ error: 'Failed to fetch news sources' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// News Sources – bulk import
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/admin/news-sources/bulk-import
+ *
+ * Registers news feed sources in bulk from a CSV string or a JSON array.
+ * Deduplicates within the payload (by normalized feed_url) and against the
+ * existing database (upsert on url).
+ *
+ * Body (JSON):
+ *   csv         {string}   – Raw CSV text (columns: network,station,city,state,feed_url,type,affiliate,market)
+ *   sources     {object[]} – Pre-parsed array of row objects (alternative to csv)
+ *   validate    {boolean}  – Probe each URL via HEAD before importing; skip true 404s / network errors (default: true)
+ *   dryRun      {boolean}  – Return what WOULD be imported without writing (default: false)
+ *   concurrency {number}   – Parallel probe/upsert workers, capped at 15 (default: 10)
+ *
+ * Response:
+ *   { ok, summary: { total, deduplicatedFromInput, inserted, updated, skipped, failed },
+ *     skipped: [{ feed_url, station, network, reason, status }],
+ *     failed:  [{ feed_url, station, error }],
+ *     dryRunDocs? }
+ */
+router.post('/news-sources/bulk-import', async (req, res) => {
+  try {
+    rejectMongoOperators(req.body);
+
+    const { csv, sources: rawSources, validate = true, dryRun = false, concurrency = 10 } = req.body;
+
+    let sources = [];
+    if (typeof csv === 'string' && csv.trim()) {
+      sources = parseCsv(csv);
+    } else if (Array.isArray(rawSources)) {
+      sources = rawSources;
+    } else {
+      return res.status(400).json({
+        error: 'Body must include either "csv" (string) or "sources" (array)',
+      });
+    }
+
+    if (sources.length === 0) {
+      return res.status(400).json({ error: 'No valid source rows found in input' });
+    }
+    if (sources.length > 1000) {
+      return res.status(400).json({ error: 'Batch size limited to 1000 sources per request' });
+    }
+
+    const safeConc = Math.min(Math.max(1, parseInt(concurrency, 10) || 10), 15);
+
+    const result = await runBulkImport(sources, {
+      validate: Boolean(validate),
+      dryRun: Boolean(dryRun),
+      concurrency: safeConc,
+    });
+
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('[admin] POST /news-sources/bulk-import error:', err);
+    res.status(500).json({ error: 'Bulk import failed', message: err.message });
   }
 });
 

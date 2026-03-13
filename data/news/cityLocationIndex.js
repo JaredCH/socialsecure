@@ -135,13 +135,21 @@ const buildCityVariantLookup = () => {
 const CITY_VARIANT_LOOKUP = buildCityVariantLookup();
 
 const inferCityLocationFromText = (text = '') => {
-  const normalizedText = normalizeToken(text);
-  if (!normalizedText) return null;
+  if (!text) return null;
 
   let bestMatch = null;
   for (const [variant, location] of CITY_VARIANT_LOOKUP.entries()) {
-    const pattern = new RegExp(`\\b${variant.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i');
-    if (!pattern.test(normalizedText)) continue;
+    // Build a case-sensitive pattern using the original city casing (from the variant map
+    // key, which is lowercased, so we reconstruct the proper-cased variant from the entry).
+    // We match against the original text (preserving capitalisation) so that common English
+    // words that happen to share a name with a city (e.g. "reading" the verb vs "Reading, PA")
+    // are not treated as city names.
+    const originalVariant = location.variants?.find(
+      (v) => normalizeToken(v) === variant
+    ) || variant;
+    const escaped = originalVariant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\b${escaped}\\b`);
+    if (!pattern.test(text)) continue;
     if (!bestMatch || variant.length > bestMatch.variant.length) {
       bestMatch = { variant, location };
     }

@@ -1,0 +1,26 @@
+[
+  {"network":"NATIONAL","station":"Politico","city":"Washington","state":"DC","feed_url":"https://rss.politico.com/politics-news.xml","type":"national","affiliate":"NA","market":"national"},
+
+  {"network":"NEXSTAR","station":"KARK","city":"Little Rock","state":"AR","feed_url":"https://www.kark.com/feed/","type":"local_tv","affiliate":"NBC","market":"Little Rock"},
+  {"network":"NEXSTAR","station":"WSLS","city":"Roanoke","state":"VA","feed_url":"https://www.wsls.com/rss/","type":"local_tv","affiliate":"NBC","market":"Roanoke-Lynchburg"},
+  {"network":"NEXSTAR","station":"WMBD","city":"Peoria","state":"IL","feed_url":"https://www.wmbd.com/feed/","type":"local_tv","affiliate":"CBS","market":"Peoria"},
+  {"network":"NEXSTAR","station":"WHLT","city":"Hattiesburg","state":"MS","feed_url":"https://www.whlt.com/feed/","type":"local_tv","affiliate":"CBS","market":"Hattiesburg"},
+
+  {"network":"SINCLAIR","station":"KBOI","city":"Boise","state":"ID","feed_url":"https://idahonews.com/feed/","type":"local_tv","affiliate":"CBS","market":"Boise"},
+  {"network":"SINCLAIR","station":"WLFL","city":"Raleigh","state":"NC","feed_url":"https://myfox8.com/feed/","type":"local_tv","affiliate":"CW","market":"Raleigh-Durham"},
+  {"network":"SINCLAIR","station":"WKEF","city":"Dayton","state":"OH","feed_url":"https://www.abc22dayton.com/feed/","type":"local_tv","affiliate":"ABC","market":"Dayton"},
+  {"network":"SINCLAIR","station":"WNWO","city":"Toledo","state":"OH","feed_url":"https://nbc24.com/feed/","type":"local_tv","affiliate":"NBC","market":"Toledo"},
+  {"network":"SINCLAIR","station":"KTUL","city":"Tulsa","state":"OK","feed_url":"https://ktul.com/feed/","type":"local_tv","affiliate":"ABC","market":"Tulsa"},
+  {"network":"SINCLAIR","station":"WCHS","city":"Charleston","state":"WV","feed_url":"https://wchstv.com/feed/","type":"local_tv","affiliate":"ABC","market":"Charleston-Huntington"},
+  {"network":"SINCLAIR","station":"KDSM","city":"Des Moines","state":"IA","feed_url":"https://kdsm.com/feed/","type":"local_tv","affiliate":"FOX","market":"Des Moines"},
+  {"network":"SINCLAIR","station":"KRXI","city":"Reno","state":"NV","feed_url":"https://www.mynews4.com/feed/","type":"local_tv","affiliate":"FOX","market":"Reno"},
+  {"network":"SINCLAIR","station":"WUTV","city":"Buffalo","state":"NY","feed_url":"https://wutv29.com/feed/","type":"local_tv","affiliate":"FOX","market":"Buffalo"},
+  {"network":"SINCLAIR","station":"WUHF","city":"Rochester","state":"NY","feed_url":"https://www.rochesterfirst.com/feed/","type":"local_tv","affiliate":"FOX","market":"Rochester"},
+  {"network":"SINCLAIR","station":"KDNL","city":"St Louis","state":"MO","feed_url":"https://www.kdnl.com/feed/","type":"local_tv","affiliate":"ABC","market":"St Louis"},
+  {"network":"SINCLAIR","station":"KBSI","city":"Cape Girardeau","state":"MO","feed_url":"https://www.heartlandnewsnow.com/feed/","type":"local_tv","affiliate":"FOX","market":"Paducah-Cape Girardeau"},
+  {"network":"SINCLAIR","station":"WUCW","city":"Minneapolis","state":"MN","feed_url":"https://www.wucw.com/feed/","type":"local_tv","affiliate":"CW","market":"Minneapolis"},
+
+  {"network":"HEARST","station":"KITV","city":"Honolulu","state":"HI","feed_url":"https://www.kitv.com/news/rss.xml","type":"local_tv","affiliate":"ABC","market":"Honolulu"},
+
+  {"network":"GRAY","station":"WKOW","city":"Madison","state":"WI","feed_url":"https://www.wkow.com/arc/outboundfeeds/rss/","type":"local_tv","affiliate":"ABC","market":"Madison"}
+]

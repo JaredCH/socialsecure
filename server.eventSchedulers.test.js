@@ -27,6 +27,7 @@ describe('server event scheduler startup', () => {
       express.urlencoded = jest.fn(noopMiddleware);
       const startEventScheduleIngestionScheduler = jest.fn();
       const startEventRoomLifecycleScheduler = jest.fn();
+      const startSportsScheduleScheduler = jest.fn();
 
       jest.doMock('express', () => express);
       jest.doMock('mongoose', () => ({ connect: jest.fn().mockResolvedValue(undefined) }));
@@ -48,6 +49,7 @@ describe('server event scheduler startup', () => {
       jest.doMock('./services/notifications', () => ({ setNotificationIo: jest.fn() }));
       jest.doMock('./services/eventScheduleIngestion', () => ({ startEventScheduleIngestionScheduler }));
       jest.doMock('./services/eventRoomLifecycle', () => ({ startEventRoomLifecycleScheduler }));
+      jest.doMock('./services/sportsScheduleIngestion', () => ({ startSportsScheduleScheduler }));
       jest.doMock('./models/User', () => ({}));
       jest.doMock('./models/Friendship', () => ({ find: jest.fn() }));
 
@@ -86,6 +88,7 @@ describe('server event scheduler startup', () => {
 
       expect(startEventScheduleIngestionScheduler).toHaveBeenCalledTimes(1);
       expect(startEventRoomLifecycleScheduler).toHaveBeenCalledTimes(1);
+      expect(startSportsScheduleScheduler).toHaveBeenCalledTimes(1);
     });
   });
 });
