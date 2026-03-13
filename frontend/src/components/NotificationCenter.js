@@ -8,7 +8,7 @@ const isResolvedFriendRequestNotification = (notification) => (
   notification?.type === 'follow' && notification?.isRead
 );
 
-const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNotification, userDisplayName = 'Account' }) => {
+const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNotification, userDisplayName = 'Account', navLinks = [] }) => {
   const navigate = useNavigate();
   const panelRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -244,7 +244,21 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
       </button>
 
       {open ? (
-        <div className="absolute right-0 mt-2 w-96 max-w-[92vw] bg-white border rounded-lg shadow-lg z-50">
+        <div className="absolute right-0 mt-2 w-64 max-w-[92vw] bg-white border rounded-lg shadow-lg z-50">
+          {navLinks.length > 0 && (
+            <div className="border-b">
+              {navLinks.map(({ to, label }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  onClick={() => setOpen(false)}
+                  className="block px-4 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-600"
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          )}
           <div className="flex items-center justify-between px-3 py-2 border-b">
             <p className="font-semibold text-gray-900">Notifications</p>
             <div className="flex items-center gap-3">

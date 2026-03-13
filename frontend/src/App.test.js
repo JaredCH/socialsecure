@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { authAPI, notificationAPI } from './utils/api';
+import { authAPI, notificationAPI, getAuthToken } from './utils/api';
 
 jest.mock('./pages/Home', () => () => <div>Home Page</div>);
 jest.mock('./pages/Login', () => () => <div>Login Page</div>);
@@ -38,7 +38,10 @@ jest.mock('./utils/api', () => ({
   notificationAPI: {
     getUnreadCount: jest.fn(),
     getPreferences: jest.fn()
-  }
+  },
+  getAuthToken: jest.fn(),
+  setAuthToken: jest.fn(),
+  clearAuthToken: jest.fn()
 }));
 
 describe('App navbar features dropdown', () => {
@@ -58,6 +61,7 @@ describe('App navbar features dropdown', () => {
     localStorage.clear();
     sessionStorage.clear();
     jest.clearAllMocks();
+    getAuthToken.mockImplementation(() => localStorage.getItem('token'));
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -95,32 +99,27 @@ describe('App navbar features dropdown', () => {
     jest.clearAllMocks();
   });
 
-  it('groups discover, calendar, and resume under Features for authenticated users', async () => {
+  it('moves discover, calendar, resume, and settings links out of the main nav', async () => {
     localStorage.setItem('token', 'token');
 
     await renderApp();
 
     expect(authAPI.getProfile).toHaveBeenCalled();
 
-    const featuresMenu = container.querySelector('[data-testid="features-menu"]');
-    expect(featuresMenu).not.toBeNull();
-    const featuresButton = featuresMenu.querySelector('button');
-    expect(featuresButton).not.toBeNull();
+    const mainNav = container.querySelector('#main-nav-menu');
+    expect(mainNav).not.toBeNull();
+    expect(container.querySelector('[data-testid="features-menu"]')).toBeNull();
 
-    await act(async () => {
-      featuresButton.click();
-    });
+    const navText = mainNav.textContent;
+    expect(navText).not.toContain('Calendar');
+    expect(navText).not.toContain('Resume');
+    expect(navText).not.toContain('Discover');
+    expect(navText).not.toContain('Control Panel');
+    expect(navText).not.toContain('User Settings');
+    expect(navText).not.toContain('Refer Friend');
 
-    const dropdownPanel = container.querySelector('#features-menu-panel');
-    expect(dropdownPanel).not.toBeNull();
-    expect(dropdownPanel.className).toContain('top-full');
-    expect(dropdownPanel.className).toContain('z-[1310]');
-    expect(featuresMenu.parentElement.className).toContain('overflow-visible');
-
-    expect(featuresMenu.textContent).toContain('Features');
-    expect(featuresMenu.textContent).toContain('Discover');
-    expect(featuresMenu.textContent).toContain('Calendar');
-    expect(featuresMenu.textContent).toContain('Resume');
+    // NotificationCenter (user pill) is rendered
+    expect(container.textContent).toContain('🔔');
   });
 
   it('does not redirect completed users to onboarding when onboarding status refresh fails', async () => {
@@ -133,80 +132,44 @@ describe('App navbar features dropdown', () => {
     expect(container.textContent).not.toContain('Onboarding Page');
   });
 
-  it('opens Features dropdown on hover and closes on mouse leave', async () => {
+  it('main nav contains core section links for authenticated users', async () => {
     localStorage.setItem('token', 'token');
 
     await renderApp();
 
-    const featuresMenu = container.querySelector('[data-testid="features-menu"]');
-    expect(featuresMenu).not.toBeNull();
-
-    expect(container.querySelector('#features-menu-panel')).toBeNull();
-
-    await act(async () => {
-      featuresMenu.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    });
-
-    expect(container.querySelector('#features-menu-panel')).not.toBeNull();
-    expect(featuresMenu.textContent).toContain('Discover');
-    expect(featuresMenu.textContent).toContain('Calendar');
-    expect(featuresMenu.textContent).toContain('Resume');
-
-    await act(async () => {
-      featuresMenu.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    });
-
-    expect(container.querySelector('#features-menu-panel')).toBeNull();
+    const mainNav = container.querySelector('#main-nav-menu');
+    expect(mainNav).not.toBeNull();
+    const navText = mainNav.textContent;
+    expect(navText).toContain('Home');
+    expect(navText).toContain('Social');
+    expect(navText).toContain('Chat');
+    expect(navText).toContain('News');
+    expect(navText).toContain('Market');
+    expect(navText).toContain('Maps');
   });
 
-  it('keeps Features dropdown open when pointer quickly re-enters', async () => {
-    jest.useFakeTimers();
-    try {
-      localStorage.setItem('token', 'token');
-
-      await renderApp();
-
-      const featuresMenu = container.querySelector('[data-testid="features-menu"]');
-      expect(featuresMenu).not.toBeNull();
-
-      await act(async () => {
-        featuresMenu.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      });
-
-      expect(container.querySelector('#features-menu-panel')).not.toBeNull();
-
-      await act(async () => {
-        featuresMenu.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
-        featuresMenu.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-        jest.advanceTimersByTime(150);
-      });
-
-      expect(container.querySelector('#features-menu-panel')).not.toBeNull();
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it('keeps calendar in Features when not authenticated', async () => {
+  it('calendar link is not shown in main nav when not authenticated', async () => {
     await renderApp();
 
     expect(container.textContent).toContain('SocialSecure');
 
-    const featuresMenu = container.querySelector('[data-testid="features-menu"]');
-    expect(featuresMenu).not.toBeNull();
-    const featuresButton = featuresMenu.querySelector('button');
-    expect(featuresButton).not.toBeNull();
+    const mainNav = container.querySelector('#main-nav-menu');
+    expect(mainNav).not.toBeNull();
+    expect(mainNav.textContent).not.toContain('Calendar');
+    expect(mainNav.textContent).not.toContain('Discover');
+    expect(mainNav.textContent).not.toContain('Resume');
+  });
 
-    await act(async () => {
-      featuresButton.click();
-    });
+  it('calendar link is not shown in main nav even when authenticated', async () => {
+    localStorage.setItem('token', 'token');
 
-    expect(featuresMenu.textContent).toContain('Calendar');
-    expect(featuresMenu.textContent).not.toContain('Discover');
-    expect(featuresMenu.textContent).not.toContain('Resume');
+    await renderApp();
+
+    const mainNav = container.querySelector('#main-nav-menu');
+    expect(mainNav).not.toBeNull();
+    expect(mainNav.textContent).not.toContain('Calendar');
+    expect(mainNav.textContent).not.toContain('Discover');
+    expect(mainNav.textContent).not.toContain('Resume');
   });
 
   it('toggles the mobile nav menu with the hamburger button', async () => {
@@ -235,13 +198,12 @@ describe('App navbar features dropdown', () => {
 
     await renderApp();
 
-    const navItems = Array.from(container.querySelectorAll('#main-nav-menu > a, #main-nav-menu > div[data-testid="features-menu"] > button'))
-      .map((node) => node.textContent.trim().replace('▾', '').trim());
+    const navItems = Array.from(container.querySelectorAll('#main-nav-menu > a'))
+      .map((node) => node.textContent.trim());
 
     expect(navItems.indexOf('Social')).toBeGreaterThan(navItems.indexOf('Home'));
     expect(navItems.indexOf('Chat')).toBeGreaterThan(navItems.indexOf('Social'));
-    expect(navItems.indexOf('Features')).toBeGreaterThan(navItems.indexOf('Chat'));
-    expect(navItems.indexOf('News')).toBeGreaterThan(navItems.indexOf('Features'));
+    expect(navItems.indexOf('News')).toBeGreaterThan(navItems.indexOf('Chat'));
     expect(navItems.indexOf('Market')).toBeGreaterThan(navItems.indexOf('News'));
     expect(navItems.indexOf('Maps')).toBeGreaterThan(navItems.indexOf('Market'));
   });

@@ -160,17 +160,12 @@ function App() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [incomingNotification, setIncomingNotification] = useState(null);
   const [notificationPreferences, setNotificationPreferences] = useState({});
-  const [isFeaturesMenuOpen, setIsFeaturesMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [welcomeConfirmationPending, setWelcomeConfirmationPending] = useState(
     () => readSessionFlag(WELCOME_PENDING_KEY)
   );
   const [welcomeProfile, setWelcomeProfile] = useState(() => readSessionJson(WELCOME_PROFILE_KEY));
   const notificationSocketRef = useRef(null);
-  const featuresMenuRef = useRef(null);
-  const firstFeatureItemRef = useRef(null);
-  const lastFeatureItemRef = useRef(null);
-  const featuresMenuCloseTimeoutRef = useRef(null);
 
   const isAuthenticated = useMemo(() => Boolean(getAuthToken() && user), [user]);
   const socialProfilePath = useMemo(() => {
@@ -379,47 +374,6 @@ function App() {
     deliverSiteNotification(incomingNotification);
   }, [incomingNotification, notificationPreferences]);
 
-  useEffect(() => {
-    if (!isFeaturesMenuOpen) {
-      return undefined;
-    }
-
-    const handleMouseDown = (event) => {
-      if (featuresMenuRef.current && !featuresMenuRef.current.contains(event.target)) {
-        setIsFeaturesMenuOpen(false);
-      }
-    };
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setIsFeaturesMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isFeaturesMenuOpen]);
-
-  useEffect(() => {
-    if (!isFeaturesMenuOpen || !firstFeatureItemRef.current || !featuresMenuRef.current) {
-      return;
-    }
-
-    if (featuresMenuRef.current.contains(document.activeElement)) {
-      firstFeatureItemRef.current.focus();
-    }
-  }, [isFeaturesMenuOpen]);
-
-  useEffect(() => () => {
-    if (featuresMenuCloseTimeoutRef.current) {
-      clearTimeout(featuresMenuCloseTimeoutRef.current);
-    }
-  }, []);
 
   const handleAuthSuccess = (payload) => {
     setAuthToken(payload.token);
@@ -502,28 +456,7 @@ function App() {
   const navEmphasisLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50';
   const navDangerButtonClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50';
   const closeNavMenus = () => {
-    if (featuresMenuCloseTimeoutRef.current) {
-      clearTimeout(featuresMenuCloseTimeoutRef.current);
-      featuresMenuCloseTimeoutRef.current = null;
-    }
     setIsMobileMenuOpen(false);
-    setIsFeaturesMenuOpen(false);
-  };
-  const openFeaturesMenu = () => {
-    if (featuresMenuCloseTimeoutRef.current) {
-      clearTimeout(featuresMenuCloseTimeoutRef.current);
-      featuresMenuCloseTimeoutRef.current = null;
-    }
-    setIsFeaturesMenuOpen(true);
-  };
-  const queueFeaturesMenuClose = () => {
-    if (featuresMenuCloseTimeoutRef.current) {
-      clearTimeout(featuresMenuCloseTimeoutRef.current);
-    }
-    featuresMenuCloseTimeoutRef.current = setTimeout(() => {
-      setIsFeaturesMenuOpen(false);
-      featuresMenuCloseTimeoutRef.current = null;
-    }, 120);
   };
 
   return (
@@ -531,15 +464,43 @@ function App() {
       <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
         <nav className="relative z-[1200] shrink-0 border-b border-blue-100 bg-gradient-to-r from-white via-slate-50 to-blue-50/60 p-3 shadow-md">
           <div className="container relative mx-auto">
-            <div className="flex items-center justify-between gap-3">
-              <h1 className="text-xl font-black tracking-tight text-blue-700">SocialSecure</h1>
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
+              <h1 className="text-3xl font-black tracking-tight text-blue-700 shrink-0">SocialSecure</h1>
+              <div
+                id="main-nav-menu"
+                className={`${isMobileMenuOpen ? 'flex' : 'hidden'} absolute right-0 top-full z-[1300] mt-2 w-64 flex-col gap-2 overflow-visible rounded-2xl border border-slate-200 bg-white p-2 shadow-lg md:static md:z-auto md:flex md:w-auto md:flex-1 md:flex-row md:flex-wrap md:items-center md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
+              >
+                {!encryptionPasswordRequired && <Link to="/" onClick={closeNavMenus} className={navLinkClass}>Home</Link>}
+                {canUseProtectedFeatures && <Link to={socialProfilePath} onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
+                {canUseProtectedFeatures && <Link to="/chat" onClick={closeNavMenus} className={navLinkClass}>Chat</Link>}
+                {canUseProtectedFeatures && <Link to="/news" onClick={closeNavMenus} className={navLinkClass}>News</Link>}
+                {canUseProtectedFeatures && <Link to="/market" onClick={closeNavMenus} className={navLinkClass}>Market</Link>}
+                {canUseProtectedFeatures && <Link to="/maps" onClick={closeNavMenus} className={navLinkClass}>Maps</Link>}
+                {isAuthenticated && onboardingRequired && <Link to="/onboarding" onClick={closeNavMenus} className={navEmphasisLinkClass}>Onboarding</Link>}
+                {isAuthenticated ? (
+                  <button onClick={handleLogout} className={navDangerButtonClass}>Logout</button>
+                ) : (
+                  <>
+                    <Link to="/login" onClick={closeNavMenus} className={navEmphasisLinkClass}>Login</Link>
+                    <Link to="/register" onClick={closeNavMenus} className={navEmphasisLinkClass}>Register</Link>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2 ml-auto shrink-0">
                 {canUseProtectedFeatures && (
                   <NotificationCenter
                     unreadCount={unreadNotificationCount}
                     onUnreadCountChange={setUnreadNotificationCount}
                     incomingNotification={incomingNotification}
                     userDisplayName={user?.username || user?.realName || 'Account'}
+                    navLinks={[
+                      { to: '/calendar', label: 'Calendar' },
+                      { to: '/resume', label: 'Resume' },
+                      { to: '/discover', label: 'Discover' },
+                      ...(user?.isAdmin ? [{ to: '/control-panel', label: 'Control Panel' }] : []),
+                      { to: '/settings', label: 'User Settings' },
+                      { to: '/refer', label: 'Refer Friend' },
+                    ]}
                   />
                 )}
                 <button
@@ -553,105 +514,6 @@ function App() {
                   <span aria-hidden="true" className="text-lg">☰</span>
                 </button>
               </div>
-            </div>
-            <div
-              id="main-nav-menu"
-              className={`${isMobileMenuOpen ? 'flex' : 'hidden'} absolute right-0 top-full z-[1300] mt-2 w-64 flex-col gap-2 overflow-visible rounded-2xl border border-slate-200 bg-white p-2 shadow-lg md:static md:z-auto md:mt-3 md:flex md:w-auto md:flex-row md:flex-wrap md:items-center md:justify-end md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
-            >
-              {!encryptionPasswordRequired && <Link to="/" onClick={closeNavMenus} className={navLinkClass}>Home</Link>}
-              {canUseProtectedFeatures && <Link to={socialProfilePath} onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
-              {canUseProtectedFeatures && <Link to="/chat" onClick={closeNavMenus} className={navLinkClass}>Chat</Link>}
-              <div
-                className="relative"
-                data-testid="features-menu"
-                ref={featuresMenuRef}
-                onMouseEnter={openFeaturesMenu}
-                onMouseLeave={queueFeaturesMenuClose}
-                onBlur={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget)) {
-                    setIsFeaturesMenuOpen(false);
-                  }
-                }}
-              >
-                <button
-                  type="button"
-                  aria-haspopup="menu"
-                  aria-expanded={isFeaturesMenuOpen}
-                  aria-controls="features-menu-panel"
-                  onClick={() => setIsFeaturesMenuOpen((prev) => !prev)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowDown') {
-                      event.preventDefault();
-                      if (!isFeaturesMenuOpen) {
-                        setIsFeaturesMenuOpen(true);
-                      } else if (firstFeatureItemRef.current) {
-                        firstFeatureItemRef.current.focus();
-                      }
-                    }
-                    if (event.key === 'ArrowUp') {
-                      event.preventDefault();
-                      if (!isFeaturesMenuOpen) {
-                        setIsFeaturesMenuOpen(true);
-                      } else if (lastFeatureItemRef.current) {
-                        lastFeatureItemRef.current.focus();
-                      }
-                    }
-                  }}
-                  className={`${navLinkClass} inline-flex items-center gap-1`}
-                >
-                  Features
-                  <span aria-hidden="true">▾</span>
-                </button>
-                {isFeaturesMenuOpen ? (
-                  <div
-                    id="features-menu-panel"
-                    role="menu"
-                    className="z-[1310] mt-2 min-w-44 max-w-[calc(100vw-2rem)] rounded-xl border border-blue-100 bg-white py-1 shadow-xl md:absolute md:right-0 md:top-full"
-                  >
-                    {canUseProtectedFeatures && (
-                      <Link ref={firstFeatureItemRef} to="/discover" role="menuitem" onClick={closeNavMenus} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 whitespace-nowrap">
-                        Discover
-                      </Link>
-                    )}
-                    <Link
-                      ref={(node) => {
-                        if (!canUseProtectedFeatures) {
-                          firstFeatureItemRef.current = node;
-                          lastFeatureItemRef.current = node;
-                        }
-                      }}
-                      to="/calendar"
-                      role="menuitem"
-                      onClick={closeNavMenus}
-                      className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 whitespace-nowrap"
-                    >
-                      Calendar
-                    </Link>
-                    {canUseProtectedFeatures && (
-                      <Link ref={lastFeatureItemRef} to="/resume" role="menuitem" onClick={closeNavMenus} className="block px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 whitespace-nowrap">
-                        Resume
-                      </Link>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-              {canUseProtectedFeatures && <Link to="/news" onClick={closeNavMenus} className={navLinkClass}>News</Link>}
-              {canUseProtectedFeatures && <Link to="/market" onClick={closeNavMenus} className={navLinkClass}>Market</Link>}
-              {canUseProtectedFeatures && <Link to="/maps" onClick={closeNavMenus} className={navLinkClass}>Maps</Link>}
-              {canUseProtectedFeatures && user?.isAdmin && <Link to="/control-panel" onClick={closeNavMenus} className={navLinkClass}>Control Panel</Link>}
-              {canUseProtectedFeatures && <Link to="/refer" onClick={closeNavMenus} className={navLinkClass}>Refer Friend</Link>}
-              {isAuthenticated && onboardingRequired && <Link to="/onboarding" onClick={closeNavMenus} className={navEmphasisLinkClass}>Onboarding</Link>}
-              {isAuthenticated ? (
-                <>
-                  <Link to="/settings" onClick={closeNavMenus} className={navLinkClass}>User Settings</Link>
-                  <button onClick={handleLogout} className={navDangerButtonClass}>Logout</button>
-                </>
-              ) : (
-                <>
-                  <Link to="/login" onClick={closeNavMenus} className={navEmphasisLinkClass}>Login</Link>
-                  <Link to="/register" onClick={closeNavMenus} className={navEmphasisLinkClass}>Register</Link>
-                </>
-              )}
             </div>
           </div>
         </nav>
