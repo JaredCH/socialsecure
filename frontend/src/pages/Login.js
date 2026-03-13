@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { authAPI, evaluateRegisterPassword } from '../utils/api';
+import { authAPI, getAuthToken } from '../utils/api';
 
 const inputClassName = 'mt-1 min-h-[44px] w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200';
 const primaryButtonClassName = 'min-h-[44px] w-full rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:opacity-50';
@@ -10,10 +10,7 @@ function Login({ onSuccess }) {
   const navigate = useNavigate();
   const [form, setForm] = useState({ identifier: '', password: '' });
   const [submitting, setSubmitting] = useState(false);
-  const passwordEvaluation = useMemo(
-    () => evaluateRegisterPassword(form.password),
-    [form.password]
-  );
+  const [formError, setFormError] = useState('');
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -21,15 +18,27 @@ function Login({ onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setFormError('');
     setSubmitting(true);
 
     try {
       const { data } = await authAPI.login(form);
       onSuccess(data);
+      if (!getAuthToken()) {
+        throw new Error('Login succeeded but browser storage is blocked. Enable site data/cookies and try again.');
+      }
       toast.success('Logged in successfully');
       navigate('/');
     } catch (error) {
-      const message = error.response?.data?.error || 'Login failed';
+      const validationErrors = error.response?.data?.errors;
+      const validationMessage = Array.isArray(validationErrors)
+        ? validationErrors.map((entry) => entry?.msg).filter(Boolean).join(' ')
+        : '';
+      const message = validationMessage
+        || error.response?.data?.error
+        || error.message
+        || 'Login failed';
+      setFormError(message);
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -72,13 +81,13 @@ function Login({ onSuccess }) {
               autoComplete="current-password"
               required
             />
-            <p className="mt-2 hidden text-xs text-gray-600 sm:block" data-testid="login-password-advisory">
-              Password quality indicator (advisory only).
-            </p>
-            <p className="mt-2 text-sm text-gray-700" aria-live="polite" role="status">
-              Strength: <span className="font-medium">{passwordEvaluation.strengthLabel}</span>
-            </p>
           </div>
+
+          {formError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert" aria-live="polite">
+              {formError}
+            </div>
+          ) : null}
 
           <button
             type="submit"

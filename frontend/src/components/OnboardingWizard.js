@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
-import { authAPI, evaluateRegisterPassword } from '../utils/api';
+import { authAPI, newsAPI, evaluateRegisterPassword } from '../utils/api';
 import { unlockOrCreateVault } from '../utils/e2ee';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
 
@@ -24,16 +24,29 @@ const DEFAULT_SECURITY_PREFERENCES = {
   requirePasswordForSensitive: true
 };
 export const INFO_VISIBILITY_OPTIONS = [
-  { value: 'social', label: 'Social level' },
-  { value: 'secure', label: 'Secure level' }
+  { value: 'social', label: 'Social', color: 'green' },
+  { value: 'secure', label: 'Secure', color: 'red' }
 ];
-const ADDITIONAL_INFO_FIELDS = [
-  { key: 'streetAddress', label: 'Home address', type: 'text', placeholder: '123 Main St' },
+const PERSONAL_INFO_FIELDS = [
+  { key: 'streetAddress', label: 'Home address', type: 'text', placeholder: '123 Main St, Apt 4' },
   { key: 'phone', label: 'Phone number', type: 'tel', placeholder: '+1 555-123-4567' },
-  { key: 'ageGroup', label: 'Age', type: 'text', placeholder: '25-34' },
+  { key: 'ageGroup', label: 'Age', type: 'text', placeholder: '25' },
   { key: 'sex', label: 'Sex', type: 'select', placeholder: 'Select' },
-  { key: 'race', label: 'Race', type: 'select', placeholder: 'Select' },
-  { key: 'hobbies', label: 'Hobbies', type: 'text', placeholder: 'Music, travel, cooking' }
+  { key: 'race', label: 'Race', type: 'select', placeholder: 'Select' }
+];
+const NEWS_CATEGORIES = [
+  { id: 'technology', name: 'Technology', icon: '\uD83D\uDCBB' },
+  { id: 'science', name: 'Science', icon: '\uD83D\uDD2C' },
+  { id: 'health', name: 'Health', icon: '\uD83C\uDFE5' },
+  { id: 'business', name: 'Business', icon: '\uD83D\uDCBC' },
+  { id: 'sports', name: 'Sports', icon: '\u26BD' },
+  { id: 'entertainment', name: 'Entertainment', icon: '\uD83C\uDFAC' },
+  { id: 'politics', name: 'Politics', icon: '\uD83C\uDFDB\uFE0F' },
+  { id: 'finance', name: 'Finance', icon: '\uD83D\uDCC8' },
+  { id: 'gaming', name: 'Gaming', icon: '\uD83C\uDFAE' },
+  { id: 'ai', name: 'AI & Machine Learning', icon: '\uD83E\uDD16' },
+  { id: 'world', name: 'World', icon: '\uD83C\uDF0D' },
+  { id: 'general', name: 'General', icon: '\uD83D\uDCF0' }
 ];
 const SEX_OPTIONS = ['Female', 'Male', 'Non-binary', 'Intersex', 'Prefer not to say', 'Other'];
 const RACE_OPTIONS = [
@@ -155,22 +168,39 @@ function OnboardingWizard({
   const [generatedPrivateKey, setGeneratedPrivateKey] = useState('');
   const [seedPhrase, setSeedPhrase] = useState('');
   const [seedPhraseQrDataUrl, setSeedPhraseQrDataUrl] = useState('');
-  const [additionalInfo, setAdditionalInfo] = useState({
+
+  // Step 3 state — weather
+  const [weatherLocations, setWeatherLocations] = useState(() => {
+    const zip = user?.zipCode || '';
+    return zip ? [{ zipCode: zip, label: `ZIP ${zip}`, isPrimary: true }] : [];
+  });
+  const [newWeatherZip, setNewWeatherZip] = useState('');
+
+  // Step 3 state — news categories
+  const [hiddenCategories, setHiddenCategories] = useState(['sports']);
+  const [sportsEnabled, setSportsEnabled] = useState(false);
+  const [sportsPanelOpen, setSportsPanelOpen] = useState(false);
+
+  // Step 3 state — sports teams
+  const [sportsTeamCatalog, setSportsTeamCatalog] = useState([]);
+  const [followedTeams, setFollowedTeams] = useState([]);
+  const [sportsTeamsLoading, setSportsTeamsLoading] = useState(false);
+  const [expandedLeagues, setExpandedLeagues] = useState({});
+
+  // Step 3 state — personal info
+  const [personalInfo, setPersonalInfo] = useState({
     streetAddress: '',
     phone: '',
-    email: user?.email || '',
     ageGroup: '',
     sex: '',
     race: '',
-    hobbies: '',
     profileFieldVisibility: {
       streetAddress: 'social',
       phone: 'social',
       email: 'social',
       ageGroup: 'social',
       sex: 'social',
-      race: 'social',
-      hobbies: 'social'
+      race: 'social'
     }
   });
 
@@ -179,45 +209,28 @@ function OnboardingWizard({
   }, [onboarding?.currentStep]);
 
   const [step, setStep] = useState(initialStep);
-  const [addressSuggestions, setAddressSuggestions] = useState([]);
 
   useEffect(() => {
     setStep(initialStep);
   }, [initialStep]);
 
-  useEffect(() => {
-    if (!user?.email) return;
-    setAdditionalInfo((prev) => (prev.email ? prev : { ...prev, email: user.email }));
-  }, [user?.email]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const query = additionalInfo.streetAddress.trim();
-    if (query.length < 3) {
-      setAddressSuggestions([]);
-      return () => {
-        cancelled = true;
-      };
+  // Fetch sports team catalog when step 3 is reached
+  const loadSportsTeams = useCallback(async () => {
+    if (sportsTeamCatalog.length > 0 || sportsTeamsLoading) return;
+    setSportsTeamsLoading(true);
+    try {
+      const { data } = await newsAPI.getSportsTeams();
+      setSportsTeamCatalog(data.leagues || []);
+    } catch {
+      // Non-critical — user can still complete onboarding
+    } finally {
+      setSportsTeamsLoading(false);
     }
+  }, [sportsTeamCatalog.length, sportsTeamsLoading]);
 
-    const timer = setTimeout(async () => {
-      try {
-        const { data } = await authAPI.getAddressSuggestions(query);
-        if (!cancelled) {
-          setAddressSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
-        }
-      } catch {
-        if (!cancelled) {
-          setAddressSuggestions([]);
-        }
-      }
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [additionalInfo.streetAddress]);
+  useEffect(() => {
+    if (step === 3) loadSportsTeams();
+  }, [step, loadSportsTeams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -395,53 +408,123 @@ function OnboardingWizard({
     }
   };
 
-  const handleAdditionalInfoChange = (field, value) => {
-    const nextValue = field === 'phone' ? formatPhoneForInput(value) : value;
-    setAdditionalInfo((prev) => ({
-      ...prev,
-      [field]: nextValue
-    }));
+  // --- Weather helpers ---
+  const handleAddWeatherZip = () => {
+    const zip = newWeatherZip.trim();
+    if (!/^\d{5}(?:-\d{4})?$/.test(zip)) {
+      toast.error('Enter a valid US ZIP code.');
+      return;
+    }
+    if (weatherLocations.some((loc) => loc.zipCode === zip)) {
+      toast.error('This ZIP is already in your list.');
+      return;
+    }
+    setWeatherLocations((prev) => [...prev, { zipCode: zip, label: `ZIP ${zip}`, isPrimary: false }]);
+    setNewWeatherZip('');
   };
 
-  const handleAdditionalInfoVisibilityChange = (field, value) => {
-    setAdditionalInfo((prev) => ({
-      ...prev,
-      profileFieldVisibility: {
-        ...prev.profileFieldVisibility,
-        [field]: value
+  const handleRemoveWeatherLocation = (index) => {
+    setWeatherLocations((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (next.length > 0 && !next.some((l) => l.isPrimary)) next[0].isPrimary = true;
+      return next;
+    });
+  };
+
+  // --- Category helpers ---
+  const toggleCategory = (categoryId) => {
+    if (categoryId === 'sports') {
+      if (sportsEnabled) {
+        setSportsPanelOpen(true);
+      } else {
+        setSportsEnabled(true);
+        setSportsPanelOpen(true);
+        setHiddenCategories((prev) => prev.filter((c) => c !== 'sports'));
       }
+      return;
+    }
+    setHiddenCategories((prev) =>
+      prev.includes(categoryId)
+        ? prev.filter((c) => c !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  const toggleTeam = (teamId) => {
+    setFollowedTeams((prev) =>
+      prev.includes(teamId) ? prev.filter((t) => t !== teamId) : [...prev, teamId]
+    );
+  };
+
+  const toggleLeague = (leagueId) => {
+    setExpandedLeagues((prev) => ({ ...prev, [leagueId]: !prev[leagueId] }));
+  };
+
+  const handleDoneSportsSelection = () => {
+    setSportsPanelOpen(false);
+  };
+
+  const handleDisableSports = () => {
+    setSportsEnabled(false);
+    setSportsPanelOpen(false);
+    setHiddenCategories((prev) => (prev.includes('sports') ? prev : [...prev, 'sports']));
+    setFollowedTeams([]);
+  };
+
+  // --- Personal info helpers ---
+  const handlePersonalInfoChange = (field, value) => {
+    const nextValue = field === 'phone' ? formatPhoneForInput(value) : value;
+    setPersonalInfo((prev) => ({ ...prev, [field]: nextValue }));
+  };
+
+  const handleVisibilityToggle = (field, value) => {
+    setPersonalInfo((prev) => ({
+      ...prev,
+      profileFieldVisibility: { ...prev.profileFieldVisibility, [field]: value }
     }));
   };
 
+  // --- Step 3 submit ---
   const handleStepThree = async (event) => {
     event.preventDefault();
-    setSubmitting(true);
-    const normalizedAdditionalInfo = {
-      streetAddress: additionalInfo.streetAddress.trim(),
-      phone: normalizePhoneForSubmission(additionalInfo.phone),
-      ageGroup: additionalInfo.ageGroup.trim(),
-      sex: additionalInfo.sex.trim(),
-      race: additionalInfo.race.trim(),
-      hobbies: additionalInfo.hobbies
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter(Boolean)
-        .slice(0, 10),
-      profileFieldVisibility: additionalInfo.profileFieldVisibility
-    };
 
+    // Validate sports: if enabled, must have at least one team
+    if (sportsEnabled && followedTeams.length === 0) {
+      toast.error('Please select at least one sports team, or disable the Sports category.');
+      return;
+    }
+
+    setSubmitting(true);
     try {
-      const { data } = await authAPI.updateProfile(normalizedAdditionalInfo);
+      // 1. Save weather locations
+      if (weatherLocations.length > 0) {
+        await newsAPI.updateWeatherLocations(weatherLocations);
+      }
+
+      // 2. Save news category preferences + followed teams
+      await newsAPI.updatePreferences({
+        followedSportsTeams: sportsEnabled ? followedTeams : []
+      });
+      await newsAPI.updateHiddenCategories(hiddenCategories);
+
+      // 3. Save personal info + profile visibility
+      const profilePayload = {
+        streetAddress: personalInfo.streetAddress.trim(),
+        phone: normalizePhoneForSubmission(personalInfo.phone),
+        ageGroup: personalInfo.ageGroup.trim(),
+        sex: personalInfo.sex.trim(),
+        race: personalInfo.race.trim(),
+        profileFieldVisibility: personalInfo.profileFieldVisibility
+      };
+      await authAPI.updateProfile(profilePayload);
+
+      // 4. Complete onboarding
       await authAPI.completeOnboarding(onboarding?.securityPreferences || DEFAULT_SECURITY_PREFERENCES);
       await onProgressSaved();
       await onCompleted();
-      if (data?.addressPendingApproval) {
-        toast.success('Onboarding completed. Your home address is pending approval.');
-      } else {
-        toast.success('Onboarding completed');
-      }
+      toast.success('Onboarding completed');
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to save additional information');
+      toast.error(error.response?.data?.error || 'Failed to save — please try again');
     } finally {
       setSubmitting(false);
     }
@@ -636,102 +719,289 @@ function OnboardingWizard({
       )}
 
       {step === 3 && (
-        <form onSubmit={handleStepThree} className="space-y-4">
-          <h2 className="text-lg font-medium">Step 3: Additional information onboarding</h2>
+        <form onSubmit={handleStepThree} className="space-y-6">
+          <h2 className="text-lg font-medium">Step 3: Additional Information</h2>
           <p className="text-sm text-gray-600">
-            Social circle/friend means your broader trusted network. Secure circle/friend means only your closest trusted contacts.
-          </p>
-          <p className="text-sm text-gray-600">
-            Every field below is completely optional. Choose Social level or Secure level per field. Only people you allow can see this,
-            the public will not have access, and SocialSecure will not use it for anything &apos;Shitty&apos;.
+            Help us personalize your experience. All personal fields below are optional.
           </p>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            {ADDITIONAL_INFO_FIELDS.map((field) => (
-              <label key={field.key} className="block text-sm">
-                {field.label}
-                {field.type === 'select' ? (
-                  <select
-                    value={additionalInfo[field.key]}
-                    onChange={(event) => handleAdditionalInfoChange(field.key, event.target.value)}
-                    className="w-full border rounded p-2 mt-1"
+          {/* ─── Section A: Weather Locations ─── */}
+          <fieldset className="rounded-lg border border-gray-200 p-4 space-y-3">
+            <legend className="text-sm font-semibold text-gray-800 px-1">Weather Locations to Monitor</legend>
+            <p className="text-xs text-gray-500">
+              Your registration ZIP code is included by default. Add up to 2 more locations.
+            </p>
+
+            <ul className="space-y-2">
+              {weatherLocations.map((loc, idx) => (
+                <li key={idx} className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 rounded border border-gray-200 bg-gray-50 px-3 py-1.5">
+                    {loc.label || loc.zipCode}
+                    {loc.isPrimary && <span className="ml-2 text-xs text-green-700 font-medium">(Primary)</span>}
+                  </span>
+                  {weatherLocations.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveWeatherLocation(idx)}
+                      className="text-red-500 hover:text-red-700 text-xs font-medium"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            {weatherLocations.length < 3 && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newWeatherZip}
+                  onChange={(e) => setNewWeatherZip(e.target.value)}
+                  placeholder="Add ZIP code"
+                  inputMode="numeric"
+                  maxLength={10}
+                  className="flex-1 border rounded p-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddWeatherZip}
+                  className="bg-blue-600 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </div>
+            )}
+          </fieldset>
+
+          {/* ─── Section B: News Interests ─── */}
+          <fieldset className="rounded-lg border border-gray-200 p-4 space-y-3">
+            <legend className="text-sm font-semibold text-gray-800 px-1">News Interests</legend>
+            <p className="text-xs text-gray-500">
+              All categories are enabled by default (except Sports). Toggle off any you are not interested in.
+            </p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {NEWS_CATEGORIES.map((cat) => {
+                const isEnabled = !hiddenCategories.includes(cat.id);
+                const isSports = cat.id === 'sports';
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => toggleCategory(cat.id)}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                      isEnabled
+                        ? 'border-blue-300 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 bg-gray-50 text-gray-500'
+                    }`}
                   >
-                    <option value="">{field.placeholder}</option>
-                    {(field.key === 'sex' ? SEX_OPTIONS : RACE_OPTIONS).map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={field.type}
-                    value={additionalInfo[field.key]}
-                    onChange={(event) => handleAdditionalInfoChange(field.key, event.target.value)}
-                    className="w-full border rounded p-2 mt-1"
-                    placeholder={field.placeholder}
-                    list={field.key === 'streetAddress' ? 'onboarding-address-suggestions' : undefined}
-                    inputMode={field.key === 'phone' ? 'tel' : undefined}
-                    maxLength={field.key === 'phone' ? 14 : undefined}
-                  />
-                )}
-                {field.key === 'streetAddress' && (
-                  <datalist id="onboarding-address-suggestions">
-                    {addressSuggestions.map((suggestion) => (
-                      <option key={suggestion} value={suggestion} />
-                    ))}
-                  </datalist>
-                )}
-                {field.key === 'hobbies' && (
-                  <p className="mt-1 text-xs text-gray-500">Use commas between hobbies (up to 10).</p>
-                )}
-              </label>
-            ))}
-          </div>
-
-          <div className="rounded-lg border border-gray-200 overflow-hidden" data-testid="additional-info-visibility-matrix">
-            <div className="grid grid-cols-[1.2fr_1.5fr_0.6fr_0.6fr] bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600">
-              <p className="px-3 py-2">Category</p>
-              <p className="px-3 py-2">What you entered</p>
-              <p className="px-3 py-2 text-center">Social</p>
-              <p className="px-3 py-2 text-center">Secure</p>
+                    <span>{cat.icon}</span>
+                    <span className="truncate">{cat.name}</span>
+                    {isSports && isEnabled && <span className="ml-auto text-xs text-blue-600">*</span>}
+                  </button>
+                );
+              })}
             </div>
-            {[{
-              key: 'email',
-              label: 'Email',
-              value: additionalInfo.email || user?.email || ''
-            }, ...ADDITIONAL_INFO_FIELDS.map((field) => ({
-              key: field.key,
-              label: field.label,
-              value: additionalInfo[field.key]
-            }))].map((row) => {
-              const visibility = additionalInfo.profileFieldVisibility[row.key] || 'social';
-              return (
-                <div key={row.key} className="grid grid-cols-[1.2fr_1.5fr_0.6fr_0.6fr] border-t border-gray-100 text-sm">
-                  <p className="px-3 py-2 text-gray-800">{row.label}</p>
-                  <p className="px-3 py-2 text-gray-600" title={String(row.value || '').trim()}>
-                    {shortenPreviewValue(row.value)}
-                  </p>
-                  <label className="flex items-center justify-center px-2 py-2">
-                    <input
-                      type="checkbox"
-                      checked={visibility === 'social'}
-                      onChange={() => handleAdditionalInfoVisibilityChange(row.key, 'social')}
-                      aria-label={`${row.label} social visibility`}
-                    />
-                  </label>
-                  <label className="flex items-center justify-center px-2 py-2">
-                    <input
-                      type="checkbox"
-                      checked={visibility === 'secure'}
-                      onChange={() => handleAdditionalInfoVisibilityChange(row.key, 'secure')}
-                      aria-label={`${row.label} secure visibility`}
-                    />
-                  </label>
-                </div>
-              );
-            })}
-          </div>
 
-          <button type="submit" disabled={submitting} className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50">
+            {/* Sports team selector — shown when sports is enabled */}
+            {sportsEnabled && !sportsPanelOpen && (
+              <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                <p className="text-sm text-blue-800">
+                  {followedTeams.length > 0
+                    ? `${followedTeams.length} team${followedTeams.length !== 1 ? 's' : ''} selected for Sports news.`
+                    : 'Sports is enabled. Choose teams to personalize your Sports news.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSportsPanelOpen(true)}
+                  className="text-sm font-medium text-blue-700 hover:text-blue-900"
+                >
+                  Edit teams
+                </button>
+              </div>
+            )}
+
+            {sportsEnabled && sportsPanelOpen && (
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-medium text-yellow-900">
+                    Select at least one team to enable Sports news, or disable Sports below.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDisableSports}
+                      className="text-xs font-medium text-red-700 hover:text-red-900"
+                    >
+                      Disable Sports
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDoneSportsSelection}
+                      className="rounded border border-yellow-300 bg-white px-2.5 py-1 text-xs font-medium text-yellow-900 hover:bg-yellow-100"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+                {sportsTeamsLoading ? (
+                  <p className="text-sm text-gray-500">Loading teams...</p>
+                ) : sportsTeamCatalog.length === 0 ? (
+                  <p className="text-sm text-gray-500">Unable to load team list. You can configure teams later in News settings.</p>
+                ) : (
+                  <div className="space-y-1 max-h-64 overflow-y-auto">
+                    {sportsTeamCatalog.map((league) => (
+                      <div key={league.id}>
+                        <button
+                          type="button"
+                          onClick={() => toggleLeague(league.id)}
+                          className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-800 py-1 hover:bg-yellow-100 rounded px-1"
+                        >
+                          <span>{league.icon || '\u26BD'}</span>
+                          <span>{league.label}</span>
+                          <span className="ml-auto text-xs text-gray-500">
+                            {expandedLeagues[league.id] ? '\u25B2' : '\u25BC'}
+                          </span>
+                        </button>
+                        {expandedLeagues[league.id] && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 pl-6 pb-2">
+                            {league.teams.map((t) => {
+                              const isFollowed = followedTeams.includes(t.id);
+                              return (
+                                <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={isFollowed}
+                                    onChange={() => toggleTeam(t.id)}
+                                    className="accent-blue-600"
+                                  />
+                                  <span className={isFollowed ? 'text-blue-800 font-medium' : 'text-gray-700'}>{t.team}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {followedTeams.length > 0 && (
+                  <p className="text-xs text-green-700">{followedTeams.length} team{followedTeams.length !== 1 ? 's' : ''} selected</p>
+                )}
+              </div>
+            )}
+          </fieldset>
+
+          {/* ─── Section C: Personal Information ─── */}
+          <fieldset className="rounded-lg border border-gray-200 p-4 space-y-3">
+            <legend className="text-sm font-semibold text-gray-800 px-1">Personal Information (Optional)</legend>
+            <div className="bg-blue-50 border border-blue-200 rounded p-3">
+              <p className="text-sm text-blue-800">
+                None of these fields are mandatory. Each field has a visibility toggle:
+                <span className="inline-block ml-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800 border border-green-300">Social</span>
+                {' '}= visible to your broader trusted friends &amp; circles,
+                <span className="inline-block ml-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800 border border-red-300">Secure</span>
+                {' '}= restricted to only your closest trusted contacts.
+              </p>
+              <p className="text-xs text-blue-700 mt-1">
+                The public will never see this information. Only the circles or friends you explicitly grant access to through our Social V Secure system will have visibility.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {PERSONAL_INFO_FIELDS.map((field) => {
+                const visibility = personalInfo.profileFieldVisibility[field.key] || 'social';
+                return (
+                  <div key={field.key} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-gray-700">{field.label}</label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleVisibilityToggle(field.key, 'social')}
+                          className={`px-2 py-0.5 rounded text-xs font-semibold border transition ${
+                            visibility === 'social'
+                              ? 'bg-green-100 text-green-800 border-green-400'
+                              : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-green-50'
+                          }`}
+                        >
+                          Social
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleVisibilityToggle(field.key, 'secure')}
+                          className={`px-2 py-0.5 rounded text-xs font-semibold border transition ${
+                            visibility === 'secure'
+                              ? 'bg-red-100 text-red-800 border-red-400'
+                              : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-red-50'
+                          }`}
+                        >
+                          Secure
+                        </button>
+                      </div>
+                    </div>
+                    {field.type === 'select' ? (
+                      <select
+                        value={personalInfo[field.key]}
+                        onChange={(e) => handlePersonalInfoChange(field.key, e.target.value)}
+                        className="w-full border rounded p-2 text-sm"
+                      >
+                        <option value="">{field.placeholder}</option>
+                        {(field.key === 'sex' ? SEX_OPTIONS : RACE_OPTIONS).map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={field.type}
+                        value={personalInfo[field.key]}
+                        onChange={(e) => handlePersonalInfoChange(field.key, e.target.value)}
+                        className="w-full border rounded p-2 text-sm"
+                        placeholder={field.placeholder}
+                        inputMode={field.key === 'phone' ? 'tel' : undefined}
+                        maxLength={field.key === 'phone' ? 14 : field.key === 'streetAddress' ? 200 : undefined}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Email visibility */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleVisibilityToggle('email', 'social')}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition ${
+                        (personalInfo.profileFieldVisibility.email || 'social') === 'social'
+                          ? 'bg-green-100 text-green-800 border-green-400'
+                          : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-green-50'
+                      }`}
+                    >
+                      Social
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleVisibilityToggle('email', 'secure')}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition ${
+                        (personalInfo.profileFieldVisibility.email || 'social') === 'secure'
+                          ? 'bg-red-100 text-red-800 border-red-400'
+                          : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-red-50'
+                      }`}
+                    >
+                      Secure
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 bg-gray-50 border rounded p-2">{user?.email || 'Not set'}</p>
+              </div>
+            </div>
+          </fieldset>
+
+          <button type="submit" disabled={submitting} className="w-full bg-green-600 text-white px-4 py-3 rounded-lg font-medium disabled:opacity-50">
             {submitting ? 'Completing...' : 'Complete Onboarding'}
           </button>
         </form>

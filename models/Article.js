@@ -110,6 +110,11 @@ const articleSchema = new mongoose.Schema({
     type: String,
     index: true
   },
+  contentFingerprint: {
+    type: String,
+    index: true,
+    default: null
+  },
   ingestTimestamp: {
     type: Date,
     default: Date.now
@@ -179,7 +184,7 @@ articleSchema.pre('save', function(next) {
 });
 
 // Static method to find duplicates
-articleSchema.statics.findDuplicate = async function(url, sourceId) {
+articleSchema.statics.findDuplicate = async function(url, sourceId, contentFingerprint = null) {
   // Try normalized URL hash first
   const crypto = require('crypto');
   const urlHash = crypto
@@ -195,6 +200,12 @@ articleSchema.statics.findDuplicate = async function(url, sourceId) {
   if (sourceId) {
     const bySourceId = await this.findOne({ sourceId });
     if (bySourceId) return bySourceId;
+  }
+
+  // Last fallback: content fingerprint
+  if (contentFingerprint) {
+    const byFingerprint = await this.findOne({ contentFingerprint });
+    if (byFingerprint) return byFingerprint;
   }
 
   return null;

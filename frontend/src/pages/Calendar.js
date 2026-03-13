@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { authAPI, calendarAPI } from '../utils/api';
+import { authAPI, calendarAPI, getAuthToken } from '../utils/api';
 
 const VIEW_OPTIONS = ['month', 'week', 'agenda'];
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -92,7 +92,7 @@ const eventTimeLabel = (event) => {
 function Calendar() {
   const [searchParams] = useSearchParams();
   const requestedUser = (searchParams.get('user') || '').trim();
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
   const isAuthenticated = Boolean(token);
 
   const [loading, setLoading] = useState(false);

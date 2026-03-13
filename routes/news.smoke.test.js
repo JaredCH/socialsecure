@@ -77,7 +77,7 @@ describe('Weather cache internals', () => {
   });
 
   it('fetchWeatherForLocation returns error when lat/lon missing', async () => {
-    const result = await internals.fetchWeatherForLocation({ city: 'Austin' });
+    const result = await internals.fetchWeatherForLocation({});
     expect(result.weather).toBeNull();
     expect(result.error).toContain('Unable to resolve');
     expect(result.cacheHit).toBe(false);
@@ -166,6 +166,30 @@ describe('Weather fallback chain', () => {
     expect(res.status).toBe(200);
     expect(res.body.fallbackSource).toBe('profileLocation');
     expect(res.body.locations.length).toBe(1);
+  });
+
+  it('falls back to registered profile zip code when structured profile location is missing', async () => {
+    const app = buildApp();
+    NewsPreferences.findOne.mockResolvedValue({
+      weatherLocations: [],
+      locations: []
+    });
+    User.findById.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        city: 'Dallas',
+        state: 'TX',
+        zipCode: '75201'
+      })
+    });
+
+    const res = await request(app)
+      .get('/api/news/weather')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.fallbackSource).toBe('profileLocation');
+    expect(res.body.locations.length).toBe(1);
+    expect(res.body.locations[0].zipCode).toBe('75201');
   });
 
   it('uses saved weather locations without fallback when available', async () => {
@@ -278,6 +302,33 @@ describe('PUT /api/news/preferences/keywords/:keyword', () => {
     expect(res.status).toBe(200);
     expect(mockPrefs.save).toHaveBeenCalled();
     expect(mockPrefs.followedKeywords[0].keyword).toBe('ethereum');
+  });
+});
+
+describe('PUT /api/news/preferences', () => {
+  it('accepts followed sports teams as plain string ids', async () => {
+    const app = buildApp();
+    const savedPreferences = {
+      user: 'user-1',
+      followedSportsTeams: ['dal-cowboys', 'kc-chiefs'],
+      hiddenCategories: []
+    };
+
+    NewsPreferences.findOneAndUpdate.mockResolvedValue(savedPreferences);
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ zipCode: '75201' }) });
+
+    const res = await request(app)
+      .put('/api/news/preferences')
+      .set('Authorization', 'Bearer valid-token')
+      .send({ followedSportsTeams: ['dal-cowboys', 'kc-chiefs'] });
+
+    expect(res.status).toBe(200);
+    expect(NewsPreferences.findOneAndUpdate).toHaveBeenCalledWith(
+      { user: 'user-1' },
+      { $set: { followedSportsTeams: ['dal-cowboys', 'kc-chiefs'] } },
+      { new: true, upsert: true }
+    );
+    expect(res.body.preferences.followedSportsTeams).toEqual(['dal-cowboys', 'kc-chiefs']);
   });
 });
 

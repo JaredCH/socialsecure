@@ -88,6 +88,701 @@ describe('News scope routing', () => {
     newsRoutes.internals.geocodeContextCache.clear();
   });
 
+  describe('default scope by location granularity', () => {
+    it('defaults to national scope when user has country-only location (not local)', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'national-1',
+          title: 'USA Headline',
+          description: '',
+          source: 'US News',
+          sourceType: 'rss',
+          sourceId: 'us-news',
+          locations: ['USA'],
+          localityLevel: 'country',
+          publishedAt: new Date('2026-03-01T00:00:00.000Z')
+        }
+      ];
+
+      // User has country-only, no city/zip/county
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: 'USA', zipCode: null }) });
+      NewsPreferences.findOne.mockResolvedValue(null);
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      // Country-only should default to national, NOT local
+      expect(response.body.personalization.requestedScope).toBe('national');
+      expect(response.body.personalization.activeScope).toBe('national');
+      expect(response.body.personalization.fallbackApplied).toBe(false);
+    });
+
+    it('defaults to regional scope when user has state-only location', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'state-1',
+          title: 'Texas Headline',
+          description: '',
+          source: 'State News',
+          sourceType: 'rss',
+          sourceId: 'state-news',
+          locations: ['Texas'],
+          localityLevel: 'state',
+          publishedAt: new Date('2026-03-01T00:00:00.000Z')
+        }
+      ];
+
+      // User has state-only, no city/zip/county
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: 'Texas', country: null, zipCode: null }) });
+      NewsPreferences.findOne.mockResolvedValue(null);
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.requestedScope).toBe('regional');
+      expect(response.body.personalization.activeScope).toBe('regional');
+      expect(response.body.personalization.fallbackApplied).toBe(false);
+    });
+
+    it('defaults to local scope when user has city location', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'local-1',
+          title: 'Austin Headline',
+          description: '',
+          source: 'Austin News',
+          sourceType: 'rss',
+          sourceId: 'austin-news',
+          locations: ['Austin'],
+          localityLevel: 'city',
+          publishedAt: new Date('2026-03-01T00:00:00.000Z')
+        }
+      ];
+
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'Austin', county: null, state: 'Texas', country: 'USA', zipCode: null }) });
+      NewsPreferences.findOne.mockResolvedValue(null);
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.requestedScope).toBe('local');
+      expect(response.body.personalization.activeScope).toBe('local');
+    });
+
+    it('defaults to local scope when user has zipCode', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'zip-1',
+          title: 'Zip Headline',
+          description: '',
+          source: 'Metro Wire',
+          sourceType: 'rss',
+          sourceId: 'metro-wire',
+          locations: ['10001'],
+          localityLevel: 'city',
+          publishedAt: new Date('2026-03-01T00:00:00.000Z')
+        }
+      ];
+
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: 'US', zipCode: '10001' }) });
+      NewsPreferences.findOne.mockResolvedValue(null);
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.requestedScope).toBe('local');
+      expect(response.body.personalization.activeScope).toBe('local');
+    });
+
+    it('defaults to global scope when user has no location', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'global-1',
+          title: 'World Headline',
+          description: '',
+          source: 'World Wire',
+          sourceType: 'rss',
+          sourceId: 'world-wire',
+          locations: [],
+          localityLevel: 'global',
+          publishedAt: new Date('2026-03-01T00:00:00.000Z')
+        }
+      ];
+
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: null, zipCode: null }) });
+      NewsPreferences.findOne.mockResolvedValue(null);
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.requestedScope).toBe('global');
+      expect(response.body.personalization.activeScope).toBe('global');
+    });
+  });
+
+  describe('strict local scope filtering', () => {
+    it('keeps older local matches in scope even when newer global articles dominate the default candidate slice', async () => {
+      const app = buildApp();
+      const recentGlobalArticles = Array.from({ length: 60 }, (_, index) => ({
+        _id: `global-${index + 1}`,
+        title: `Global headline ${index + 1}`,
+        description: 'Broader story',
+        source: 'World Wire',
+        sourceType: 'rss',
+        sourceId: `world-wire-${index + 1}`,
+        topics: ['general'],
+        category: 'general',
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date(`2026-03-11T${String((index % 10) + 10).padStart(2, '0')}:00:00.000Z`)
+      }));
+      const olderLocalArticle = {
+        _id: 'local-san-marcos-1',
+        title: 'San Marcos council agenda',
+        description: 'Local San Marcos government update',
+        source: 'Community Impact',
+        sourceType: 'googleNews',
+        sourceId: 'community-impact',
+        topics: ['general'],
+        category: 'general',
+        locations: ['san marcos, tx, us'],
+        assignedZipCode: '78666',
+        locationTags: {
+          zipCodes: ['78666'],
+          cities: ['san marcos'],
+          counties: ['hays county'],
+          states: ['tx'],
+          countries: ['us']
+        },
+        localityLevel: 'city',
+        publishedAt: new Date('2025-03-01T00:00:00.000Z')
+      };
+
+      NewsPreferences.findOne.mockResolvedValue({
+        defaultScope: 'local',
+        locations: [{ zipCode: '78666', isPrimary: true }],
+        followedKeywords: [],
+        followedSportsTeams: [],
+        hiddenCategories: []
+      });
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: null, zipCode: '78666' }) });
+      Article.find.mockImplementation((query) => {
+        if (query.isPromoted) return buildFindChain([]);
+        if (query?.$and?.[1]?.$or) return buildFindChain([olderLocalArticle]);
+        return buildFindChain(recentGlobalArticles);
+      });
+
+      const response = await request(app)
+        .get('/api/news/feed?scope=local&page=1&limit=10')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.requestedScope).toBe('local');
+      expect(response.body.personalization.activeScope).toBe('local');
+      expect(response.body.personalization.fallbackApplied).toBe(false);
+      expect(response.body.articles.some((article) => article._id === 'local-san-marcos-1')).toBe(true);
+    });
+
+    it('does not widen local scoped candidate queries with state or country clauses', async () => {
+      const app = buildApp();
+      const broadScopedCandidates = Array.from({ length: 250 }, (_, index) => ({
+        _id: `state-${index + 1}`,
+        title: `Texas headline ${index + 1}`,
+        description: 'Regional story',
+        source: 'State Wire',
+        sourceType: 'rss',
+        sourceId: `state-wire-${index + 1}`,
+        topics: ['general'],
+        category: 'general',
+        locations: ['texas', 'us'],
+        locationTags: {
+          states: ['tx'],
+          countries: ['us']
+        },
+        localityLevel: 'state',
+        publishedAt: new Date(`2026-03-11T${String((index % 10) + 10).padStart(2, '0')}:00:00.000Z`)
+      }));
+      const trueLocalCandidate = {
+        _id: 'local-san-marcos-query',
+        title: 'San Marcos council agenda',
+        description: 'Local San Marcos government update',
+        source: 'Community Impact',
+        sourceType: 'rss',
+        sourceId: 'community-impact',
+        topics: ['general'],
+        category: 'general',
+        locations: ['san marcos, tx, us'],
+        assignedZipCode: '78666',
+        locationTags: {
+          zipCodes: ['78666'],
+          cities: ['san marcos'],
+          counties: ['hays county'],
+          states: ['tx'],
+          countries: ['us']
+        },
+        localityLevel: 'city',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      };
+
+      NewsPreferences.findOne.mockResolvedValue({
+        defaultScope: 'local',
+        locations: [{ zipCode: '78666', city: 'San Marcos', county: 'Hays County', state: 'Texas', country: 'United States', isPrimary: true }],
+        followedKeywords: [],
+        followedSportsTeams: [],
+        hiddenCategories: []
+      });
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'San Marcos', county: 'Hays County', state: 'Texas', country: 'United States', zipCode: '78666' }) });
+      Article.find.mockImplementation((query) => {
+        if (query.isPromoted) return buildFindChain([]);
+        if (query?.$and?.[1]?.$or) {
+          const scopedClauses = query.$and[1].$or;
+          const hasBroadLocalClause = scopedClauses.some((clause) =>
+            Object.prototype.hasOwnProperty.call(clause, 'locationTags.states')
+            || Object.prototype.hasOwnProperty.call(clause, 'locationTags.countries')
+            || (Array.isArray(clause.locations?.$in)
+              && clause.locations.$in.some((token) => ['texas', 'tx', 'united states', 'us'].includes(String(token).toLowerCase())))
+          );
+          return buildFindChain(hasBroadLocalClause ? broadScopedCandidates : [trueLocalCandidate]);
+        }
+        return buildFindChain([]);
+      });
+
+      const response = await request(app)
+        .get('/api/news/feed?scope=local&page=1&limit=10')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.requestedScope).toBe('local');
+      expect(response.body.personalization.activeScope).toBe('local');
+      expect(response.body.personalization.fallbackApplied).toBe(false);
+      expect(response.body.articles.map((article) => article._id)).toContain('local-san-marcos-query');
+    });
+
+    it('local scope returns only local-matching articles (no national contamination)', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'local-1',
+          title: 'Austin City Council Update',
+          description: 'Local government news in Austin',
+          source: 'Austin Daily',
+          sourceType: 'rss',
+          sourceId: 'austin-daily',
+          topics: ['politics'],
+          locations: ['Austin', 'Texas', 'USA'],
+          localityLevel: 'city',
+          publishedAt: new Date('2026-03-01T00:00:00.000Z')
+        },
+        {
+          _id: 'national-1',
+          title: 'Federal Policy Update',
+          description: 'National policy news',
+          source: 'US Wire',
+          sourceType: 'rss',
+          sourceId: 'us-wire',
+          topics: ['politics'],
+          locations: ['USA'],
+          localityLevel: 'country',
+          publishedAt: new Date('2026-03-01T01:00:00.000Z')
+        },
+        {
+          _id: 'global-1',
+          title: 'International Summit',
+          description: 'World leaders meet',
+          source: 'World Wire',
+          sourceType: 'rss',
+          sourceId: 'world-wire',
+          topics: ['politics'],
+          locations: [],
+          localityLevel: 'global',
+          publishedAt: new Date('2026-03-01T02:00:00.000Z')
+        }
+      ];
+
+      NewsPreferences.findOne.mockResolvedValue({
+        defaultScope: 'local',
+        locations: [{ city: 'Austin', state: 'Texas', country: 'USA', isPrimary: true }],
+        followedKeywords: [],
+        hiddenCategories: []
+      });
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'Austin', county: null, state: 'Texas', country: 'USA', zipCode: null }) });
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed?scope=local')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.requestedScope).toBe('local');
+      expect(response.body.personalization.activeScope).toBe('local');
+      // Local scope should NOT include national/global articles when local matches exist
+      expect(response.body.articles.length).toBeGreaterThanOrEqual(1);
+      expect(response.body.articles[0]._id).toBe('local-1');
+    });
+
+    it('local scope does not keep state-level sports matches when true city-local articles exist', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'local-san-marcos-1',
+          title: 'San Marcos approves downtown improvements',
+          description: 'City council approved a new downtown plan.',
+          source: 'Community Impact',
+          sourceType: 'googleNews',
+          sourceId: 'community-impact',
+          topics: ['general'],
+          category: 'general',
+          locations: ['san marcos, tx, us'],
+          assignedZipCode: '78666',
+          locationTags: {
+            zipCodes: ['78666'],
+            cities: ['san marcos'],
+            counties: ['hays county'],
+            states: ['tx'],
+            countries: ['us']
+          },
+          localityLevel: 'city',
+          publishedAt: new Date('2025-03-01T00:00:00.000Z')
+        },
+        {
+          _id: 'sports-texas-1',
+          title: 'Texas needs a win in critical SEC Tournament matchup',
+          description: 'The Longhorns are trying to secure an NCAA Tournament bid.',
+          source: 'Yahoo News',
+          sourceType: 'rss',
+          sourceId: 'yahoo-sports',
+          topics: ['sports'],
+          category: 'sports',
+          locations: ['texas', 'tx'],
+          locationTags: {
+            zipCodes: [],
+            cities: [],
+            counties: [],
+            states: ['texas', 'tx'],
+            countries: ['us']
+          },
+          localityLevel: 'state',
+          publishedAt: new Date('2026-03-11T17:10:33.000Z')
+        }
+      ];
+
+      NewsPreferences.findOne.mockResolvedValue({
+        defaultScope: 'local',
+        locations: [{ zipCode: '78666', city: 'San Marcos', state: 'Texas', country: 'United States', isPrimary: true }],
+        followedKeywords: [],
+        followedSportsTeams: ['ncaa-football:texas-longhorns'],
+        hiddenCategories: []
+      });
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: null, zipCode: '78666' }) });
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed?scope=local&page=1&limit=10')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.activeScope).toBe('local');
+      expect(response.body.personalization.fallbackApplied).toBe(false);
+      expect(response.body.articles.map((article) => article._id)).toEqual(['local-san-marcos-1']);
+    });
+
+    it('local scope does not treat zip-only state matches as city-local when richer city context exists', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'local-san-marcos-2',
+          title: 'San Marcos downtown safety update',
+          description: 'City crews are adjusting downtown traffic signals.',
+          source: 'Community Impact',
+          sourceType: 'googleNews',
+          sourceId: 'community-impact',
+          topics: ['general'],
+          category: 'general',
+          locations: ['san marcos, tx, us'],
+          assignedZipCode: '78666',
+          locationTags: {
+            zipCodes: ['78666'],
+            cities: ['san marcos'],
+            counties: ['hays county'],
+            states: ['tx'],
+            countries: ['us']
+          },
+          localityLevel: 'city',
+          publishedAt: new Date('2026-03-10T00:00:00.000Z')
+        },
+        {
+          _id: 'zip-only-state-1',
+          title: 'Central Texas refinery update',
+          description: 'A broad Texas story incorrectly inherited the user zip.',
+          source: 'Spectrum News',
+          sourceType: 'googleNews',
+          sourceId: 'spectrum-news',
+          topics: ['general'],
+          category: 'general',
+          locations: ['brownsville', 'texas', 'tx', 'us'],
+          assignedZipCode: '78666',
+          locationTags: {
+            zipCodes: ['78666'],
+            cities: [],
+            counties: [],
+            states: ['texas', 'tx'],
+            countries: ['us']
+          },
+          localityLevel: 'state',
+          publishedAt: new Date('2026-03-11T00:00:00.000Z')
+        }
+      ];
+
+      NewsPreferences.findOne.mockResolvedValue({
+        defaultScope: 'local',
+        locations: [{ zipCode: '78666', city: 'San Marcos', county: 'Hays County', state: 'Texas', country: 'United States', isPrimary: true }],
+        followedKeywords: [],
+        followedSportsTeams: [],
+        hiddenCategories: []
+      });
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'San Marcos', county: 'Hays County', state: 'Texas', country: 'United States', zipCode: '78666' }) });
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed?scope=local&page=1&limit=10')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.activeScope).toBe('local');
+      expect(response.body.personalization.fallbackApplied).toBe(false);
+      expect(response.body.articles.map((article) => article._id)).toEqual(['local-san-marcos-2']);
+    });
+
+    it('local scope with no matches falls back and exposes fallback metadata', async () => {
+      const app = buildApp();
+      // No local articles, only national
+      const feedArticles = [
+        {
+          _id: 'national-1',
+          title: 'USA Headline',
+          description: '',
+          source: 'US News',
+          sourceType: 'rss',
+          sourceId: 'us-news',
+          locations: ['USA'],
+          localityLevel: 'country',
+          publishedAt: new Date('2026-03-01T00:00:00.000Z')
+        }
+      ];
+
+      NewsPreferences.findOne.mockResolvedValue({
+        defaultScope: 'local',
+        locations: [{ city: 'Smallville', state: 'Kansas', country: 'USA', isPrimary: true }],
+        followedKeywords: [],
+        hiddenCategories: []
+      });
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'Smallville', county: null, state: 'Kansas', country: 'USA', zipCode: null }) });
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed?scope=local')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.requestedScope).toBe('local');
+      // Should fall back since no local matches
+      expect(response.body.personalization.fallbackApplied).toBe(true);
+      expect(response.body.personalization.fallbackReason).toBe('no_scope_matches');
+      expect(response.body.personalization.resolvedScope).toBe(response.body.personalization.activeScope);
+    });
+  });
+
+  describe('scope + category/topic composition', () => {
+    it('local scope + topic filter returns only local articles matching topic', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'local-tech-1',
+          title: 'Austin Tech Startup Raises Funds',
+          description: 'Local AI company expands',
+          source: 'Austin Tech',
+          sourceType: 'rss',
+          sourceId: 'austin-tech',
+          topics: ['technology', 'ai'],
+          category: 'technology',
+          locations: ['Austin', 'Texas'],
+          localityLevel: 'city',
+          publishedAt: new Date('2026-03-01T00:00:00.000Z')
+        },
+        {
+          _id: 'local-politics-1',
+          title: 'Austin City Council Vote',
+          description: 'Local politics',
+          source: 'Austin Daily',
+          sourceType: 'rss',
+          sourceId: 'austin-daily',
+          topics: ['politics'],
+          category: 'politics',
+          locations: ['Austin', 'Texas'],
+          localityLevel: 'city',
+          publishedAt: new Date('2026-03-01T01:00:00.000Z')
+        },
+        {
+          _id: 'national-tech-1',
+          title: 'National Tech Policy',
+          description: 'Federal tech regulation',
+          source: 'US Tech',
+          sourceType: 'rss',
+          sourceId: 'us-tech',
+          topics: ['technology'],
+          category: 'technology',
+          locations: ['USA'],
+          localityLevel: 'country',
+          publishedAt: new Date('2026-03-01T02:00:00.000Z')
+        }
+      ];
+
+      NewsPreferences.findOne.mockResolvedValue({
+        defaultScope: 'local',
+        locations: [{ city: 'Austin', state: 'Texas', country: 'USA', isPrimary: true }],
+        followedKeywords: [],
+        hiddenCategories: []
+      });
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'Austin', county: null, state: 'Texas', country: 'USA', zipCode: null }) });
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed?scope=local&topic=technology')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.activeScope).toBe('local');
+      // Should only return local tech articles, not national tech
+      expect(response.body.articles.some(a => a._id === 'local-tech-1')).toBe(true);
+      expect(response.body.articles.some(a => a._id === 'national-tech-1')).toBe(false);
+    });
+
+    it('local scope + All Categories returns truly local-only articles', async () => {
+      const app = buildApp();
+      const feedArticles = [
+        {
+          _id: 'local-1',
+          title: 'Austin Local News',
+          description: 'Local news',
+          source: 'Austin Daily',
+          sourceType: 'rss',
+          sourceId: 'austin-daily',
+          topics: ['general'],
+          category: 'general',
+          locations: ['Austin'],
+          localityLevel: 'city',
+          publishedAt: new Date('2026-03-01T00:00:00.000Z')
+        },
+        {
+          _id: 'global-1',
+          title: 'World News',
+          description: 'Global news',
+          source: 'World Wire',
+          sourceType: 'rss',
+          sourceId: 'world-wire',
+          topics: ['general'],
+          category: 'general',
+          locations: [],
+          localityLevel: 'global',
+          publishedAt: new Date('2026-03-01T01:00:00.000Z')
+        }
+      ];
+
+      NewsPreferences.findOne.mockResolvedValue({
+        defaultScope: 'local',
+        locations: [{ city: 'Austin', state: 'Texas', country: 'USA', isPrimary: true }],
+        followedKeywords: [],
+        hiddenCategories: []
+      });
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: 'Austin', county: null, state: 'Texas', country: 'USA', zipCode: null }) });
+      Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+      const response = await request(app)
+        .get('/api/news/feed?scope=local')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.personalization.activeScope).toBe('local');
+      // Local scope should prioritize local articles
+      expect(response.body.articles[0]._id).toBe('local-1');
+    });
+  });
+
+  describe('preference repair for stale zip-only defaults', () => {
+    it('repairs a stale global default when a zip-only primary location can now be enriched', async () => {
+      const app = buildApp();
+      const stalePreferences = {
+        _id: 'pref-1',
+        user: 'user-1',
+        defaultScope: 'global',
+        locations: [{ zipCode: '78666', city: null, county: null, state: null, country: null, isPrimary: true }],
+        followedKeywords: [],
+        followedSportsTeams: [],
+        hiddenCategories: []
+      };
+      const repairedPreferences = {
+        ...stalePreferences,
+        defaultScope: 'local',
+        locations: [{ zipCode: '78666', city: 'San Marcos', county: 'Hays County', state: 'Texas', stateCode: 'TX', country: 'United States', countryCode: 'US', cityKey: 'TX:san-marcos', isPrimary: true }]
+      };
+
+      User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: null, country: null, zipCode: '78666' }) });
+      NewsPreferences.findOne.mockResolvedValue(stalePreferences);
+      NewsPreferences.findOneAndUpdate.mockResolvedValue(repairedPreferences);
+
+      const response = await request(app)
+        .get('/api/news/preferences')
+        .set('Authorization', 'Bearer token');
+
+      expect(response.status).toBe(200);
+      expect(NewsPreferences.findOneAndUpdate).toHaveBeenCalledWith(
+        { user: 'user-1' },
+        {
+          $set: {
+            defaultScope: 'local',
+            locations: [expect.objectContaining({
+              zipCode: '78666',
+              city: 'San Marcos',
+              county: 'Hays County',
+              stateCode: 'TX',
+              countryCode: 'US',
+              isPrimary: true
+            })]
+          }
+        },
+        { new: true }
+      );
+      expect(response.body.preferences.defaultScope).toBe('local');
+      expect(response.body.preferences.locations[0]).toEqual(expect.objectContaining({
+        zipCode: '78666',
+        city: 'San Marcos',
+        county: 'Hays County',
+        stateCode: 'TX',
+        countryCode: 'US'
+      }));
+    });
+  });
+
   it('defaults to local scope when profile location exists and no explicit preference is stored', async () => {
     const app = buildApp();
     const feedArticles = [
@@ -738,7 +1433,7 @@ describe('News scope routing', () => {
     expect(response.body.articles[0]._id).toBe('us-1');
   });
 
-  it('mixes global articles into local scope results', async () => {
+  it('does NOT mix global articles into explicit local scope results (no contamination)', async () => {
     const app = buildApp();
     const feedArticles = [
       {
@@ -782,10 +1477,60 @@ describe('News scope routing', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.personalization.activeScope).toBe('local');
-    // Local article should be first, global mixed in after
-    expect(response.body.articles.length).toBe(2);
+    expect(response.body.personalization.requestedScope).toBe('local');
+    // Explicit local scope should NOT include global articles when local matches exist
+    expect(response.body.articles.length).toBe(1);
     expect(response.body.articles[0]._id).toBe('local-1');
-    expect(response.body.articles[1]._id).toBe('global-mix-1');
+  });
+
+  it('mixes global articles into regional scope results (allowed for regional)', async () => {
+    const app = buildApp();
+    const feedArticles = [
+      {
+        _id: 'state-1',
+        title: 'Texas state legislature update',
+        description: 'State government news',
+        source: 'Texas Tribune',
+        sourceType: 'rss',
+        sourceId: 'texas-tribune',
+        topics: ['politics'],
+        locations: ['Texas', 'USA'],
+        localityLevel: 'state',
+        publishedAt: new Date('2026-03-01T00:00:00.000Z')
+      },
+      {
+        _id: 'global-mix-2',
+        title: 'International climate summit',
+        description: 'Leaders gather for climate talks',
+        source: 'World Wire',
+        sourceType: 'rss',
+        sourceId: 'world-wire',
+        topics: ['politics'],
+        locations: [],
+        localityLevel: 'global',
+        publishedAt: new Date('2026-03-01T01:00:00.000Z')
+      }
+    ];
+
+    NewsPreferences.findOne.mockResolvedValue({
+      defaultScope: 'regional',
+      locations: [{ state: 'Texas', country: 'USA', isPrimary: true }],
+      followedKeywords: [],
+      hiddenCategories: []
+    });
+    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ city: null, county: null, state: 'Texas', country: 'USA', zipCode: null }) });
+    Article.find.mockImplementation((query) => buildFindChain(query.isPromoted ? [] : feedArticles));
+
+    const response = await request(app)
+      .get('/api/news/feed?scope=regional')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.personalization.activeScope).toBe('regional');
+    expect(response.body.personalization.requestedScope).toBe('regional');
+    // Regional scope may include global articles mixed in
+    expect(response.body.articles.length).toBeGreaterThanOrEqual(1);
+    expect(response.body.articles[0]._id).toBe('state-1');
   });
 
   it('infers location from article title text at query time', async () => {

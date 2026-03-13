@@ -1,4 +1,4 @@
-const CACHE_NAME = 'socialsecure-shell-v1';
+const CACHE_NAME = 'socialsecure-shell-v2';
 const APP_SHELL = ['/', '/index.html', '/manifest.json', '/icon-192x192.png', '/icon-512x512.png'];
 
 self.addEventListener('install', (event) => {
@@ -27,6 +27,10 @@ self.addEventListener('fetch', (event) => {
 
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
+
+  // Never cache API requests — they carry user-specific authenticated data
+  // that must always be fetched fresh to prevent stale user identity across sessions.
+  if (requestUrl.pathname.startsWith('/api/')) return;
 
   if (event.request.mode === 'navigate') {
     event.respondWith(

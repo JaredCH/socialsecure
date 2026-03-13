@@ -258,4 +258,5 @@ describe('App navbar features dropdown', () => {
     expect(main.className).not.toContain('container');
     expect(container.textContent).toContain('Social Page');
   });
+
 });

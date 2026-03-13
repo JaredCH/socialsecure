@@ -136,8 +136,10 @@ const canonicalizeNewsLocation = (location = {}) => {
   const city = titleCase(location.city || '');
   const county = titleCase(location.county || '');
   const zipCode = String(location.zipCode || '').trim().toUpperCase() || null;
-  const countryCode = canonicalizeCountryCode(location.country || location.countryCode) || US_COUNTRY_CANONICAL;
-  const country = countryCode === 'US' ? 'United States' : countryCode;
+  const rawCountry = location.country || location.countryCode;
+  const hasMeaningfulCountryInput = rawCountry && String(rawCountry).trim().length > 0;
+  const countryCode = hasMeaningfulCountryInput ? canonicalizeCountryCode(rawCountry) : null;
+  const country = countryCode ? (countryCode === 'US' ? 'United States' : countryCode) : null;
 
   const canonicalCity = stateCode && city
     ? getCitiesForState(stateCode).find((candidate) => normalizeToken(candidate) === normalizeToken(city)) || city

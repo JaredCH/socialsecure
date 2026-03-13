@@ -21,6 +21,7 @@ function Register({ onSuccess }) {
     lastName: '',
     username: '',
     email: '',
+    zipCode: '',
     referralCode: token || ''
   });
   const [submitting, setSubmitting] = useState(false);
@@ -99,6 +100,12 @@ function Register({ onSuccess }) {
       return;
     }
 
+    const trimmedZip = form.zipCode.trim();
+    if (!trimmedZip || !/^\d{5}(?:-\d{4})?$/.test(trimmedZip)) {
+      toast.error('A valid US ZIP code is required (e.g. 12345 or 12345-6789).');
+      return;
+    }
+
     if (usernameStatus.state !== 'available') {
       toast.error('Please choose an available username before continuing.');
       return;
@@ -112,6 +119,7 @@ function Register({ onSuccess }) {
         lastName: form.lastName.trim(),
         username: form.username.trim().toLowerCase(),
         email: form.email.trim().toLowerCase(),
+        zipCode: trimmedZip,
         referralCode: form.referralCode || undefined
       };
 
@@ -223,6 +231,23 @@ function Register({ onSuccess }) {
                 required
               />
               {fieldErrors.email && <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">ZIP Code</label>
+              <input
+                name="zipCode"
+                value={form.zipCode}
+                onChange={handleChange}
+                className={inputClassName}
+                placeholder="12345"
+                autoComplete="postal-code"
+                inputMode="numeric"
+                maxLength={10}
+                required
+              />
+              <p className="mt-1 text-xs text-gray-500">Required. Powers your local news and weather.</p>
+              {fieldErrors.zipCode && <p className="mt-1 text-sm text-red-600">{fieldErrors.zipCode}</p>}
             </div>
           </section>
 

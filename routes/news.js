@@ -12,6 +12,7 @@ const Article = require('../models/Article');
 const RssSource = require('../models/RssSource');
 const NewsPreferences = require('../models/NewsPreferences');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
+const NewsLocation = require('../models/NewsLocation');
 const User = require('../models/User');
 const {
   calculateViralScore,
@@ -21,7 +22,8 @@ const {
 } = require('../services/newsViralScore');
 const {
   findZipLocation,
-  findZipLocationByCityState
+  findZipLocationByCityState,
+  resolveZipLocation
 } = require('../services/zipLocationIndex');
 const {
   NEWS_SOURCE_CATALOG,
@@ -45,6 +47,12 @@ const {
   getLocationTaxonomyPayload,
   titleCase
 } = require('../utils/newsLocationTaxonomy');
+const {
+  canonicalizeLocationInput,
+  resolveCanonicalLocationInput,
+  upsertMasterLocationFromUser,
+  syncMasterLocationsFromUsers
+} = require('../services/newsLocationMaster');
 const {
   SPORTS_TEAMS,
   getSportsTeamsByLeague,
@@ -108,6 +116,15 @@ const NEWS_LOCAL_REDDIT_ENABLED = String(process.env.NEWS_LOCAL_REDDIT_ENABLED |
 const NEWS_LOCAL_NEWSAPI_ENABLED = String(process.env.NEWS_LOCAL_NEWSAPI_ENABLED || 'false').toLowerCase() === 'true';
 const NEWS_API_KEY = (process.env.NEWS_API_KEY || '').trim();
 const NEWS_LOCAL_MAX_LOCATIONS = Math.max(1, parseInt(process.env.NEWS_LOCAL_MAX_LOCATIONS || '50', 10) || 50);
+const NEWS_GOOGLE_MASTER_POLLING_ENABLED = String(process.env.NEWS_GOOGLE_MASTER_POLLING_ENABLED || 'true').toLowerCase() !== 'false';
+const NEWS_GOOGLE_MASTER_POLL_CONCURRENCY = Math.max(1, parseInt(process.env.NEWS_GOOGLE_MASTER_POLL_CONCURRENCY || '3', 10) || 3);
+const NEWS_GOOGLE_MASTER_MAX_LOCATIONS_PER_CYCLE = Math.max(1, parseInt(process.env.NEWS_GOOGLE_MASTER_MAX_LOCATIONS_PER_CYCLE || '30', 10) || 30);
+const NEWS_GOOGLE_MASTER_POLL_BASE_INTERVAL_MS = Math.max(2 * 60 * 1000, parseInt(process.env.NEWS_GOOGLE_MASTER_POLL_BASE_INTERVAL_MS || '720000', 10) || 720000);
+const NEWS_GOOGLE_MASTER_POLL_JITTER_MS = Math.max(1000, parseInt(process.env.NEWS_GOOGLE_MASTER_POLL_JITTER_MS || '180000', 10) || 180000);
+const NEWS_GOOGLE_MASTER_REQUEST_DELAY_MIN_MS = Math.max(250, parseInt(process.env.NEWS_GOOGLE_MASTER_REQUEST_DELAY_MIN_MS || '800', 10) || 800);
+const NEWS_GOOGLE_MASTER_REQUEST_DELAY_MAX_MS = Math.max(NEWS_GOOGLE_MASTER_REQUEST_DELAY_MIN_MS, parseInt(process.env.NEWS_GOOGLE_MASTER_REQUEST_DELAY_MAX_MS || '2500', 10) || 2500);
+const NEWS_GOOGLE_MASTER_BACKOFF_BASE_MS = Math.max(10 * 1000, parseInt(process.env.NEWS_GOOGLE_MASTER_BACKOFF_BASE_MS || '60000', 10) || 60000);
+const NEWS_GOOGLE_MASTER_BACKOFF_MAX_MS = Math.max(NEWS_GOOGLE_MASTER_BACKOFF_BASE_MS, parseInt(process.env.NEWS_GOOGLE_MASTER_BACKOFF_MAX_MS || '21600000', 10) || 21600000);
 
 // ============================================
 // WEATHER CACHE
@@ -536,6 +553,14 @@ const LOCAL_STORY_SIGNAL_PATTERNS = [
   /\bmunicipal\b/, /\bplanning commission\b/, /\bzoning\b/, /\bpublic safety\b/
 ];
 
+const LOCATION_PHRASE_NOISE_PATTERN = /\b(the|and|or|for|with|without|against|before|after|during|while|when|where|which|that|this|these|those|his|her|their|our|your|my|its|was|were|is|are|be|been|being|have|has|had|do|does|did|will|would|should|could|can|may|might|must)\b/i;
+const LOCATION_PHRASE_MAX_WORDS = 4;
+const DISALLOWED_SINGLE_LOCATION_TOKENS = new Set([
+  'january', 'february', 'march', 'april', 'may', 'june', 'july',
+  'august', 'september', 'october', 'november', 'december',
+  'season', 'game', 'quarter', 'history', 'league', 'film', 'there'
+]);
+
 const SUPPORTED_RSS_PROVIDERS = [
   { id: 'google-news', label: 'Google News', hostPatterns: ['news.google.com'] },
   { id: 'reuters', label: 'Reuters', hostPatterns: ['reuters.com', 'reutersagency.com'] },
@@ -554,7 +579,12 @@ const normalizeLocationToken = (value) => String(value || '').trim().toLowerCase
 const normalizeTopicToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeZipCode = (value) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 const normalizeUsZipCode = (value) => normalizeZipCode(value).split('-')[0];
-const normalizeSportsTeamId = (value) => String(value || '').trim().toLowerCase();
+const normalizeSportsTeamId = (value) => {
+  if (value && typeof value === 'object') {
+    return String(value.id || value.teamId || value.type || '').trim().toLowerCase();
+  }
+  return String(value || '').trim().toLowerCase();
+};
 const normalizeFollowedSportsTeams = (teams = []) => [...new Set(
   (Array.isArray(teams) ? teams : [])
     .map(normalizeSportsTeamId)
@@ -662,16 +692,22 @@ const inferLocationTokensFromText = (input = '') => {
     ...canadaZipMatches.map((zip) => normalizeZipCode(zip))
   );
 
-  // Match "in/at/from/near <Place>" phrases
-  const locationPhrases = lower.match(/\b(?:in|at|from|near)\s+([a-z][a-z\s\-]{1,40})\b/g) || [];
-  for (const phrase of locationPhrases) {
-    const normalized = phrase
-      .replace(/\b(?:in|at|from|near)\s+/i, '')
+  // Match "in/at/from/near <Place>" phrases.
+  // Keep phrases short and reject stopword-heavy fragments to reduce noisy tags.
+  const phraseMatches = Array.from(lower.matchAll(/\b(?:in|at|from|near)\s+([a-z][a-z\s\-]{1,40}?)(?=\s+(?:in|at|from|near)\b|[.,;!?]|$)/g));
+  for (const match of phraseMatches) {
+    const phraseHead = String(match?.[1] || '')
+      .split(/\b(?:and|or|but)\b|[.,;!?]/)[0];
+    const normalized = phraseHead
       .replace(/[^a-z\s\-]/g, '')
+      .replace(/\s+/g, ' ')
       .trim();
-    if (normalized.length >= 3) {
-      tokens.push(normalized);
-    }
+    if (normalized.length < 3) continue;
+    const wordCount = normalized.split(' ').filter(Boolean).length;
+    if (wordCount === 0 || wordCount > LOCATION_PHRASE_MAX_WORDS) continue;
+    if (wordCount === 1 && DISALLOWED_SINGLE_LOCATION_TOKENS.has(normalized)) continue;
+    if (LOCATION_PHRASE_NOISE_PATTERN.test(normalized)) continue;
+    tokens.push(normalized);
   }
 
   // Match US state full names
@@ -1028,33 +1064,47 @@ const isSportsContext = ({ source = {}, query = null, item = {} }) => {
 
 const inferSportsLocationContext = ({ source = {}, query = null, item = {} }) => {
   if (!isSportsContext({ source, query, item })) return null;
-  const text = `${item.title || ''} ${item.contentSnippet || item.content || item.summary || ''}`;
-  const matchedTeam = inferSportsLocationFromText(text);
-  if (!matchedTeam) return null;
+  const titleText = `${item.title || ''}`;
+  const fullText = `${item.title || ''} ${item.contentSnippet || item.content || item.summary || ''}`;
+  // Prefer title matches for stronger article-level precision, then fall back to body text.
+  const matchedTeams = inferSportsTeamsFromText(titleText).length > 0
+    ? inferSportsTeamsFromText(titleText)
+    : inferSportsTeamsFromText(fullText);
+  if (!matchedTeams.length) return null;
 
-  const canonical = canonicalizeNewsLocation({
-    city: matchedTeam.city,
-    state: matchedTeam.state,
-    country: 'US'
-  });
+  const cities = [];
+  const states = [];
+  for (const matchedTeam of matchedTeams) {
+    const canonical = canonicalizeNewsLocation({
+      city: matchedTeam.city,
+      state: matchedTeam.state,
+      country: 'US'
+    });
+    if (canonical.city) cities.push(String(canonical.city).toLowerCase());
+    if (canonical.stateCode) states.push(String(canonical.stateCode).toLowerCase());
+    if (canonical.state) states.push(String(canonical.state).toLowerCase());
+  }
 
-  if (!canonical.city || !canonical.stateCode) return null;
+  const uniqueCities = toUniqueNonEmptyStrings(cities);
+  const uniqueStates = toUniqueNonEmptyStrings(states);
+  if (uniqueCities.length === 0 && uniqueStates.length === 0) return null;
 
-  const cityToken = canonical.city.toLowerCase();
-  const stateCodeToken = canonical.stateCode.toLowerCase();
-  const stateNameToken = String(canonical.state || '').toLowerCase();
+  const localityLevel = uniqueCities.length === 1 ? 'city' : 'state';
+  const scopeMetadata = localityLevel === 'city'
+    ? { scopeReason: 'city_match', scopeConfidence: 0.9 }
+    : { scopeReason: 'state_match', scopeConfidence: 0.78 };
 
   return {
-    locationTokens: toUniqueNonEmptyLocationTokens([cityToken, stateCodeToken, stateNameToken, 'united states', 'us']),
+    locationTokens: toUniqueNonEmptyLocationTokens([...uniqueCities, ...uniqueStates, 'united states', 'us']),
     locationTags: {
       zipCodes: [],
-      cities: [cityToken],
+      cities: uniqueCities,
       counties: [],
-      states: toUniqueNonEmptyStrings([stateCodeToken, stateNameToken]),
+      states: uniqueStates,
       countries: ['united states', 'us']
     },
-    localityLevel: 'city',
-    scopeMetadata: { scopeReason: 'city_match', scopeConfidence: 0.92 }
+    localityLevel,
+    scopeMetadata
   };
 };
 
@@ -1118,14 +1168,41 @@ const resolveArticleLocationContext = async ({ source = {}, item = {}, query = n
   let localityLevel = inferLocalityLevelFromTags(locationTags);
   let scopeMetadata = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
 
-  // For sports coverage with no explicit location, infer city/state from team references.
-  if (localityLevel === 'global') {
+  // For sports coverage with weak/non-specific location, infer city/state from team references.
+  const currentStateCount = Array.isArray(locationTags.states) ? locationTags.states.length : 0;
+  const shouldApplySportsContext = localityLevel === 'global'
+    || localityLevel === 'country'
+    || (localityLevel === 'state' && currentStateCount <= 2);
+  if (shouldApplySportsContext) {
     const sportsContext = inferSportsLocationContext({ source, query, item });
     if (sportsContext) {
       locationTokens = toUniqueNonEmptyLocationTokens([...locationTokens, ...sportsContext.locationTokens]);
-      locationTags = normalizeLocationTagSet(mergeLocationTags(locationTags, sportsContext.locationTags, assignedZipCode), assignedZipCode);
-      localityLevel = sportsContext.localityLevel;
-      scopeMetadata = sportsContext.scopeMetadata;
+      // Re-run enrichment to preserve deterministic city tagging (city requires zip pairing).
+      locationTags = await enrichLocationTagsWithCorrelations({
+        locationTags: mergeLocationTags(locationTags, sportsContext.locationTags, assignedZipCode),
+        assignedZipCode
+      });
+
+      // Sports entities frequently imply a city even when no zip can be correlated.
+      // Preserve detected city tags so team headlines retain intended local context.
+      if (sportsContext.localityLevel === 'city' && Array.isArray(sportsContext.locationTags?.cities) && sportsContext.locationTags.cities.length > 0) {
+        locationTags = normalizeLocationTagSet({
+          ...locationTags,
+          cities: toUniqueNonEmptyLocationTokens([
+            ...(Array.isArray(locationTags.cities) ? locationTags.cities : []),
+            ...sportsContext.locationTags.cities
+          ])
+        }, assignedZipCode);
+      }
+
+      localityLevel = inferLocalityLevelFromTags(locationTags);
+      if (sportsContext.localityLevel === 'city') {
+        localityLevel = 'city';
+      }
+      const derivedScope = deriveScopeMetadata({ locationTags, localityLevel, locationTokens });
+      scopeMetadata = sportsContext.scopeMetadata.scopeConfidence >= derivedScope.scopeConfidence
+        ? sportsContext.scopeMetadata
+        : derivedScope;
     }
   }
 
@@ -1552,7 +1629,21 @@ const resolveDefaultScope = ({ preferences, locationContext }) => {
   if (NEWS_SCOPE_VALUES.includes(preferences?.defaultScope)) {
     return preferences.defaultScope;
   }
-  return hasLocationContext(locationContext) ? 'local' : 'global';
+  // Compute default scope from location granularity:
+  // - local if zip/city present
+  // - regional if state present (but no city/zip)
+  // - national if country only
+  // - global if no location
+  const hasZip = Boolean(locationContext?.zipCode || (locationContext?.zipCodeValues?.length > 0));
+  const hasCity = Boolean(locationContext?.city || (locationContext?.cityValues?.length > 0));
+  const hasCounty = Boolean(locationContext?.county || (locationContext?.countyValues?.length > 0));
+  const hasState = Boolean(locationContext?.state || (locationContext?.stateValues?.length > 0));
+  const hasCountry = Boolean(locationContext?.country || (locationContext?.countryValues?.length > 0));
+
+  if (hasZip || hasCity || hasCounty) return 'local';
+  if (hasState) return 'regional';
+  if (hasCountry) return 'national';
+  return 'global';
 };
 
 const getFallbackScopeOrder = (scope) => {
@@ -1569,9 +1660,27 @@ const getFallbackScopeOrder = (scope) => {
 };
 
 const scopeCanUseContext = (scope, locationContext) => {
-  if (scope === 'local') return Boolean(locationContext?.cityValues?.length || locationContext?.countyValues?.length || locationContext?.zipCodeValues?.length);
-  if (scope === 'regional') return Boolean(locationContext?.stateValues?.length);
-  if (scope === 'national') return Boolean(locationContext?.countryValues?.length);
+  // Strict scope eligibility:
+  // - local requires city/county/zip context (NOT country-only)
+  // - regional requires state context
+  // - national requires country context
+  if (scope === 'local') {
+    // Local scope requires actual local granularity: zip, city, or county
+    // Country-only context does NOT qualify as local
+    return Boolean(
+      locationContext?.zipCodeValues?.length > 0 ||
+      locationContext?.cityValues?.length > 0 ||
+      locationContext?.countyValues?.length > 0
+    );
+  }
+  if (scope === 'regional') {
+    // Regional requires state-level context
+    return Boolean(locationContext?.stateValues?.length > 0);
+  }
+  if (scope === 'national') {
+    // National requires country-level context
+    return Boolean(locationContext?.countryValues?.length > 0);
+  }
   return true;
 };
 
@@ -1611,6 +1720,27 @@ const canonicalizePreferenceLocation = (location = {}) => {
     isPrimary: Boolean(location?.isPrimary)
   };
 };
+
+const deriveDefaultScopeFromLocationShape = (location = {}) => {
+  const hasZip = Boolean(location?.zipCode);
+  const hasCity = Boolean(location?.city);
+  const hasCounty = Boolean(location?.county);
+  const hasState = Boolean(location?.state || location?.stateCode);
+  const hasCountry = Boolean(location?.country || location?.countryCode);
+
+  if (hasZip || hasCity || hasCounty) return 'local';
+  if (hasState) return 'regional';
+  if (hasCountry) return 'national';
+  return 'global';
+};
+
+const locationsDiffer = (left = {}, right = {}) => (
+  normalizeLocationFieldValue('city', left?.city) !== normalizeLocationFieldValue('city', right?.city)
+  || normalizeLocationFieldValue('county', left?.county) !== normalizeLocationFieldValue('county', right?.county)
+  || normalizeLocationFieldValue('state', left?.state || left?.stateCode) !== normalizeLocationFieldValue('state', right?.state || right?.stateCode)
+  || normalizeLocationFieldValue('country', left?.country || left?.countryCode) !== normalizeLocationFieldValue('country', right?.country || right?.countryCode)
+  || normalizeLocationFieldValue('zipCode', left?.zipCode) !== normalizeLocationFieldValue('zipCode', right?.zipCode)
+);
 
 const getPrimaryPreferenceLocation = (preferences = {}) => {
   const locations = Array.isArray(preferences?.locations) ? preferences.locations : [];
@@ -1700,7 +1830,7 @@ const scoreRecency = (publishedAt, freshnessScore = 0) => {
 
 const articleMentionsLocationToken = (articleLocationToken, userToken) => {
   if (!articleLocationToken || !userToken) return false;
-  return articleLocationToken.includes(userToken) || userToken.includes(articleLocationToken);
+  return articleLocationToken === userToken;
 };
 
 const articleMatchesLocation = (article, locationContext) => {
@@ -1750,10 +1880,92 @@ const articleMatchesLocation = (article, locationContext) => {
   };
 };
 
-const getScopeTier = (scope, locationMatches) => {
+const buildScopedCandidateClauses = (locationContext = {}, scopeValue = 'global') => {
+  const zipValues = extractZipTokens(locationContext?.zipCodeValues || [locationContext?.zipCode]);
+  const cityValues = toUniqueNonEmptyLocationTokens(locationContext?.cityValues || [locationContext?.city]);
+  const countyValues = toUniqueNonEmptyLocationTokens(locationContext?.countyValues || [locationContext?.county]);
+  const stateValues = toUniqueNonEmptyLocationTokens(locationContext?.stateValues || [locationContext?.state]);
+  const countryValues = toUniqueNonEmptyLocationTokens(locationContext?.countryValues || [locationContext?.country]);
+  const localLocationTokens = toUniqueNonEmptyLocationTokens([
+    ...zipValues,
+    ...cityValues,
+    ...countyValues
+  ]);
+  const regionalLocationTokens = toUniqueNonEmptyLocationTokens(stateValues);
+  const nationalLocationTokens = toUniqueNonEmptyLocationTokens(countryValues);
+  const allLocationTokens = toUniqueNonEmptyLocationTokens([
+    ...localLocationTokens,
+    ...regionalLocationTokens,
+    ...nationalLocationTokens
+  ]);
+
+  if (scopeValue === 'global' || allLocationTokens.length === 0) {
+    return [];
+  }
+
+  const clauses = [];
+  const addInClause = (field, values = []) => {
+    if (!Array.isArray(values) || values.length === 0) return;
+    clauses.push({ [field]: { $in: values } });
+  };
+
+  if (scopeValue === 'local') {
+    addInClause('assignedZipCode', zipValues);
+    addInClause('locationTags.zipCodes', zipValues);
+    addInClause('locationTags.cities', cityValues);
+    addInClause('locationTags.counties', countyValues);
+    addInClause('locations', localLocationTokens);
+    return clauses;
+  }
+
+  if (scopeValue === 'regional') {
+    addInClause('locationTags.states', stateValues);
+    addInClause('locations', regionalLocationTokens);
+    return clauses;
+  }
+
+  if (scopeValue === 'national') {
+    addInClause('locationTags.countries', countryValues);
+    addInClause('locations', nationalLocationTokens);
+  }
+
+  return clauses;
+};
+
+const buildScopedCandidateQuery = (baseQuery = {}, locationContext = {}, scopeValue = 'global') => {
+  const clauses = buildScopedCandidateClauses(locationContext, scopeValue);
+  if (clauses.length === 0) return null;
+  return { $and: [baseQuery, { $or: clauses }] };
+};
+
+const mergeCandidateArticles = (...articleGroups) => {
+  const merged = [];
+  const seenKeys = new Set();
+
+  for (const group of articleGroups) {
+    for (const article of (Array.isArray(group) ? group : [])) {
+      const key = String(article?._id || article?.normalizedUrlHash || article?.url || '');
+      if (!key || seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      merged.push(article);
+    }
+  }
+
+  return merged;
+};
+
+const getScopeTier = (scope, locationMatches, locationContext = {}) => {
+  const hasStrictLocalContext = Boolean(
+    (Array.isArray(locationContext?.cityValues) && locationContext.cityValues.length > 0)
+    || (Array.isArray(locationContext?.countyValues) && locationContext.countyValues.length > 0)
+    || locationContext?.city
+    || locationContext?.county
+  );
+
   if (scope === 'local') {
-    if (locationMatches.zipCode || locationMatches.city) return 0;
+    if (locationMatches.city) return 0;
     if (locationMatches.county) return 1;
+    if (locationMatches.zipCode && !hasStrictLocalContext) return 0;
     if (locationMatches.state) return 2;
     if (locationMatches.country) return 3;
     return 4;
@@ -1790,7 +2002,7 @@ const scoreLocalityLevel = (scope, localityLevel) => {
 };
 
 const articlePassesScope = (scope, scopeTier) => {
-  if (scope === 'local') return scopeTier <= 2;
+  if (scope === 'local') return scopeTier <= 1;
   if (scope === 'regional') return scopeTier <= 1;
   if (scope === 'national') return scopeTier <= 1;
   return true;
@@ -3353,6 +3565,39 @@ const buildNormalizedUrlHash = (url) => {
   if (!url) return null;
   return crypto.createHash('sha256').update(String(url).toLowerCase().trim()).digest('hex').substring(0, 16);
 };
+
+const buildContentFingerprint = (article = {}) => {
+  const normalizedTitle = String(article.title || '').toLowerCase().trim();
+  const normalizedDescription = String(article.description || '').toLowerCase().trim();
+  if (!normalizedTitle && !normalizedDescription) {
+    return null;
+  }
+  return crypto
+    .createHash('sha256')
+    .update(`${normalizedTitle}|${normalizedDescription}`)
+    .digest('hex')
+    .substring(0, 20);
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const randomIntInclusive = (min, max) => {
+  const safeMin = Math.ceil(Number(min) || 0);
+  const safeMax = Math.floor(Number(max) || 0);
+  if (safeMax <= safeMin) return safeMin;
+  return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
+};
+
+const nextPollDelayMs = (failureCount = 0) => {
+  if (failureCount > 0) {
+    const exponential = Math.min(
+      NEWS_GOOGLE_MASTER_BACKOFF_MAX_MS,
+      NEWS_GOOGLE_MASTER_BACKOFF_BASE_MS * (2 ** Math.min(8, failureCount - 1))
+    );
+    return exponential + randomIntInclusive(1000, NEWS_GOOGLE_MASTER_POLL_JITTER_MS);
+  }
+  return NEWS_GOOGLE_MASTER_POLL_BASE_INTERVAL_MS + randomIntInclusive(1000, NEWS_GOOGLE_MASTER_POLL_JITTER_MS);
+};
 const EMPTY_LOCATION_TAGS = Object.freeze({
   zipCodes: [],
   cities: [],
@@ -3402,6 +3647,7 @@ const buildIngestionNormalizedPayload = (article = {}, options = {}) => {
     localityLevel: safeArticle.localityLevel || 'global',
     language: safeArticle.language || 'en',
     normalizedUrlHash: safeArticle.normalizedUrlHash || null,
+    contentFingerprint: safeArticle.contentFingerprint || null,
     locationTags: safeArticle.locationTags || EMPTY_LOCATION_TAGS
   };
 };
@@ -3420,28 +3666,52 @@ const persistNewsIngestionRecord = async (payload) => {
 
 const cleanupStaleNewsData = async () => {
   if (mongoose.connection?.readyState !== 1) {
+    console.warn('[cleanupStaleNewsData] MongoDB connection not ready, skipping cleanup');
     return null;
   }
+
   const cutoff = new Date(Date.now() - NEWS_RETENTION_MS);
-  const [articleCleanup, recordCleanup] = await Promise.all([
-    Article.deleteMany({
+  console.log(`[cleanupStaleNewsData] Starting cleanup with cutoff: ${cutoff.toISOString()} (${NEWS_RETENTION_DAYS} days ago)`);
+
+  try {
+    // Delete articles older than the retention period
+    // Use publishedAt as primary filter, with ingestTimestamp as fallback for articles missing publishedAt
+    const articleCleanup = await Article.deleteMany({
       $or: [
         { publishedAt: { $lt: cutoff } },
-        { ingestTimestamp: { $lt: cutoff } }
+        { publishedAt: null, ingestTimestamp: { $lt: cutoff } },
+        { publishedAt: { $exists: false }, ingestTimestamp: { $lt: cutoff } }
       ]
-    }),
-    NewsIngestionRecord.deleteMany({
+    });
+
+    // Delete ingestion records older than retention period or marked as duplicates
+    const recordCleanup = await NewsIngestionRecord.deleteMany({
       $or: [
         { scrapedAt: { $lt: cutoff } },
         { 'dedupe.outcome': 'duplicate' }
       ]
-    })
-  ]);
-  return {
-    cutoff,
-    articlesDeleted: articleCleanup?.deletedCount || 0,
-    ingestionRecordsDeleted: recordCleanup?.deletedCount || 0
-  };
+    });
+
+    const result = {
+      cutoff,
+      articlesDeleted: articleCleanup?.deletedCount || 0,
+      ingestionRecordsDeleted: recordCleanup?.deletedCount || 0,
+      timestamp: new Date().toISOString()
+    };
+
+    console.log(`[cleanupStaleNewsData] Cleanup complete: deleted ${result.articlesDeleted} articles, ${result.ingestionRecordsDeleted} ingestion records`);
+
+    return result;
+  } catch (error) {
+    console.error('[cleanupStaleNewsData] Error during cleanup:', error.message);
+    return {
+      cutoff,
+      articlesDeleted: 0,
+      ingestionRecordsDeleted: 0,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+  }
 };
 
 async function processArticles(articles, options = {}) {
@@ -3456,19 +3726,36 @@ async function processArticles(articles, options = {}) {
   const scoredArticles = [];
   const momentumMap = createMomentumMap(articles, new Date());
   const findExistingArticle = Article.findDuplicate
-    ? (url, sourceId, normalizedUrlHash) => Article.findDuplicate(url, sourceId)
-    : (url, sourceId, normalizedUrlHash) => Article.findOne({ normalizedUrlHash });
+    ? (url, sourceId, normalizedUrlHash, contentFingerprint) => {
+      // Keep compatibility with tests/mocks that still stub a 2-arg signature.
+      if (Article.findDuplicate.length >= 3) {
+        return Article.findDuplicate(url, sourceId, contentFingerprint);
+      }
+      return Article.findDuplicate(url, sourceId);
+    }
+    : (url, sourceId, normalizedUrlHash, contentFingerprint) => {
+      const dedupeClauses = [
+        ...(normalizedUrlHash ? [{ normalizedUrlHash }] : []),
+        ...(contentFingerprint ? [{ contentFingerprint }] : [])
+      ];
+      if (dedupeClauses.length === 0) {
+        return null;
+      }
+      return Article.findOne({ $or: dedupeClauses });
+    };
 
   for (const article of articles) {
     try {
       const normalizedUrlHash = article.url
         ? buildNormalizedUrlHash(article.url)
         : null;
+      const contentFingerprint = buildContentFingerprint(article);
       const sourceMomentum = getArticleMomentumSignal(article, momentumMap);
       const scoring = calculateViralScore(article, { sourceMomentum });
       const scoredArticle = {
         ...article,
         normalizedUrlHash,
+        contentFingerprint,
         viralScore: scoring.score,
         viralScoreVersion: scoring.scoreVersion,
         viralSignals: scoring.signals,
@@ -3482,7 +3769,8 @@ async function processArticles(articles, options = {}) {
       const existing = await findExistingArticle(
         scopedArticle.url,
         scopedArticle.sourceId,
-        scopedArticle.normalizedUrlHash
+        scopedArticle.normalizedUrlHash,
+        scopedArticle.contentFingerprint
       );
       
       if (existing) {
@@ -3522,7 +3810,8 @@ async function processArticles(articles, options = {}) {
               viralSignals: scopedArticle.viralSignals,
               isPromoted: scopedArticle.isPromoted,
               lastScoredAt: scopedArticle.lastScoredAt,
-              localityLevel: scopedArticle.localityLevel || existing.localityLevel || 'global'
+              localityLevel: scopedArticle.localityLevel || existing.localityLevel || 'global',
+              contentFingerprint: scopedArticle.contentFingerprint || existing.contentFingerprint || null
             }
           });
           results.updated++;
@@ -3892,32 +4181,30 @@ async function ingestAllSources() {
   let localMetrics = null;
   if (NEWS_LOCAL_SOURCES_ENABLED) {
     try {
-      // Gather unique user locations from active news preferences
-      const userPrefs = await NewsPreferences.find({
-        'locations.0': { $exists: true }
-      }).select('locations').limit(NEWS_LOCAL_MAX_LOCATIONS).lean();
+      await syncMasterLocationsFromUsers({
+        limit: Math.max(NEWS_LOCAL_MAX_LOCATIONS * 10, 100)
+      });
 
-      const locationSet = new Map();
-      for (const pref of userPrefs) {
-        for (const loc of (pref.locations || [])) {
-          const city = (loc.city || '').trim();
-          const state = (loc.state || '').trim();
-          const zipCode = (loc.zipCode || '').trim();
-          const key = `${city.toLowerCase()}|${(state || zipCode).toLowerCase()}`;
-          if (key !== '|' && !locationSet.has(key)) {
-            locationSet.set(key, {
-              city,
-              state,
-              stateAbbrev: state, // normalizeLocationInput in planner resolves full names
-              zipCode,
-              country: loc.country || 'US'
-            });
-          }
-        }
-      }
+      const masterLocations = await NewsLocation.find({
+        isActive: true,
+        userCount: { $gt: 0 },
+        $or: [
+          { canonicalCity: { $exists: true, $ne: null } },
+          { canonicalZipCode: { $exists: true, $ne: null } }
+        ]
+      })
+        .sort({ userCount: -1, updatedAt: -1 })
+        .limit(NEWS_LOCAL_MAX_LOCATIONS)
+        .lean();
 
-      if (locationSet.size > 0) {
-        const locations = Array.from(locationSet.values()).slice(0, NEWS_LOCAL_MAX_LOCATIONS);
+      if (masterLocations.length > 0) {
+        const locations = masterLocations.map((loc) => ({
+          city: loc.canonicalCity || '',
+          state: loc.canonicalStateCode || loc.canonicalState || '',
+          stateAbbrev: loc.canonicalStateCode || '',
+          zipCode: loc.canonicalZipCode || '',
+          country: loc.canonicalCountryCode || loc.canonicalCountry || 'US'
+        }));
         const { articles: localArticles, metrics } = await ingestLocalSources(locations);
         allArticles = [...allArticles, ...localArticles];
         localMetrics = metrics;
@@ -3948,6 +4235,285 @@ async function ingestAllSources() {
   console.log(`Ingestion complete: ${results.inserted} inserted, ${results.updated} updated, ${results.duplicates} duplicates in ${Date.now() - startTime}ms`);
   return results;
 }
+
+const buildGoogleMasterQuery = (location = {}) => {
+  const parts = [
+    location.canonicalZipCode,
+    location.canonicalCity,
+    location.canonicalStateCode || location.canonicalState,
+    location.canonicalCountryCode || location.canonicalCountry,
+    'local news'
+  ].filter(Boolean);
+  return parts.join(' ');
+};
+
+const queueImmediateLocationFetch = async ({ userId = null, location = {}, coordinates = null } = {}) => {
+  const upserted = await upsertMasterLocationFromUser({
+    userId,
+    location,
+    coordinates,
+    queueOnDemand: true
+  });
+  if (!upserted) {
+    return {
+      status: 'ignored',
+      reason: 'location_not_resolved'
+    };
+  }
+  // Fire-and-forget so registration can continue while polling starts quickly.
+  runGoogleMasterPollingCycle().catch((error) => {
+    console.warn('[news-google-master-poll] On-demand trigger failed:', error.message);
+  });
+  return {
+    status: 'queued',
+    locationKey: upserted.locationKey,
+    canonicalName: upserted.canonicalName
+  };
+};
+
+const pollSingleMasterLocation = async (location, { reason = 'scheduled' } = {}) => {
+  const pollStart = Date.now();
+  const ingestionRunId = uuidv4();
+  const query = buildGoogleMasterQuery(location);
+  const now = new Date();
+
+  if (!query) {
+    return {
+      locationKey: location.locationKey,
+      status: 'skipped',
+      inserted: 0,
+      updated: 0,
+      duplicates: 0,
+      durationMs: 0,
+      reason: 'missing_query'
+    };
+  }
+
+  await NewsLocation.updateOne(
+    { _id: location._id },
+    {
+      $set: {
+        onDemandStatus: reason === 'on-demand' ? 'running' : location.onDemandStatus,
+        onDemandLastTriggeredAt: reason === 'on-demand' ? now : location.onDemandLastTriggeredAt
+      }
+    }
+  );
+
+  try {
+    await sleep(randomIntInclusive(NEWS_GOOGLE_MASTER_REQUEST_DELAY_MIN_MS, NEWS_GOOGLE_MASTER_REQUEST_DELAY_MAX_MS));
+    const fetched = await fetchGoogleNewsSource(query, 'googleNews');
+    const enriched = fetched.map((article) => ({
+      ...article,
+      sourceProviderId: 'google-master-local',
+      sourceTier: 1,
+      feedMetadata: {
+        ...(article.feedMetadata || {}),
+        masterLocationKey: location.locationKey,
+        masterCanonicalName: location.canonicalName,
+        pollingReason: reason,
+        pollingQuery: query,
+        ingestionRunId
+      },
+      locations: [...new Set([...(article.locations || []), String(location.canonicalName || '').toLowerCase()])],
+      locationTags: mergeLocationTags(article.locationTags, {
+        zipCodes: location.canonicalZipCode ? [location.canonicalZipCode] : [],
+        cities: location.canonicalCity ? [location.canonicalCity] : [],
+        counties: location.canonicalCounty ? [location.canonicalCounty] : [],
+        states: location.canonicalStateCode ? [location.canonicalStateCode] : [],
+        countries: location.canonicalCountryCode ? [location.canonicalCountryCode] : []
+      }, location.canonicalZipCode || null),
+      assignedZipCode: article.assignedZipCode || location.canonicalZipCode || null,
+      localityLevel: article.localityLevel || (location.canonicalCity ? 'city' : (location.canonicalStateCode ? 'state' : 'country'))
+    }));
+
+    const processed = await processArticles(enriched, { ingestionRunId });
+    const durationMs = Date.now() - pollStart;
+    const nextDelay = nextPollDelayMs(0);
+    const nextPollAt = new Date(Date.now() + nextDelay);
+
+    await NewsLocation.updateOne(
+      { _id: location._id },
+      {
+        $set: {
+          lastPolledAt: new Date(),
+          nextPollAt,
+          lastPollStatus: 'success',
+          lastPollError: null,
+          lastPollDurationMs: durationMs,
+          lastResultArticleCount: enriched.length,
+          lastResultDuplicateCount: processed.duplicates,
+          onDemandRequestedAt: null,
+          onDemandStatus: reason === 'on-demand' ? 'success' : location.onDemandStatus,
+          consecutiveFailureCount: 0
+        },
+        $inc: {
+          totalPollCount: 1
+        }
+      }
+    );
+
+    return {
+      locationKey: location.locationKey,
+      status: 'success',
+      inserted: processed.inserted,
+      updated: processed.updated,
+      duplicates: processed.duplicates,
+      articlesFetched: enriched.length,
+      durationMs,
+      reason
+    };
+  } catch (error) {
+    const currentFailures = Number(location.consecutiveFailureCount || 0) + 1;
+    const nextDelay = nextPollDelayMs(currentFailures);
+    await NewsLocation.updateOne(
+      { _id: location._id },
+      {
+        $set: {
+          lastPolledAt: new Date(),
+          nextPollAt: new Date(Date.now() + nextDelay),
+          lastPollStatus: 'error',
+          lastPollError: error.message,
+          onDemandStatus: reason === 'on-demand' ? 'error' : location.onDemandStatus
+        },
+        $inc: {
+          totalPollCount: 1,
+          totalFailureCount: 1,
+          consecutiveFailureCount: 1
+        }
+      }
+    );
+    return {
+      locationKey: location.locationKey,
+      status: 'error',
+      inserted: 0,
+      updated: 0,
+      duplicates: 0,
+      durationMs: Date.now() - pollStart,
+      reason,
+      error: error.message
+    };
+  }
+};
+
+const runLocationTasksWithConcurrency = async (locations = [], worker) => {
+  const queue = [...locations];
+  const outputs = [];
+  const workers = Array.from({ length: Math.min(NEWS_GOOGLE_MASTER_POLL_CONCURRENCY, queue.length) }, async () => {
+    while (queue.length > 0) {
+      const next = queue.shift();
+      if (!next) continue;
+      const result = await worker(next);
+      outputs.push(result);
+    }
+  });
+  await Promise.all(workers);
+  return outputs;
+};
+
+let googleMasterPollingTimer = null;
+let googleMasterPollingActive = false;
+let googleMasterLastCycleAt = null;
+let googleMasterLastCycleResult = null;
+
+const runGoogleMasterPollingCycle = async () => {
+  if (googleMasterPollingActive || !NEWS_GOOGLE_MASTER_POLLING_ENABLED) {
+    return googleMasterLastCycleResult;
+  }
+  googleMasterPollingActive = true;
+  const cycleStartedAt = Date.now();
+
+  try {
+    await syncMasterLocationsFromUsers({
+      limit: Math.max(NEWS_GOOGLE_MASTER_MAX_LOCATIONS_PER_CYCLE * 20, 200)
+    });
+
+    const now = new Date();
+    const candidates = await NewsLocation.find({
+      isActive: true,
+      userCount: { $gt: 0 },
+      $or: [
+        { onDemandRequestedAt: { $lte: now }, onDemandStatus: { $in: ['queued', 'error'] } },
+        { nextPollAt: { $lte: now } },
+        { nextPollAt: null }
+      ]
+    })
+      .sort({ onDemandRequestedAt: 1, nextPollAt: 1, userCount: -1 })
+      .limit(NEWS_GOOGLE_MASTER_MAX_LOCATIONS_PER_CYCLE)
+      .lean();
+
+    const cycleResults = await runLocationTasksWithConcurrency(candidates, async (loc) => {
+      const reason = loc.onDemandRequestedAt ? 'on-demand' : 'scheduled';
+      return pollSingleMasterLocation(loc, { reason });
+    });
+
+    const summary = cycleResults.reduce((acc, result) => {
+      acc.polled += 1;
+      acc.inserted += Number(result.inserted || 0);
+      acc.updated += Number(result.updated || 0);
+      acc.duplicates += Number(result.duplicates || 0);
+      if (result.status === 'error') acc.errors += 1;
+      if (result.reason === 'on-demand') acc.onDemand += 1;
+      return acc;
+    }, {
+      polled: 0,
+      inserted: 0,
+      updated: 0,
+      duplicates: 0,
+      errors: 0,
+      onDemand: 0
+    });
+
+    googleMasterLastCycleAt = new Date();
+    googleMasterLastCycleResult = {
+      ...summary,
+      durationMs: Date.now() - cycleStartedAt,
+      sampledLocations: cycleResults.slice(0, 10)
+    };
+    console.log('[news-google-master-poll-cycle]', JSON.stringify(googleMasterLastCycleResult));
+    return googleMasterLastCycleResult;
+  } finally {
+    googleMasterPollingActive = false;
+  }
+};
+
+const scheduleNextGoogleMasterPollingCycle = () => {
+  if (googleMasterPollingTimer) {
+    clearTimeout(googleMasterPollingTimer);
+    googleMasterPollingTimer = null;
+  }
+  if (!NEWS_GOOGLE_MASTER_POLLING_ENABLED) {
+    return;
+  }
+  const delayMs = randomIntInclusive(60 * 1000, 3 * 60 * 1000);
+  googleMasterPollingTimer = setTimeout(async () => {
+    try {
+      await runGoogleMasterPollingCycle();
+    } catch (error) {
+      console.error('[news-google-master-poll-cycle] Failed:', error.message);
+    } finally {
+      scheduleNextGoogleMasterPollingCycle();
+    }
+  }, delayMs);
+};
+
+const startGoogleMasterPollingEngine = () => {
+  if (!NEWS_GOOGLE_MASTER_POLLING_ENABLED) {
+    console.log('Google master location polling engine is disabled');
+    return;
+  }
+  scheduleNextGoogleMasterPollingCycle();
+  runGoogleMasterPollingCycle().catch((error) => {
+    console.error('[news-google-master-poll] Initial cycle failed:', error.message);
+  });
+  console.log('Google master location polling engine started');
+};
+
+const stopGoogleMasterPollingEngine = () => {
+  if (googleMasterPollingTimer) {
+    clearTimeout(googleMasterPollingTimer);
+    googleMasterPollingTimer = null;
+  }
+};
 
 // ============================================
 // AUTHENTICATION MIDDLEWARE
@@ -4038,8 +4604,13 @@ router.get('/feed', authenticateToken, async (req, res) => {
     const followedSportsTeams = normalizeFollowedSportsTeams(preferences?.followedSportsTeams || []);
     const followedSportsTeamSet = new Set(followedSportsTeams);
     
-    // Build base query
-    const query = { isActive: true };
+    // Build base query with strict 7-day age filter for all news and Reddit articles
+    // This ensures no article older than 7 days appears in any scope (local, regional, national, global)
+    const sevenDaysAgo = new Date(Date.now() - NEWS_RETENTION_MS);
+    const query = {
+      isActive: true,
+      publishedAt: { $gte: sevenDaysAgo }
+    };
     
     // Filter by source type
     if (sourceType) {
@@ -4058,6 +4629,18 @@ router.get('/feed', authenticateToken, async (req, res) => {
       .sort({ publishedAt: -1, freshnessScore: -1 })
       .limit(candidateLimit)
       .lean();
+
+    if (activeScope !== 'global' && hasLocationContext(locationContext)) {
+      const scopedCandidateQuery = buildScopedCandidateQuery(query, locationContext, activeScope);
+      if (scopedCandidateQuery) {
+        const scopedCandidateLimit = Math.min(MAX_FEED_CANDIDATES, Math.max(candidateLimit * 5, parsedLimit * 20));
+        const scopedArticles = await Article.find(scopedCandidateQuery)
+          .sort({ publishedAt: -1, freshnessScore: -1 })
+          .limit(scopedCandidateLimit)
+          .lean();
+        articles = mergeCandidateArticles(scopedArticles, articles);
+      }
+    }
     
     // Apply source filtering based on preferences
     if (preferences?.rssSources?.length > 0) {
@@ -4110,7 +4693,7 @@ router.get('/feed', authenticateToken, async (req, res) => {
     const buildScopedArticles = (scopeValue) => {
       const scoped = scopedCandidates
         .map((article) => {
-          const scopeTier = getScopeTier(scopeValue, article._locationMatches);
+          const scopeTier = getScopeTier(scopeValue, article._locationMatches, locationContext);
           const recencyScore = scoreRecency(article.publishedAt, article.freshnessScore);
           const localityLevelScore = scoreLocalityLevel(scopeValue, article.localityLevel);
           const deterministicScopeScore = NEWS_LOCATION_TAGGER_V2_ENABLED
@@ -4155,6 +4738,8 @@ router.get('/feed', authenticateToken, async (req, res) => {
     };
 
     let scopeFilteredArticles = buildScopedArticles(activeScope);
+    const originalRequestedScope = requestedScope;
+    
     if (scopeFilteredArticles.length === 0) {
       const isSportsTopic = topicAliases.includes('sports');
       let fallbackChain = getFallbackScopeOrder(activeScope).slice(1);
@@ -4178,10 +4763,14 @@ router.get('/feed', authenticateToken, async (req, res) => {
       }
     }
 
-    // Mix in national/global articles when viewing local or regional scope
-    // so users see their local news first, plus top broader stories
-    const allowBroaderMix = !topicAliases.includes('sports');
-    if ((activeScope === 'local' || activeScope === 'regional') && scopeFilteredArticles.length > 0 && allowBroaderMix) {
+    // For explicit local scope requests: do NOT mix in broader (national/global) articles
+    // when local matches exist. Only allow broader mixing for regional scope or when
+    // the user is on a fallback scope (not their original request).
+    const isExplicitLocalRequest = originalRequestedScope === 'local';
+    const allowBroaderMix = !isExplicitLocalRequest && !topicAliases.includes('sports');
+    
+    // Only mix broader articles for regional scope (not strict local requests)
+    if (allowBroaderMix && activeScope === 'regional' && scopeFilteredArticles.length > 0) {
       const seenIds = new Set(scopeFilteredArticles.map((a) => String(a._id)));
       const globalCandidates = buildScopedArticles('global')
         .filter((a) => !seenIds.has(String(a._id)));
@@ -4241,13 +4830,16 @@ router.get('/feed', authenticateToken, async (req, res) => {
         followedKeywords,
         followedSportsTeams,
         hasKeywordMatches: articles.some(a => a.isFollowingMatch),
-        requestedScope,
+        // Deterministic scope metadata for fallback clarity
+        requestedScope: originalRequestedScope || requestedScope,
         activeScope,
+        resolvedScope: activeScope,
         fallbackApplied,
-        fallbackReason,
+        fallbackReason: fallbackApplied ? (fallbackReason || 'no_scope_matches') : null,
         scopeDecision: {
           reason: fallbackReason || 'direct_match',
-          locationContext: locationTelemetry
+          locationContext: locationTelemetry,
+          fallbackChain: getFallbackScopeOrder(originalRequestedScope || requestedScope)
         },
         locationContext: {
           source: locationContext.source,
@@ -4256,6 +4848,12 @@ router.get('/feed', authenticateToken, async (req, res) => {
           hasCounty: Boolean(locationContext.county),
           hasState: Boolean(locationContext.state),
           hasCountry: Boolean(locationContext.country),
+          hasAnyLocalContext: Boolean(
+            locationContext.zipCode || locationContext.city || locationContext.county ||
+            (locationContext.zipCodeValues?.length > 0) ||
+            (locationContext.cityValues?.length > 0) ||
+            (locationContext.countyValues?.length > 0)
+          ),
           levelsUsed: activeScope === 'local'
             ? ['zipCode', 'city', 'county', 'state', 'country']
             : activeScope === 'regional'
@@ -4405,17 +5003,23 @@ router.get('/preferences', authenticateToken, async (req, res) => {
     
     // Create default preferences if none exist
     if (!preferences) {
-      const seededLocations = userFallbackLocation
+      const resolvedUserFallback = userFallbackLocation
+        ? await resolveCanonicalLocationInput(userFallbackLocation)
+        : null;
+      const effectiveUserFallbackLocation = resolvedUserFallback?.canonical || userFallbackLocation;
+      const seededLocations = effectiveUserFallbackLocation
         ? [{
             ...canonicalizePreferenceLocation({
-              city: userFallbackLocation.city,
-              zipCode: userFallbackLocation.zipCode,
-              state: userFallbackLocation.state,
-              country: userFallbackLocation.country,
+              city: effectiveUserFallbackLocation.city,
+              zipCode: effectiveUserFallbackLocation.zipCode,
+              county: effectiveUserFallbackLocation.county,
+              state: effectiveUserFallbackLocation.stateCode || effectiveUserFallbackLocation.state,
+              country: effectiveUserFallbackLocation.countryCode || effectiveUserFallbackLocation.country,
               isPrimary: true
             })
           }]
         : [];
+      const computedDefaultScope = deriveDefaultScopeFromLocationShape(effectiveUserFallbackLocation);
       preferences = await NewsPreferences.create({
         user: req.user.userId,
         rssSources: [],
@@ -4427,23 +5031,26 @@ router.get('/preferences', authenticateToken, async (req, res) => {
         followedSportsTeams: [],
         hiddenCategories: [],
         localPriorityEnabled: true,
-        defaultScope: seededLocations.length > 0 ? 'local' : 'global'
+        defaultScope: computedDefaultScope
       });
     } else if ((!NEWS_SCOPE_VALUES.includes(preferences.defaultScope) || !preferences.locations?.length) && userFallbackLocation) {
+      const resolvedUserFallback = await resolveCanonicalLocationInput(userFallbackLocation);
+      const effectiveUserFallbackLocation = resolvedUserFallback?.canonical || userFallbackLocation;
       const updatePayload = {};
       if (!preferences.locations?.length) {
         updatePayload.locations = [{
           ...canonicalizePreferenceLocation({
-            city: userFallbackLocation.city,
-            zipCode: userFallbackLocation.zipCode,
-            state: userFallbackLocation.state,
-            country: userFallbackLocation.country,
+            city: effectiveUserFallbackLocation.city,
+            zipCode: effectiveUserFallbackLocation.zipCode,
+            county: effectiveUserFallbackLocation.county,
+            state: effectiveUserFallbackLocation.stateCode || effectiveUserFallbackLocation.state,
+            country: effectiveUserFallbackLocation.countryCode || effectiveUserFallbackLocation.country,
             isPrimary: true
           })
         }];
       }
       if (!NEWS_SCOPE_VALUES.includes(preferences.defaultScope)) {
-        updatePayload.defaultScope = hasLocationContext(userFallbackLocation) ? 'local' : 'global';
+        updatePayload.defaultScope = deriveDefaultScopeFromLocationShape(effectiveUserFallbackLocation);
       }
       if (Object.keys(updatePayload).length > 0) {
         preferences = await maybePopulatePreferences(NewsPreferences.findOneAndUpdate(
@@ -4453,9 +5060,55 @@ router.get('/preferences', authenticateToken, async (req, res) => {
         ));
       }
     } else if (!NEWS_SCOPE_VALUES.includes(preferences.defaultScope)) {
+      const primaryLocation = preferences.locations?.[0];
+      const computedDefaultScope = deriveDefaultScopeFromLocationShape(primaryLocation);
       preferences = await maybePopulatePreferences(NewsPreferences.findOneAndUpdate(
         { user: req.user.userId },
-        { $set: { defaultScope: preferences.locations?.length ? 'local' : 'global' } },
+        { $set: { defaultScope: computedDefaultScope } },
+        { new: true }
+      ));
+    }
+
+    const primaryLocation = getPrimaryPreferenceLocation(preferences);
+    const resolvedPrimaryLocation = primaryLocation
+      ? await resolveCanonicalLocationInput(primaryLocation)
+      : null;
+    const normalizedPrimaryLocation = resolvedPrimaryLocation?.canonical
+      ? canonicalizePreferenceLocation({
+          ...resolvedPrimaryLocation.canonical,
+          isPrimary: Boolean(primaryLocation?.isPrimary || true)
+        })
+      : null;
+    const shouldRepairPrimaryLocation = Boolean(
+      primaryLocation
+      && normalizedPrimaryLocation
+      && locationsDiffer(primaryLocation, normalizedPrimaryLocation)
+    );
+    const shouldRepairSeededScope = Boolean(
+      shouldRepairPrimaryLocation
+      && preferences?.defaultScope === 'global'
+      && deriveDefaultScopeFromLocationShape(normalizedPrimaryLocation) !== 'global'
+    );
+    if (shouldRepairPrimaryLocation || shouldRepairSeededScope) {
+      const updatedLocations = (Array.isArray(preferences.locations) ? preferences.locations : []).map((location, index) => {
+        if (!location?.isPrimary && index !== 0) {
+          return canonicalizePreferenceLocation({
+            ...(location?.toObject?.() || location),
+            isPrimary: Boolean(location?.isPrimary)
+          });
+        }
+        return {
+          ...normalizedPrimaryLocation,
+          isPrimary: true
+        };
+      });
+      const repairPayload = { locations: updatedLocations };
+      if (shouldRepairSeededScope) {
+        repairPayload.defaultScope = deriveDefaultScopeFromLocationShape(normalizedPrimaryLocation);
+      }
+      preferences = await maybePopulatePreferences(NewsPreferences.findOneAndUpdate(
+        { user: req.user.userId },
+        { $set: repairPayload },
         { new: true }
       ));
     }
@@ -5122,6 +5775,77 @@ router.get('/topics', (req, res) => {
   res.json({ topics });
 });
 
+router.get('/prefetch-status', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId)
+      .select('_id city state country county zipCode')
+      .lean();
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const locationData = await resolveCanonicalLocationInput({
+      city: user.city,
+      state: user.state,
+      country: user.country,
+      county: user.county,
+      zipCode: user.zipCode
+    });
+
+    if (!locationData?.locationKey) {
+      return res.json({
+        status: 'unavailable',
+        reason: 'no_location',
+        articles: []
+      });
+    }
+
+    const masterLocation = await NewsLocation.findOne({
+      locationKey: locationData.locationKey
+    }).lean();
+
+    const locationClauses = [
+      ...(locationData.canonicalName ? [{ locations: String(locationData.canonicalName || '').toLowerCase() }] : []),
+      ...(locationData.canonical?.zipCode ? [{ assignedZipCode: locationData.canonical.zipCode }] : []),
+      ...(locationData.canonical?.city ? [{ 'locationTags.cities': locationData.canonical.city }] : []),
+      ...(locationData.canonical?.stateCode ? [{ 'locationTags.states': locationData.canonical.stateCode }] : [])
+    ];
+    const articleMatch = {
+      isActive: true,
+      createdAt: { $gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+      ...(locationClauses.length > 0 ? { $or: locationClauses } : {})
+    };
+
+    const articles = await Article.find(articleMatch)
+      .sort({ publishedAt: -1, createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    return res.json({
+      status: masterLocation?.onDemandStatus || 'none',
+      location: masterLocation
+        ? {
+          locationKey: masterLocation.locationKey,
+          canonicalName: masterLocation.canonicalName,
+          lastPolledAt: masterLocation.lastPolledAt,
+          nextPollAt: masterLocation.nextPollAt,
+          lastPollStatus: masterLocation.lastPollStatus
+        }
+        : {
+          locationKey: locationData.locationKey,
+          canonicalName: locationData.canonicalName,
+          lastPolledAt: null,
+          nextPollAt: null,
+          lastPollStatus: 'idle'
+        },
+      articles
+    });
+  } catch (error) {
+    console.error('Error fetching prefetch status:', error);
+    return res.status(500).json({ error: 'Failed to fetch prefetch status' });
+  }
+});
+
 router.get('/location-taxonomy', authenticateToken, (req, res) => {
   res.json({ taxonomy: getLocationTaxonomyPayload() });
 });
@@ -5136,6 +5860,168 @@ router.get('/sports-teams', authenticateToken, (req, res) => {
   res.json({
     leagues,
     totalTeams,
+    generatedAt: new Date().toISOString()
+  });
+});
+
+// ============================================
+// SPORTS SCHEDULE ENDPOINTS
+// ============================================
+
+const SportsSchedule = require('../models/SportsSchedule');
+const {
+  runSportsScheduleIngestion,
+  getTeamSchedules,
+  isInSeason,
+  getNextSeasonStart,
+  LEAGUE_SEASONS
+} = require('../services/sportsScheduleIngestion');
+
+/**
+ * GET /api/news/sports-schedules
+ * Get upcoming games for user's followed sports teams
+ * Query params:
+ *   - teams: comma-separated list of team IDs
+ *   - league: filter by league (optional)
+ */
+router.get('/sports-schedules', authenticateToken, async (req, res) => {
+  try {
+    const { teams, league } = req.query;
+    
+    // Get user's followed teams from preferences if not specified
+    let teamIds = [];
+    
+    if (teams) {
+      teamIds = String(teams).split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    } else {
+      // Get from user preferences
+      const preferences = await NewsPreferences.findOne({ user: req.user.id });
+      if (preferences?.followedSportsTeams?.length > 0) {
+        teamIds = preferences.followedSportsTeams.map(t => t.toLowerCase());
+      }
+    }
+    
+    if (teamIds.length === 0) {
+      return res.json({
+        schedules: {},
+        generatedAt: new Date().toISOString()
+      });
+    }
+    
+    // Limit to 50 teams max
+    teamIds = teamIds.slice(0, 50);
+    
+    // Get schedules for each team
+    const schedules = await getTeamSchedules(teamIds);
+    
+    // Add league season status
+    const leagueStatuses = {};
+    const leagues = new Set(teamIds.map(id => {
+      const parts = id.split(':');
+      return parts[0]?.toUpperCase();
+    }).filter(Boolean));
+    
+    for (const leagueId of leagues) {
+      leagueStatuses[leagueId] = {
+        isInSeason: isInSeason(leagueId),
+        nextSeasonStart: getNextSeasonStart(leagueId)?.toISOString() || null
+      };
+    }
+    
+    res.json({
+      schedules,
+      leagueStatuses,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching sports schedules:', error);
+    res.status(500).json({ error: 'Failed to fetch sports schedules' });
+  }
+});
+
+/**
+ * GET /api/news/sports-schedules/league/:league
+ * Get all upcoming games for a specific league
+ */
+router.get('/sports-schedules/league/:league', authenticateToken, async (req, res) => {
+  try {
+    const { league } = req.params;
+    const leagueUpper = (league || '').toUpperCase();
+    
+    // Validate league
+    const validLeagues = new Set(['NFL', 'NBA', 'MLB', 'NHL', 'MLS', 'NCAA_FOOTBALL', 'NCAA_BASKETBALL', 'PREMIER_LEAGUE', 'LA_LIGA']);
+    if (!validLeagues.has(leagueUpper)) {
+      return res.status(400).json({ error: 'Invalid league' });
+    }
+    
+    const now = new Date();
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    
+    // Get upcoming games for the league
+    const games = await SportsSchedule.find({
+      league: leagueUpper,
+      gameDate: { $gte: now, $lte: thirtyDaysFromNow },
+      status: { $in: ['scheduled', 'in_progress', 'tbd'] }
+    })
+    .sort({ gameDate: 1 })
+    .limit(100)
+    .lean();
+    
+    res.json({
+      league: leagueUpper,
+      isInSeason: isInSeason(leagueUpper),
+      nextSeasonStart: getNextSeasonStart(leagueUpper)?.toISOString() || null,
+      games,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching league schedules:', error);
+    res.status(500).json({ error: 'Failed to fetch league schedules' });
+  }
+});
+
+/**
+ * POST /api/news/sports-schedules/ingest
+ * Trigger manual ingestion of sports schedules (admin only)
+ */
+router.post('/sports-schedules/ingest', authenticateToken, async (req, res) => {
+  try {
+    // In production, add admin check here
+    // if (req.user.role !== 'admin') {
+    //   return res.status(403).json({ error: 'Admin access required' });
+    // }
+    
+    const result = await runSportsScheduleIngestion();
+    res.json({
+      success: true,
+      result,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error triggering sports schedule ingestion:', error);
+    res.status(500).json({ error: 'Failed to trigger ingestion' });
+  }
+});
+
+/**
+ * GET /api/news/sports-schedules/seasons
+ * Get season information for all leagues
+ */
+router.get('/sports-schedules/seasons', authenticateToken, (req, res) => {
+  const seasons = {};
+  const now = new Date();
+  
+  for (const [league, info] of Object.entries(LEAGUE_SEASONS)) {
+    seasons[league] = {
+      isInSeason: isInSeason(league),
+      nextSeasonStart: getNextSeasonStart(league)?.toISOString() || null,
+      seasonStartMonth: info.seasonStartMonth,
+      seasonEndMonth: info.seasonEndMonth
+    };
+  }
+  
+  res.json({
+    seasons,
     generatedAt: new Date().toISOString()
   });
 });
@@ -5217,6 +6103,24 @@ async function resolveWeatherLocationCoordinates(locObj = {}) {
       countryCode: locObj.countryCode || null,
       timezone: locObj.timezone || null
     };
+  }
+
+  // If a ZIP code is provided, try to resolve it locally first
+  const zipCode = locObj.zipCode || locObj.postalCode || null;
+  if (zipCode) {
+    const zipLocation = await resolveZipLocation(zipCode, { allowGeocode: true, persist: true });
+    if (zipLocation && Number.isFinite(zipLocation.latitude) && Number.isFinite(zipLocation.longitude)) {
+      return {
+        lat: Number(zipLocation.latitude),
+        lon: Number(zipLocation.longitude),
+        label: locObj.label || [zipLocation.city, zipLocation.state, zipLocation.country].filter(Boolean).join(', '),
+        city: zipLocation.city || locObj.city || null,
+        state: zipLocation.state || locObj.state || null,
+        country: zipLocation.country || locObj.country || null,
+        countryCode: zipLocation.countryCode || locObj.countryCode || null,
+        timezone: locObj.timezone || null
+      };
+    }
   }
 
   const query = String(locObj.query || locObj.label || [locObj.city, locObj.state, locObj.zipCode, locObj.country].filter(Boolean).join(' ')).trim();
@@ -5400,9 +6304,14 @@ router.get('/weather', authenticateToken, async (req, res) => {
         if (user?.location?.lat && user?.location?.lon) {
           weatherLocations = [{ lat: user.location.lat, lon: user.location.lon, label: 'Profile Location', isPrimary: true }];
           fallbackSource = 'profileLocation';
-        } else if (user?.location?.city || user?.location?.state || user?.location?.zipCode) {
-          weatherLocations = [{ city: user.location.city, state: user.location.state, zipCode: user.location.zipCode, label: 'Profile Location', isPrimary: true }];
-          fallbackSource = 'profileLocation';
+        } else {
+          const profileCity = user?.city || user?.location?.city || null;
+          const profileState = user?.state || user?.location?.state || null;
+          const profileZipCode = user?.zipCode || user?.location?.zipCode || null;
+          if (profileCity || profileState || profileZipCode) {
+            weatherLocations = [{ city: profileCity, state: profileState, zipCode: profileZipCode, label: 'Profile Location', isPrimary: true }];
+            fallbackSource = 'profileLocation';
+          }
         }
       }
     }
@@ -5679,6 +6588,99 @@ router.get('/schedule-info', authenticateToken, async (req, res) => {
   }
 });
 
+router.get('/google-master/health', authenticateToken, async (req, res) => {
+  try {
+    const requester = await User.findById(req.user.userId).select('_id isAdmin');
+    if (!requester?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const now = new Date();
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [
+      totalTracked,
+      activeTracked,
+      queuedOnDemand,
+      failedRecent,
+      stalePolled,
+      recentIngestion
+    ] = await Promise.all([
+      NewsLocation.countDocuments({}),
+      NewsLocation.countDocuments({ isActive: true, userCount: { $gt: 0 } }),
+      NewsLocation.countDocuments({ isActive: true, onDemandStatus: 'queued', onDemandRequestedAt: { $lte: now } }),
+      NewsLocation.countDocuments({ isActive: true, lastPollStatus: 'error', lastPolledAt: { $gte: oneHourAgo } }),
+      NewsLocation.countDocuments({ isActive: true, userCount: { $gt: 0 }, $or: [{ lastPolledAt: null }, { lastPolledAt: { $lt: oneDayAgo } }] }),
+      NewsIngestionRecord.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: oneHourAgo },
+            'source.providerId': 'google-master-local'
+          }
+        },
+        {
+          $group: {
+            _id: '$dedupe.outcome',
+            count: { $sum: 1 }
+          }
+        }
+      ]).catch(() => [])
+    ]);
+
+    const byOutcome = {};
+    for (const row of recentIngestion) {
+      byOutcome[row._id || 'unknown'] = row.count;
+    }
+
+    const totalRecent = Object.values(byOutcome).reduce((sum, value) => sum + Number(value || 0), 0);
+    const insertedRecent = Number(byOutcome.inserted || 0);
+    const errorRecent = Number(byOutcome.error || 0);
+    const duplicateRecent = Number(byOutcome.duplicate || 0);
+
+    const anomalySignals = {
+      lowVolume: totalRecent < 5,
+      elevatedErrors: totalRecent > 0 ? (errorRecent / totalRecent) >= 0.2 : false,
+      duplicateSpike: totalRecent > 0 ? (duplicateRecent / totalRecent) >= 0.7 : false,
+      staleCoverage: stalePolled > 0
+    };
+
+    res.json({
+      engine: {
+        enabled: NEWS_GOOGLE_MASTER_POLLING_ENABLED,
+        active: !!googleMasterPollingTimer,
+        pollConcurrency: NEWS_GOOGLE_MASTER_POLL_CONCURRENCY,
+        maxLocationsPerCycle: NEWS_GOOGLE_MASTER_MAX_LOCATIONS_PER_CYCLE,
+        baseIntervalMs: NEWS_GOOGLE_MASTER_POLL_BASE_INTERVAL_MS,
+        jitterMs: NEWS_GOOGLE_MASTER_POLL_JITTER_MS
+      },
+      trackedLocations: {
+        totalTracked,
+        activeTracked,
+        queuedOnDemand,
+        stalePolled,
+        failedRecent
+      },
+      lastCycle: {
+        runAt: googleMasterLastCycleAt,
+        result: googleMasterLastCycleResult
+      },
+      recentIngestion: {
+        total: totalRecent,
+        inserted: insertedRecent,
+        updated: Number(byOutcome.updated || 0),
+        duplicates: duplicateRecent,
+        errors: errorRecent,
+        byOutcome
+      },
+      anomalySignals
+    });
+  } catch (error) {
+    console.error('Error fetching google master health:', error);
+    res.status(500).json({ error: 'Failed to fetch google master health' });
+  }
+});
+
 /**
  * GET /api/news/ingestion-stats
  * Returns aggregated ingestion statistics per source, per scope, per status (admin)
@@ -5888,6 +6890,7 @@ function startIngestionScheduler() {
   }, INGESTION_INTERVAL_MS);
   
   console.log('News ingestion scheduler started (10-minute cadence)');
+  startGoogleMasterPollingEngine();
 }
 
 function stopIngestionScheduler() {
@@ -5896,6 +6899,7 @@ function stopIngestionScheduler() {
     ingestionInterval = null;
     console.log('News ingestion scheduler stopped');
   }
+  stopGoogleMasterPollingEngine();
 }
 
 // Export for manual control
@@ -5904,6 +6908,7 @@ module.exports = {
   ingestAllSources,
   startIngestionScheduler,
   stopIngestionScheduler,
+  queueImmediateLocationFetch,
   // Export adapters for testing
   adapters: {
     fetchRssSource,
@@ -5943,6 +6948,10 @@ module.exports = {
     resolveLocationContext,
     geocodeContextCache,
     computeScopeQualityMetrics,
+    runGoogleMasterPollingCycle,
+    startGoogleMasterPollingEngine,
+    stopGoogleMasterPollingEngine,
+    pollSingleMasterLocation,
     normalizeToStandardCategory,
     buildGoogleNewsFeedUrl,
     classifySourceHealth,

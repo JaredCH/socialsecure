@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { friendsAPI } from '../utils/api';
+import { friendsAPI, getAuthToken } from '../utils/api';
 import toast from 'react-hot-toast';
 import PresenceIndicator from './PresenceIndicator';
 import { getRealtimeSocket, onFriendPresence } from '../utils/realtime';
@@ -28,7 +28,7 @@ function FriendsManager({ currentUser, onUserUpdate }) {
       return undefined;
     }
 
-    const token = localStorage.getItem('token');
+    const token = getAuthToken();
     if (!token) {
       return undefined;
     }

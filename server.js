@@ -15,6 +15,7 @@ const { initializeRealtime } = require('./services/realtime');
 const { ensureUniversalAdminAccount } = require('./services/universalAdmin');
 const { startEventScheduleIngestionScheduler } = require('./services/eventScheduleIngestion');
 const { startEventRoomLifecycleScheduler } = require('./services/eventRoomLifecycle');
+const { startSportsScheduleScheduler } = require('./services/sportsScheduleIngestion');
 
 const TYPING_THROTTLE_MS = 1000;
 const SOCKET_JWT_SECRET = process.env.JWT_SECRET || '';
@@ -50,6 +51,8 @@ const configuredOrigins = (cleanEnv(process.env.CLIENT_URL) || defaultOrigins.jo
   .split(',')
   .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean);
+const hasHttpClientOrigin = configuredOrigins.some((origin) => origin.startsWith('http://'));
+const strictBrowserIsolation = !hasHttpClientOrigin;
 
 const corsOrigin = (origin, callback) => {
   if (!origin) {
@@ -88,6 +91,10 @@ const openStreetMapTileSources = [
   'https://b.tile.openstreetmap.org',
   'https://c.tile.openstreetmap.org'
 ];
+if (!strictBrowserIsolation) {
+  // Helmet merges defaults unless a directive is explicitly set to null.
+  cspDirectives['upgrade-insecure-requests'] = null;
+}
 cspDirectives['img-src'] = [
   ...(cspDirectives['img-src'] || []),
   ...openStreetMapTileSources,
@@ -95,6 +102,8 @@ cspDirectives['img-src'] = [
 ];
 
 app.use(helmet({
+  crossOriginOpenerPolicy: strictBrowserIsolation ? { policy: 'same-origin' } : false,
+  originAgentCluster: strictBrowserIsolation,
   contentSecurityPolicy: {
     directives: cspDirectives
   }
@@ -115,6 +124,15 @@ const limiter = rateLimit({
   }
 });
 app.use('/api/', limiter);
+
+// Prevent all API responses from being stored in any cache (HTTP, SW, proxy).
+// This is the primary defence-in-depth measure to stop authenticated user data
+// leaking across sessions even if the service-worker cache-exclusion rule is
+// somehow bypassed.
+app.use('/api/', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
 // Body parsing middleware
 app.use(cookieParser());
@@ -232,6 +250,15 @@ if (process.env.NODE_ENV !== 'test') {
     }
   } catch (error) {
     console.error('Failed to start news ingestion scheduler:', error);
+  }
+}
+
+// Start sports schedule ingestion scheduler (3am/3pm UTC)
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    startSportsScheduleScheduler();
+  } catch (error) {
+    console.error('Failed to start sports schedule scheduler:', error);
   }
 }
 

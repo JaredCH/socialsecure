@@ -1,5 +1,80 @@
 import axios from 'axios';
 
+const AUTH_TOKEN_KEY = 'authToken';
+
+export const getAuthToken = () => {
+  let canUseSessionStorage = true;
+  try {
+    const sessionToken = sessionStorage.getItem(AUTH_TOKEN_KEY);
+    if (sessionToken) {
+      return sessionToken;
+    }
+  } catch {
+    canUseSessionStorage = false;
+  }
+
+  try {
+    // Legacy/fallback storage key.
+    const legacyToken = localStorage.getItem('token');
+    if (!legacyToken) {
+      return null;
+    }
+
+    // One-time migration only when sessionStorage is available.
+    if (canUseSessionStorage) {
+      try {
+        sessionStorage.setItem(AUTH_TOKEN_KEY, legacyToken);
+        localStorage.removeItem('token');
+      } catch {
+        // Keep legacy token if migration fails.
+      }
+    }
+
+    return legacyToken;
+  } catch {
+    // Ignore storage access failures and treat as logged out.
+  }
+
+  return null;
+};
+
+export const setAuthToken = (token) => {
+  let wroteSessionToken = false;
+  try {
+    if (token) {
+      sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+    } else {
+      sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+    wroteSessionToken = true;
+  } catch {
+    wroteSessionToken = false;
+  }
+
+  // Fallback path when sessionStorage is blocked/unavailable.
+  if (!wroteSessionToken) {
+    try {
+      if (token) {
+        localStorage.setItem('token', token);
+      } else {
+        localStorage.removeItem('token');
+      }
+    } catch {
+      // Ignore storage access failures.
+    }
+    return;
+  }
+
+  // Clear legacy key to avoid cross-tab account bleed from old storage behavior.
+  try {
+    localStorage.removeItem('token');
+  } catch {
+    // Ignore storage access failures.
+  }
+};
+
+export const clearAuthToken = () => setAuthToken(null);
+
 export const normalizeApiBaseUrl = (apiUrl) => {
   const trimmedApiUrl = (apiUrl || '').trim();
   if (!trimmedApiUrl) return '/api';
@@ -23,7 +98,7 @@ const api = axios.create({
 
 // Add token to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -34,8 +109,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+    const requestUrl = String(error.config?.url || '');
+    const isLoginRequest = /\/auth\/login(?:$|\?)/.test(requestUrl);
+
+    if (error.response?.status === 401 && !isLoginRequest) {
+      clearAuthToken();
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -522,8 +600,14 @@ export const newsAPI = {
   getLocationTaxonomy: () => api.get('/news/location-taxonomy'),
   // Get sports team league catalog for team-follow UI
   getSportsTeams: () => api.get('/news/sports-teams'),
+  // Get sports schedules for followed teams
+  getSportsSchedules: (teamIds) => api.get('/news/sports-schedules', { params: { teams: teamIds?.join(',') } }),
+  // Get season status for all leagues
+  getSportsSeasons: () => api.get('/news/sports-schedules/seasons'),
   // Get single article
   getArticle: (id) => api.get(`/news/article/${id}`),
+  // Registration/on-demand local prefetch status
+  getPrefetchStatus: () => api.get('/news/prefetch-status'),
   // Trigger manual ingestion (admin)
   triggerIngestion: () => api.post('/news/ingest'),
   // Trigger single-source ingestion (admin)

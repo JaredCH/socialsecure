@@ -1,13 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { newsAPI } from '../utils/api';
 import NewsControlPanel from '../components/news/control/NewsControlPanel';
 import { HealthDot } from '../components/news/control/HealthDot';
-import SourcesStatusCard from '../components/news/sidebar/SourcesStatusCard';
-import TrendingCard from '../components/news/sidebar/TrendingCard';
-import KeywordHitsCard from '../components/news/sidebar/KeywordHitsCard';
-import LocalNewsCard from '../components/news/sidebar/LocalNewsCard';
 import WeatherWidget from '../components/news/sidebar/WeatherWidget';
 import ArticleDrawer from '../components/news/ArticleDrawer';
+import SportsSchedulePanel from '../components/news/SportsSchedulePanel';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +42,8 @@ const SOURCE_FORMAT_GUIDANCE = {
   bbc: 'BBC News RSS feed URL (e.g., https://feeds.bbci.co.uk/news/rss.xml)'
 };
 
+const REGISTRATION_PREFETCH_STATUS_KEY = 'registrationNewsPrefetchStatus';
+
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
 const formatRelativeTime = (dateString) => {
@@ -76,10 +75,38 @@ const getScopeFallbackMessage = (personalization = {}) => {
   if (!personalization?.fallbackApplied) return '';
   const activeScope = personalization?.activeScope || 'broader';
   const requestedScope = personalization?.requestedScope || 'selected';
-  if (personalization?.fallbackReason === 'no_scope_matches') {
-    return `Showing ${activeScope} scope — no ${requestedScope} articles available right now.`;
+  const fallbackReason = personalization?.fallbackReason;
+  
+  if (fallbackReason === 'no_scope_matches') {
+    return `No ${requestedScope} articles found — showing ${activeScope} news instead.`;
   }
-  return `Showing ${activeScope} scope — ${requestedScope} scope is unavailable for your current location.`;
+  if (fallbackReason === 'insufficient_local_context') {
+    return `Local scope unavailable — location data is too broad for local news. Showing ${activeScope} news.`;
+  }
+  return `${requestedScope} scope unavailable — showing ${activeScope} news instead.`;
+};
+
+const getScopeFallbackBannerDetails = (personalization = {}) => {
+  if (!personalization?.fallbackApplied) return null;
+  const activeScope = personalization?.activeScope || 'broader';
+  const requestedScope = personalization?.requestedScope || 'selected';
+  const fallbackReason = personalization?.fallbackReason;
+  
+  let title = 'Scope adjusted';
+  let message = `Showing ${activeScope} news instead of ${requestedScope}.`;
+  let type = 'info';
+  
+  if (fallbackReason === 'no_scope_matches') {
+    title = 'No local matches';
+    message = `No ${requestedScope} articles available right now. Showing ${activeScope} news instead.`;
+    type = 'warning';
+  } else if (fallbackReason === 'insufficient_local_context') {
+    title = 'Location data insufficient';
+    message = `Your current location data is too broad for local news precision. Add a ZIP code or city/state to get local news.`;
+    type = 'warning';
+  }
+  
+  return { title, message, type, requestedScope, activeScope };
 };
 
 const normalizeScopeSelection = (scope) => (VALID_SCOPE_IDS.has(scope) ? scope : 'local');
@@ -122,6 +149,16 @@ const PANEL_IDS = { sources: 'sources', categories: 'categories', keywords: 'key
 // ─── Main Component ──────────────────────────────────────────────────────────────
 
 function News() {
+  const newsSectionRef = useRef(null);
+  const initialPrefetchSeed = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem(REGISTRATION_PREFETCH_STATUS_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   // Core state
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +173,7 @@ function News() {
   const [newKeyword, setNewKeyword] = useState('');
   const [activeScope, setActiveScope] = useState('local');
   const [scopeFallbackMessage, setScopeFallbackMessage] = useState('');
+  const [scopeFallbackDetails, setScopeFallbackDetails] = useState(null);
   const [availableSources, setAvailableSources] = useState([]);
   const [topUsedSources, setTopUsedSources] = useState([]);
   const [newSource, setNewSource] = useState({ name: '', url: '', type: 'rss', category: 'general' });
@@ -147,6 +185,8 @@ function News() {
   const [registrationAlignment, setRegistrationAlignment] = useState(null);
   const [sportsLeagues, setSportsLeagues] = useState([]);
   const [weatherStatusMessage, setWeatherStatusMessage] = useState('');
+  const [prefetchStatus, setPrefetchStatus] = useState(initialPrefetchSeed);
+  const [prefetchArticles, setPrefetchArticles] = useState([]);
 
   // UI-only state
   const [openPanel, setOpenPanel] = useState(null);
@@ -156,6 +196,35 @@ function News() {
   const [selectedArticleId, setSelectedArticleId] = useState(null);
 
   const togglePanel = (id) => setOpenPanel(prev => (prev === id ? null : id));
+
+  const clearPrefetchSeed = useCallback(() => {
+    sessionStorage.removeItem(REGISTRATION_PREFETCH_STATUS_KEY);
+  }, []);
+
+  const applyPrefetchPayload = useCallback((data) => {
+    if (!data) return null;
+    setPrefetchStatus({
+      status: data.status || 'none',
+      location: data.location || null,
+      reason: data.reason || null
+    });
+    setPrefetchArticles(Array.isArray(data.articles) ? data.articles : []);
+
+    const settledStates = new Set(['success', 'error', 'none', 'unavailable']);
+    if (settledStates.has(data.status)) {
+      clearPrefetchSeed();
+    }
+    return data;
+  }, [clearPrefetchSeed]);
+
+  const loadPrefetchStatus = useCallback(async () => {
+    try {
+      const { data } = await newsAPI.getPrefetchStatus();
+      return applyPrefetchPayload(data);
+    } catch (err) {
+      return null;
+    }
+  }, [applyPrefetchPayload]);
 
   // ─── Data fetching (unchanged API contracts) ────────────────────────────────
 
@@ -179,7 +248,9 @@ function News() {
     setPagination(refreshedFeed.data.pagination);
     // Keep the selected scope sticky in UI; backend fallback should not change user selection.
     setActiveScope(normalizeScopeSelection(scope));
-    setScopeFallbackMessage(getScopeFallbackMessage(refreshedFeed.data.personalization));
+    const personalization = refreshedFeed.data.personalization || {};
+    setScopeFallbackMessage(getScopeFallbackMessage(personalization));
+    setScopeFallbackDetails(getScopeFallbackBannerDetails(personalization));
   }, [activeScope, activeFilter]);
 
   const bootstrap = useCallback(async () => {
@@ -192,6 +263,7 @@ function News() {
         newsAPI.getPromoted({ limit: 8 }).catch(() => ({ data: { items: [] } })),
         newsAPI.getSportsTeams().catch(() => ({ data: { leagues: [] } }))
       ]);
+      const prefetchRes = await newsAPI.getPrefetchStatus().catch(() => ({ data: null }));
       const taxonomyRes = await newsAPI.getLocationTaxonomy().catch(() => ({ data: { taxonomy: { country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} } } }));
       const preferredScope = prefsRes.data.preferences?.defaultScope;
       const feedRes = await newsAPI.getFeed({ page: 1, limit: 20, scope: preferredScope || undefined });
@@ -202,12 +274,15 @@ function News() {
       setRegistrationAlignment(prefsRes.data.registrationAlignment || null);
       setLocationTaxonomy(taxonomyRes.data.taxonomy || { country: { code: 'US', name: 'United States' }, states: [], citiesByState: {} });
       setActiveScope(normalizeScopeSelection(preferredScope || 'local'));
-      setScopeFallbackMessage(getScopeFallbackMessage(feedRes.data.personalization));
+      const personalization = feedRes.data.personalization || {};
+      setScopeFallbackMessage(getScopeFallbackMessage(personalization));
+      setScopeFallbackDetails(getScopeFallbackBannerDetails(personalization));
       setTopics(topicsRes.data.topics);
       setSportsLeagues(sportsTeamsRes.data.leagues || []);
       setPromotedArticles(promotedRes.data.items || []);
       setAvailableSources(sourcesRes.data.sources || []);
       setTopUsedSources(sourcesRes.data.topUsedSources || []);
+      applyPrefetchPayload(prefetchRes.data);
       setPromotedError(null);
       if (prefsRes.data.preferences?.hiddenCategories) setHiddenCategories(prefsRes.data.preferences.hiddenCategories);
       setError(null);
@@ -221,6 +296,37 @@ function News() {
   }, []);
 
   useEffect(() => { bootstrap(); }, [bootstrap]);
+
+  useEffect(() => {
+    if (!showSettings) return;
+    const anchor = newsSectionRef.current;
+    if (anchor?.scrollIntoView) {
+      anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [showSettings]);
+
+  useEffect(() => {
+    const status = String(prefetchStatus?.status || '').toLowerCase();
+    if (status !== 'queued' && status !== 'running') {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const intervalId = setInterval(async () => {
+      const data = await loadPrefetchStatus();
+      if (cancelled || !data) return;
+      const nextStatus = String(data.status || '').toLowerCase();
+      if (nextStatus === 'success') {
+        await refreshFeed(activeScope, activeFilter);
+        await loadPromoted(activeFilter);
+      }
+    }, 7000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [prefetchStatus?.status, loadPrefetchStatus, refreshFeed, loadPromoted, activeScope, activeFilter]);
 
   // ─── Handlers (same business logic, same API calls) ─────────────────────────
 
@@ -316,11 +422,10 @@ function News() {
     }
   };
 
-  const handleAddLocation = async (e) => {
-    e.preventDefault();
-    if (!newLocation.city.trim() && !newLocation.zipCode.trim() && !newLocation.state.trim() && !newLocation.country.trim()) return;
+  const handleAddLocation = async (locationData) => {
+    if (!locationData?.city?.trim() && !locationData?.zipCode?.trim() && !locationData?.state?.trim() && !locationData?.country?.trim()) return;
     try {
-      const res = await newsAPI.addLocation(newLocation);
+      const res = await newsAPI.addLocation(locationData);
       setPreferences(res.data.preferences);
       setRegistrationAlignment(res.data.registrationAlignment || null);
       setNewLocation({ city: '', cityKey: '', zipCode: '', state: '', stateCode: '', country: 'United States', countryCode: 'US', isPrimary: false });
@@ -567,41 +672,54 @@ function News() {
     return sourcePreferenceId ? isSourceEnabled(sourcePreferenceId) : false;
   }).length;
   const enabledCategoryCount = ALL_CATEGORIES.length - hiddenCategories.length;
+  const prefetchState = String(prefetchStatus?.status || '').toLowerCase();
+  const showPrefetchBanner = ['queued', 'running', 'success', 'error'].includes(prefetchState);
+  const prefetchLocationLabel = prefetchStatus?.location?.canonicalName || 'your area';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-gray-100 text-gray-900">
+    <div
+      ref={newsSectionRef}
+      id="news-section-start"
+      className="relative left-1/2 right-1/2 min-h-screen w-screen -translate-x-1/2 bg-gradient-to-b from-[#eef3ff] via-[#f5f8ff] to-[#f8fafc] text-gray-900"
+    >
 
-      {/* ── Sticky Top Bar ──────────────────────────────────────────────────────── */}
-      <header className="bg-white/80 backdrop-blur-lg border-b border-gray-200/60 sticky top-0 z-30 shadow-sm">
+      {/* ── Sticky Top Bar (reduced height ~30%) ──────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/80 shadow-sm backdrop-blur-lg supports-[backdrop-filter]:bg-white/70">
         <div className="w-full px-4 sm:px-6 lg:px-8">
-          {/* Row 1 – title + controls */}
-          <div className="flex items-center justify-between py-3">
-            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent select-none">
+          {/* Row 1 – title + controls (reduced padding) */}
+          <div className="flex items-center justify-between py-1.5">
+            <h1 className="select-none bg-gradient-to-r from-slate-900 via-blue-700 to-cyan-600 bg-clip-text text-xl font-black tracking-tight text-transparent">
               News
             </h1>
             <div className="flex items-center gap-2">
               {/* Sort control */}
-              <select
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value)}
-                className="hidden sm:block text-xs bg-gray-100 border-0 rounded-lg px-2.5 py-1.5 text-gray-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-              >
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-              </select>
+              <div className="hidden sm:inline-flex items-center rounded-xl border border-slate-200 bg-white/70 p-0.5 text-xs shadow-sm">
+                <button
+                  onClick={() => setSortOrder('newest')}
+                  className={`rounded-lg px-2 py-1 font-semibold transition-all ${sortOrder === 'newest' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Newest
+                </button>
+                <button
+                  onClick={() => setSortOrder('oldest')}
+                  className={`rounded-lg px-2 py-1 font-semibold transition-all ${sortOrder === 'oldest' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Oldest
+                </button>
+              </div>
 
               {/* List/Grid view toggle */}
-              <div className="hidden sm:inline-flex items-center rounded-lg bg-gray-100 p-0.5">
+              <div className="hidden sm:inline-flex items-center rounded-xl border border-slate-200 bg-white/70 p-0.5 shadow-sm">
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`rounded-lg p-1 transition-all ${viewMode === 'list' ? 'bg-slate-900 text-white shadow-sm' : 'text-gray-400 hover:bg-slate-100 hover:text-gray-600'}`}
                   aria-label="List view"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                 </button>
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`rounded-lg p-1 transition-all ${viewMode === 'grid' ? 'bg-slate-900 text-white shadow-sm' : 'text-gray-400 hover:bg-slate-100 hover:text-gray-600'}`}
                   aria-label="Grid view"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
@@ -611,7 +729,7 @@ function News() {
               {/* Mobile filter toggle */}
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors"
+                className="rounded-xl p-1.5 text-gray-500 transition-colors hover:bg-gray-100 lg:hidden"
                 aria-label="Toggle filters"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -622,7 +740,7 @@ function News() {
               {/* Settings gear */}
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className={`p-2 rounded-xl transition-colors ${showSettings ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+                className={`rounded-xl p-1.5 transition-colors ${showSettings ? 'bg-slate-900 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
                 aria-label="Configure news preferences"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -633,17 +751,17 @@ function News() {
             </div>
           </div>
 
-          {/* Row 2 – Scope segmented control */}
-          <div className="flex items-center gap-3 pb-3">
-            <div className="inline-flex items-center rounded-xl bg-gray-100 p-1">
+          {/* Row 2 – Scope segmented control (reduced padding) */}
+          <div className="flex items-center justify-center gap-3 pb-1.5">
+            <div className="inline-flex items-center rounded-2xl border border-slate-200 bg-white/80 p-0.5 shadow-sm ring-1 ring-slate-100">
               {NEWS_SCOPES.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => handleScopeChange(s.id)}
-                  className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  className={`flex items-center gap-1 rounded-xl px-3 py-1 text-sm font-semibold transition-all duration-200 sm:px-3.5 ${
                     activeScope === s.id
-                      ? 'bg-white text-gray-900 shadow-sm ring-1 ring-black/5'
-                      : 'text-gray-500 hover:text-gray-700'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                   }`}
                 >
                   <span className="text-xs sm:text-sm">{s.icon}</span>
@@ -651,17 +769,34 @@ function News() {
                 </button>
               ))}
             </div>
-            {scopeFallbackMessage && <p className="text-xs text-amber-600 truncate">{scopeFallbackMessage}</p>}
+            {scopeFallbackDetails && (
+              <div className={`flex items-center gap-2 rounded-xl px-3 py-1 ${
+                scopeFallbackDetails.type === 'warning' ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200' : 'bg-sky-50 text-sky-800 ring-1 ring-sky-200'
+              }`}>
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {scopeFallbackDetails.type === 'warning' ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  )}
+                </svg>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold">{scopeFallbackDetails.title}</p>
+                  <p className="text-[11px] opacity-90">{scopeFallbackDetails.message}</p>
+                </div>
+              </div>
+            )}
+            {!scopeFallbackDetails && scopeFallbackMessage && <p className="text-xs text-amber-600 truncate">{scopeFallbackMessage}</p>}
           </div>
 
-          {/* Row 3 – Category chips */}
-          <div className="flex gap-1.5 overflow-x-auto pb-3 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
+          {/* Row 3 – Category chips (reduced padding, centered) */}
+          <div className="-mx-4 flex justify-center gap-2 overflow-x-auto px-4 pb-1.5 scrollbar-hide sm:mx-0 sm:px-0">
             <button
               onClick={() => handleFilterChange('all')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
+              className={`group relative whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${
                 activeFilter === 'all'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-                  : 'bg-white text-gray-600 hover:bg-gray-100 ring-1 ring-gray-200'
+                  ? 'border-slate-900 bg-slate-900 text-white shadow-md shadow-slate-300'
+                  : 'border-slate-200 bg-white text-slate-600 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
               All
@@ -670,10 +805,10 @@ function News() {
               <button
                 key={cat.id}
                 onClick={() => handleFilterChange(cat.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-1 ${
+                className={`flex items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${
                   activeFilter === cat.id
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-                    : 'bg-white text-gray-600 hover:bg-gray-100 ring-1 ring-gray-200'
+                    ? 'border-slate-900 bg-slate-900 text-white shadow-md shadow-slate-300'
+                    : 'border-slate-200 bg-white text-slate-600 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50'
                 }`}
               >
                 <span>{cat.icon}</span>
@@ -682,10 +817,10 @@ function News() {
             ))}
           </div>
 
-          {/* Keyword bar (always visible) */}
-          <div className="pb-3">
-            <form onSubmit={handleAddKeyword} className="flex items-center gap-2">
-              <div className="relative flex-1">
+          {/* Keyword bar (always visible, reduced padding) */}
+          <div className="pb-1.5">
+            <form onSubmit={handleAddKeyword} className="flex items-center justify-center gap-2">
+              <div className="relative flex-1 max-w-md">
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -694,17 +829,17 @@ function News() {
                   value={newKeyword}
                   onChange={(e) => setNewKeyword(e.target.value)}
                   placeholder="Add keyword to track (e.g., Bitcoin, AI, Iran…)"
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all"
+                  className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-sm placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none transition-all"
                 />
               </div>
-              <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shadow-indigo-200">
+              <button type="submit" className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shadow-indigo-200">
                 Track
               </button>
             </form>
             {activeKeywords.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
+              <div className="flex flex-wrap justify-center gap-1.5 mt-1.5">
                 {activeKeywords.map((item) => (
-                  <span key={item.keyword} className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium ring-1 ring-indigo-200/60">
+                  <span key={item.keyword} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium ring-1 ring-indigo-200/60">
                     {item.keyword}
                     <button onClick={() => handleRemoveKeyword(item.keyword)} className="text-indigo-400 hover:text-red-500 transition-colors ml-0.5" aria-label={`Remove keyword ${item.keyword}`}>×</button>
                   </span>
@@ -772,8 +907,52 @@ function News() {
         />
       )}
 
+      {showPrefetchBanner && (
+        <div className="w-full px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 text-sm text-indigo-900">
+            {(prefetchState === 'queued' || prefetchState === 'running') && (
+              <p>
+                Fetching local news for <span className="font-semibold">{prefetchLocationLabel}</span>. New matches will appear automatically.
+              </p>
+            )}
+            {prefetchState === 'success' && (
+              <p>
+                Local news is ready for <span className="font-semibold">{prefetchLocationLabel}</span>.
+              </p>
+            )}
+            {prefetchState === 'error' && (
+              <p>
+                Local prefetch failed for <span className="font-semibold">{prefetchLocationLabel}</span>. The poller will retry shortly.
+              </p>
+            )}
+            {prefetchArticles.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                {prefetchArticles.slice(0, 3).map((article) => (
+                  <a
+                    key={article._id || article.url}
+                    href={article.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full border border-indigo-200 bg-white px-3 py-1 font-medium text-indigo-700 hover:border-indigo-300"
+                  >
+                    {article.title}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Main Content ──────────────────────────────────────────────────────── */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-6 flex gap-6">
+      <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
+
+        {/* Mobile weather placement near top of feed */}
+        <div className="mb-5 lg:hidden">
+          <WeatherWidget />
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)_20rem]">
 
         {/* Mobile sidebar overlay */}
         {sidebarOpen && <div className="fixed inset-0 bg-black/30 z-30 lg:hidden" onClick={() => setSidebarOpen(false)} />}
@@ -788,7 +967,7 @@ function News() {
           lg:block overflow-y-auto
           border-r lg:border-r-0 border-gray-200
         `}>
-          <div className="p-4 lg:p-0 space-y-3 lg:sticky lg:top-[210px]">
+          <div className="p-4 lg:p-0 space-y-3 lg:sticky lg:top-[156px]">
             {/* Mobile close */}
             <div className="flex items-center justify-between lg:hidden mb-2">
               <span className="text-sm font-bold text-gray-900">Filters</span>
@@ -958,11 +1137,17 @@ function News() {
                 </div>
               </div>
             )}
+
+            {/* ── Sports Schedule Panel ───────────────────────────────────────── */}
+            <SportsSchedulePanel
+              followedTeams={preferences?.followedSportsTeams || []}
+              sportsLeagues={sportsLeagues}
+            />
           </div>
         </aside>
 
         {/* ── Article Feed ───────────────────────────────────────────────────── */}
-        <main className="flex-1 min-w-0">
+        <main className="min-w-0">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4 text-sm">
               {error}
@@ -1093,33 +1278,15 @@ function News() {
           </p>
         </main>
 
-        {/* ── Right Sidebar – Information Stack ────────────────────────────── */}
-        <aside className="hidden xl:block w-72 shrink-0">
-          <div className="sticky top-[210px] space-y-4">
-            <SourcesStatusCard
-              sources={availableSources}
-              enabledCount={enabledSourceCount}
-              totalCount={availableSources.length + 1 /* +1 for Google News */}
-              onManageSources={() => { setSidebarOpen(true); togglePanel(PANEL_IDS.sources); }}
-            />
-            <TrendingCard
-              items={promotedArticles}
-              loading={promotedLoading}
-              error={promotedError}
-            />
-            <KeywordHitsCard
-              keywords={activeKeywords}
-              articles={articles}
-              onKeywordClick={(kw) => setNewKeyword(kw)}
-            />
-            <LocalNewsCard
-              articles={articles}
-              locations={preferences?.locations || []}
-              onManageLocations={() => setShowSettings(true)}
-            />
+        {/* ── Right Rail (prominent weather near top) ─────────────────────── */}
+        <aside className="hidden lg:block">
+          <div className="sticky top-[156px] space-y-4">
             <WeatherWidget />
           </div>
         </aside>
+
+        </div>
+
       </div>
 
       {/* ── Article Drawer ──────────────────────────────────────────────────── */}

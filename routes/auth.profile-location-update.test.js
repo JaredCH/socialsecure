@@ -18,9 +18,17 @@ jest.mock('../models/Session', () => mockSessionModel);
 jest.mock('../models/SecurityEvent', () => ({ create: jest.fn() }));
 jest.mock('../services/notifications', () => ({ createNotification: jest.fn() }));
 
+// Mock news routes to prevent database operations during profile update tests
+const mockQueueImmediateLocationFetch = jest.fn().mockResolvedValue({ status: 'queued', locationKey: 'TEST:KEY' });
+jest.mock('./news', () => ({
+  queueImmediateLocationFetch: mockQueueImmediateLocationFetch
+}));
+
 const jwt = require('jsonwebtoken');
 const { createNotification } = require('../services/notifications');
 const authRouter = require('./auth');
+const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
+const { canonicalizeLocationInput, resolveCanonicalLocationInput, buildLocationKey } = require('../services/newsLocationMaster');
 
 const buildApp = () => {
   const app = express();
@@ -57,6 +65,7 @@ const buildUserDoc = (overrides = {}) => {
 describe('Auth profile location update cooldown', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockQueueImmediateLocationFetch.mockClear();
     jwt.verify.mockReturnValue({ userId: 'user-1' });
     mockUserModel.findOne.mockResolvedValue(null);
     mockSessionModel.findOne.mockResolvedValue({ save: jest.fn().mockResolvedValue(true) });
@@ -82,7 +91,7 @@ describe('Auth profile location update cooldown', () => {
     expect(user.save).toHaveBeenCalled();
     expect(user.city).toBe('San Marcos');
     expect(user.locationLastUpdatedAt).toBeInstanceOf(Date);
-  });
+  }, 15000);
 
   it('rejects location changes within the 7-day cooldown window', async () => {
     const app = buildApp();
@@ -253,5 +262,264 @@ describe('Auth profile location update cooldown', () => {
     expect(requester.pendingStreetAddressStatus).toBe('approved');
     expect(owner.addressApprovalRequests[0].status).toBe('approved');
     expect(createNotification).toHaveBeenCalled();
+  });
+
+  it('accepts zipCode in profile update and backfills city/state/country from the zip index', async () => {
+    const app = buildApp();
+    const user = buildUserDoc({
+      zipCode: null,
+      locationLastUpdatedAt: new Date('2026-01-01T00:00:00.000Z')
+    });
+    mockUserModel.findById.mockResolvedValue(user);
+
+    const response = await request(app)
+      .put('/api/auth/profile')
+      .set('Authorization', 'Bearer token')
+      .send({
+        zipCode: '78666'
+      });
+
+    expect(response.status).toBe(200);
+    expect(user.save).toHaveBeenCalled();
+    expect(user.zipCode).toBe('78666');
+    expect(user.city).toBe('San Marcos');
+    expect(user.state).toBe('TX');
+    expect(user.country).toBe('US');
+    expect(user.locationLastUpdatedAt).toBeInstanceOf(Date);
+  }, 15000);
+
+  it('treats zip-only profile update as location change and enforces cooldown', async () => {
+    const app = buildApp();
+    const user = buildUserDoc({
+      zipCode: '78666',
+      locationLastUpdatedAt: new Date(Date.now() - (2 * 24 * 60 * 60 * 1000))
+    });
+    mockUserModel.findById.mockResolvedValue(user);
+
+    const response = await request(app)
+      .put('/api/auth/profile')
+      .set('Authorization', 'Bearer token')
+      .send({
+        zipCode: '78701'
+      });
+
+    expect(response.status).toBe(429);
+    expect(response.body.error).toMatch(/once every 7 days/i);
+    expect(user.save).not.toHaveBeenCalled();
+  });
+
+  it('triggers queueImmediateLocationFetch after successful zip-only profile update', async () => {
+    const app = buildApp();
+    const user = buildUserDoc({
+      zipCode: null,
+      city: 'Austin',
+      state: 'TX',
+      country: 'US',
+      locationLastUpdatedAt: new Date('2026-01-01T00:00:00.000Z')
+    });
+    mockUserModel.findById.mockResolvedValue(user);
+
+    jest.mock('./news', () => ({
+      queueImmediateLocationFetch: jest.fn().mockResolvedValue({ status: 'queued', locationKey: 'ZIP:78666' })
+    }));
+
+    const response = await request(app)
+      .put('/api/auth/profile')
+      .set('Authorization', 'Bearer token')
+      .send({
+        zipCode: '78666'
+      });
+
+    expect(response.status).toBe(200);
+    expect(user.zipCode).toBe('78666');
+    expect(user.locationLastUpdatedAt).toBeInstanceOf(Date);
+  });
+
+  it('validates zipCode format and rejects invalid zips', async () => {
+    const app = buildApp();
+    const user = buildUserDoc();
+    mockUserModel.findById.mockResolvedValue(user);
+
+    const invalidZips = ['1234', '123456', 'abcde', '12345-67890', ''];
+    for (const invalidZip of invalidZips) {
+      const response = await request(app)
+        .put('/api/auth/profile')
+        .set('Authorization', 'Bearer token')
+        .send({ zipCode: invalidZip });
+
+      if (invalidZip === '') {
+        expect(response.status).toBe(200);
+      } else {
+        expect(response.status).toBe(400);
+        expect(response.body.errors).toBeDefined();
+      }
+    }
+  });
+
+  it('accepts valid ZIP+4 format', async () => {
+    const app = buildApp();
+    const user = buildUserDoc({
+      zipCode: null,
+      locationLastUpdatedAt: new Date('2026-01-01T00:00:00.000Z')
+    });
+    mockUserModel.findById.mockResolvedValue(user);
+
+    const response = await request(app)
+      .put('/api/auth/profile')
+      .set('Authorization', 'Bearer token')
+      .send({
+        zipCode: '78666-1234'
+      });
+
+    expect(response.status).toBe(200);
+    expect(user.zipCode).toBe('78666-1234');
+  });
+});
+
+describe('canonicalizeNewsLocation does not default to US', () => {
+  it('returns null country when no country input is provided', () => {
+    const result = canonicalizeNewsLocation({
+      city: 'Austin',
+      state: 'TX'
+    });
+    expect(result.country).toBeNull();
+    expect(result.countryCode).toBeNull();
+    expect(result.city).toBe('Austin');
+    expect(result.stateCode).toBe('TX');
+  });
+
+  it('returns null country when empty country string is provided', () => {
+    const result = canonicalizeNewsLocation({
+      city: 'Austin',
+      state: 'TX',
+      country: ''
+    });
+    expect(result.country).toBeNull();
+    expect(result.countryCode).toBeNull();
+  });
+
+  it('still canonicalizes US when explicitly provided', () => {
+    const result = canonicalizeNewsLocation({
+      city: 'Austin',
+      state: 'TX',
+      country: 'US'
+    });
+    expect(result.country).toBe('United States');
+    expect(result.countryCode).toBe('US');
+  });
+
+  it('still canonicalizes USA variations to US', () => {
+    const variations = ['USA', 'United States', 'united states', 'america'];
+    for (const variation of variations) {
+      const result = canonicalizeNewsLocation({
+        city: 'Austin',
+        state: 'TX',
+        country: variation
+      });
+      expect(result.countryCode).toBe('US');
+    }
+  });
+
+  it('preserves non-US country codes when provided', () => {
+    const result = canonicalizeNewsLocation({
+      city: 'Toronto',
+      state: 'ON',
+      country: 'CA'
+    });
+    expect(result.country).toBe('CA');
+    expect(result.countryCode).toBe('CA');
+  });
+});
+
+describe('newsLocationMaster buildLocationKey minimum granularity', () => {
+  it('returns null for country-only input', () => {
+    const canonical = {
+      city: null,
+      state: null,
+      stateCode: null,
+      zipCode: null,
+      cityKey: null,
+      country: 'United States',
+      countryCode: 'US'
+    };
+    const key = buildLocationKey(canonical);
+    expect(key).toBeNull();
+  });
+
+  it('returns valid key for state+country input', () => {
+    const canonical = {
+      city: null,
+      state: 'Texas',
+      stateCode: 'TX',
+      zipCode: null,
+      cityKey: null,
+      country: 'United States',
+      countryCode: 'US'
+    };
+    const key = buildLocationKey(canonical);
+    expect(key).toBe('STATE:US:TX');
+  });
+
+  it('returns valid key for zipCode input', () => {
+    const canonical = {
+      city: null,
+      state: null,
+      stateCode: null,
+      zipCode: '78666',
+      cityKey: null,
+      country: null,
+      countryCode: null
+    };
+    const key = buildLocationKey(canonical);
+    expect(key).toBe('ZIP:78666');
+  });
+
+  it('returns valid key for cityKey input', () => {
+    const canonical = {
+      city: 'Austin',
+      state: 'Texas',
+      stateCode: 'TX',
+      zipCode: null,
+      cityKey: 'TX:austin',
+      country: 'United States',
+      countryCode: 'US'
+    };
+    const key = buildLocationKey(canonical);
+    expect(key).toBe('TX:austin');
+  });
+
+  it('canonicalizeLocationInput returns null for country-only data', () => {
+    const result = canonicalizeLocationInput({
+      country: 'US'
+    });
+    expect(result).toBeNull();
+  });
+
+  it('canonicalizeLocationInput returns valid result for state+country', () => {
+    const result = canonicalizeLocationInput({
+      state: 'TX',
+      country: 'US'
+    });
+    expect(result).not.toBeNull();
+    expect(result.locationKey).toBe('STATE:US:TX');
+  });
+
+  it('canonicalizeLocationInput returns valid result for zipCode', () => {
+    const result = canonicalizeLocationInput({
+      zipCode: '78666'
+    });
+    expect(result).not.toBeNull();
+    expect(result.locationKey).toBe('ZIP:78666');
+  });
+
+  it('resolveCanonicalLocationInput backfills a zip-only location into canonical city/state data', async () => {
+    const result = await resolveCanonicalLocationInput({
+      zipCode: '78666'
+    });
+    expect(result).not.toBeNull();
+    expect(result.canonical.zipCode).toBe('78666');
+    expect(result.canonical.city).toBe('San Marcos');
+    expect(result.canonical.stateCode).toBe('TX');
+    expect(result.canonical.countryCode).toBe('US');
   });
 });

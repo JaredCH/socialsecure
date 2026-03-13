@@ -171,39 +171,26 @@ const replayMissedEvents = (socket, userId, lastEventId) => {
 
 const authenticateSocket = async (socket) => {
   const auth = socket?.handshake?.auth || {};
-  const fallbackUserId = String(auth.userId || '').trim();
   const token = String(auth.token || '').trim();
 
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
-      const user = await User.findById(decoded.userId).select('_id username realName realtimePreferences').lean();
-      if (user) {
-        return {
-          userId: String(user._id),
-          displayName: user.username || user.realName || 'user',
-          realtimePreferences: normalizeRealtimePreferences(user.realtimePreferences)
-        };
-      }
-    } catch {
-      // fall back to existing join-user compatibility below
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const user = await User.findById(decoded.userId).select('_id username realName realtimePreferences').lean();
+    if (!user) {
+      return null;
     }
-  }
-
-  if (!fallbackUserId) {
+    return {
+      userId: String(user._id),
+      displayName: user.username || user.realName || 'user',
+      realtimePreferences: normalizeRealtimePreferences(user.realtimePreferences)
+    };
+  } catch {
     return null;
   }
-
-  const fallbackUser = await User.findById(fallbackUserId).select('_id username realName realtimePreferences').lean();
-  if (!fallbackUser) {
-    return null;
-  }
-
-  return {
-    userId: String(fallbackUser._id),
-    displayName: fallbackUser.username || fallbackUser.realName || 'user',
-    realtimePreferences: normalizeRealtimePreferences(fallbackUser.realtimePreferences)
-  };
 };
 
 const canEmitTyping = (socketId, scope, targetId, status) => {
@@ -234,7 +221,8 @@ const bindSocketHandlers = () => {
 
     socket.on('join-user', async (userId) => {
       const normalizedUserId = String(userId || '').trim();
-      if (!normalizedUserId) return;
+      // Only allow the authenticated socket owner to join their own user room.
+      if (!normalizedUserId || normalizedUserId !== socket.data?.userId) return;
       socket.join(`user:${normalizedUserId}`);
     });
 

@@ -20,7 +20,7 @@ import ModerationDashboard from './pages/ModerationDashboard';
 import NotificationCenter from './components/NotificationCenter';
 import NotificationSettings from './pages/NotificationSettings';
 import ResumePublic from './pages/ResumePublic';
-import { authAPI, notificationAPI } from './utils/api';
+import { authAPI, notificationAPI, getAuthToken, setAuthToken, clearAuthToken } from './utils/api';
 import { initRealtime, disconnectRealtime } from './utils/realtime';
 import { deliverSiteNotification, shouldDisplaySiteNotification } from './utils/browserNotifications';
 
@@ -32,6 +32,7 @@ const DEFAULT_SECURITY_PREFERENCES = {
   requirePasswordForSensitive: true
 };
 const VALID_ONBOARDING_STATUSES = new Set(['pending', 'in_progress', 'completed']);
+const NEWS_PREFETCH_STATUS_KEY = 'registrationNewsPrefetchStatus';
 
 const normalizeOnboardingStatus = (value, fallback = 'pending') => (
   VALID_ONBOARDING_STATUSES.has(value) ? value : fallback
@@ -70,12 +71,15 @@ const RouteMain = ({ children }) => {
   const location = useLocation();
   const isChatRoute = location.pathname === '/chat';
   const isMapsRoute = location.pathname === '/maps';
+  const isNewsRoute = location.pathname === '/news';
   const isSocialRoute = location.pathname === '/social' || location.pathname === '/friends';
   const isCalendarRoute = location.pathname === '/calendar';
 
   return (
     <main className={isChatRoute || isMapsRoute
       ? 'flex-1 min-h-0 overflow-hidden'
+      : isNewsRoute
+        ? 'flex-1 min-h-0 overflow-y-auto'
       : isSocialRoute
         ? 'mx-auto mt-8 flex-1 min-h-0 w-full overflow-y-auto'
       : isCalendarRoute
@@ -90,6 +94,54 @@ const RouteMain = ({ children }) => {
 function App() {
   const WELCOME_PENDING_KEY = 'postRegistrationWelcomePending';
   const WELCOME_PROFILE_KEY = 'postRegistrationWelcomeProfile';
+  const readSessionFlag = (key) => {
+    try {
+      return sessionStorage.getItem(key) === 'true';
+    } catch {
+      return false;
+    }
+  };
+
+  const readSessionJson = (key) => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const writeSessionValue = (key, value) => {
+    try {
+      sessionStorage.setItem(key, value);
+    } catch {
+      // best effort only
+    }
+  };
+
+  const removeSessionValue = (key) => {
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      // best effort only
+    }
+  };
+
+  const readLocalNumber = (key, fallback = 0) => {
+    try {
+      return Number(localStorage.getItem(key) || fallback);
+    } catch {
+      return fallback;
+    }
+  };
+
+  const writeLocalValue = (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // best effort only
+    }
+  };
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [checkingEncryptionStatus, setCheckingEncryptionStatus] = useState(false);
@@ -111,23 +163,16 @@ function App() {
   const [isFeaturesMenuOpen, setIsFeaturesMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [welcomeConfirmationPending, setWelcomeConfirmationPending] = useState(
-    () => sessionStorage.getItem(WELCOME_PENDING_KEY) === 'true'
+    () => readSessionFlag(WELCOME_PENDING_KEY)
   );
-  const [welcomeProfile, setWelcomeProfile] = useState(() => {
-    try {
-      const rawProfile = sessionStorage.getItem(WELCOME_PROFILE_KEY);
-      return rawProfile ? JSON.parse(rawProfile) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [welcomeProfile, setWelcomeProfile] = useState(() => readSessionJson(WELCOME_PROFILE_KEY));
   const notificationSocketRef = useRef(null);
   const featuresMenuRef = useRef(null);
   const firstFeatureItemRef = useRef(null);
   const lastFeatureItemRef = useRef(null);
   const featuresMenuCloseTimeoutRef = useRef(null);
 
-  const isAuthenticated = useMemo(() => Boolean(localStorage.getItem('token') && user), [user]);
+  const isAuthenticated = useMemo(() => Boolean(getAuthToken() && user), [user]);
   const socialProfilePath = useMemo(() => {
     const username = String(user?.username || '').trim();
     return username ? `/social?user=${encodeURIComponent(username)}` : '/social';
@@ -138,7 +183,7 @@ function App() {
   const canUseProtectedFeatures = isAuthenticated && !encryptionPasswordRequired && !onboardingRequired && !passwordResetRequired;
 
   const refreshEncryptionPasswordStatus = async () => {
-    if (!localStorage.getItem('token')) {
+    if (!getAuthToken()) {
       setEncryptionPasswordStatus({
         hasEncryptionPassword: true,
         encryptionPasswordSetAt: null,
@@ -167,7 +212,7 @@ function App() {
   };
 
   const refreshOnboardingStatus = async () => {
-    if (!localStorage.getItem('token')) {
+    if (!getAuthToken()) {
       setOnboardingStatus({
         status: 'completed',
         currentStep: ONBOARDING_TOTAL_STEPS,
@@ -202,7 +247,7 @@ function App() {
 
   useEffect(() => {
     const bootstrap = async () => {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         setCheckingAuth(false);
         return;
@@ -223,7 +268,7 @@ function App() {
           hasEncryptionPassword: !!data.user?.hasEncryptionPassword
         }));
       } catch {
-        localStorage.removeItem('token');
+        clearAuthToken();
         setUser(null);
       } finally {
         setCheckingAuth(false);
@@ -288,11 +333,11 @@ function App() {
         return;
       }
 
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       const socket = initRealtime({
         token,
         userId: String(user._id),
-        lastEventTimestamp: Number(localStorage.getItem('realtime:lastEventTs') || 0)
+        lastEventTimestamp: readLocalNumber('realtime:lastEventTs', 0)
       });
       if (!socket) return;
 
@@ -300,7 +345,7 @@ function App() {
         if (!payload) return;
         setIncomingNotification(payload);
         setUnreadNotificationCount((prev) => prev + (payload.isRead ? 0 : 1));
-        localStorage.setItem('realtime:lastEventTs', String(Date.now()));
+        writeLocalValue('realtime:lastEventTs', String(Date.now()));
       });
 
       socket.on('realtime_events_replay', (payload) => {
@@ -311,7 +356,7 @@ function App() {
             setUnreadNotificationCount((prev) => prev + (event.payload.isRead ? 0 : 1));
           }
         });
-        localStorage.setItem('realtime:lastEventTs', String(Date.now()));
+        writeLocalValue('realtime:lastEventTs', String(Date.now()));
       });
 
       notificationSocketRef.current = socket;
@@ -377,7 +422,10 @@ function App() {
   }, []);
 
   const handleAuthSuccess = (payload) => {
-    localStorage.setItem('token', payload.token);
+    setAuthToken(payload.token);
+    if (payload?.registrationNewsPrefetch) {
+      writeSessionValue(NEWS_PREFETCH_STATUS_KEY, JSON.stringify(payload.registrationNewsPrefetch));
+    }
     setUser(payload.user);
     setUnreadNotificationCount(Number(payload.user?.unreadNotificationCount || 0));
     setOnboardingStatus((prev) => ({
@@ -394,9 +442,10 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    sessionStorage.removeItem(WELCOME_PENDING_KEY);
-    sessionStorage.removeItem(WELCOME_PROFILE_KEY);
+    clearAuthToken();
+    removeSessionValue(NEWS_PREFETCH_STATUS_KEY);
+    removeSessionValue(WELCOME_PENDING_KEY);
+    removeSessionValue(WELCOME_PROFILE_KEY);
     setUser(null);
     setWelcomeConfirmationPending(false);
     setWelcomeProfile(null);
@@ -421,15 +470,15 @@ function App() {
       realName: registeredUser?.realName || '',
       username: registeredUser?.username || ''
     };
-    sessionStorage.setItem(WELCOME_PENDING_KEY, 'true');
-    sessionStorage.setItem(WELCOME_PROFILE_KEY, JSON.stringify(profile));
+    writeSessionValue(WELCOME_PENDING_KEY, 'true');
+    writeSessionValue(WELCOME_PROFILE_KEY, JSON.stringify(profile));
     setWelcomeProfile(profile);
     setWelcomeConfirmationPending(true);
   };
 
   const handleWelcomeConfirmed = () => {
-    sessionStorage.removeItem(WELCOME_PENDING_KEY);
-    sessionStorage.removeItem(WELCOME_PROFILE_KEY);
+    removeSessionValue(WELCOME_PENDING_KEY);
+    removeSessionValue(WELCOME_PROFILE_KEY);
     setWelcomeConfirmationPending(false);
     setWelcomeProfile(null);
   };

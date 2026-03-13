@@ -12,9 +12,11 @@ const mockToPublicProfile = jest.fn(() => ({
   _id: 'user-1',
   username: 'new_user',
   realName: 'New User',
-  country: null,
-  county: null,
-  zipCode: null
+  country: 'US',
+  county: 'Hays County',
+  zipCode: '78666',
+  city: 'San Marcos',
+  state: 'TX'
 }));
 
 const mockUserModel = jest.fn(function userConstructor(data) {
@@ -54,7 +56,7 @@ describe('Auth registration minimal identity flow', () => {
     mockUserFindOne.mockResolvedValue(null);
   });
 
-  it('registers with first/last name, username, and email only', async () => {
+  it('registers with first/last name, username, email, and zip while backfilling city/state', async () => {
     const app = buildApp();
 
     const response = await request(app)
@@ -63,7 +65,8 @@ describe('Auth registration minimal identity flow', () => {
         firstName: 'New',
         lastName: 'User',
         username: 'new_user',
-        email: 'new@example.com'
+        email: 'new@example.com',
+        zipCode: '78666'
       });
 
     expect(response.status).toBe(201);
@@ -71,6 +74,11 @@ describe('Auth registration minimal identity flow', () => {
       realName: 'New User',
       username: 'new_user',
       email: 'new@example.com',
+      city: 'San Marcos',
+      state: 'TX',
+      country: 'US',
+      county: 'Hays County',
+      zipCode: '78666',
       mustResetPassword: false
     }));
     expect(mockUserModel.mock.calls[0][0].passwordHash).toEqual(expect.any(String));
@@ -89,7 +97,8 @@ describe('Auth registration minimal identity flow', () => {
       .post('/api/auth/register')
       .send({
         username: 'new_user',
-        email: 'new@example.com'
+        email: 'new@example.com',
+        zipCode: '78666'
       });
 
     expect(response.status).toBe(400);

@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
@@ -19,6 +20,7 @@ const {
   normalizeSocialPagePreferences
 } = require('../utils/socialPagePreferences');
 const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
+const { resolveCanonicalLocationInput } = require('../services/newsLocationMaster');
 
 const PROFILE_THEMES = [...SOCIAL_THEME_PRESETS];
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
@@ -29,7 +31,7 @@ const PGP_PRIVATE_KEY_BEGIN = '-----BEGIN PGP PRIVATE KEY BLOCK-----';
 const PGP_PRIVATE_KEY_END = '-----END PGP PRIVATE KEY BLOCK-----';
 const ONBOARDING_TOTAL_STEPS = 4;
 const LOCATION_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
-const LOCATION_CHANGE_FIELDS = ['city', 'state', 'country'];
+const LOCATION_CHANGE_FIELDS = ['city', 'state', 'country', 'zipCode'];
 const PROFILE_VISIBILITY_OPTIONS = ['public', 'social', 'secure'];
 const passwordChangeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -378,14 +380,25 @@ router.post('/register', [
     .customSanitizer((value) => String(value || '').toUpperCase())
     .matches(/^[A-Z]{2}$/)
     .withMessage('Please select a country from the list'),
+  body('city')
+    .optional({ checkFalsy: true })
+    .trim()
+    .isLength({ max: 120 })
+    .withMessage('City must be at most 120 characters'),
+  body('state')
+    .optional({ checkFalsy: true })
+    .trim()
+    .isLength({ max: 120 })
+    .withMessage('State must be at most 120 characters'),
   body('county')
     .optional({ checkFalsy: true })
     .trim()
     .isLength({ max: 100 })
     .withMessage('County must be at most 100 characters'),
   body('zipCode')
-    .optional({ checkFalsy: true })
     .trim()
+    .notEmpty()
+    .withMessage('ZIP code is required')
     .custom((value) => {
       if (!isValidZipCode(normalizeZipCode(value))) {
         throw new Error('Zip Code must be a valid US ZIP (12345 or 12345-6789) or postal format');
@@ -428,6 +441,8 @@ router.post('/register', [
       email,
       password,
       countryCode,
+      city,
+      state,
       county,
       zipCode,
       streetAddress,
@@ -448,6 +463,20 @@ router.post('/register', [
       return res.status(400).json({ error: 'A name is required' });
     }
     const normalizedCounty = county?.trim();
+    const resolvedRegistrationLocation = await resolveCanonicalLocationInput({
+      city: normalizeLocationValue(city),
+      state: normalizeLocationValue(state),
+      country: normalizeLocationValue(countryCode),
+      county: normalizeLocationValue(county),
+      zipCode: zipCode ? normalizeZipCode(zipCode) : null
+    });
+    const canonicalLocation = resolvedRegistrationLocation?.canonical || canonicalizeNewsLocation({
+      city: normalizeLocationValue(city),
+      state: normalizeLocationValue(state),
+      country: normalizeLocationValue(countryCode),
+      county: normalizeLocationValue(county),
+      zipCode: zipCode ? normalizeZipCode(zipCode) : null
+    });
     const normalizedProfileFieldVisibility = normalizeProfileFieldVisibility(profileFieldVisibility);
 
     // Check if user already exists
@@ -468,9 +497,11 @@ router.post('/register', [
       username,
       email,
       passwordHash: password || generateTemporaryPassword(), // Will be hashed by pre-save middleware
-      country: countryCode || undefined,
-      county: normalizedCounty || undefined,
-      zipCode: zipCode ? normalizeZipCode(zipCode) : undefined,
+      city: canonicalLocation.city || undefined,
+      state: canonicalLocation.stateCode || canonicalLocation.state || undefined,
+      country: canonicalLocation.countryCode || countryCode || undefined,
+      county: canonicalLocation.county || normalizedCounty || undefined,
+      zipCode: canonicalLocation.zipCode || (zipCode ? normalizeZipCode(zipCode) : undefined),
       streetAddress: normalizeProfileOptionalValue(streetAddress),
       worksAt: normalizeProfileOptionalValue(worksAt),
       hobbies: normalizeHobbies(hobbies),
@@ -485,6 +516,35 @@ router.post('/register', [
     });
 
     await user.save();
+
+    const registrationNewsPrefetchPromise = (async () => {
+      try {
+        if (mongoose.connection?.readyState !== 1) {
+          return { status: 'deferred', reason: 'db_not_ready' };
+        }
+        const newsRoutes = require('./news');
+        if (typeof newsRoutes.queueImmediateLocationFetch !== 'function') {
+          return { status: 'unavailable' };
+        }
+        const coordinates = Array.isArray(user.location?.coordinates)
+          ? { lon: user.location.coordinates[0], lat: user.location.coordinates[1] }
+          : null;
+        return await newsRoutes.queueImmediateLocationFetch({
+          userId: user._id,
+          location: {
+            city: user.city,
+            state: user.state,
+            country: user.country,
+            county: user.county,
+            zipCode: user.zipCode
+          },
+          coordinates
+        });
+      } catch (error) {
+        console.warn('Unable to queue registration news prefetch:', error.message);
+        return { status: 'error', reason: error.message };
+      }
+    })();
 
     // Generate token
     const token = generateToken(user._id, user.onboardingStatus || 'pending');
@@ -511,11 +571,17 @@ router.post('/register', [
       metadata: { location: { city: null, country: null } }
     });
 
+    const registrationNewsPrefetch = await Promise.race([
+      registrationNewsPrefetchPromise,
+      new Promise((resolve) => setTimeout(() => resolve({ status: 'queued', deferred: true }), 1200))
+    ]);
+
     res.status(201).json({
       message: 'Registration successful',
       user: toAuthenticatedUserProfile(user),
       token,
       requiresPasswordReset: !!user.mustResetPassword,
+      registrationNewsPrefetch,
       expiresIn: 86400 // 24 hours in seconds
     });
   } catch (error) {
@@ -1400,6 +1466,17 @@ router.put('/profile', [
   body('city').optional().trim(),
   body('state').optional().trim(),
   body('country').optional().trim(),
+  body('zipCode')
+    .optional()
+    .trim()
+    .customSanitizer((value) => normalizeZipCode(value))
+    .custom((value) => {
+      if (!value) return true;
+      if (!/^\d{5}(?:-\d{4})?$/.test(value)) {
+        throw new Error('Zip Code must be a valid US ZIP (12345 or 12345-6789)');
+      }
+      return true;
+    }),
   body('bio')
     .optional({ nullable: true })
     .isString()
@@ -1533,6 +1610,7 @@ router.put('/profile', [
       city,
       state,
       country,
+      zipCode,
       bio,
       avatarUrl,
       bannerUrl,
@@ -1543,27 +1621,44 @@ router.put('/profile', [
     } = req.body;
     const now = Date.now();
 
-    const requestedLocation = canonicalizeNewsLocation({
+    const requestedLocationInput = {
       city: normalizeLocationValue(city),
       state: normalizeLocationValue(state),
-      country: normalizeLocationValue(country)
-    });
+      country: normalizeLocationValue(country),
+      zipCode: zipCode ? normalizeZipCode(zipCode) : null
+    };
     const hasLocationFieldsInRequest = LOCATION_CHANGE_FIELDS.some((field) =>
       Object.prototype.hasOwnProperty.call(req.body, field)
     );
-    const hasNonEmptyLocationValues = LOCATION_CHANGE_FIELDS.some((field) => requestedLocation[field]);
+    const resolvedRequestedLocation = hasLocationFieldsInRequest
+      ? await resolveCanonicalLocationInput(requestedLocationInput)
+      : null;
+    const requestedLocation = resolvedRequestedLocation?.canonical || canonicalizeNewsLocation(requestedLocationInput);
+    const hasNonEmptyLocationValues = LOCATION_CHANGE_FIELDS.some((field) => {
+      if (field === 'zipCode') {
+        return requestedLocation.zipCode;
+      }
+      return requestedLocation[field];
+    });
     if (hasLocationFieldsInRequest && hasNonEmptyLocationValues) {
       const currentLocation = {
         city: normalizeLocationValue(user.city),
         state: normalizeLocationValue(user.state),
-        country: normalizeLocationValue(user.country)
+        country: normalizeLocationValue(user.country),
+        zipCode: user.zipCode ? normalizeZipCode(user.zipCode) : null
       };
       const nextLocation = {
         city: requestedLocation.city || currentLocation.city,
         state: requestedLocation.stateCode || requestedLocation.state || currentLocation.state,
-        country: requestedLocation.countryCode || requestedLocation.country || currentLocation.country
+        country: requestedLocation.countryCode || requestedLocation.country || currentLocation.country,
+        zipCode: requestedLocation.zipCode || currentLocation.zipCode
       };
-      const locationChanged = LOCATION_CHANGE_FIELDS.some((field) => nextLocation[field] !== currentLocation[field]);
+      const locationChanged = LOCATION_CHANGE_FIELDS.some((field) => {
+        if (field === 'zipCode') {
+          return nextLocation.zipCode !== currentLocation.zipCode;
+        }
+        return nextLocation[field] !== currentLocation[field];
+      });
 
       if (locationChanged) {
         const lastLocationUpdateTime = user.locationLastUpdatedAt ? new Date(user.locationLastUpdatedAt).getTime() : null;
@@ -1576,6 +1671,9 @@ router.put('/profile', [
         user.city = nextLocation.city;
         user.state = nextLocation.state;
         user.country = nextLocation.country;
+        if (nextLocation.zipCode) {
+          user.zipCode = nextLocation.zipCode;
+        }
         user.locationLastUpdatedAt = new Date(now);
       }
     }
@@ -1721,7 +1819,33 @@ router.put('/profile', [
     user.updatedAt = new Date();
     await user.save();
 
-    res.json({ 
+    // Trigger immediate location fetch after successful profile location update
+    const hasLocationChange = hasLocationFieldsInRequest && hasNonEmptyLocationValues;
+    if (hasLocationChange) {
+      try {
+        const newsRoutes = require('./news');
+        if (typeof newsRoutes.queueImmediateLocationFetch === 'function') {
+          const coordinates = Array.isArray(user.location?.coordinates)
+            ? { lon: user.location.coordinates[0], lat: user.location.coordinates[1] }
+            : null;
+          await newsRoutes.queueImmediateLocationFetch({
+            userId: user._id,
+            location: {
+              city: user.city,
+              state: user.state,
+              country: user.country,
+              county: user.county,
+              zipCode: user.zipCode
+            },
+            coordinates
+          });
+        }
+      } catch (queueError) {
+        console.warn('Failed to queue immediate location fetch after profile update:', queueError.message);
+      }
+    }
+
+    res.json({
       message: addressPendingApproval
         ? 'Profile updated. Your home address is pending approval from an existing resident.'
         : 'Profile updated successfully',

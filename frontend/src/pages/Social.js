@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
+import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, getAuthToken, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
@@ -532,7 +532,7 @@ const Social = () => {
     return params.get('user') || '';
   }, []);
 
-  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(localStorage.getItem('token')));
+  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(getAuthToken()));
   const [currentUser, setCurrentUser] = useState(null);
   const [isGuestPreview, setIsGuestPreview] = useState(false);
   const [guestUser, setGuestUser] = useState(initialGuestUser);
@@ -1380,7 +1380,7 @@ const Social = () => {
     setLoadingFeed(true);
     setFeedError('');
 
-    const token = localStorage.getItem('token');
+    const token = getAuthToken();
     if (!token) {
       setIsAuthenticated(false);
       try {
@@ -1464,7 +1464,7 @@ const Social = () => {
       return undefined;
     }
 
-    const token = localStorage.getItem('token');
+    const token = getAuthToken();
     if (!token) {
       return undefined;
     }

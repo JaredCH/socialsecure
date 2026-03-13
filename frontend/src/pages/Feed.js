@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI, feedAPI } from '../utils/api';
+import { authAPI, feedAPI, getAuthToken } from '../utils/api';
 
 const VISIBILITY_OPTIONS = ['public', 'friends', 'private'];
 const MEDIA_URL_MAX_ITEMS = 8;
@@ -120,7 +120,7 @@ const Social = () => {
     return params.get('user') || '';
   }, []);
 
-  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(localStorage.getItem('token')));
+  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(getAuthToken()));
   const [currentUser, setCurrentUser] = useState(null);
   const [guestUser, setGuestUser] = useState(initialGuestUser);
   const [guestProfile, setGuestProfile] = useState(null);
@@ -179,7 +179,7 @@ const Social = () => {
     setLoadingFeed(true);
     setFeedError('');
 
-    const token = localStorage.getItem('token');
+    const token = getAuthToken();
     if (!token) {
       setIsAuthenticated(false);
       try {
