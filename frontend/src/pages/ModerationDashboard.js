@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { moderationAPI, newsAPI } from '../utils/api';
 
@@ -436,8 +437,18 @@ function ModerationDashboard() {
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-8">
       <div className="rounded-2xl bg-gradient-to-r from-gray-900 to-gray-700 px-6 py-5 text-white shadow-lg">
-        <h1 className="text-2xl font-bold">Control Panel</h1>
-        <p className="mt-1 text-sm text-gray-300">High-level command center for users, posts, chat activity, reports, and moderation actions.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Control Panel</h1>
+            <p className="mt-1 text-sm text-gray-300">High-level command center for users, posts, chat activity, reports, and moderation actions.</p>
+          </div>
+          <Link
+            to="/control-panel/news-review"
+            className="flex-shrink-0 self-start rounded-xl border border-white/30 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 transition-colors"
+          >
+            📰 News Review
+          </Link>
+        </div>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

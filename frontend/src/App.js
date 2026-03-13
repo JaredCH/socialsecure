@@ -17,6 +17,7 @@ import ResumeBuilder from './pages/ResumeBuilder';
 import OnboardingPage from './pages/OnboardingPage';
 import PostRegistrationWelcome from './pages/PostRegistrationWelcome';
 import ModerationDashboard from './pages/ModerationDashboard';
+import AdminNewsReview from './pages/AdminNewsReview';
 import NotificationCenter from './components/NotificationCenter';
 import NotificationSettings from './pages/NotificationSettings';
 import ResumePublic from './pages/ResumePublic';
@@ -683,6 +684,22 @@ function App() {
               )}
             />
             <Route path="/moderation" element={<Navigate to="/control-panel" replace />} />
+            <Route
+              path="/control-panel/news-review"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  allowWhenOnboardingRequired={false}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                  allowWhenEncryptionRequired={false}
+                  passwordResetRequired={passwordResetRequired}
+                  allowWhenPasswordResetRequired={false}
+                >
+                  {user?.isAdmin ? <AdminNewsReview /> : <Navigate to={socialProfilePath} replace />}
+                </ProtectedRoute>
+              )}
+            />
             <Route
               path="/discover"
               element={(

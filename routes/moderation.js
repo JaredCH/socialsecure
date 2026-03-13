@@ -17,6 +17,7 @@ const ChatConversation = require('../models/ChatConversation');
 const Article = require('../models/Article');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
+const NewsPreferences = require('../models/NewsPreferences');
 
 const REPORT_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const REPORT_LIMIT_MAX = 5;
@@ -1416,6 +1417,207 @@ router.put('/appeals/:reportId', [
   } catch (error) {
     console.error('Process appeal error:', error);
     return res.status(500).json({ error: 'Failed to process appeal' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// News Review — Admin article auditing endpoints
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /control-panel/news-review/articles
+ *
+ * Query the Article collection with optional filters.
+ *
+ * Query params:
+ *   city, state, zipCode, county       — location filters (case-insensitive)
+ *   category                           — article category string
+ *   source                             — source name filter
+ *   keyword                            — searches title + description
+ *   dateFrom, dateTo                   — ISO date bounds on publishedAt
+ *   localityLevel                      — city | county | state | country | global
+ *   isActive                           — "true" | "false"
+ *   sortBy                             — publishedAt (default) | viralScore | ingestTimestamp
+ *   sortDir                            — desc (default) | asc
+ *   page                               — 1-based page number (default 1)
+ *   limit                              — results per page (default 25, max 100)
+ */
+router.get('/control-panel/news-review/articles', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const {
+      city, state, zipCode, county,
+      category, source, keyword,
+      dateFrom, dateTo,
+      localityLevel, isActive,
+      sortBy = 'publishedAt', sortDir = 'desc',
+      page = '1', limit = '25',
+    } = req.query;
+
+    const filter = {};
+
+    // Location filters — match against locationTags sub-document arrays
+    if (city) filter['locationTags.cities'] = { $regex: new RegExp(city.trim(), 'i') };
+    if (state) filter['locationTags.states'] = { $regex: new RegExp(state.trim(), 'i') };
+    if (zipCode) filter['locationTags.zipCodes'] = zipCode.trim();
+    if (county) filter['locationTags.counties'] = { $regex: new RegExp(county.trim(), 'i') };
+
+    if (category) filter.category = category.trim().toLowerCase();
+    if (source) filter.source = { $regex: new RegExp(source.trim(), 'i') };
+    if (localityLevel) filter.localityLevel = localityLevel.trim();
+    if (typeof isActive !== 'undefined' && isActive !== '') {
+      filter.isActive = isActive === 'true';
+    }
+
+    // Keyword search across title & description
+    if (keyword && keyword.trim()) {
+      const kw = keyword.trim();
+      filter.$or = [
+        { title: { $regex: new RegExp(kw, 'i') } },
+        { description: { $regex: new RegExp(kw, 'i') } },
+      ];
+    }
+
+    // Date range on publishedAt
+    if (dateFrom || dateTo) {
+      filter.publishedAt = {};
+      if (dateFrom) filter.publishedAt.$gte = new Date(dateFrom);
+      if (dateTo) filter.publishedAt.$lte = new Date(dateTo);
+    }
+
+    const allowedSortFields = ['publishedAt', 'viralScore', 'ingestTimestamp', 'createdAt'];
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'publishedAt';
+    const sortOrder = sortDir === 'asc' ? 1 : -1;
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 25));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [articles, total] = await Promise.all([
+      Article.find(filter)
+        .select('title description source category publishedAt ingestTimestamp localityLevel locationTags locations viralScore scopeReason scopeConfidence isActive isPromoted feedSource url')
+        .sort({ [sortField]: sortOrder })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Article.countDocuments(filter),
+    ]);
+
+    return res.json({
+      articles,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+      limit: limitNum,
+    });
+  } catch (error) {
+    console.error('News review articles error:', error);
+    return res.status(500).json({ error: 'Failed to fetch articles' });
+  }
+});
+
+/**
+ * GET /control-panel/news-review/simulate
+ *
+ * Simulate the news feed for a specific user as they would see it.
+ *
+ * Query params:
+ *   username  — the user to simulate (required)
+ *   limit     — number of articles (default 50, max 100)
+ *   scope     — override defaultScope: local | regional | national | global
+ */
+router.get('/control-panel/news-review/simulate', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { username, limit = '50', scope } = req.query;
+
+    if (!username || !username.trim()) {
+      return res.status(400).json({ error: 'username parameter is required' });
+    }
+
+    const targetUser = await User.findOne({ username: username.trim() })
+      .select('_id username isAdmin profileCity profileState profileZipCode')
+      .lean();
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const prefs = await NewsPreferences.findOne({ user: targetUser._id }).lean();
+
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+
+    // Build location tokens from NewsPreferences.locations, fall back to profile fields
+    const locationFilter = [];
+
+    const locations = prefs?.locations || [];
+    for (const loc of locations) {
+      if (loc.zipCode) locationFilter.push({ 'locationTags.zipCodes': loc.zipCode });
+      if (loc.city) locationFilter.push({ 'locationTags.cities': { $regex: new RegExp(`^${loc.city}$`, 'i') } });
+      if (loc.state) locationFilter.push({ 'locationTags.states': { $regex: new RegExp(`^${loc.state}$`, 'i') } });
+    }
+
+    // Fallback: user's profile location fields
+    if (locationFilter.length === 0) {
+      if (targetUser.profileZipCode) {
+        locationFilter.push({ 'locationTags.zipCodes': targetUser.profileZipCode });
+      }
+      if (targetUser.profileCity) {
+        locationFilter.push({ 'locationTags.cities': { $regex: new RegExp(`^${targetUser.profileCity}$`, 'i') } });
+      }
+    }
+
+    const effectiveScope = scope || prefs?.defaultScope || 'global';
+
+    // Build the article query
+    const localityLevelMap = {
+      local: ['city', 'county'],
+      regional: ['city', 'county', 'state'],
+      national: ['city', 'county', 'state', 'country'],
+      global: ['city', 'county', 'state', 'country', 'global'],
+    };
+    const allowedLocality = localityLevelMap[effectiveScope] || localityLevelMap.global;
+
+    const articleFilter = { isActive: true, localityLevel: { $in: allowedLocality } };
+
+    // Hidden categories
+    if (prefs?.hiddenCategories?.length) {
+      articleFilter.category = { $nin: prefs.hiddenCategories };
+    }
+
+    // For local/regional scopes: restrict to user's location tokens if any exist.
+    // For national/global: show all articles regardless of location.
+    if ((effectiveScope === 'local' || effectiveScope === 'regional') && locationFilter.length > 0) {
+      articleFilter.$or = locationFilter;
+    }
+
+    const articles = await Article.find(articleFilter)
+      .select('title description source category publishedAt localityLevel locationTags viralScore scopeReason isActive url')
+      .sort({ viralScore: -1, publishedAt: -1 })
+      .limit(limitNum)
+      .lean();
+
+    return res.json({
+      user: {
+        username: targetUser.username,
+        profileCity: targetUser.profileCity,
+        profileState: targetUser.profileState,
+        profileZipCode: targetUser.profileZipCode,
+      },
+      preferences: prefs
+        ? {
+            defaultScope: prefs.defaultScope,
+            localPriorityEnabled: prefs.localPriorityEnabled,
+            locations: prefs.locations,
+            followedKeywords: prefs.followedKeywords,
+            hiddenCategories: prefs.hiddenCategories,
+          }
+        : null,
+      simulatedScope: effectiveScope,
+      articles,
+      articleCount: articles.length,
+    });
+  } catch (error) {
+    console.error('News review simulate error:', error);
+    return res.status(500).json({ error: 'Failed to simulate news feed' });
   }
 });
 

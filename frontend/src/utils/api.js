@@ -680,7 +680,10 @@ export const moderationAPI = {
   removeInfraction: (userId, infractionIndex) => api.delete(`/moderation/control-panel/users/${encodeURIComponent(userId)}/infractions/${encodeURIComponent(infractionIndex)}`),
   deletePostByAdmin: (postId) => api.delete(`/moderation/control-panel/posts/${encodeURIComponent(postId)}`),
   deleteMessageByAdmin: (messageId, type = 'room') => api.delete(`/moderation/control-panel/messages/${encodeURIComponent(messageId)}?type=${encodeURIComponent(type)}`),
-  deleteUserByAdmin: (userId) => api.delete(`/moderation/control-panel/users/${encodeURIComponent(userId)}`)
+  deleteUserByAdmin: (userId) => api.delete(`/moderation/control-panel/users/${encodeURIComponent(userId)}`),
+  // News Review — article auditing and feed simulation
+  getNewsReviewArticles: (params = {}) => api.get('/moderation/control-panel/news-review/articles', { params }),
+  simulateNewsFeed: (params = {}) => api.get('/moderation/control-panel/news-review/simulate', { params }),
 };
 
 export default api;

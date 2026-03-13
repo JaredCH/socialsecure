@@ -16,6 +16,7 @@ const { ensureUniversalAdminAccount } = require('./services/universalAdmin');
 const { startEventScheduleIngestionScheduler } = require('./services/eventScheduleIngestion');
 const { startEventRoomLifecycleScheduler } = require('./services/eventRoomLifecycle');
 const { startSportsScheduleScheduler } = require('./services/sportsScheduleIngestion');
+const { startArticleCleanupScheduler } = require('./services/newsArticleCleanup');
 
 const TYPING_THROTTLE_MS = 1000;
 const SOCKET_JWT_SECRET = process.env.JWT_SECRET || '';
@@ -361,6 +362,11 @@ if (process.env.NODE_ENV !== 'test') {
     startEventRoomLifecycleScheduler();
   } catch (error) {
     console.error('Failed to start event schedulers:', error);
+  }
+  try {
+    startArticleCleanupScheduler();
+  } catch (error) {
+    console.error('Failed to start article cleanup scheduler:', error);
   }
 }
 
