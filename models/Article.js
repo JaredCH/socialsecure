@@ -113,6 +113,7 @@ const articleSchema = new mongoose.Schema({
   contentFingerprint: {
     type: String,
     index: true,
+    sparse: true,
     default: null
   },
   ingestTimestamp: {
@@ -185,7 +186,15 @@ articleSchema.pre('save', function(next) {
 
 // Static method to find duplicates
 articleSchema.statics.findDuplicate = async function(url, sourceId, contentFingerprint = null) {
-  // Try normalized URL hash first
+  // Content fingerprint (hash of title+description) is checked first because
+  // Google News serves the same article with a different opaque URL token on
+  // every RSS fetch, making URL-based hashes unreliable for deduplication.
+  if (contentFingerprint) {
+    const byFingerprint = await this.findOne({ contentFingerprint });
+    if (byFingerprint) return byFingerprint;
+  }
+
+  // Normalized URL hash works for sources with stable URLs (non-Google-News).
   const crypto = require('crypto');
   const urlHash = crypto
     .createHash('sha256')
@@ -196,16 +205,10 @@ articleSchema.statics.findDuplicate = async function(url, sourceId, contentFinge
   const byHash = await this.findOne({ normalizedUrlHash: urlHash });
   if (byHash) return byHash;
 
-  // Try by sourceId
+  // Fallback: RSS GUID / sourceId
   if (sourceId) {
     const bySourceId = await this.findOne({ sourceId });
     if (bySourceId) return bySourceId;
-  }
-
-  // Last fallback: content fingerprint
-  if (contentFingerprint) {
-    const byFingerprint = await this.findOne({ contentFingerprint });
-    if (byFingerprint) return byFingerprint;
   }
 
   return null;

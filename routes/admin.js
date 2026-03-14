@@ -21,6 +21,7 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 
 const User = require('../models/User');
+const Article = require('../models/Article');
 const NewsPreferences = require('../models/NewsPreferences');
 const NewsLocation = require('../models/NewsLocation');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
@@ -865,6 +866,138 @@ router.post('/news-sources/bulk-import', async (req, res) => {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('[admin] POST /news-sources/bulk-import error:', err);
     res.status(500).json({ error: 'Bulk import failed', message: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Article maintenance – backfill fingerprints & deduplication
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/admin/articles/backfill-fingerprints
+ *
+ * Computes and saves contentFingerprint for every article that is currently
+ * missing it.  Safe to run multiple times (skips articles that already have
+ * a fingerprint).  Returns counts of examined / updated articles.
+ */
+router.post('/articles/backfill-fingerprints', async (_req, res) => {
+  try {
+    const cursor = Article.find({ contentFingerprint: { $in: [null, ''] } })
+      .select('_id title description')
+      .lean()
+      .cursor();
+
+    let examined = 0;
+    let updated = 0;
+    const BATCH = 200;
+    const ops = [];
+
+    for await (const article of cursor) {
+      examined++;
+      const title = String(article.title || '').toLowerCase().trim();
+      const desc  = String(article.description || '').toLowerCase().trim();
+      if (!title && !desc) continue;
+
+      const fingerprint = crypto
+        .createHash('sha256')
+        .update(`${title}|${desc}`)
+        .digest('hex')
+        .substring(0, 20);
+
+      ops.push({
+        updateOne: {
+          filter: { _id: article._id },
+          update: { $set: { contentFingerprint: fingerprint } }
+        }
+      });
+
+      if (ops.length >= BATCH) {
+        await Article.bulkWrite(ops, { ordered: false });
+        updated += ops.length;
+        ops.length = 0;
+      }
+    }
+
+    if (ops.length > 0) {
+      await Article.bulkWrite(ops, { ordered: false });
+      updated += ops.length;
+    }
+
+    return res.json({ ok: true, examined, updated });
+  } catch (err) {
+    console.error('[admin] POST /articles/backfill-fingerprints error:', err);
+    return res.status(500).json({ error: 'Backfill failed', message: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/articles/dedup
+ *
+ * Removes duplicate Article documents.  Two articles are considered duplicates
+ * when they share the same contentFingerprint (title+description hash) OR, for
+ * articles without a fingerprint, the same url.
+ *
+ * Strategy: within each duplicate group the OLDEST document (smallest _id /
+ * earliest createdAt) is kept; all others are deleted.
+ *
+ * Query params:
+ *   dryRun=true  — report counts without deleting anything (default: false)
+ */
+router.post('/articles/dedup', async (req, res) => {
+  try {
+    const dryRun = String(req.query.dryRun || req.body?.dryRun || 'false').toLowerCase() === 'true';
+
+    // --- Phase 1: deduplicate by contentFingerprint ---
+    const fpDupGroups = await Article.aggregate([
+      { $match: { contentFingerprint: { $nin: [null, ''] } } },
+      { $group: { _id: '$contentFingerprint', ids: { $push: '$_id' }, count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } }
+    ]);
+
+    let fpDeletedCount = 0;
+    for (const group of fpDupGroups) {
+      // Sort ascending so the first element is the oldest ObjectId.
+      group.ids.sort((a, b) => (a.toString() < b.toString() ? -1 : 1));
+      const [, ...toDelete] = group.ids;
+      if (!dryRun) {
+        const result = await Article.deleteMany({ _id: { $in: toDelete } });
+        fpDeletedCount += result.deletedCount;
+      } else {
+        fpDeletedCount += toDelete.length;
+      }
+    }
+
+    // --- Phase 2: deduplicate by url for articles without a fingerprint ---
+    const urlDupGroups = await Article.aggregate([
+      { $match: { contentFingerprint: { $in: [null, ''] }, url: { $nin: [null, ''] } } },
+      { $group: { _id: '$url', ids: { $push: '$_id' }, count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } }
+    ]);
+
+    let urlDeletedCount = 0;
+    for (const group of urlDupGroups) {
+      group.ids.sort((a, b) => (a.toString() < b.toString() ? -1 : 1));
+      const [, ...toDelete] = group.ids;
+      if (!dryRun) {
+        const result = await Article.deleteMany({ _id: { $in: toDelete } });
+        urlDeletedCount += result.deletedCount;
+      } else {
+        urlDeletedCount += toDelete.length;
+      }
+    }
+
+    return res.json({
+      ok: true,
+      dryRun,
+      fingerprintDupGroups: fpDupGroups.length,
+      fingerprintDeleted: fpDeletedCount,
+      urlDupGroups: urlDupGroups.length,
+      urlDeleted: urlDeletedCount,
+      totalDeleted: fpDeletedCount + urlDeletedCount
+    });
+  } catch (err) {
+    console.error('[admin] POST /articles/dedup error:', err);
+    return res.status(500).json({ error: 'Dedup failed', message: err.message });
   }
 });
 

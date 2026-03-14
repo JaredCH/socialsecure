@@ -836,16 +836,10 @@ const isLikelyLocationQuery = (value = '') => {
 };
 
 const resolveAssignedZipCode = async ({ locationTokens = [], source = {}, item = {}, query = null }) => {
-  const sourceZip = normalizeZipCode(source.zipCode || source.postalCode || '');
-  if (sourceZip && isZipLikeToken(sourceZip)) {
-    return sourceZip;
-  }
-
-  const directZip = extractZipTokens(locationTokens)[0];
-  if (directZip) {
-    return directZip;
-  }
-
+  // Check the article title for an explicit "City, ST" pattern first.
+  // This prevents a source feed configured for one city (e.g. San Marcos, 78666)
+  // from mis-tagging articles that are actually about a different city
+  // (e.g. "Black Friday hours in San Antonio, TX").
   const titleCityState = parseCityStateFromTitle(item.title);
   if (titleCityState) {
     try {
@@ -860,6 +854,16 @@ const resolveAssignedZipCode = async ({ locationTokens = [], source = {}, item =
     } catch (error) {
       console.warn('News article zip index lookup failed:', titleCityState, error.message);
     }
+  }
+
+  const sourceZip = normalizeZipCode(source.zipCode || source.postalCode || '');
+  if (sourceZip && isZipLikeToken(sourceZip)) {
+    return sourceZip;
+  }
+
+  const directZip = extractZipTokens(locationTokens)[0];
+  if (directZip) {
+    return directZip;
   }
 
   const titleQuery = extractCityStateQueryFromTitle(item.title);
@@ -3727,11 +3731,9 @@ async function processArticles(articles, options = {}) {
   const momentumMap = createMomentumMap(articles, new Date());
   const findExistingArticle = Article.findDuplicate
     ? (url, sourceId, normalizedUrlHash, contentFingerprint) => {
-      // Keep compatibility with tests/mocks that still stub a 2-arg signature.
-      if (Article.findDuplicate.length >= 3) {
-        return Article.findDuplicate(url, sourceId, contentFingerprint);
-      }
-      return Article.findDuplicate(url, sourceId);
+      // Always pass contentFingerprint — Function.length excludes default-valued
+      // params so the old `>= 3` length check was always false and never reached it.
+      return Article.findDuplicate(url, sourceId, contentFingerprint);
     }
     : (url, sourceId, normalizedUrlHash, contentFingerprint) => {
       const dedupeClauses = [
