@@ -66,11 +66,25 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
         };
       }
       
-      // Team not found in leagues data - use as-is
+      // Team not found in leagues data - parse info from colon-format ID (e.g. 'nfl:dallas-cowboys')
+      const colonIdx = normalizedId.indexOf(':');
+      if (colonIdx > 0) {
+        const leagueSlug = normalizedId.substring(0, colonIdx);
+        const teamSlug = normalizedId.substring(colonIdx + 1);
+        const toTitle = (s) => s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const leagueName = leagueSlug.split('-').map(w => w.length <= 4 ? w.toUpperCase() : toTitle(w)).join(' ');
+        return {
+          id: normalizedId,
+          displayName: toTitle(teamSlug),
+          leagueName,
+          abbreviation: teamSlug.split('-').map(w => w[0]).join('').toUpperCase().substring(0, 3),
+          isFollowed: true,
+        };
+      }
       return {
         id: normalizedId,
         displayName: getTeamDisplayName(team),
-        leagueName: team?.league?.name || team?.leagueName || 'Unknown League',
+        leagueName: team?.league?.name || team?.leagueName || 'Unknown',
         isFollowed: true,
       };
     });

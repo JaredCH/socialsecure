@@ -44,7 +44,8 @@ const PROMOTED_THRESHOLD = parseInt(process.env.NEWS_VIRAL_PROMOTED_THRESHOLD ||
 const { buildFeed } = require('../services/newsFeedBuilder');
 const { triggerLocationIngest, ingestLocalNews, ingestAllKnownLocations } = require('../services/newsIngestion.local');
 const { ingestAllCategories } = require('../services/newsIngestion.categories');
-const { ingestAllFollowedTeams, SPORTS_TEAMS } = require('../services/newsIngestion.sports');
+const { ingestAllFollowedTeams } = require('../services/newsIngestion.sports');
+const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocationIndex');
 const { ingestAllMonitoredSubreddits } = require('../services/newsIngestion.social');
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
 const { getLocationTaxonomyPayload } = require('../utils/newsLocationTaxonomy');
@@ -342,8 +343,13 @@ function requireAdminApiKey(req, res, next) {
   if (!secret) return res.status(503).json({ error: 'Admin API not configured' });
   const provided = String(req.headers['x-admin-api-key'] || '');
   if (!provided) return res.status(401).json({ error: 'Admin API key required' });
-  const valid = crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(secret));
-  if (!valid) return res.status(403).json({ error: 'Invalid admin API key' });
+  // Pad to equal length before constant-time comparison to avoid length-oracle
+  const secretBuf = Buffer.from(secret);
+  const providedBuf = Buffer.alloc(secretBuf.length);
+  providedBuf.write(provided.slice(0, secretBuf.length));
+  let valid = false;
+  try { valid = crypto.timingSafeEqual(secretBuf, providedBuf); } catch { valid = false; }
+  if (!valid || provided.length !== secret.length) return res.status(403).json({ error: 'Invalid admin API key' });
   next();
 }
 
@@ -429,23 +435,47 @@ router.get('/categories', authenticateToken, (req, res) => {
 /**
  * GET /api/news/sports-teams
  * Returns the full list of followable sports teams grouped by league.
- * Also returns a flat teams array for backward compat.
+ * IDs use slug format matching stored preferences (e.g. "nfl:dallas-cowboys").
  */
 router.get('/sports-teams', authenticateToken, (req, res) => {
   const { league: leagueFilter } = req.query;
-  const allTeams = Object.entries(SPORTS_TEAMS)
-    .filter(([, t]) => !leagueFilter || t.league === leagueFilter)
-    .map(([id, t]) => ({ id, ...t }))
+
+  // Build flat teams list from the canonical catalog
+  const allTeams = SPORTS_CATALOG
+    .filter((t) => {
+      if (!leagueFilter) return true;
+      const leagueSlug = t.id.split(':')[0];
+      return leagueSlug === leagueFilter || t.league === leagueFilter;
+    })
+    .map((t) => {
+      const leagueSlug = t.id.split(':')[0];
+      // Pick the shortest all-caps variant as abbreviation (e.g., 'DAL', 'GB')
+      const abbr = (t.variants || []).find((v) => v === v.toUpperCase() && v.length <= 4 && /^[A-Z0-9]+$/.test(v)) || '';
+      return {
+        id: t.id,
+        name: t.team,
+        league: leagueSlug,
+        leagueLabel: t.leagueLabel,
+        shortName: (t.variants || [])[0] || t.team,
+        abbreviation: abbr,
+        city: t.city,
+        state: t.state,
+        country: t.country,
+        icon: t.icon,
+      };
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // Group into leagues array for frontend league-picker UI
   const leagueMap = {};
   for (const team of allTeams) {
-    const lg = team.league || 'other';
-    if (!leagueMap[lg]) leagueMap[lg] = { id: lg, name: lg.toUpperCase(), teams: [] };
+    const lg = team.league;
+    if (!leagueMap[lg]) {
+      leagueMap[lg] = { id: lg, name: team.leagueLabel || lg.toUpperCase(), icon: team.icon || '', teams: [] };
+    }
     leagueMap[lg].teams.push(team);
   }
-  const leagues = Object.values(leagueMap).sort((a, b) => a.id.localeCompare(b.id));
+  const leagues = Object.values(leagueMap).sort((a, b) => a.name.localeCompare(b.name));
 
   res.json({ teams: allTeams, leagues });
 });
@@ -480,7 +510,7 @@ router.get('/sports-schedules', authenticateToken, async (req, res) => {
  */
 router.get('/sports-schedules/seasons', authenticateToken, async (req, res) => {
   try {
-    const leagueIds = [...new Set(Object.values(SPORTS_TEAMS).map((t) => t.league))];
+    const leagueIds = [...new Set(SPORTS_CATALOG.map((t) => t.id.split(':')[0]))];
     // Return a simple in-season flag derived from current date; expand with real data as needed
     const month = new Date().getMonth() + 1; // 1-12
     const seasons = {};
