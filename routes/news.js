@@ -4239,11 +4239,16 @@ async function ingestAllSources() {
 }
 
 const buildGoogleMasterQuery = (location = {}) => {
+  const city = location.canonicalCity;
+  const state = location.canonicalState || location.canonicalStateCode;
+  if (city && state) {
+    return `"${city} ${state}" when:1d`;
+  }
+  // Fallback for locations missing city or state
   const parts = [
     location.canonicalZipCode,
-    location.canonicalCity,
-    location.canonicalStateCode || location.canonicalState,
-    location.canonicalCountryCode || location.canonicalCountry,
+    city,
+    state,
     'local news'
   ].filter(Boolean);
   return parts.join(' ');
