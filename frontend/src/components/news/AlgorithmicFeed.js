@@ -122,8 +122,8 @@ export default function AlgorithmicFeed({
           if (activeRegion?.city)    params.city     = activeRegion.city;
           const res = await newsAPI.searchArticles(params);
           if (!cancelled) {
-            setSearchResults(res.data?.results || []);
-            setArticles(res.data?.results || []);
+            setSearchResults(res.data?.articles || []);
+            setArticles(res.data?.articles || []);
             setHasMore(false);
           }
           return;

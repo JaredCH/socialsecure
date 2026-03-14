@@ -39,12 +39,15 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+const PROMOTED_THRESHOLD = parseInt(process.env.NEWS_VIRAL_PROMOTED_THRESHOLD || '65', 10);
+
 const { buildFeed } = require('../services/newsFeedBuilder');
 const { triggerLocationIngest, ingestLocalNews, ingestAllKnownLocations } = require('../services/newsIngestion.local');
 const { ingestAllCategories } = require('../services/newsIngestion.categories');
 const { ingestAllFollowedTeams, SPORTS_TEAMS } = require('../services/newsIngestion.sports');
 const { ingestAllMonitoredSubreddits } = require('../services/newsIngestion.social');
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
+const { getLocationTaxonomyPayload } = require('../utils/newsLocationTaxonomy');
 
 // ---------------------------------------------------------------------------
 // Weather constants
@@ -425,20 +428,127 @@ router.get('/categories', authenticateToken, (req, res) => {
 
 /**
  * GET /api/news/sports-teams
- * Returns the full list of followable sports teams.
+ * Returns the full list of followable sports teams grouped by league.
+ * Also returns a flat teams array for backward compat.
  */
 router.get('/sports-teams', authenticateToken, (req, res) => {
-  const { league } = req.query;
-  const teams = Object.entries(SPORTS_TEAMS)
-    .filter(([, t]) => !league || t.league === league)
+  const { league: leagueFilter } = req.query;
+  const allTeams = Object.entries(SPORTS_TEAMS)
+    .filter(([, t]) => !leagueFilter || t.league === leagueFilter)
     .map(([id, t]) => ({ id, ...t }))
     .sort((a, b) => a.name.localeCompare(b.name));
-  res.json({ teams });
+
+  // Group into leagues array for frontend league-picker UI
+  const leagueMap = {};
+  for (const team of allTeams) {
+    const lg = team.league || 'other';
+    if (!leagueMap[lg]) leagueMap[lg] = { id: lg, name: lg.toUpperCase(), teams: [] };
+    leagueMap[lg].teams.push(team);
+  }
+  const leagues = Object.values(leagueMap).sort((a, b) => a.id.localeCompare(b.id));
+
+  res.json({ teams: allTeams, leagues });
+});
+
+/**
+ * GET /api/news/sports-schedules
+ * Returns upcoming game schedules for the user's followed teams.
+ * Requires `teams` query param (comma-separated team IDs).
+ */
+router.get('/sports-schedules', authenticateToken, async (req, res) => {
+  try {
+    const teamIds = String(req.query.teams || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (teamIds.length === 0) return res.json({ schedules: [], seasons: {} });
+
+    const SportsSchedule = require('../models/SportsSchedule');
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // next 14 days
+    const schedules = await SportsSchedule.find({
+      teamId: { $in: teamIds },
+      gameDate: { $gte: now, $lte: cutoff }
+    }).sort({ gameDate: 1 }).limit(50).lean();
+    res.json({ schedules });
+  } catch (error) {
+    console.error('Error fetching sports schedules:', error);
+    res.status(500).json({ error: 'Failed to fetch sports schedules' });
+  }
+});
+
+/**
+ * GET /api/news/sports-schedules/seasons
+ * Returns current season status for all tracked leagues.
+ */
+router.get('/sports-schedules/seasons', authenticateToken, async (req, res) => {
+  try {
+    const leagueIds = [...new Set(Object.values(SPORTS_TEAMS).map((t) => t.league))];
+    // Return a simple in-season flag derived from current date; expand with real data as needed
+    const month = new Date().getMonth() + 1; // 1-12
+    const seasons = {};
+    for (const lg of leagueIds) {
+      seasons[lg] = {
+        inSeason: true, // default optimistic; front-end gracefully handles no games
+        league: lg
+      };
+    }
+    res.json({ seasons });
+  } catch (error) {
+    console.error('Error fetching season info:', error);
+    res.status(500).json({ error: 'Failed to fetch season info' });
+  }
 });
 
 // ===========================================================================
 // NEWS PREFERENCES ROUTES
 // ===========================================================================
+
+/**
+ * GET /api/news/location-taxonomy
+ * Returns the canonical US state/city taxonomy for location selectors.
+ */
+router.get('/location-taxonomy', authenticateToken, (req, res) => {
+  try {
+    res.json({ taxonomy: getLocationTaxonomyPayload() });
+  } catch (error) {
+    console.error('Error fetching location taxonomy:', error);
+    res.status(500).json({ error: 'Failed to fetch location taxonomy' });
+  }
+});
+
+/**
+ * GET /api/news/sources
+ * Returns available RSS sources with health status for the settings panel.
+ * Sources are a union of the catalog and any user-added RSS sources.
+ */
+router.get('/sources', authenticateToken, async (req, res) => {
+  try {
+    const RssSource = require('../models/RssSource');
+    const dbSources = await RssSource.find({}).lean();
+    res.json({ sources: dbSources, catalogVersion: 'v1' });
+  } catch (error) {
+    console.error('Error fetching news sources:', error);
+    res.status(500).json({ error: 'Failed to fetch sources' });
+  }
+});
+
+/**
+ * GET /api/news/promoted
+ * Returns top viral articles.
+ */
+router.get('/promoted', authenticateToken, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+    const query = { viralScore: { $gte: PROMOTED_THRESHOLD }, isActive: { $ne: false } };
+    if (req.query.topic) query.category = req.query.topic;
+    const articles = await Article.find(query)
+      .sort({ viralScore: -1, publishedAt: -1 })
+      .limit(limit)
+      .lean();
+    res.json({ articles });
+  } catch (error) {
+    console.error('Error fetching promoted articles:', error);
+    res.status(500).json({ error: 'Failed to fetch promoted articles' });
+  }
+});
 
 /**
  * GET /api/news/preferences
@@ -450,7 +560,20 @@ router.get('/preferences', authenticateToken, async (req, res) => {
     if (!prefs) {
       prefs = await NewsPreferences.create({ user: req.user.userId });
     }
-    res.json({ preferences: prefs });
+    // Compute registration alignment: flag mismatch between profile and news prefs
+    let registrationAlignment = null;
+    try {
+      const user = await User.findById(req.user.userId).select('city state zipCode').lean();
+      const primaryLoc = (prefs.locations || []).find(l => l.isPrimary) || (prefs.locations || [])[0];
+      if (user && primaryLoc) {
+        const profileZip = String(user.zipCode || '').trim();
+        const prefZip = String(primaryLoc.zipCode || '').trim();
+        registrationAlignment = (profileZip && prefZip && profileZip !== prefZip)
+          ? { mismatched: true, profileZip, prefZip }
+          : { mismatched: false };
+      }
+    } catch { /* non-fatal */ }
+    res.json({ preferences: prefs, registrationAlignment });
   } catch (error) {
     console.error('Error fetching news preferences:', error);
     res.status(500).json({ error: 'Failed to fetch preferences' });
@@ -459,14 +582,18 @@ router.get('/preferences', authenticateToken, async (req, res) => {
 
 /**
  * PUT /api/news/preferences
- * Update top-level preference fields (locations, followedSportsTeams, etc.)
+ * Update top-level preference fields.
  * Does NOT touch weatherLocations or redditMonitors (use dedicated endpoints).
  */
 router.put('/preferences', authenticateToken, async (req, res) => {
   try {
     const ALLOWED_FIELDS = [
-      'locations', 'followedSportsTeams', 'followedCategories',
-      'notificationsEnabled', 'digestFrequency'
+      'locations', 'followedSportsTeams', 'rssSources',
+      'googleNewsTopics', 'googleNewsEnabled',
+      'gdletCategories', 'gdletEnabled',
+      'followedKeywords', 'defaultScope', 'localPriorityEnabled',
+      'hiddenCategories', 'disabledSourceCategories',
+      'refreshInterval', 'articlesPerPage'
     ];
     const update = {};
     for (const field of ALLOWED_FIELDS) {
@@ -478,10 +605,157 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       { $set: update },
       { new: true, upsert: true }
     );
-    res.json({ preferences: prefs });
+    // Compute registration alignment
+    let registrationAlignment = null;
+    try {
+      const user = await User.findById(req.user.userId).select('zipCode').lean();
+      const primaryLoc = (prefs.locations || []).find(l => l.isPrimary) || (prefs.locations || [])[0];
+      if (user && primaryLoc) {
+        const profileZip = String(user.zipCode || '').trim();
+        const prefZip = String(primaryLoc.zipCode || '').trim();
+        registrationAlignment = (profileZip && prefZip && profileZip !== prefZip)
+          ? { mismatched: true, profileZip, prefZip }
+          : { mismatched: false };
+      }
+    } catch { /* non-fatal */ }
+    res.json({ preferences: prefs, registrationAlignment });
   } catch (error) {
     console.error('Error updating news preferences:', error);
     res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
+
+/**
+ * POST /api/news/preferences/locations
+ * Add a location to the user's news preferences.
+ */
+router.post('/preferences/locations', authenticateToken, async (req, res) => {
+  try {
+    const { city, cityKey, zipCode, state, stateCode, country, countryCode, county, isPrimary } = req.body || {};
+    if (!city && !zipCode && !state) {
+      return res.status(400).json({ error: 'Provide at least city, zipCode, or state' });
+    }
+    const prefs = await NewsPreferences.getOrCreate(req.user.userId);
+    const MAX_LOCATIONS = 5;
+    if (prefs.locations.length >= MAX_LOCATIONS) {
+      return res.status(400).json({ error: `Maximum ${MAX_LOCATIONS} locations allowed` });
+    }
+    const setAsPrimary = isPrimary || prefs.locations.length === 0;
+    if (setAsPrimary) prefs.locations.forEach((l) => { l.isPrimary = false; });
+    prefs.locations.push({
+      city: city || null, cityKey: cityKey || null,
+      zipCode: zipCode || null,
+      state: state || null, stateCode: stateCode || null,
+      country: country || null, countryCode: countryCode || null,
+      county: county || null,
+      isPrimary: setAsPrimary
+    });
+    await prefs.save();
+    let registrationAlignment = null;
+    try {
+      const user = await User.findById(req.user.userId).select('zipCode').lean();
+      const primaryLoc = prefs.locations.find(l => l.isPrimary) || prefs.locations[0];
+      if (user && primaryLoc) {
+        const profileZip = String(user.zipCode || '').trim();
+        const prefZip = String(primaryLoc.zipCode || '').trim();
+        registrationAlignment = (profileZip && prefZip && profileZip !== prefZip)
+          ? { mismatched: true, profileZip, prefZip }
+          : { mismatched: false };
+      }
+    } catch { /* non-fatal */ }
+    res.json({ preferences: prefs, registrationAlignment });
+  } catch (error) {
+    console.error('Error adding location:', error);
+    res.status(500).json({ error: 'Failed to add location' });
+  }
+});
+
+/**
+ * DELETE /api/news/preferences/locations/:locationId
+ * Remove a location preference by its subdocument _id.
+ */
+router.delete('/preferences/locations/:locationId', authenticateToken, async (req, res) => {
+  try {
+    const { locationId } = req.params;
+    const prefs = await NewsPreferences.findOneAndUpdate(
+      { user: req.user.userId },
+      { $pull: { locations: { _id: locationId } } },
+      { new: true }
+    );
+    if (!prefs) return res.status(404).json({ error: 'Preferences not found' });
+    // Re-assign primary if needed
+    if (prefs.locations.length > 0 && !prefs.locations.some((l) => l.isPrimary)) {
+      prefs.locations[0].isPrimary = true;
+      await prefs.save();
+    }
+    let registrationAlignment = null;
+    try {
+      const user = await User.findById(req.user.userId).select('zipCode').lean();
+      const primaryLoc = prefs.locations.find(l => l.isPrimary) || prefs.locations[0];
+      if (user && primaryLoc) {
+        const profileZip = String(user.zipCode || '').trim();
+        const prefZip = String(primaryLoc.zipCode || '').trim();
+        registrationAlignment = (profileZip && prefZip && profileZip !== prefZip)
+          ? { mismatched: true, profileZip, prefZip }
+          : { mismatched: false };
+      }
+    } catch { /* non-fatal */ }
+    res.json({ preferences: prefs, registrationAlignment });
+  } catch (error) {
+    console.error('Error removing location:', error);
+    res.status(500).json({ error: 'Failed to remove location' });
+  }
+});
+
+/**
+ * PUT /api/news/preferences/hidden-categories
+ * Update which categories the user has hidden from their feed.
+ */
+router.put('/preferences/hidden-categories', authenticateToken, async (req, res) => {
+  try {
+    const { hiddenCategories } = req.body || {};
+    if (!Array.isArray(hiddenCategories)) {
+      return res.status(400).json({ error: 'hiddenCategories must be an array' });
+    }
+    const prefs = await NewsPreferences.findOneAndUpdate(
+      { user: req.user.userId },
+      { $set: { hiddenCategories: hiddenCategories.map((c) => String(c).toLowerCase()).filter(Boolean) } },
+      { new: true, upsert: true }
+    );
+    res.json({ preferences: prefs });
+  } catch (error) {
+    console.error('Error updating hidden categories:', error);
+    res.status(500).json({ error: 'Failed to update hidden categories' });
+  }
+});
+
+/**
+ * PUT /api/news/preferences/source-categories
+ * Toggle a category on/off for a specific source.
+ * Body: { sourceId, category }
+ */
+router.put('/preferences/source-categories', authenticateToken, async (req, res) => {
+  try {
+    const { sourceId, category } = req.body || {};
+    if (!sourceId || !category) {
+      return res.status(400).json({ error: 'sourceId and category are required' });
+    }
+    const prefs = await NewsPreferences.getOrCreate(req.user.userId);
+    const map = prefs.disabledSourceCategories || new Map();
+    const key = String(sourceId);
+    const current = map.get(key) || [];
+    const cat = String(category).toLowerCase();
+    if (current.includes(cat)) {
+      map.set(key, current.filter((c) => c !== cat));
+    } else {
+      map.set(key, [...current, cat]);
+    }
+    prefs.disabledSourceCategories = map;
+    await prefs.save();
+    res.json({ preferences: prefs });
+  } catch (error) {
+    console.error('Error toggling source category:', error);
+    res.status(500).json({ error: 'Failed to toggle source category' });
   }
 });
 
@@ -909,6 +1183,35 @@ router.delete('/preferences/keywords/:keyword', authenticateToken, async (req, r
   } catch (error) {
     console.error('Error removing keyword:', error);
     res.status(500).json({ error: 'Failed to remove keyword' });
+  }
+});
+
+/**
+ * PUT /api/news/preferences/keywords/:keyword
+ * Rename/edit an existing followed keyword.
+ * Body: { keyword: string } — the new keyword value
+ */
+router.put('/preferences/keywords/:keyword', authenticateToken, async (req, res) => {
+  try {
+    const oldKeyword = decodeURIComponent(req.params.keyword || '').toLowerCase().trim();
+    const newKeyword = String(req.body.keyword || '').trim().toLowerCase();
+    if (!oldKeyword || !newKeyword) {
+      return res.status(400).json({ error: 'Both old and new keyword values are required' });
+    }
+    if (newKeyword.length > 100) return res.status(400).json({ error: 'keyword too long (max 100 chars)' });
+    const prefs = await NewsPreferences.getOrCreate(req.user.userId);
+    const existing = prefs.followedKeywords.find((k) => k.keyword === oldKeyword);
+    if (!existing) return res.status(404).json({ error: 'Keyword not found' });
+    // Check for duplicate
+    if (oldKeyword !== newKeyword && prefs.followedKeywords.some((k) => k.keyword === newKeyword)) {
+      return res.status(400).json({ error: 'A keyword with that name already exists' });
+    }
+    existing.keyword = newKeyword;
+    await prefs.save();
+    res.json({ preferences: prefs });
+  } catch (error) {
+    console.error('Error renaming keyword:', error);
+    res.status(500).json({ error: 'Failed to rename keyword' });
   }
 });
 

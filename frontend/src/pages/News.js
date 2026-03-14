@@ -249,7 +249,7 @@ function News() {
       </div>
 
       {/* ─── Desktop layout (>= lg) ────────────────────────────────────────── */}
-      <div className="hidden lg:flex h-screen overflow-hidden bg-gray-50">
+      <div className="hidden lg:flex h-full overflow-hidden bg-gray-50">
         <NewsLeftPanel
           categories={CATEGORIES}
           activeCategories={activeCategories}
