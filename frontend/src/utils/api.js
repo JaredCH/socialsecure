@@ -616,6 +616,14 @@ export const newsAPI = {
   getScheduleInfo: () => api.get('/news/schedule-info'),
   // Get ingestion stats (admin)
   getIngestionStats: () => api.get('/news/ingestion-stats'),
+  // Get 20 news categories with metadata
+  getCategories: () => api.get('/news/categories'),
+  // Reddit monitor management
+  addRedditMonitor: (data) => api.post('/news/preferences/reddit', data),
+  removeRedditMonitor: (subreddit) => api.delete(`/news/preferences/reddit/${encodeURIComponent(subreddit)}`),
+  updateRedditMonitor: (subreddit, data) => api.patch(`/news/preferences/reddit/${encodeURIComponent(subreddit)}`, data),
+  // Get sports teams (all or by league)
+  getSportsTeamList: (league) => api.get('/news/sports-teams', { params: league ? { league } : {} }),
   // Weather
   getWeather: () => api.get('/news/weather'),
   geocodeWeatherLocations: (q) => api.get('/news/weather/geocode', { params: { q } }),
@@ -623,6 +631,10 @@ export const newsAPI = {
   updateWeatherLocations: (locations) => api.put('/news/preferences/weather-locations', { locations }),
   removeWeatherLocation: (locationId) => api.delete(`/news/preferences/weather-locations/${locationId}`),
   setWeatherLocationPrimary: (locationId) => api.put(`/news/preferences/weather-locations/${locationId}/primary`),
+  // Article impression tracking (fire-and-forget)
+  reportImpressions: (impressions) => api.post('/news/impressions', { impressions }).catch(() => {}),
+  // Full-text article search
+  searchArticles: (params = {}) => api.get('/news/search', { params }),
 };
 
 // Maps API

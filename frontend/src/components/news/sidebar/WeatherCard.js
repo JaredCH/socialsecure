@@ -20,7 +20,23 @@ const WeatherCard = ({ location }) => {
 
   if (!weather) return null;
 
-  const { current, high, low, hourly = [], weekly = [], updatedAt } = weather;
+  const { current, high, low, hourly = [], weekly = [], updatedAt, uvIndex, airQuality, pollen } = weather;
+
+  // UV Index color
+  const uvColor = uvIndex == null ? null
+    : uvIndex <= 2 ? '#16a34a'
+    : uvIndex <= 5 ? '#ca8a04'
+    : uvIndex <= 7 ? '#ea580c'
+    : uvIndex <= 10 ? '#dc2626'
+    : '#7c3aed';
+
+  // AQI color
+  const aqiColor = !airQuality ? null
+    : airQuality.index <= 50 ? '#16a34a'
+    : airQuality.index <= 100 ? '#ca8a04'
+    : airQuality.index <= 150 ? '#ea580c'
+    : airQuality.index <= 200 ? '#dc2626'
+    : '#7c3aed';
   const iconMap = {
     sun: '☀️',
     'cloud-sun': '⛅',
@@ -69,6 +85,37 @@ const WeatherCard = ({ location }) => {
       {/* Updated timestamp */}
       {updatedAt && (
         <p className="text-[10px] text-gray-400 mb-2">Updated {new Date(updatedAt).toLocaleTimeString()}</p>
+      )}
+
+      {/* UV / AQI / Pollen row */}
+      {(uvIndex != null || airQuality != null || pollen != null) && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] mb-2">
+          {uvIndex != null && (
+            <span className="flex items-center gap-1">
+              <span>UV</span>
+              <span className="font-semibold px-1.5 py-0.5 rounded-full text-white text-[10px]" style={{ backgroundColor: uvColor }}>
+                {uvIndex}
+              </span>
+            </span>
+          )}
+          {airQuality != null && (
+            <span className="flex items-center gap-1">
+              <span>AQI</span>
+              <span className="font-semibold px-1.5 py-0.5 rounded-full text-white text-[10px]" style={{ backgroundColor: aqiColor }}>
+                {airQuality.index}
+              </span>
+              <span className="text-gray-500">{airQuality.label}</span>
+            </span>
+          )}
+          {pollen != null && (
+            <span className="flex items-center gap-1 text-gray-500">
+              🌿
+              {pollen.grass != null && <span>Grass {Math.round(pollen.grass)}</span>}
+              {pollen.birch != null && <span>Birch {Math.round(pollen.birch)}</span>}
+              {pollen.ragweed != null && <span>Ragweed {Math.round(pollen.ragweed)}</span>}
+            </span>
+          )}
+        </div>
       )}
 
       {/* Hourly expand/collapse */}

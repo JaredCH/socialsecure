@@ -15,7 +15,7 @@ const mongoose = require('mongoose');
 const Article = require('../models/Article');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 
-const RETENTION_DAYS = 15;
+const RETENTION_DAYS = parseInt(process.env.NEWS_RETENTION_DAYS || '8', 10);
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 h
 
 /**

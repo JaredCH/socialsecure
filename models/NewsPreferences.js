@@ -156,6 +156,14 @@ const newsPreferencesSchema = new mongoose.Schema({
     default: []
   },
 
+  // Reddit subreddit monitoring
+  redditMonitors: [{
+    subreddit: { type: String, required: true, trim: true, lowercase: true },
+    minUpvotes: { type: Number, default: 100, min: 0, max: 100000 },
+    enabled: { type: Boolean, default: true },
+    addedAt: { type: Date, default: Date.now }
+  }],
+
   // Followed sports teams (team ids from sportsTeamLocationIndex)
   followedSportsTeams: {
     type: [{

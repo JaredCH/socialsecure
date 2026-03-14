@@ -93,8 +93,35 @@ const articleSchema = new mongoose.Schema({
   },
   sourceType: {
     type: String,
-    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'gdlet', 'npr', 'bbc', 'patch', 'redditLocal', 'tvAffiliate', 'localNewspaper', 'newsApi'],
+    enum: ['rss', 'googleNews', 'youtube', 'podcast', 'government', 'gdlet', 'npr', 'bbc', 'patch', 'redditLocal', 'tvAffiliate', 'localNewspaper', 'newsApi', 'reddit', 'sportNews'],
     default: 'rss'
+  },
+  // Which ingestion pipeline created this article
+  pipeline: {
+    type: String,
+    enum: ['local', 'category', 'sports', 'social'],
+    default: 'category',
+    index: true
+  },
+  // Key for local/geo articles: normalised "city-state" slug
+  cityKey: {
+    type: String,
+    default: null,
+    index: true
+  },
+  // Sports team IDs this article is linked to (from sportsTeams followed by users)
+  sportTeamIds: [{
+    type: String,
+    lowercase: true
+  }],
+  // Reddit-specific fields
+  subreddit: {
+    type: String,
+    default: null
+  },
+  redditScore: {
+    type: Number,
+    default: null
   },
   // Local source tier metadata (populated by local ingestion pipeline)
   sourceTier: {
@@ -170,6 +197,8 @@ articleSchema.index({ sourceType: 1, publishedAt: -1 });
 articleSchema.index({ category: 1, publishedAt: -1 });
 articleSchema.index({ normalizedUrlHash: 1 });
 articleSchema.index({ isActive: 1, isPromoted: 1, viralScore: -1, publishedAt: -1 });
+// Text index for full-text keyword search
+articleSchema.index({ title: 'text', description: 'text', topics: 'text' }, { name: 'article_text_search', weights: { title: 10, topics: 5, description: 1 } });
 
 // Pre-save hook to generate normalized URL hash
 articleSchema.pre('save', function(next) {

@@ -517,34 +517,14 @@ router.post('/register', [
 
     await user.save();
 
-    const registrationNewsPrefetchPromise = (async () => {
+    // Fire-and-forget: seed local news for the new user's ZIP code immediately
+    if (user.zipCode) {
       try {
-        if (mongoose.connection?.readyState !== 1) {
-          return { status: 'deferred', reason: 'db_not_ready' };
-        }
-        const newsRoutes = require('./news');
-        if (typeof newsRoutes.queueImmediateLocationFetch !== 'function') {
-          return { status: 'unavailable' };
-        }
-        const coordinates = Array.isArray(user.location?.coordinates)
-          ? { lon: user.location.coordinates[0], lat: user.location.coordinates[1] }
-          : null;
-        return await newsRoutes.queueImmediateLocationFetch({
-          userId: user._id,
-          location: {
-            city: user.city,
-            state: user.state,
-            country: user.country,
-            county: user.county,
-            zipCode: user.zipCode
-          },
-          coordinates
-        });
-      } catch (error) {
-        console.warn('Unable to queue registration news prefetch:', error.message);
-        return { status: 'error', reason: error.message };
+        require('../services/newsIngestion.local').triggerLocationIngest(user.zipCode);
+      } catch (e) {
+        console.warn('Unable to trigger local news ingest on registration:', e.message);
       }
-    })();
+    }
 
     // Generate token
     const token = generateToken(user._id, user.onboardingStatus || 'pending');
@@ -571,17 +551,11 @@ router.post('/register', [
       metadata: { location: { city: null, country: null } }
     });
 
-    const registrationNewsPrefetch = await Promise.race([
-      registrationNewsPrefetchPromise,
-      new Promise((resolve) => setTimeout(() => resolve({ status: 'queued', deferred: true }), 1200))
-    ]);
-
     res.status(201).json({
       message: 'Registration successful',
       user: toAuthenticatedUserProfile(user),
       token,
       requiresPasswordReset: !!user.mustResetPassword,
-      registrationNewsPrefetch,
       expiresIn: 86400 // 24 hours in seconds
     });
   } catch (error) {
