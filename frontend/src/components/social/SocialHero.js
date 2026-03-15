@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
 
 const MOBILE_MENU_LAYOUT_BY_TAB = {
-  main: { x: -92, y: -24 },
-  friends: { x: -122, y: -60 },
-  gallery: { x: -138, y: -100 },
-  chat: { x: -132, y: -138 },
-  calendar: { x: -102, y: -170 }
+  main: { x: -56, y: -16 },
+  friends: { x: -72, y: -48 },
+  gallery: { x: -78, y: -80 },
+  chat: { x: -74, y: -112 },
+  calendar: { x: -58, y: -144 }
 };
 
 const buildMobileMenuLayout = (items) => {
@@ -314,7 +314,7 @@ const SocialHero = ({
                         onTabChange?.(tab.id);
                         setIsMobileMenuOpen(false);
                       }}
-                      className={`pointer-events-auto absolute bottom-12 right-12 flex w-[5.9rem] origin-bottom-right items-center gap-2 rounded-full border px-2.5 py-2 text-left shadow-[0_16px_28px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isActive ? 'border-white/20 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                      className={`pointer-events-auto absolute bottom-12 right-12 flex w-[4.8rem] origin-bottom-right items-center gap-1.5 rounded-full border px-2 py-1.5 text-left shadow-[0_12px_24px_rgba(2,6,23,0.22)] transition-all duration-300 ease-out ${isActive ? 'border-white/20 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
                       style={{
                         transform,
                         transitionDelay,
@@ -322,12 +322,12 @@ const SocialHero = ({
                       }}
                     >
                       <span
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isActive ? 'bg-slate-950/8' : 'bg-white/10'}`}
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${isActive ? 'bg-slate-950/8' : 'bg-white/10'}`}
                         style={{ color: isActive ? menuActiveColor : menuTextColor }}
                       >
-                        <TabIcon icon={tab.icon} className="h-4 w-4" />
+                        <TabIcon icon={tab.icon} className="h-3.5 w-3.5" />
                       </span>
-                      <span className="truncate text-[0.68rem] font-semibold tracking-[0.02em]">
+                      <span className="truncate text-[0.6rem] font-semibold tracking-[0.02em]">
                         {SOCIAL_HERO_TAB_LABELS[tab.id]}
                       </span>
                     </button>
