@@ -210,7 +210,7 @@ describe('News inline preferences updates', () => {
   it('toggles a catalog source without DB id using provider identifier', async () => {
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -229,7 +229,7 @@ describe('News inline preferences updates', () => {
   it.skip('submits primary location selection and refreshes feed', async () => {
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -285,7 +285,7 @@ describe('News inline preferences updates', () => {
   it('renders control panel with tabs when settings opened', async () => {
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -311,7 +311,7 @@ describe('News inline preferences updates', () => {
   it('renders source cards with health dots for wired and unwired sources', async () => {
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -328,7 +328,7 @@ describe('News inline preferences updates', () => {
   it('switches tabs in control panel', async () => {
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -397,7 +397,7 @@ describe('News inline preferences updates', () => {
 
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -501,7 +501,7 @@ describe('News inline preferences updates', () => {
     await renderNews();
 
     // Open settings to see Locations panel
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -522,7 +522,7 @@ describe('News inline preferences updates', () => {
   it('rejects add location with country-only input (no zip or city/state)', async () => {
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -551,7 +551,7 @@ describe('News inline preferences updates', () => {
   it('accepts valid ZIP code location input', async () => {
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -597,7 +597,7 @@ describe('News inline preferences updates', () => {
 
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });
@@ -649,7 +649,7 @@ describe('News inline preferences updates', () => {
 
     await renderNews();
 
-    const openSettingsButton = container.querySelector('button[aria-label="Configure news preferences"]');
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
     await act(async () => {
       openSettingsButton.click();
     });

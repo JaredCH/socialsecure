@@ -18,6 +18,7 @@ const mongoose = require('mongoose');
 const Article = require('../models/Article');
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
 const { calculateViralScore, createMomentumMap } = require('./newsViralScore');
+const { extractRssImageUrl } = require('./newsRssImage');
 
 const parser = new Parser({ timeout: 14000, headers: { 'User-Agent': 'SocialSecure-NewsBot/1.0' } });
 
@@ -25,15 +26,6 @@ const MIN_DELAY_MS = 900;   // min ms between requests
 const MAX_JITTER_MS = 300;  // additional random jitter
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function extractImageUrl(item) {
-  if (item['media:content']?.$.url) return item['media:content'].$.url;
-  if (item.enclosure?.url) return item.enclosure.url;
-  if (item['media:thumbnail']?.$.url) return item['media:thumbnail'].$.url;
-  const html = item['content:encoded'] || item.content || '';
-  const match = html.match(/<img[^>]+src="([^"]+)"/i);
-  return match ? match[1] : null;
-}
 
 async function persistItem(item, category, feedSource) {
   const url = item.link || item.guid;
@@ -63,7 +55,7 @@ async function persistItem(item, category, feedSource) {
     description: (item.contentSnippet || item.summary || '').trim().substring(0, 1000),
     source: item.creator || item.author || feedSource,
     url,
-    imageUrl: extractImageUrl(item),
+    imageUrl: extractRssImageUrl(item),
     publishedAt: item.isoDate ? new Date(item.isoDate) : new Date(),
     category,
     pipeline: 'category',

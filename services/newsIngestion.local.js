@@ -18,6 +18,7 @@ const Article = require('../models/Article');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
 const { GN_SEARCH } = require('../config/newsCategoryFeeds');
 const { calculateViralScore, createMomentumMap } = require('./newsViralScore');
+const { extractRssImageUrl } = require('./newsRssImage');
 
 const parser = new Parser({ timeout: 12000, headers: { 'User-Agent': 'SocialSecure-NewsBot/1.0' } });
 
@@ -80,7 +81,7 @@ async function persistArticles(items, pipeline, cityKey, city, stateCode) {
         description: (item.contentSnippet || item.summary || item.content || '').trim().substring(0, 1000),
         source: item.creator || item.author || 'Google News',
         url,
-        imageUrl: extractImageUrl(item),
+        imageUrl: extractRssImageUrl(item),
         publishedAt: item.isoDate ? new Date(item.isoDate) : new Date(),
         category: 'general',
         pipeline,
@@ -118,16 +119,6 @@ async function persistArticles(items, pipeline, cityKey, city, stateCode) {
   }
 
   return { inserted, duplicates };
-}
-
-function extractImageUrl(item) {
-  if (item['media:content']?.$.url) return item['media:content'].$.url;
-  if (item.enclosure?.url) return item.enclosure.url;
-  if (item['media:thumbnail']?.$.url) return item['media:thumbnail'].$.url;
-  // Try to find an img tag in content
-  const html = item['content:encoded'] || item.content || '';
-  const match = html.match(/<img[^>]+src="([^"]+)"/i);
-  return match ? match[1] : null;
 }
 
 /**

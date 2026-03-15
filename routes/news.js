@@ -45,6 +45,7 @@ const { buildFeed } = require('../services/newsFeedBuilder');
 const { triggerLocationIngest, ingestLocalNews, ingestAllKnownLocations } = require('../services/newsIngestion.local');
 const { ingestAllCategories } = require('../services/newsIngestion.categories');
 const { ingestAllFollowedTeams } = require('../services/newsIngestion.sports');
+const { getTeamSchedules, getLeagueStatusMap, getAllLeagueStatuses } = require('../services/sportsScheduleIngestion');
 const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocationIndex');
 const { ingestAllMonitoredSubreddits } = require('../services/newsIngestion.social');
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
@@ -615,16 +616,12 @@ router.get('/sports-teams', authenticateToken, (req, res) => {
 router.get('/sports-schedules', authenticateToken, async (req, res) => {
   try {
     const teamIds = String(req.query.teams || '').split(',').map((s) => s.trim()).filter(Boolean);
-    if (teamIds.length === 0) return res.json({ schedules: [], seasons: {} });
+    if (teamIds.length === 0) return res.json({ schedules: {}, leagueStatuses: {} });
 
-    const SportsSchedule = require('../models/SportsSchedule');
-    const now = new Date();
-    const cutoff = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // next 14 days
-    const schedules = await SportsSchedule.find({
-      teamId: { $in: teamIds },
-      gameDate: { $gte: now, $lte: cutoff }
-    }).sort({ gameDate: 1 }).limit(50).lean();
-    res.json({ schedules });
+    const schedules = await getTeamSchedules(teamIds);
+    const leagues = [...new Set(Object.values(schedules).map((entry) => entry?.league).filter(Boolean))];
+    const leagueStatuses = getLeagueStatusMap(leagues);
+    res.json({ schedules, leagueStatuses });
   } catch (error) {
     console.error('Error fetching sports schedules:', error);
     res.status(500).json({ error: 'Failed to fetch sports schedules' });
@@ -637,17 +634,7 @@ router.get('/sports-schedules', authenticateToken, async (req, res) => {
  */
 router.get('/sports-schedules/seasons', authenticateToken, async (req, res) => {
   try {
-    const leagueIds = [...new Set(SPORTS_CATALOG.map((t) => t.id.split(':')[0]))];
-    // Return a simple in-season flag derived from current date; expand with real data as needed
-    const month = new Date().getMonth() + 1; // 1-12
-    const seasons = {};
-    for (const lg of leagueIds) {
-      seasons[lg] = {
-        inSeason: true, // default optimistic; front-end gracefully handles no games
-        league: lg
-      };
-    }
-    res.json({ seasons });
+    res.json({ seasons: getAllLeagueStatuses() });
   } catch (error) {
     console.error('Error fetching season info:', error);
     res.status(500).json({ error: 'Failed to fetch season info' });

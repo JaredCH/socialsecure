@@ -15,3 +15,25 @@ export const formatRelativeTime = (dateString) => {
   if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
   return date.toLocaleDateString();
 };
+
+export const isRenderableNewsImageUrl = (value) => {
+  if (typeof value !== 'string') return false;
+
+  try {
+    const normalized = value.trim();
+    if (!normalized) return false;
+
+    const parsed = new URL(normalized);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    if (/\.svg(?:$|\?)/i.test(parsed.pathname)) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const getRenderableNewsImageUrl = (article) => {
+  const candidate = article?.imageUrl;
+  return isRenderableNewsImageUrl(candidate) ? candidate.trim() : null;
+};

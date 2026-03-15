@@ -1,4 +1,5 @@
 import React from 'react';
+import NewsArticleImage from './NewsArticleImage';
 
 /**
  * ArticleCard
@@ -47,17 +48,11 @@ const ArticleCard = ({ article, size = 'compact', onClick }) => {
         role="button"
         aria-label={title}
       >
-        {imageUrl && (
-          <div className="aspect-[16/9] overflow-hidden bg-gray-100">
-            <img
-              src={imageUrl}
-              alt=""
-              loading="lazy"
-              className="w-full h-full object-cover"
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
-          </div>
-        )}
+        <NewsArticleImage
+          article={article}
+          wrapperClassName="aspect-[16/9] overflow-hidden bg-gray-100"
+          imageClassName="w-full h-full object-cover"
+        />
         <div className="p-4">
           <div className="flex items-center gap-2 mb-2">
             {tierLabel && (
@@ -90,17 +85,11 @@ const ArticleCard = ({ article, size = 'compact', onClick }) => {
         role="button"
         aria-label={title}
       >
-        {imageUrl && (
-          <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100">
-            <img
-              src={imageUrl}
-              alt=""
-              loading="lazy"
-              className="w-full h-full object-cover"
-              onError={(e) => { e.target.parentNode.style.display = 'none'; }}
-            />
-          </div>
-        )}
+        <NewsArticleImage
+          article={article}
+          wrapperClassName="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100"
+          imageClassName="w-full h-full object-cover"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-1">
             {tierLabel && (

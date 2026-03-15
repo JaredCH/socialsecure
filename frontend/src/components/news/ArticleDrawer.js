@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import NewsArticleImage from './NewsArticleImage';
 import { formatRelativeTime } from './utils';
 
 function buildLocationLabel(article) {
@@ -11,19 +13,40 @@ function buildLocationLabel(article) {
 const ArticleDrawer = ({ article, onClose }) => {
   if (!article) return null;
 
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose?.();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
   const sourceName = article.source?.name || article.sourceName || article.source || 'Unknown source';
   const locationLabel = buildLocationLabel(article);
   const keywords = article.keywords || article.topics || [];
 
-  return (
+  const drawer = (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
+      <div className="fixed inset-0 z-[210] bg-black/40" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white shadow-2xl overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Article Detail"
+        className="fixed inset-y-0 right-0 z-[220] w-full max-w-lg overflow-y-auto bg-white shadow-2xl"
+      >
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
           <h3 className="text-sm font-bold text-gray-900">Article Detail</h3>
           <button
             onClick={onClose}
@@ -39,14 +62,11 @@ const ArticleDrawer = ({ article, onClose }) => {
         {/* Content */}
         <div className="p-6">
           <div>
-            {article.imageUrl && (
-              <img
-                src={article.imageUrl}
-                alt=""
-                className="w-full h-48 object-cover rounded-xl mb-4"
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            )}
+            <NewsArticleImage
+              article={article}
+              wrapperClassName="mb-4 overflow-hidden rounded-xl"
+              imageClassName="h-48 w-full object-cover"
+            />
 
             <h2 className="text-xl font-bold text-gray-900 leading-snug mb-3">{article.title}</h2>
 
@@ -115,6 +135,8 @@ const ArticleDrawer = ({ article, onClose }) => {
       </div>
     </>
   );
+
+  return createPortal(drawer, document.body);
 };
 
 export default ArticleDrawer;

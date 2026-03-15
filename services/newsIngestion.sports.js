@@ -19,6 +19,7 @@ const Article = require('../models/Article');
 const NewsPreferences = require('../models/NewsPreferences');
 const { buildSportsTeamFeedUrl } = require('../config/newsCategoryFeeds');
 const { calculateViralScore } = require('./newsViralScore');
+const { extractRssImageUrl } = require('./newsRssImage');
 
 const parser = new Parser({ timeout: 14000, headers: { 'User-Agent': 'SocialSecure-NewsBot/1.0' } });
 
@@ -155,15 +156,6 @@ const SPORTS_TEAMS = {
   'nhl-wpg': { name: 'Winnipeg Jets', league: 'nhl', shortName: 'Jets' },
 };
 
-function extractImageUrl(item) {
-  if (item['media:content']?.$.url) return item['media:content'].$.url;
-  if (item.enclosure?.url) return item.enclosure.url;
-  if (item['media:thumbnail']?.$.url) return item['media:thumbnail'].$.url;
-  const html = item['content:encoded'] || item.content || '';
-  const match = html.match(/<img[^>]+src="([^"]+)"/i);
-  return match ? match[1] : null;
-}
-
 /**
  * Ingest news for a single sports team.
  * Tags articles with `sportTeamIds` so the feed can filter by followed teams.
@@ -216,7 +208,7 @@ async function ingestSportsTeamNews(teamId) {
         description: (item.contentSnippet || item.summary || '').trim().substring(0, 1000),
         source: item.creator || item.author || 'Google News Sports',
         url,
-        imageUrl: extractImageUrl(item),
+        imageUrl: extractRssImageUrl(item),
         publishedAt: item.isoDate ? new Date(item.isoDate) : new Date(),
         category: 'sports',
         pipeline: 'sports',
