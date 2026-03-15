@@ -317,7 +317,7 @@ const GlobalSocialLauncher = ({ currentUsername = '', unreadNotificationCount = 
 
           <nav
             aria-label="Site navigation shortcuts"
-            className={`absolute bottom-[10.6rem] right-3 flex flex-col items-end gap-2 transition-all duration-300 ${isOpen ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0 pointer-events-none'}`}
+            className={`absolute bottom-[12.15rem] right-3 flex flex-col items-end gap-2 transition-all duration-300 ${isOpen ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0 pointer-events-none'}`}
           >
             {SITE_NAV_LINKS.map((link, index) => {
               const isRouteActive = routeLocation.pathname === link.path;
