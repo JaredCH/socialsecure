@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
 
 const MOBILE_MENU_LAYOUT_BY_TAB = {
-  main: { x: -56, y: -16 },
-  friends: { x: -72, y: -48 },
-  gallery: { x: -78, y: -80 },
-  chat: { x: -74, y: -112 },
-  calendar: { x: -58, y: -144 }
+  main: { x: -38, y: -8 },
+  friends: { x: -48, y: -36 },
+  gallery: { x: -52, y: -64 },
+  chat: { x: -48, y: -92 },
+  calendar: { x: -40, y: -120 }
 };
 
 const buildMobileMenuLayout = (items) => {
@@ -314,20 +314,17 @@ const SocialHero = ({
                         onTabChange?.(tab.id);
                         setIsMobileMenuOpen(false);
                       }}
-                      className={`pointer-events-auto absolute bottom-12 right-12 flex w-[4.8rem] origin-bottom-right items-center gap-1.5 rounded-full border px-2 py-1.5 text-left shadow-[0_12px_24px_rgba(2,6,23,0.22)] transition-all duration-300 ease-out ${isActive ? 'border-white/20 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                      className={`pointer-events-auto absolute bottom-12 right-12 flex w-[3.8rem] origin-bottom-right items-center gap-1 rounded-full border px-2 py-1 text-left shadow-[0_8px_20px_rgba(2,6,23,0.2)] transition-all duration-300 ease-out ${isActive ? 'border-white/20 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
                       style={{
                         transform,
                         transitionDelay,
                         color: isActive ? backgroundColor : menuTextColor
                       }}
                     >
-                      <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${isActive ? 'bg-slate-950/8' : 'bg-white/10'}`}
-                        style={{ color: isActive ? menuActiveColor : menuTextColor }}
-                      >
-                        <TabIcon icon={tab.icon} className="h-3.5 w-3.5" />
+                      <span style={{ color: isActive ? menuActiveColor : menuTextColor }} className="shrink-0">
+                        <TabIcon icon={tab.icon} className="h-4 w-4" />
                       </span>
-                      <span className="truncate text-[0.6rem] font-semibold tracking-[0.02em]">
+                      <span className="truncate text-[0.55rem] font-semibold tracking-[0.02em]">
                         {SOCIAL_HERO_TAB_LABELS[tab.id]}
                       </span>
                     </button>
