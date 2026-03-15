@@ -80,10 +80,16 @@ try {
         "pm2 restart '$Pm2App' --update-env",
         "pm2 save",
         "sleep 2",
+        "set -a",
+        "if [ -f .env ]; then . ./.env; fi",
+        "set +a",
+        'if [ -z "${ADMIN_SECRET:-}" ]; then echo ADMIN_SECRET_missing_from_env; exit 1; fi',
         "echo PM2_STATUS",
         "pm2 ls",
         "echo HEALTH_CHECK",
-        "curl -sS http://127.0.0.1:5000/health"
+        "curl -fsS http://127.0.0.1:5000/health",
+        "echo ADMIN_PREFERENCES_MIGRATION",
+        'curl -fsS -X POST -H "X-Admin-API-Key: ${ADMIN_SECRET}" http://127.0.0.1:5000/api/admin/migrate/admin-preferences'
     ) -join "; "
 
     & plink -batch -hostkey $VmHostKey -pw $password "$VmUser@$VmHost" $remoteCommands

@@ -37,9 +37,19 @@ const mockSecurityEventModel = {
   create: jest.fn().mockResolvedValue({})
 };
 
+const mockNewsPreferencesModel = {
+  findOneAndUpdate: jest.fn().mockResolvedValue({})
+};
+
+const mockTriggerLocationIngest = jest.fn().mockResolvedValue({ status: 'queued', zipCode: '78666' });
+
 jest.mock('../models/User', () => mockUserModel);
 jest.mock('../models/Session', () => mockSessionModel);
 jest.mock('../models/SecurityEvent', () => mockSecurityEventModel);
+jest.mock('../models/NewsPreferences', () => mockNewsPreferencesModel);
+jest.mock('../services/newsIngestion.local', () => ({
+  triggerLocationIngest: mockTriggerLocationIngest
+}));
 
 const authRouter = require('./auth');
 
@@ -54,6 +64,8 @@ describe('Auth registration minimal identity flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUserFindOne.mockResolvedValue(null);
+    mockNewsPreferencesModel.findOneAndUpdate.mockResolvedValue({});
+    mockTriggerLocationIngest.mockResolvedValue({ status: 'queued', zipCode: '78666' });
   });
 
   it('registers with first/last name, username, email, and zip while backfilling city/state', async () => {
@@ -87,6 +99,28 @@ describe('Auth registration minimal identity flow', () => {
       realName: 'New User',
       email: 'new@example.com'
     });
+    expect(mockNewsPreferencesModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { user: 'user-1' },
+      expect.objectContaining({
+        $setOnInsert: expect.objectContaining({
+          user: 'user-1',
+          locations: [expect.objectContaining({
+            city: 'San Marcos',
+            cityKey: 'TX:san-marcos',
+            zipCode: '78666',
+            state: 'Texas',
+            stateCode: 'TX',
+            country: 'United States',
+            countryCode: 'US',
+            county: 'Hays County',
+            isPrimary: true
+          })]
+        })
+      }),
+      expect.objectContaining({ upsert: true, new: true, setDefaultsOnInsert: true })
+    );
+    expect(mockTriggerLocationIngest).toHaveBeenCalledWith('78666');
+    expect(response.body.registrationNewsPrefetch).toEqual({ status: 'queued', zipCode: '78666' });
     expect(response.body.requiresPasswordReset).toBe(false);
   });
 

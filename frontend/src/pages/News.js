@@ -298,7 +298,7 @@ function News() {
 
       {/* ─── Shared overlays ───────────────────────────────────────────────── */}
       <ArticleDrawer
-        articleId={selectedArticle?._id}
+        article={selectedArticle}
         onClose={() => setSelectedArticle(null)}
       />
 

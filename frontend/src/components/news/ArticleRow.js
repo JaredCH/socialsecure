@@ -52,7 +52,8 @@ export default function ArticleRow({ article, onArticle, onScrollPast, onClick }
   const { symbol, bg, text } = getCategoryIcon(article.category);
   const isKeyword = article._tier === 'keyword';
   const isBreaking = Number(article.viralSignals?.urgencyTerms) > 0.8;
-  const sourceName = article.source?.name || article.sourceName || '';
+  const sourceName = article.source?.name || article.sourceName || article.source || '';
+  const locationLabel = article.locationTags?.city || article.locationTags?.cities?.[0] || '';
   const subtitle = article.description
     ? article.description.length > 140
       ? article.description.slice(0, 140) + '…'
@@ -118,12 +119,12 @@ export default function ArticleRow({ article, onArticle, onScrollPast, onClick }
             </>
           )}
           <span>{timeAgo(article.publishedAt)}</span>
-          {article.locationTags?.city && (
+          {locationLabel && (
             <>
               <span aria-hidden="true">·</span>
               <span className="flex items-center gap-0.5">
                 <span className="material-symbols-outlined text-[11px] leading-none">location_on</span>
-                {article.locationTags.city}
+                {locationLabel}
               </span>
             </>
           )}

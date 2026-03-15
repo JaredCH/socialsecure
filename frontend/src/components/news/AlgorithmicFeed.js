@@ -17,6 +17,9 @@ import ArticleRow from './ArticleRow';
 
 const IMPRESSION_FLUSH_INTERVAL = 5000; // ms
 const IMPRESSION_FLUSH_COUNT    = 10;   // flush when buffer reaches N
+const REGISTRATION_PREFETCH_STATUS_KEY = 'registrationNewsPrefetchStatus';
+const EMPTY_FEED_RETRY_DELAY_MS = 4000;
+const EMPTY_FEED_RETRY_LIMIT = 4;
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
 function SkeletonRow() {
@@ -64,6 +67,25 @@ export default function AlgorithmicFeed({
   // Impression buffer: { articleId, type: 'scroll'|'click' }
   const impressionBuffer = useRef([]);
   const flushTimerRef    = useRef(null);
+  const retryTimerRef    = useRef(null);
+
+  const hasRegistrationPrefetchSeed = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return Boolean(window.sessionStorage.getItem(REGISTRATION_PREFETCH_STATUS_KEY));
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const clearRegistrationPrefetchSeed = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.sessionStorage.removeItem(REGISTRATION_PREFETCH_STATUS_KEY);
+    } catch {
+      // Ignore storage failures in private browsing or locked-down contexts.
+    }
+  }, []);
 
   // Flush impressions to server
   const flushImpressions = useCallback(() => {
@@ -83,6 +105,7 @@ export default function AlgorithmicFeed({
     flushTimerRef.current = setInterval(flushImpressions, IMPRESSION_FLUSH_INTERVAL);
     return () => {
       clearInterval(flushTimerRef.current);
+      clearTimeout(retryTimerRef.current);
       flushImpressions();
     };
   }, [flushImpressions]);
@@ -105,7 +128,9 @@ export default function AlgorithmicFeed({
   useEffect(() => {
     let cancelled = false;
 
-    const load = async () => {
+    clearTimeout(retryTimerRef.current);
+
+    const load = async (attempt = 0) => {
       setLoading(true);
       setError(null);
       setSearchResults(null);
@@ -133,19 +158,31 @@ export default function AlgorithmicFeed({
         if (cancelled) return;
 
         const { sections, feed, triggeredIngest } = res.data || {};
-        const categoryKeys = categories.map((c) => c.key);
-        const ordered = buildAlgorithmicSequence(sections || {}, feed || [], categoryKeys);
+        const ordered = buildAlgorithmicSequence(sections || {}, feed || [], categories);
         setArticles(ordered);
 
-        if (triggeredIngest) {
+        if (ordered.length > 0) {
+          clearRegistrationPrefetchSeed();
+        }
+
+        const shouldRetryEmptyFeed =
+          ordered.length === 0 &&
+          attempt < EMPTY_FEED_RETRY_LIMIT &&
+          hasRegistrationPrefetchSeed();
+
+        if (triggeredIngest || shouldRetryEmptyFeed) {
           setShowIngestBanner(true);
-          setTimeout(() => {
+          retryTimerRef.current = setTimeout(() => {
             if (!cancelled) {
-              setShowIngestBanner(false);
-              // Reload feed after local ingest finishes
-              load();
+              load(attempt + 1);
             }
-          }, 8000);
+          }, triggeredIngest ? 8000 : EMPTY_FEED_RETRY_DELAY_MS);
+          return;
+        }
+
+        setShowIngestBanner(false);
+        if (ordered.length === 0) {
+          clearRegistrationPrefetchSeed();
         }
       } catch (err) {
         if (!cancelled) setError('Failed to load news. Tap to retry.');
@@ -155,8 +192,11 @@ export default function AlgorithmicFeed({
     };
 
     load();
-    return () => { cancelled = true; };
-}, [activeCategory, activeRegion, activeDate, searchQuery]);
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimerRef.current);
+    };
+}, [activeCategory, activeRegion, activeDate, searchQuery, buildFeedParams, categories, clearRegistrationPrefetchSeed, hasRegistrationPrefetchSeed]);
 
   // ── Infinite scroll sentinel ─────────────────────────────────────────────────
   const sentinelRef = useRef(null);
@@ -176,9 +216,8 @@ export default function AlgorithmicFeed({
             setHasMore(false);
             return;
           }
-          const categoryKeys = categories.map((c) => c.key);
           const seen = new Set(articles.map((a) => a._id));
-          const batch = buildInfiniteScrollBatch(feed, categoryKeys, seen);
+          const batch = buildInfiniteScrollBatch(feed, categories, seen);
           if (batch.length === 0) {
             setHasMore(false);
           } else {

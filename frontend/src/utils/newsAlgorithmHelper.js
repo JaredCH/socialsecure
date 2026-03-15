@@ -1,22 +1,10 @@
 /**
  * newsAlgorithmHelper.js
  *
- * Deterministic feed ordering algorithm for the algorithmic news feed.
- *
- * Slots 1–10:
- *   • 5 slots for LOCAL articles (city-level, _tier === 'local')
- *   • 5 slots spread across 5 randomly chosen categories (1 each)
- *   • Result is interleaved so articles are never grouped by tier
- *
- * Slots 11–30 (all-categories coverage):
- *   • Every active category appears at least twice
- *   • No two adjacent articles share the same category
- *   • Within a category, sorted by viralScore desc
- *
- * Slots 31+ (groups of 5):
- *   • Pick next category from a shuffled exhaustion queue
- *   • Show up to 5 articles for that category
- *   • After all categories are exhausted, re-shuffle and repeat
+ * Feed ordering favors recency first, then adds modest boosts for articles
+ * that should surface near the top: followed-keyword matches, local items,
+ * and breaking coverage. The result stays deterministic and keeps category
+ * filtered feeds populated instead of over-optimizing for cross-category mix.
  */
 
 // ─── Fisher-Yates shuffle ────────────────────────────────────────────────────
@@ -27,6 +15,78 @@ function shuffle(array) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+function normalizeCategoryKeys(categories = []) {
+  return categories
+    .map((category) => {
+      if (!category) return null;
+      return typeof category === 'string' ? category : category.key;
+    })
+    .filter(Boolean);
+}
+
+function getPublishedTimestamp(article) {
+  const timestamp = article?.publishedAt ? new Date(article.publishedAt).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getUrgencyBoost(article) {
+  const urgency = Number(article?.viralSignals?.urgencyTerms || 0);
+  return Number.isFinite(urgency) ? urgency : 0;
+}
+
+function getPriorityBoost(article) {
+  let boost = 0;
+
+  if (article?._tier === 'keyword') boost += 6 * 60 * 60 * 1000;
+  if (article?._tier === 'local' || article?.pipeline === 'local') boost += 3 * 60 * 60 * 1000;
+  if (article?._tier === 'state') boost += 90 * 60 * 1000;
+  if (article?._tier === 'national') boost += 60 * 60 * 1000;
+  if (article?._tier === 'trending') boost += 45 * 60 * 1000;
+
+  if (article?.category === 'breaking') boost += 2 * 60 * 60 * 1000;
+  if ((article?.localityLevel === 'city' || article?.localityLevel === 'county') && article?._tier !== 'local') {
+    boost += 75 * 60 * 1000;
+  }
+
+  boost += Math.min(getUrgencyBoost(article), 100) * 90 * 1000;
+  boost += Math.min(Number(article?.viralScore || 0), 100) * 60 * 1000;
+
+  return boost;
+}
+
+function rankArticles(left, right) {
+  const leftScore = getPublishedTimestamp(left) + getPriorityBoost(left);
+  const rightScore = getPublishedTimestamp(right) + getPriorityBoost(right);
+
+  if (rightScore !== leftScore) return rightScore - leftScore;
+
+  const publishedDiff = getPublishedTimestamp(right) - getPublishedTimestamp(left);
+  if (publishedDiff !== 0) return publishedDiff;
+
+  const viralDiff = Number(right?.viralScore || 0) - Number(left?.viralScore || 0);
+  if (viralDiff !== 0) return viralDiff;
+
+  return String(right?._id || '').localeCompare(String(left?._id || ''));
+}
+
+function dedupeArticles(articles = []) {
+  const seen = new Set();
+
+  return articles.filter((article) => {
+    const key = String(article?._id || '');
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function annotateArticles(articles = [], fallbackTier = 'feed') {
+  return articles.map((article) => ({
+    ...article,
+    _displayTier: article?._tier || fallbackTier,
+  }));
 }
 
 // ─── Exhaust-before-repeat queue ─────────────────────────────────────────────
@@ -65,116 +125,22 @@ function makeSeenSet(articles) {
  * @returns {Array} ordered articles with a `_displayTier` field
  */
 export function buildAlgorithmicSequence(sections = {}, feed = [], categories = []) {
-  const categoryKeys = categories.map((c) => c.key).filter(Boolean);
-  const seen = new Set();
-
-  const addSeen = (a) => { seen.add(String(a._id)); return a; };
-  const notSeen = (a) => !seen.has(String(a._id));
-
-  // ── 0. Keyword-promoted articles (always first) ───────────────────────────
-  const keywordArticles = (sections.keyword || [])
-    .filter(notSeen)
-    .map((a) => addSeen({ ...a, _displayTier: 'keyword' }));
-
-  // ── 1. Build pool maps by category ───────────────────────────────────────
-  // All feed articles organised by category (for coverage algo)
-  const byCategory = {};
-  for (const cat of categoryKeys) byCategory[cat] = [];
-
-  const allFeed = [
+  const categoryKeys = new Set(normalizeCategoryKeys(categories));
+  const combined = dedupeArticles([
+    ...(sections.keyword || []),
     ...(sections.local || []),
     ...(sections.state || []),
     ...(sections.national || []),
     ...(sections.trending || []),
     ...feed,
-  ];
+  ]);
 
-  for (const art of allFeed) {
-    if (seen.has(String(art._id))) continue;
-    const cat = art.category || 'general';
-    if (!byCategory[cat]) byCategory[cat] = [];
-    byCategory[cat].push(art);
-  }
-  // Sort each category pool by viralScore desc
-  for (const cat of Object.keys(byCategory)) {
-    byCategory[cat].sort((a, b) => (b.viralScore || 0) - (a.viralScore || 0));
-  }
+  const filtered = combined.filter((article) => {
+    if (!categoryKeys.size) return true;
+    return !article?.category || categoryKeys.has(article.category) || article.category === 'general';
+  });
 
-  // ── 2. Slots 1–10: 5 local + 5 from 5 random categories ─────────────────
-  const localPool = (sections.local || []).filter(notSeen);
-  const localSlots = localPool.slice(0, 5).map(addSeen).map((a) => ({ ...a, _displayTier: 'local' }));
-
-  // Pick 5 random non-exhausted categories for the other 5 slots
-  const shuffledCats = shuffle(categoryKeys).filter((k) => (byCategory[k] || []).length > 0);
-  const pickedCats = shuffledCats.slice(0, 5);
-  const categorySlots = pickedCats.map((cat) => {
-    const art = byCategory[cat].find(notSeen);
-    if (!art) return null;
-    addSeen(art);
-    return { ...art, _displayTier: 'category' };
-  }).filter(Boolean);
-
-  // Interleave: local[0], cat[0], local[1], cat[1], ...
-  const first10 = [];
-  const maxFirst = Math.max(localSlots.length, categorySlots.length);
-  for (let i = 0; i < maxFirst; i++) {
-    if (localSlots[i]) first10.push(localSlots[i]);
-    if (categorySlots[i]) first10.push(categorySlots[i]);
-  }
-
-  // ── 3. Slots 11–30: every category ≥2×, no adjacent same-category ────────
-  const coverage = [];
-  // Two passes ensure ≥2× per category
-  for (let pass = 0; pass < 2; pass++) {
-    for (const cat of shuffle(categoryKeys)) {
-      const art = (byCategory[cat] || []).find(notSeen);
-      if (!art) continue;
-      addSeen(art);
-      coverage.push({ ...art, _displayTier: 'coverage' });
-    }
-  }
-
-  // Reorder coverage: no two adjacent with same category
-  const noDupeAdjacentCoverage = [];
-  const coverageQueue = [...coverage];
-  while (coverageQueue.length > 0) {
-    const lastCat = noDupeAdjacentCoverage.length > 0
-      ? noDupeAdjacentCoverage[noDupeAdjacentCoverage.length - 1].category
-      : null;
-    // Find first article with different category
-    const idx = coverageQueue.findIndex((a) => a.category !== lastCat);
-    if (idx === -1) {
-      // All remaining are same category — just append
-      noDupeAdjacentCoverage.push(...coverageQueue.splice(0));
-    } else {
-      noDupeAdjacentCoverage.push(...coverageQueue.splice(idx, 1));
-    }
-  }
-
-  // ── 4. Slots 31+: groups of 5 by exhaustion-queue ────────────────────────
-  const exhaustQueue = buildCategoryExhaustQueue(categoryKeys);
-  const groupsOf5 = [];
-  // We'll generate up to 10 groups from the remaining pool for initial render
-  for (let g = 0; g < 10; g++) {
-    let cat = exhaustQueue.next();
-    // Skip if pool is empty; find next non-empty
-    let attempts = 0;
-    while ((byCategory[cat] || []).filter(notSeen).length === 0 && attempts < categoryKeys.length) {
-      cat = exhaustQueue.next();
-      attempts++;
-    }
-    const pool = (byCategory[cat] || []).filter(notSeen);
-    if (pool.length === 0) break;
-    const group = pool.slice(0, 5).map(addSeen).map((a) => ({ ...a, _displayTier: 'group' }));
-    groupsOf5.push(...group);
-  }
-
-  return [
-    ...keywordArticles,
-    ...first10,
-    ...noDupeAdjacentCoverage,
-    ...groupsOf5,
-  ];
+  return annotateArticles(filtered).sort(rankArticles);
 }
 
 /**
@@ -187,42 +153,14 @@ export function buildAlgorithmicSequence(sections = {}, feed = [], categories = 
  * @returns {Array} ordered articles
  */
 export function buildInfiniteScrollBatch(newFeedArticles = [], categories = [], alreadySeen = new Set()) {
-  const categoryKeys = categories.map((c) => c.key).filter(Boolean);
-  const seen = new Set(alreadySeen);
-  const notSeen = (a) => !seen.has(String(a._id));
+  const categoryKeys = new Set(normalizeCategoryKeys(categories));
 
-  const byCategory = {};
-  for (const cat of categoryKeys) byCategory[cat] = [];
-  for (const art of newFeedArticles) {
-    if (seen.has(String(art._id))) continue;
-    const cat = art.category || 'general';
-    if (!byCategory[cat]) byCategory[cat] = [];
-    byCategory[cat].push(art);
-  }
-  for (const cat of Object.keys(byCategory)) {
-    byCategory[cat].sort((a, b) => (b.viralScore || 0) - (a.viralScore || 0));
-  }
-
-  const exhaustQueue = buildCategoryExhaustQueue(categoryKeys);
-  const result = [];
-  let attempts = 0;
-
-  while (attempts < categoryKeys.length * 2) {
-    const cat = exhaustQueue.next();
-    const pool = (byCategory[cat] || []).filter(notSeen);
-    if (pool.length === 0) { attempts++; continue; }
-    pool.slice(0, 5).forEach((a) => {
-      seen.add(String(a._id));
-      result.push({ ...a, _displayTier: 'group' });
-    });
-    if (result.length >= newFeedArticles.length) break;
-    attempts = 0;
-  }
-
-  // Fallback: anything not yet shown
-  for (const art of newFeedArticles) {
-    if (!seen.has(String(art._id))) result.push({ ...art, _displayTier: 'feed' });
-  }
-
-  return result;
+  return annotateArticles(
+    dedupeArticles(newFeedArticles).filter((article) => {
+      const articleId = String(article?._id || '');
+      if (!articleId || alreadySeen.has(articleId)) return false;
+      if (!categoryKeys.size) return true;
+      return !article?.category || categoryKeys.has(article.category) || article.category === 'general';
+    })
+  ).sort(rankArticles);
 }

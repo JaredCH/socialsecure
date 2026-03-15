@@ -10,6 +10,7 @@ const User = require('../models/User');
 const Session = require('../models/Session');
 const SecurityEvent = require('../models/SecurityEvent');
 const DeviceKey = require('../models/DeviceKey');
+const NewsPreferences = require('../models/NewsPreferences');
 const { createNotification } = require('../services/notifications');
 const {
   SOCIAL_THEME_PRESETS,
@@ -517,10 +518,45 @@ router.post('/register', [
 
     await user.save();
 
-    // Fire-and-forget: seed local news for the new user's ZIP code immediately
+    const registrationNewsLocation = canonicalLocation.city || canonicalLocation.zipCode || canonicalLocation.stateCode
+      ? {
+          city: canonicalLocation.city || null,
+          cityKey: canonicalLocation.cityKey || null,
+          zipCode: canonicalLocation.zipCode || null,
+          state: canonicalLocation.state || null,
+          stateCode: canonicalLocation.stateCode || null,
+          country: canonicalLocation.country || null,
+          countryCode: canonicalLocation.countryCode || null,
+          county: canonicalLocation.county || null,
+          isPrimary: true
+        }
+      : null;
+
+    if (registrationNewsLocation) {
+      try {
+        await NewsPreferences.findOneAndUpdate(
+          { user: user._id },
+          {
+            $setOnInsert: {
+              user: user._id,
+              locations: [registrationNewsLocation]
+            }
+          },
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true
+          }
+        );
+      } catch (error) {
+        console.warn('Unable to seed news preferences on registration:', error.message);
+      }
+    }
+
+    let registrationNewsPrefetch = null;
     if (user.zipCode) {
       try {
-        require('../services/newsIngestion.local').triggerLocationIngest(user.zipCode);
+        registrationNewsPrefetch = await require('../services/newsIngestion.local').triggerLocationIngest(user.zipCode);
       } catch (e) {
         console.warn('Unable to trigger local news ingest on registration:', e.message);
       }
@@ -555,6 +591,7 @@ router.post('/register', [
       message: 'Registration successful',
       user: toAuthenticatedUserProfile(user),
       token,
+      registrationNewsPrefetch,
       requiresPasswordReset: !!user.mustResetPassword,
       expiresIn: 86400 // 24 hours in seconds
     });

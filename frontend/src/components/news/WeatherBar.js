@@ -50,6 +50,82 @@ function getDayAbbr(dateStr) {
   try { return DAY_ABBR[new Date(dateStr).getDay()]; } catch { return ''; }
 }
 
+function hasUsableWeather(location) {
+  return Boolean(location?.weather?.current);
+}
+
+function formatLocationLine(location) {
+  if (!location) return '';
+
+  const baseLabel = location.city || location.label || '';
+  if (!baseLabel) return location.zipCode ? `ZIP ${location.zipCode}` : '';
+  if (!location.city) return location.zipCode && !String(baseLabel).includes(location.zipCode)
+    ? `${baseLabel} ${location.zipCode}`
+    : baseLabel;
+
+  return [
+    `${location.city}${location.state ? `, ${location.state}` : ''}`,
+    location.zipCode || null,
+  ].filter(Boolean).join(' ');
+}
+
+function getUnavailableMessage(locations, requestError) {
+  if (requestError) {
+    return 'Weather is temporarily unavailable. Try again in a moment.';
+  }
+
+  if (!locations.length) {
+    return 'Add a weather or news location in preferences to load forecasts here.';
+  }
+
+  const firstError = locations.find((location) => location?.error);
+  if (firstError?.error) {
+    return firstError.error;
+  }
+
+  return 'No current weather data is available for your saved locations right now.';
+}
+
+function WeatherUnavailableState({ variant, message }) {
+  const isCard = variant === 'card';
+
+  return (
+    <div
+      className={isCard
+        ? 'bg-gradient-to-br from-blue-700 to-indigo-800 rounded-2xl shadow-lg overflow-hidden'
+        : 'sticky top-0 z-30 bg-gradient-to-r from-blue-700 to-indigo-800 shadow-md'}
+    >
+      <div className="px-3 py-2.5 flex items-center gap-3 text-white">
+        <span className="text-2xl shrink-0" aria-hidden="true">🌤️</span>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold leading-tight">Weather unavailable</div>
+          <div className="text-[11px] text-white/80 leading-tight">{message}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WeatherMetric({ label, value, badgeColor = null, detail = null }) {
+  if (value == null || value === '') return null;
+
+  return (
+    <div className="rounded-xl bg-white/10 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-white/60">{label}</div>
+      <div className="mt-1 flex items-center gap-2 text-sm text-white">
+        {badgeColor ? (
+          <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: badgeColor }}>
+            {value}
+          </span>
+        ) : (
+          <span className="font-semibold">{value}</span>
+        )}
+        {detail ? <span className="text-xs text-white/70">{detail}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 // ─── Day forecast carousel slot (3 per group) ────────────────────────────────
 function DaySlot({ day }) {
   if (!day) return <div className="flex-1" />;
@@ -71,6 +147,7 @@ function DaySlot({ day }) {
 export default function WeatherBar({ variant = 'sticky' }) {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [requestError, setRequestError] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('hourly');
   const [carouselGroup, setCarouselGroup] = useState(0); // 0=d1-3, 1=d4-6, 2=d7
@@ -79,12 +156,24 @@ export default function WeatherBar({ variant = 'sticky' }) {
 
   useEffect(() => {
     newsAPI.getWeather()
-      .then((r) => setLocations(r.data?.locations || []))
-      .catch(console.error)
+      .then((r) => {
+        setLocations(r.data?.locations || []);
+        setRequestError(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        setLocations([]);
+        setRequestError(error);
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  const primary = locations.find((l) => l.isPrimary) || locations[0];
+  const primary =
+    locations.find((location) => location.isPrimary && hasUsableWeather(location)) ||
+    locations.find(hasUsableWeather) ||
+    locations.find((location) => location.isPrimary) ||
+    locations[0] ||
+    null;
   const weekly = primary?.weather?.weekly || [];
   const totalGroups = weekly.length > 0 ? Math.ceil(weekly.length / 3) : 0;
 
@@ -101,6 +190,12 @@ export default function WeatherBar({ variant = 'sticky' }) {
     return () => clearInterval(intervalRef.current);
   }, [totalGroups]);
 
+  useEffect(() => {
+    if (carouselGroup >= totalGroups) {
+      setCarouselGroup(0);
+    }
+  }, [carouselGroup, totalGroups]);
+
   if (loading) {
     return (
       <div className={variant === 'sticky'
@@ -111,11 +206,13 @@ export default function WeatherBar({ variant = 'sticky' }) {
     );
   }
 
-  if (!primary?.weather?.current) return null;
+  if (!primary?.weather?.current) {
+    return <WeatherUnavailableState variant={variant} message={getUnavailableMessage(locations, requestError)} />;
+  }
 
   const { weather, label, city, state, zipCode } = primary;
   const { current, high, low, hourly = [], weekly: wk = [], uvIndex, airQuality, pollen } = weather;
-  const displayCity = city || label || '';
+  const displayCity = formatLocationLine(primary) || label || city || '';
   const currentIcon = ICON_MAP[current?.icon] || '🌤️';
 
   // Carousel day slots
@@ -123,6 +220,111 @@ export default function WeatherBar({ variant = 'sticky' }) {
   const carouselDays = wk.slice(groupStart, groupStart + 3);
 
   const isCard = variant === 'card';
+
+  if (isCard) {
+    return (
+      <section className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 rounded-2xl shadow-lg overflow-hidden">
+        <div className="px-4 pt-4 pb-3 border-b border-white/10">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">Weather</div>
+              <div className="mt-1 text-lg font-semibold text-white leading-tight">{displayCity}</div>
+              <div className="mt-1 text-sm text-white/70">{current?.shortForecast || weather.forecastSummary || 'Current conditions unavailable'}</div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-3xl leading-none" aria-hidden="true">{currentIcon}</div>
+              <div className="mt-2 text-4xl font-bold text-white leading-none">
+                {current?.temperature != null ? `${current.temperature}°` : '--'}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-white/80">
+            {high != null && <span className="rounded-full bg-white/10 px-2.5 py-1">High {high}°</span>}
+            {low != null && <span className="rounded-full bg-white/10 px-2.5 py-1">Low {low}°</span>}
+            {current?.humidity != null && <span className="rounded-full bg-white/10 px-2.5 py-1">Humidity {current.humidity}%</span>}
+            {current?.windSpeed != null && <span className="rounded-full bg-white/10 px-2.5 py-1">Wind {current.windSpeed} mph</span>}
+          </div>
+        </div>
+
+        <div className="px-4 py-3 space-y-3">
+          {(uvIndex != null || airQuality != null || pollen != null) && (
+            <div className="grid grid-cols-1 gap-2">
+              <WeatherMetric label="UV Index" value={uvIndex} badgeColor={UV_COLOR(uvIndex)} />
+              <WeatherMetric label="Air Quality" value={airQuality?.index} badgeColor={AQI_COLOR(airQuality?.index)} detail={airQuality?.label || null} />
+              <WeatherMetric
+                label="Pollen"
+                value={pollen ? [
+                  pollen.grass != null ? `Grass ${Math.round(pollen.grass)}` : null,
+                  pollen.birch != null ? `Birch ${Math.round(pollen.birch)}` : null,
+                  pollen.ragweed != null ? `Ragweed ${Math.round(pollen.ragweed)}` : null,
+                ].filter(Boolean).join(' · ') : null}
+              />
+            </div>
+          )}
+
+          {(hourly.length > 0 || wk.length > 0) && (
+            <>
+              <div className="flex gap-2">
+                {hourly.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('hourly')}
+                    className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
+                      activeTab === 'hourly'
+                        ? 'bg-white text-blue-700'
+                        : 'bg-white/10 text-white hover:bg-white/20'
+                    }`}
+                  >
+                    Hourly
+                  </button>
+                )}
+                {wk.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('weekly')}
+                    className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
+                      activeTab === 'weekly'
+                        ? 'bg-white text-blue-700'
+                        : 'bg-white/10 text-white hover:bg-white/20'
+                    }`}
+                  >
+                    5-Day
+                  </button>
+                )}
+              </div>
+
+              {activeTab === 'hourly' && hourly.length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {hourly.slice(0, 8).map((h, i) => (
+                    <div key={i} className="rounded-xl bg-white/8 px-2 py-2 text-center text-white/80">
+                      <div className="text-[10px]">{new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}</div>
+                      <div className="mt-1 text-base">{ICON_MAP[h.icon] || '🌤️'}</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{h.temperature}°</div>
+                      <div className="text-[10px]">{h.precipitationProbability ?? '--'}%</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeTab === 'weekly' && wk.length > 0 && (
+                <div className="space-y-2">
+                  {wk.map((day, index) => (
+                    <div key={index} className="flex items-center gap-3 rounded-xl bg-white/8 px-3 py-2 text-sm text-white/85">
+                      <div className="w-10 font-medium">{getDayAbbr(day.date)}</div>
+                      <div className="text-lg">{ICON_MAP[day.icon] || '🌤️'}</div>
+                      <div className="w-20 font-semibold text-white">{day.high}° / {day.low}°</div>
+                      <div className="min-w-0 flex-1 truncate text-white/70">{day.shortForecast}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div
