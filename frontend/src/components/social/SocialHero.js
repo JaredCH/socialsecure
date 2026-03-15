@@ -1,43 +1,58 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
 
-/* ── Layout: "Main" sits flush at the screen bottom as a horizontal
-   appendage from the S circle, the other 4 arc upward around the
-   upper-left quadrant of the circle.  y is relative to the chip
-   origin (48 px up from viewport bottom, 48 px from right).        */
-const MOBILE_MENU_LAYOUT_BY_TAB = {
-  main:     { x: -52, y:  6 },
-  friends:  { x: -66, y: -22 },
-  gallery:  { x: -70, y: -50 },
-  chat:     { x: -62, y: -78 },
-  calendar: { x: -46, y: -104 }
+const MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB = {
+  main: { x: -76, y: 2 },
+  friends: { x: -90, y: -34 },
+  gallery: { x: -84, y: -68 },
+  chat: { x: -66, y: -102 },
+  calendar: { x: -38, y: -134 }
 };
 
-/* Site-wide navigation shortcuts shown above the social chips */
+const MOBILE_SITE_MENU_LAYOUT_BY_TAB = {
+  chat: { x: 66, y: 2 },
+  news: { x: 82, y: -32 },
+  market: { x: 78, y: -66 },
+  discover: { x: 60, y: -100 }
+};
+
 const SITE_NAV_LINKS = [
-  { id: 'chat',     label: 'Chat',     path: '/chat',     icon: 'chat' },
-  { id: 'news',     label: 'News',     path: '/news',     icon: 'news' },
-  { id: 'market',   label: 'Market',   path: '/market',   icon: 'market' },
-  { id: 'discover', label: 'Discover', path: '/discover',  icon: 'discover' }
+  { id: 'chat', label: 'Chat', path: '/chat', icon: 'chat' },
+  { id: 'news', label: 'News', path: '/news', icon: 'news' },
+  { id: 'market', label: 'Market', path: '/market', icon: 'market' },
+  { id: 'discover', label: 'Discover', path: '/discover', icon: 'discover' }
 ];
 
-const buildMobileMenuLayout = (items) => {
+const buildMobileMenuLayout = (items, layoutMap, fallbackOriginX) => {
   if (!Array.isArray(items) || items.length === 0) {
     return [];
   }
 
   return items.map((item, index) => {
     const fallback = {
-      x: -56 - (index * 6),
-      y: 6 - (index * 28)
+      x: fallbackOriginX + (index * 14),
+      y: 2 - (index * 32)
     };
 
     return {
       ...item,
-      ...(MOBILE_MENU_LAYOUT_BY_TAB[item.id] || fallback)
+      ...(layoutMap[item.id] || fallback)
     };
   });
+};
+
+const formatActivityTimestamp = (value) => {
+  if (!value) return '';
+
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return '';
+
+  const diffMinutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000));
+  if (diffMinutes < 1) return 'now';
+  if (diffMinutes < 60) return `${diffMinutes}m`;
+  if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h`;
+  return `${Math.floor(diffMinutes / 1440)}d`;
 };
 
 // Simple icon components for the tabs
@@ -94,7 +109,9 @@ const SocialHero = ({
   onTabChange,
   isMobile = false,
   isEditing = false,
-  onEditClick
+  onEditClick,
+  activitySummary = {},
+  onMobileMenuToggle
 }) => {
   const {
     name = 'User Name',
@@ -118,34 +135,62 @@ const SocialHero = ({
   } = heroConfig;
   const currentAvatarSize = isMobile ? 88 : 128;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSiteMenuOpen, setIsSiteMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const routeLocation = useLocation();
 
-  const mobileMenuItems = useMemo(() => buildMobileMenuLayout(SOCIAL_HERO_TABS), []);
+  const socialMenuItems = useMemo(
+    () => buildMobileMenuLayout(SOCIAL_HERO_TABS, MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB, -72),
+    []
+  );
+  const siteMenuItems = useMemo(
+    () => buildMobileMenuLayout(SITE_NAV_LINKS, MOBILE_SITE_MENU_LAYOUT_BY_TAB, 54),
+    []
+  );
+  const primarySocialMenuItem = socialMenuItems.find((item) => item.id === 'main') || socialMenuItems[0] || null;
+  const secondarySocialMenuItems = socialMenuItems.filter((item) => item.id !== primarySocialMenuItem?.id);
+  const isAnyMobileMenuOpen = isMobileMenuOpen || isSiteMenuOpen;
+  const unreadNotificationCount = Number(activitySummary?.unreadNotificationCount || 0);
+  const unreadMessageCount = Number(activitySummary?.unreadMessageCount || 0);
+  const notificationItems = Array.isArray(activitySummary?.notifications) ? activitySummary.notifications.slice(0, 2) : [];
+  const messageItems = Array.isArray(activitySummary?.messages) ? activitySummary.messages.slice(0, 2) : [];
+  const hasActivityRail = unreadNotificationCount > 0 || unreadMessageCount > 0 || notificationItems.length > 0 || messageItems.length > 0;
 
   useEffect(() => {
     if (!isMobile || !showNavigation) {
       setIsMobileMenuOpen(false);
+      setIsSiteMenuOpen(false);
     }
   }, [isMobile, showNavigation]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setIsSiteMenuOpen(false);
   }, [activeTab]);
 
   useEffect(() => {
-    if (!isMobileMenuOpen) {
+    setIsSiteMenuOpen(false);
+  }, [routeLocation.pathname]);
+
+  useEffect(() => {
+    if (!isAnyMobileMenuOpen) {
       return undefined;
     }
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         setIsMobileMenuOpen(false);
+        setIsSiteMenuOpen(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isMobileMenuOpen]);
+  }, [isAnyMobileMenuOpen]);
+
+  useEffect(() => {
+    onMobileMenuToggle?.(Boolean(isMobile && isAnyMobileMenuOpen));
+  }, [isAnyMobileMenuOpen, isMobile, onMobileMenuToggle]);
 
   const getNavItemClasses = (tabId) => {
     const isActive = activeTab === tabId;
@@ -186,6 +231,11 @@ const SocialHero = ({
   };
   const mobileOrbitalGlowStyle = {
     background: `radial-gradient(circle, ${menuActiveColor}2a 0%, ${backgroundColor}00 72%)`
+  };
+  const siteLauncherStyle = {
+    boxShadow: isSiteMenuOpen
+      ? `0 22px 44px ${backgroundColor}4f, 0 0 0 1px ${menuTextColor}18`
+      : `0 16px 28px ${backgroundColor}2a, 0 0 0 1px ${menuTextColor}12`
   };
 
   return (
@@ -303,54 +353,191 @@ const SocialHero = ({
       {/* Mobile Navigation - Bottom Tabs */}
       {showNavigation && isMobile && (
         <>
-          {isMobileMenuOpen && (
+          {isAnyMobileMenuOpen && (
             <button
               type="button"
               aria-label="Close social section menu"
               className="fixed inset-0 z-40 border-0 bg-[radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.18),rgba(2,6,23,0.88)_38%,rgba(2,6,23,0.7)_100%)] backdrop-blur-[3px]"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                setIsSiteMenuOpen(false);
+              }}
             />
           )}
+
+          {hasActivityRail && isAnyMobileMenuOpen && (
+            <div className="pointer-events-none fixed inset-x-4 top-20 z-50 md:hidden">
+              <div className="mx-auto flex max-w-sm flex-col gap-2">
+                {(unreadNotificationCount > 0 || notificationItems.length > 0) && (
+                  <div className="rounded-3xl border border-white/15 bg-slate-950/78 p-3 text-white shadow-[0_20px_50px_rgba(2,6,23,0.32)] backdrop-blur-xl">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[0.65rem] uppercase tracking-[0.28em] text-white/55">Notifications</p>
+                        <p className="mt-1 text-sm font-semibold">{unreadNotificationCount > 0 ? `${unreadNotificationCount} unread` : 'Latest updates'}</p>
+                      </div>
+                      <span className="inline-flex min-w-[2rem] justify-center rounded-full bg-white/12 px-2 py-1 text-xs font-semibold text-white/88">
+                        {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount || notificationItems.length}
+                      </span>
+                    </div>
+                    {notificationItems.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {notificationItems.map((item) => (
+                          <div key={item._id || item.id || item.title} className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="line-clamp-2 text-sm font-medium text-white/92">{item.title || item.message || item.type || 'New activity'}</p>
+                              <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.18em] text-white/45">{formatActivityTimestamp(item.createdAt || item.updatedAt)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {(unreadMessageCount > 0 || messageItems.length > 0) && (
+                  <div className="rounded-3xl border border-white/15 bg-slate-950/72 p-3 text-white shadow-[0_18px_46px_rgba(2,6,23,0.28)] backdrop-blur-xl">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[0.65rem] uppercase tracking-[0.28em] text-white/55">Messages</p>
+                        <p className="mt-1 text-sm font-semibold">{unreadMessageCount > 0 ? `${unreadMessageCount} unread` : 'Recent activity'}</p>
+                      </div>
+                      <span className="inline-flex min-w-[2rem] justify-center rounded-full bg-sky-500/20 px-2 py-1 text-xs font-semibold text-sky-100">
+                        {unreadMessageCount > 99 ? '99+' : unreadMessageCount || messageItems.length}
+                      </span>
+                    </div>
+                    {messageItems.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {messageItems.map((item) => (
+                          <div key={item.id || item._id || item.title} className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-medium text-white/92">{item.title || 'Conversation'}</p>
+                                <p className="mt-0.5 line-clamp-1 text-xs text-white/56">{item.summary || 'Recent message activity available'}</p>
+                              </div>
+                              <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.18em] text-white/45">{formatActivityTimestamp(item.timestamp || item.lastMessageAt)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div
+            className="pointer-events-none fixed bottom-0 left-0 z-50 md:hidden"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          >
+            <div className="relative h-[18rem] w-64 overflow-visible">
+              <div
+                className={`absolute bottom-8 left-8 h-48 w-48 rounded-full transition-all duration-500 ${isSiteMenuOpen ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
+                aria-hidden="true"
+                style={{ background: `radial-gradient(circle, ${menuActiveColor}20 0%, ${backgroundColor}00 72%)` }}
+              />
+
+              <nav aria-label="Site navigation shortcuts" className="absolute inset-0">
+                {siteMenuItems.map((link, index) => {
+                  const isRouteActive = routeLocation.pathname === link.path;
+                  const transform = isSiteMenuOpen
+                    ? `translate3d(${link.x}px, ${link.y}px, 0) scale(1)`
+                    : 'translate3d(0, 0, 0) scale(0.7)';
+
+                  return (
+                    <button
+                      key={link.id}
+                      type="button"
+                      aria-label={`Open ${link.label}`}
+                      onClick={() => {
+                        navigate(link.path);
+                        setIsMobileMenuOpen(false);
+                        setIsSiteMenuOpen(false);
+                      }}
+                      className={`pointer-events-auto absolute bottom-5 left-5 flex w-[5rem] origin-bottom-left items-center justify-between rounded-[1.1rem] border px-2.5 py-2 text-left shadow-[0_10px_22px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isRouteActive ? 'border-white/25 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isSiteMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                      style={{
+                        transform,
+                        transitionDelay: `${index * 26}ms`,
+                        color: isRouteActive ? backgroundColor : menuTextColor
+                      }}
+                    >
+                      <TabIcon icon={link.icon} className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate text-[0.58rem] font-semibold uppercase tracking-[0.12em]">{link.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <button
+                type="button"
+                className={`pointer-events-auto absolute -bottom-4 -left-4 flex h-24 w-16 flex-col items-center justify-center overflow-hidden rounded-[2rem] rounded-bl-none border text-white transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${isSiteMenuOpen ? 'scale-105 border-white/24 bg-slate-950/78 backdrop-blur-xl' : 'scale-100 border-white/12 bg-slate-950/18 backdrop-blur-md'}`}
+                style={siteLauncherStyle}
+                onClick={() => setIsSiteMenuOpen((prev) => {
+                  const next = !prev;
+                  if (next) {
+                    setIsMobileMenuOpen(false);
+                  }
+                  return next;
+                })}
+                aria-expanded={isSiteMenuOpen}
+                aria-label={isSiteMenuOpen ? 'Collapse site navigation menu' : 'Expand site navigation menu'}
+              >
+                <span className="absolute inset-[8px] rounded-[1.5rem] rounded-bl-none border border-white/10" aria-hidden="true" />
+                <span className={`absolute inset-0 transition-opacity duration-300 ${isSiteMenuOpen ? 'opacity-100' : 'opacity-55'}`} aria-hidden="true" style={{ background: `linear-gradient(160deg, ${menuActiveColor}66 0%, ${backgroundColor}10 42%, transparent 100%)` }} />
+                <span className="relative flex flex-col items-center gap-2">
+                  <span className="flex flex-col gap-1.5">
+                    <span className="h-[2px] w-6 rounded-full bg-white/90" />
+                    <span className="h-[2px] w-4 rounded-full bg-white/70" />
+                    <span className="h-[2px] w-6 rounded-full bg-white/90" />
+                  </span>
+                  <span className="text-[0.42rem] font-semibold uppercase tracking-[0.28em] text-white/72">Go</span>
+                </span>
+              </button>
+            </div>
+          </div>
+
           <div
             className="pointer-events-none fixed bottom-0 right-0 z-50 md:hidden"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             data-testid="social-mobile-nav"
           >
-            <div className="relative h-[22rem] w-72 overflow-visible">
+            <div className="relative h-[18rem] w-72 overflow-visible">
               <div
-                className={`absolute bottom-10 right-10 h-56 w-56 rounded-full transition-all duration-500 ${isMobileMenuOpen ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
+                className={`absolute bottom-8 right-8 h-48 w-48 rounded-full transition-all duration-500 ${isMobileMenuOpen ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
                 style={mobileOrbitalGlowStyle}
                 aria-hidden="true"
               />
-
-              {/* ── Site-wide navigation links (slim list above social chips) ── */}
-              <nav
-                aria-label="Site navigation"
-                className={`pointer-events-auto absolute bottom-[11.5rem] right-4 flex flex-col items-end gap-[3px] transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'}`}
-              >
-                {SITE_NAV_LINKS.map((link, i) => (
-                  <button
-                    key={link.id}
-                    type="button"
-                    onClick={() => { navigate(link.path); setIsMobileMenuOpen(false); }}
-                    className="flex items-center gap-1.5 rounded-md border border-white/8 bg-slate-950/60 px-2.5 py-[3px] text-[0.6rem] font-medium tracking-wide text-white/75 backdrop-blur-xl transition-colors hover:bg-white/10 hover:text-white"
-                    style={{ transitionDelay: `${i * 30 + 80}ms` }}
-                  >
-                    <TabIcon icon={link.icon} className="h-3 w-3" />
-                    {link.label}
-                  </button>
-                ))}
-              </nav>
-
-              {/* ── Social page section chips (arc around S circle) ── */}
               <nav
                 id="social-mobile-nav-menu"
                 aria-label="Social sections"
                 className="absolute inset-0"
               >
-                {mobileMenuItems.map((tab, index) => {
+                {primarySocialMenuItem ? (
+                  <button
+                    type="button"
+                    aria-label={`Open ${SOCIAL_HERO_TAB_LABELS[primarySocialMenuItem.id]} section`}
+                    onClick={() => {
+                      onTabChange?.(primarySocialMenuItem.id);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`pointer-events-auto absolute bottom-5 right-5 flex w-[5.2rem] origin-bottom-right items-center gap-1.5 rounded-full border px-3 py-2 text-left shadow-[0_12px_26px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${activeTab === primarySocialMenuItem.id ? 'border-white/25 bg-white text-slate-950' : 'border-white/10 bg-slate-950/86 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                    style={{
+                      transform: isMobileMenuOpen
+                        ? `translate3d(${primarySocialMenuItem.x}px, ${primarySocialMenuItem.y}px, 0) scale(1)`
+                        : 'translate3d(0, 0, 0) scale(0.7)',
+                      color: activeTab === primarySocialMenuItem.id ? backgroundColor : menuTextColor
+                    }}
+                  >
+                    <TabIcon icon={primarySocialMenuItem.icon} className="h-4 w-4 shrink-0" />
+                    <span className="truncate text-[0.62rem] font-semibold uppercase tracking-[0.12em]">
+                      {SOCIAL_HERO_TAB_LABELS[primarySocialMenuItem.id]}
+                    </span>
+                  </button>
+                ) : null}
+
+                {secondarySocialMenuItems.map((tab, index) => {
                   const isActive = activeTab === tab.id;
-                  const transitionDelay = `${index * 28}ms`;
+                  const transitionDelay = `${index * 28 + 20}ms`;
                   const transform = isMobileMenuOpen
                     ? `translate3d(${tab.x}px, ${tab.y}px, 0) scale(1)`
                     : 'translate3d(0, 0, 0) scale(0.7)';
@@ -364,7 +551,7 @@ const SocialHero = ({
                         onTabChange?.(tab.id);
                         setIsMobileMenuOpen(false);
                       }}
-                      className={`pointer-events-auto absolute bottom-6 right-6 flex w-[4.2rem] origin-bottom-right items-center gap-1 rounded-full border px-2 py-[5px] text-left shadow-[0_8px_20px_rgba(2,6,23,0.2)] transition-all duration-300 ease-out ${isActive ? 'border-white/25 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                      className={`pointer-events-auto absolute bottom-5 right-5 flex w-[4.85rem] origin-bottom-right items-center gap-1.5 rounded-full border px-2.5 py-[7px] text-left shadow-[0_10px_22px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isActive ? 'border-white/25 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
                       style={{
                         transform,
                         transitionDelay,
@@ -384,7 +571,7 @@ const SocialHero = ({
 
               <div className="absolute bottom-0 right-0 flex items-end gap-3">
                 <div
-                  className={`pointer-events-none absolute bottom-[4.5rem] right-[5.7rem] rounded-2xl border border-white/10 bg-slate-950/72 px-3 py-2 text-right text-white shadow-[0_18px_40px_rgba(2,6,23,0.26)] backdrop-blur-xl transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100'}`}
+                  className={`pointer-events-none absolute bottom-[4.6rem] right-[5rem] rounded-2xl border border-white/10 bg-slate-950/72 px-3 py-2 text-right text-white shadow-[0_18px_40px_rgba(2,6,23,0.26)] backdrop-blur-xl transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100'}`}
                   aria-hidden="true"
                 >
                   <div className="text-[0.6rem] uppercase tracking-[0.32em] text-white/55">Social</div>
@@ -392,18 +579,25 @@ const SocialHero = ({
                 </div>
                 <button
                   type="button"
-                  className={`pointer-events-auto absolute -bottom-6 -right-6 flex h-24 w-24 items-start justify-start overflow-hidden rounded-full border text-white transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${isMobileMenuOpen ? 'scale-105 border-white/22 bg-slate-950/72 backdrop-blur-xl' : 'scale-100 border-white/14 bg-slate-950/20 backdrop-blur-md'}`}
+                  className={`pointer-events-auto absolute -bottom-4 -right-4 flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border text-white transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${isMobileMenuOpen ? 'scale-105 border-white/22 bg-slate-950/78 backdrop-blur-xl' : 'scale-100 border-white/14 bg-slate-950/22 backdrop-blur-md'}`}
                   style={mobileLauncherStyle}
-                  onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+                  onClick={() => setIsMobileMenuOpen((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setIsSiteMenuOpen(false);
+                    }
+                    return next;
+                  })}
                   aria-expanded={isMobileMenuOpen}
                   aria-controls="social-mobile-nav-menu"
                   aria-label={isMobileMenuOpen ? 'Collapse social section menu' : 'Expand social section menu'}
                 >
                   <span className={`absolute inset-[8px] rounded-full border transition-opacity duration-300 ${isMobileMenuOpen ? 'border-white/14 opacity-100' : 'border-white/12 opacity-75'}`} aria-hidden="true" />
-                  <span className={`absolute inset-0 transition-opacity duration-300 ${isMobileMenuOpen ? 'opacity-100' : 'opacity-52'}`} aria-hidden="true" style={{ background: `radial-gradient(circle at 30% 25%, ${menuActiveColor}aa, ${backgroundColor}18 40%, transparent 74%)` }} />
-                  <span className="relative ml-4 mt-3 flex flex-col items-center leading-none">
-                    <span className="text-[1.8rem] font-black tracking-[-0.16em]">S</span>
-                    <span className="text-[0.42rem] uppercase tracking-[0.28em] text-white/72">
+                  <span className={`absolute inset-0 transition-opacity duration-300 ${isMobileMenuOpen ? 'opacity-100' : 'opacity-58'}`} aria-hidden="true" style={{ background: `radial-gradient(circle at 35% 30%, ${menuActiveColor}bb, ${backgroundColor}18 42%, transparent 75%)` }} />
+                  <span className="absolute inset-[15px] rounded-full bg-white/[0.03]" aria-hidden="true" />
+                  <span className="relative flex flex-col items-center justify-center leading-none">
+                    <span className="text-[2rem] font-black tracking-[-0.12em]">S</span>
+                    <span className="mt-1 text-[0.42rem] uppercase tracking-[0.28em] text-white/72">
                       {isMobileMenuOpen ? 'Close' : 'Menu'}
                     </span>
                   </span>

@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
+import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, notificationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import { onFeedInteraction, onFeedPost, onTyping } from '../utils/realtime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -20,6 +20,7 @@ jest.mock('../utils/api', () => {
       deleteEvent: jest.fn()
     },
     chatAPI: {
+      getConversations: jest.fn(),
       getProfileThread: jest.fn(),
       getConversationMessages: jest.fn()
     },
@@ -50,6 +51,10 @@ jest.mock('../utils/api', () => {
       getBlocks: jest.fn(),
       getMutes: jest.fn(),
       getMyReports: jest.fn()
+    },
+    notificationAPI: {
+      getUnreadCount: jest.fn(),
+      getNotifications: jest.fn()
     },
     resumeAPI: {
       getMyResume: jest.fn()
@@ -174,6 +179,17 @@ describe('Social page hero background rendering', () => {
     });
     calendarAPI.getUserCalendarEvents.mockResolvedValue({ data: { events: [] } });
     calendarAPI.deleteEvent.mockResolvedValue({ data: { success: true } });
+    notificationAPI.getUnreadCount.mockResolvedValue({ data: { count: 0 } });
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [] } });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: null, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
     chatAPI.getProfileThread.mockResolvedValue({
       data: {
         conversation: {

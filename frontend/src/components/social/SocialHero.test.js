@@ -103,4 +103,46 @@ describe('SocialHero mobile navigation', () => {
     expect(container.querySelector('button[aria-label="Close social section menu"]')).toBeNull();
     expect(launcher.getAttribute('aria-expanded')).toBe('false');
   });
+
+  it('opens the mirrored site launcher and shows the site links', async () => {
+    await renderHero();
+
+    const launcher = container.querySelector('button[aria-label="Expand site navigation menu"]');
+    expect(launcher).not.toBeNull();
+
+    await act(async () => {
+      launcher.click();
+    });
+
+    expect(container.textContent).toContain('Chat');
+    expect(container.textContent).toContain('News');
+    expect(container.textContent).toContain('Market');
+    expect(container.textContent).toContain('Discover');
+  });
+
+  it('shows activity cards when the social launcher is open', async () => {
+    await renderHero({
+      activitySummary: {
+        unreadNotificationCount: 2,
+        unreadMessageCount: 1,
+        notifications: [
+          { _id: 'n1', title: 'Friend request accepted', createdAt: new Date().toISOString() }
+        ],
+        messages: [
+          { id: 'm1', title: 'Nora', summary: '1 unread messages', timestamp: new Date().toISOString() }
+        ]
+      }
+    });
+
+    const launcher = container.querySelector('button[aria-label="Expand social section menu"]');
+
+    await act(async () => {
+      launcher.click();
+    });
+
+    expect(container.textContent).toContain('Notifications');
+    expect(container.textContent).toContain('Friend request accepted');
+    expect(container.textContent).toContain('Messages');
+    expect(container.textContent).toContain('Nora');
+  });
 });

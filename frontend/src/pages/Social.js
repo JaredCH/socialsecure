@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, getAuthToken, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
+import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, getAuthToken, moderationAPI, notificationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
@@ -557,6 +557,13 @@ const Social = () => {
 
   const [isAuthenticated, setIsAuthenticated] = useState(Boolean(getAuthToken()));
   const [currentUser, setCurrentUser] = useState(null);
+  const [heroOverlayOpen, setHeroOverlayOpen] = useState(false);
+  const [heroOverlayActivity, setHeroOverlayActivity] = useState({
+    unreadNotificationCount: 0,
+    unreadMessageCount: 0,
+    notifications: [],
+    messages: []
+  });
   const [isGuestPreview, setIsGuestPreview] = useState(false);
   const [guestUser, setGuestUser] = useState(initialGuestUser);
   const [guestProfile, setGuestProfile] = useState(null);
@@ -954,6 +961,82 @@ const Social = () => {
 
     loadProfileChatThread();
   }, [activeProfile?._id]);
+
+  useEffect(() => {
+    if (!heroOverlayOpen || !isAuthenticated || !currentUser?._id) {
+      if (!isAuthenticated) {
+        setHeroOverlayActivity({
+          unreadNotificationCount: 0,
+          unreadMessageCount: 0,
+          notifications: [],
+          messages: []
+        });
+      }
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const loadHeroOverlayActivity = async () => {
+      const [notificationCountResponse, notificationsResponse, conversationsResponse] = await Promise.all([
+        notificationAPI.getUnreadCount().catch(() => ({ data: { count: Number(currentUser?.unreadNotificationCount || 0) } })),
+        notificationAPI.getNotifications(1, 3).catch(() => ({ data: { notifications: [] } })),
+        chatAPI.getConversations().catch(() => ({ data: { conversations: { zip: { current: null, nearby: [] }, dm: [], profile: [] } } }))
+      ]);
+
+      if (isCancelled) {
+        return;
+      }
+
+      const notifications = Array.isArray(notificationsResponse.data?.notifications)
+        ? notificationsResponse.data.notifications.filter((item) => !item?.isRead).slice(0, 2)
+        : [];
+
+      const conversations = conversationsResponse.data?.conversations || {};
+      const threadedMessages = [
+        ...(Array.isArray(conversations.dm) ? conversations.dm : []),
+        ...(Array.isArray(conversations.profile) ? conversations.profile : [])
+      ];
+
+      const unreadMessageCount = threadedMessages.reduce(
+        (total, conversation) => total + Number(conversation?.unreadCount || conversation?.unreadMessages || 0),
+        0
+      );
+
+      const messageItems = threadedMessages
+        .filter((conversation) => Boolean(conversation?.lastMessageAt || conversation?.messageCount))
+        .sort((left, right) => new Date(right?.lastMessageAt || 0).getTime() - new Date(left?.lastMessageAt || 0).getTime())
+        .slice(0, 2)
+        .map((conversation) => {
+          const title = conversation?.type === 'dm'
+            ? (conversation?.peer?.realName || conversation?.peer?.username || 'Direct message')
+            : (conversation?.profileUser?.realName
+              ? `${conversation.profileUser.realName}'s thread`
+              : (conversation?.profileUser?.username ? `${conversation.profileUser.username}'s thread` : (conversation?.title || 'Profile thread')));
+
+          return {
+            id: conversation?._id || title,
+            title,
+            summary: unreadMessageCount > 0
+              ? `${Number(conversation?.unreadCount || conversation?.unreadMessages || 0) || 0} unread messages`
+              : `${Number(conversation?.messageCount || 0)} total messages`,
+            timestamp: conversation?.lastMessageAt || null
+          };
+        });
+
+      setHeroOverlayActivity({
+        unreadNotificationCount: Number(notificationCountResponse.data?.count ?? currentUser?.unreadNotificationCount ?? 0),
+        unreadMessageCount,
+        notifications,
+        messages: messageItems
+      });
+    };
+
+    loadHeroOverlayActivity();
+    return () => {
+      isCancelled = true;
+    };
+  }, [heroOverlayOpen, isAuthenticated, currentUser?._id, currentUser?.unreadNotificationCount]);
 
   useEffect(() => {
     const loadCalendarPreview = async () => {
@@ -4827,6 +4910,8 @@ const Social = () => {
           isMobile={isMobile}
           isEditing={ownerEditingEnabled}
           onEditClick={() => setDesignStudioOpen(true)}
+          activitySummary={heroOverlayActivity}
+          onMobileMenuToggle={setHeroOverlayOpen}
         />
 
         <div className={`px-4 sm:px-6 lg:px-8 ${isMobile ? 'pb-24 pt-8' : 'pt-8'}`}>
