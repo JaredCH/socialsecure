@@ -10,13 +10,6 @@ const MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB = {
   calendar: { x: -38, y: -134 }
 };
 
-const MOBILE_SITE_MENU_LAYOUT_BY_TAB = {
-  chat: { x: 66, y: 2 },
-  news: { x: 82, y: -32 },
-  market: { x: 78, y: -66 },
-  discover: { x: 60, y: -100 }
-};
-
 const SITE_NAV_LINKS = [
   { id: 'chat', label: 'Chat', path: '/chat', icon: 'chat' },
   { id: 'news', label: 'News', path: '/news', icon: 'news' },
@@ -135,7 +128,6 @@ const SocialHero = ({
   } = heroConfig;
   const currentAvatarSize = isMobile ? 88 : 128;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSiteMenuOpen, setIsSiteMenuOpen] = useState(false);
   const navigate = useNavigate();
   const routeLocation = useLocation();
 
@@ -143,13 +135,6 @@ const SocialHero = ({
     () => buildMobileMenuLayout(SOCIAL_HERO_TABS, MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB, -72),
     []
   );
-  const siteMenuItems = useMemo(
-    () => buildMobileMenuLayout(SITE_NAV_LINKS, MOBILE_SITE_MENU_LAYOUT_BY_TAB, 54),
-    []
-  );
-  const primarySocialMenuItem = socialMenuItems.find((item) => item.id === 'main') || socialMenuItems[0] || null;
-  const secondarySocialMenuItems = socialMenuItems.filter((item) => item.id !== primarySocialMenuItem?.id);
-  const isAnyMobileMenuOpen = isMobileMenuOpen || isSiteMenuOpen;
   const unreadNotificationCount = Number(activitySummary?.unreadNotificationCount || 0);
   const unreadMessageCount = Number(activitySummary?.unreadMessageCount || 0);
   const notificationItems = Array.isArray(activitySummary?.notifications) ? activitySummary.notifications.slice(0, 2) : [];
@@ -159,38 +144,35 @@ const SocialHero = ({
   useEffect(() => {
     if (!isMobile || !showNavigation) {
       setIsMobileMenuOpen(false);
-      setIsSiteMenuOpen(false);
     }
   }, [isMobile, showNavigation]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
-    setIsSiteMenuOpen(false);
   }, [activeTab]);
 
   useEffect(() => {
-    setIsSiteMenuOpen(false);
+    setIsMobileMenuOpen(false);
   }, [routeLocation.pathname]);
 
   useEffect(() => {
-    if (!isAnyMobileMenuOpen) {
+    if (!isMobileMenuOpen) {
       return undefined;
     }
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         setIsMobileMenuOpen(false);
-        setIsSiteMenuOpen(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isAnyMobileMenuOpen]);
+  }, [isMobileMenuOpen]);
 
   useEffect(() => {
-    onMobileMenuToggle?.(Boolean(isMobile && isAnyMobileMenuOpen));
-  }, [isAnyMobileMenuOpen, isMobile, onMobileMenuToggle]);
+    onMobileMenuToggle?.(Boolean(isMobile && isMobileMenuOpen));
+  }, [isMobileMenuOpen, isMobile, onMobileMenuToggle]);
 
   const getNavItemClasses = (tabId) => {
     const isActive = activeTab === tabId;
@@ -231,11 +213,6 @@ const SocialHero = ({
   };
   const mobileOrbitalGlowStyle = {
     background: `radial-gradient(circle, ${menuActiveColor}2a 0%, ${backgroundColor}00 72%)`
-  };
-  const siteLauncherStyle = {
-    boxShadow: isSiteMenuOpen
-      ? `0 22px 44px ${backgroundColor}4f, 0 0 0 1px ${menuTextColor}18`
-      : `0 16px 28px ${backgroundColor}2a, 0 0 0 1px ${menuTextColor}12`
   };
 
   return (
@@ -353,19 +330,16 @@ const SocialHero = ({
       {/* Mobile Navigation - Bottom Tabs */}
       {showNavigation && isMobile && (
         <>
-          {isAnyMobileMenuOpen && (
+          {isMobileMenuOpen && (
             <button
               type="button"
               aria-label="Close social section menu"
               className="fixed inset-0 z-40 border-0 bg-[radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.18),rgba(2,6,23,0.88)_38%,rgba(2,6,23,0.7)_100%)] backdrop-blur-[3px]"
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                setIsSiteMenuOpen(false);
-              }}
+              onClick={() => setIsMobileMenuOpen(false)}
             />
           )}
 
-          {hasActivityRail && isAnyMobileMenuOpen && (
+          {hasActivityRail && isMobileMenuOpen && (
             <div className="pointer-events-none fixed inset-x-4 top-20 z-50 md:hidden">
               <div className="mx-auto flex max-w-sm flex-col gap-2">
                 {(unreadNotificationCount > 0 || notificationItems.length > 0) && (
@@ -427,22 +401,23 @@ const SocialHero = ({
           )}
 
           <div
-            className="pointer-events-none fixed bottom-0 left-0 z-50 md:hidden"
+            className="pointer-events-none fixed bottom-0 right-0 z-50 md:hidden"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+            data-testid="social-mobile-nav"
           >
-            <div className="relative h-[18rem] w-64 overflow-visible">
+            <div className="relative h-[20rem] w-72 overflow-visible">
               <div
-                className={`absolute bottom-8 left-8 h-48 w-48 rounded-full transition-all duration-500 ${isSiteMenuOpen ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
+                className={`absolute bottom-8 right-8 h-48 w-48 rounded-full transition-all duration-500 ${isMobileMenuOpen ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
+                style={mobileOrbitalGlowStyle}
                 aria-hidden="true"
-                style={{ background: `radial-gradient(circle, ${menuActiveColor}20 0%, ${backgroundColor}00 72%)` }}
               />
 
-              <nav aria-label="Site navigation shortcuts" className="absolute inset-0">
-                {siteMenuItems.map((link, index) => {
+              <nav
+                aria-label="Site navigation shortcuts"
+                className={`absolute bottom-[10.6rem] right-3 flex flex-col items-end gap-2 transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0 pointer-events-none'}`}
+              >
+                {SITE_NAV_LINKS.map((link, index) => {
                   const isRouteActive = routeLocation.pathname === link.path;
-                  const transform = isSiteMenuOpen
-                    ? `translate3d(${link.x}px, ${link.y}px, 0) scale(1)`
-                    : 'translate3d(0, 0, 0) scale(0.7)';
 
                   return (
                     <button
@@ -452,95 +427,32 @@ const SocialHero = ({
                       onClick={() => {
                         navigate(link.path);
                         setIsMobileMenuOpen(false);
-                        setIsSiteMenuOpen(false);
                       }}
-                      className={`pointer-events-auto absolute bottom-5 left-5 flex w-[5rem] origin-bottom-left items-center justify-between rounded-[1.1rem] border px-2.5 py-2 text-left shadow-[0_10px_22px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isRouteActive ? 'border-white/25 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isSiteMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                      className={`pointer-events-auto flex min-w-[6.4rem] items-center justify-between gap-2 rounded-full border px-3 py-2 text-left shadow-[0_12px_24px_rgba(2,6,23,0.24)] transition-all duration-300 ${isRouteActive ? 'border-white/24 bg-white text-slate-950' : 'border-white/10 bg-slate-950/72 text-white backdrop-blur-xl'}`}
                       style={{
-                        transform,
-                        transitionDelay: `${index * 26}ms`,
+                        transitionDelay: `${index * 26 + 20}ms`,
                         color: isRouteActive ? backgroundColor : menuTextColor
                       }}
                     >
-                      <TabIcon icon={link.icon} className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate text-[0.58rem] font-semibold uppercase tracking-[0.12em]">{link.label}</span>
+                      <span className="flex items-center gap-2">
+                        <TabIcon icon={link.icon} className="h-3.5 w-3.5 shrink-0" />
+                        <span className="text-[0.58rem] font-semibold uppercase tracking-[0.14em]">{link.label}</span>
+                      </span>
+                      <span className={`h-1.5 w-1.5 rounded-full ${isRouteActive ? 'bg-slate-950/45' : 'bg-white/45'}`} aria-hidden="true" />
                     </button>
                   );
                 })}
               </nav>
 
-              <button
-                type="button"
-                className={`pointer-events-auto absolute -bottom-4 -left-4 flex h-24 w-16 flex-col items-center justify-center overflow-hidden rounded-[2rem] rounded-bl-none border text-white transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${isSiteMenuOpen ? 'scale-105 border-white/24 bg-slate-950/78 backdrop-blur-xl' : 'scale-100 border-white/12 bg-slate-950/18 backdrop-blur-md'}`}
-                style={siteLauncherStyle}
-                onClick={() => setIsSiteMenuOpen((prev) => {
-                  const next = !prev;
-                  if (next) {
-                    setIsMobileMenuOpen(false);
-                  }
-                  return next;
-                })}
-                aria-expanded={isSiteMenuOpen}
-                aria-label={isSiteMenuOpen ? 'Collapse site navigation menu' : 'Expand site navigation menu'}
-              >
-                <span className="absolute inset-[8px] rounded-[1.5rem] rounded-bl-none border border-white/10" aria-hidden="true" />
-                <span className={`absolute inset-0 transition-opacity duration-300 ${isSiteMenuOpen ? 'opacity-100' : 'opacity-55'}`} aria-hidden="true" style={{ background: `linear-gradient(160deg, ${menuActiveColor}66 0%, ${backgroundColor}10 42%, transparent 100%)` }} />
-                <span className="relative flex flex-col items-center gap-2">
-                  <span className="flex flex-col gap-1.5">
-                    <span className="h-[2px] w-6 rounded-full bg-white/90" />
-                    <span className="h-[2px] w-4 rounded-full bg-white/70" />
-                    <span className="h-[2px] w-6 rounded-full bg-white/90" />
-                  </span>
-                  <span className="text-[0.42rem] font-semibold uppercase tracking-[0.28em] text-white/72">Go</span>
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="pointer-events-none fixed bottom-0 right-0 z-50 md:hidden"
-            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-            data-testid="social-mobile-nav"
-          >
-            <div className="relative h-[18rem] w-72 overflow-visible">
-              <div
-                className={`absolute bottom-8 right-8 h-48 w-48 rounded-full transition-all duration-500 ${isMobileMenuOpen ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
-                style={mobileOrbitalGlowStyle}
-                aria-hidden="true"
-              />
               <nav
                 id="social-mobile-nav-menu"
                 aria-label="Social sections"
                 className="absolute inset-0"
               >
-                {primarySocialMenuItem ? (
-                  <button
-                    type="button"
-                    aria-label={`Open ${SOCIAL_HERO_TAB_LABELS[primarySocialMenuItem.id]} section`}
-                    onClick={() => {
-                      onTabChange?.(primarySocialMenuItem.id);
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className={`pointer-events-auto absolute bottom-5 right-5 flex w-[5.2rem] origin-bottom-right items-center gap-1.5 rounded-full border px-3 py-2 text-left shadow-[0_12px_26px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${activeTab === primarySocialMenuItem.id ? 'border-white/25 bg-white text-slate-950' : 'border-white/10 bg-slate-950/86 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
-                    style={{
-                      transform: isMobileMenuOpen
-                        ? `translate3d(${primarySocialMenuItem.x}px, ${primarySocialMenuItem.y}px, 0) scale(1)`
-                        : 'translate3d(0, 0, 0) scale(0.7)',
-                      color: activeTab === primarySocialMenuItem.id ? backgroundColor : menuTextColor
-                    }}
-                  >
-                    <TabIcon icon={primarySocialMenuItem.icon} className="h-4 w-4 shrink-0" />
-                    <span className="truncate text-[0.62rem] font-semibold uppercase tracking-[0.12em]">
-                      {SOCIAL_HERO_TAB_LABELS[primarySocialMenuItem.id]}
-                    </span>
-                  </button>
-                ) : null}
-
-                {secondarySocialMenuItems.map((tab, index) => {
+                {isMobileMenuOpen && socialMenuItems.map((tab, index) => {
                   const isActive = activeTab === tab.id;
-                  const transitionDelay = `${index * 28 + 20}ms`;
-                  const transform = isMobileMenuOpen
-                    ? `translate3d(${tab.x}px, ${tab.y}px, 0) scale(1)`
-                    : 'translate3d(0, 0, 0) scale(0.7)';
+                  const transitionDelay = `${index * 28 + 24}ms`;
+                  const transform = `translate3d(${tab.x}px, ${tab.y}px, 0) scale(1)`;
 
                   return (
                     <button
@@ -570,24 +482,11 @@ const SocialHero = ({
               </nav>
 
               <div className="absolute bottom-0 right-0 flex items-end gap-3">
-                <div
-                  className={`pointer-events-none absolute bottom-[4.6rem] right-[5rem] rounded-2xl border border-white/10 bg-slate-950/72 px-3 py-2 text-right text-white shadow-[0_18px_40px_rgba(2,6,23,0.26)] backdrop-blur-xl transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100'}`}
-                  aria-hidden="true"
-                >
-                  <div className="text-[0.6rem] uppercase tracking-[0.32em] text-white/55">Social</div>
-                  <div className="mt-1 text-sm font-semibold">{SOCIAL_HERO_TAB_LABELS[activeTab] || 'Main'}</div>
-                </div>
                 <button
                   type="button"
                   className={`pointer-events-auto absolute -bottom-4 -right-4 flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border text-white transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${isMobileMenuOpen ? 'scale-105 border-white/22 bg-slate-950/78 backdrop-blur-xl' : 'scale-100 border-white/14 bg-slate-950/22 backdrop-blur-md'}`}
                   style={mobileLauncherStyle}
-                  onClick={() => setIsMobileMenuOpen((prev) => {
-                    const next = !prev;
-                    if (next) {
-                      setIsSiteMenuOpen(false);
-                    }
-                    return next;
-                  })}
+                  onClick={() => setIsMobileMenuOpen((prev) => !prev)}
                   aria-expanded={isMobileMenuOpen}
                   aria-controls="social-mobile-nav-menu"
                   aria-label={isMobileMenuOpen ? 'Collapse social section menu' : 'Expand social section menu'}

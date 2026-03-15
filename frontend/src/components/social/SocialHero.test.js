@@ -104,10 +104,10 @@ describe('SocialHero mobile navigation', () => {
     expect(launcher.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('opens the mirrored site launcher and shows the site links', async () => {
+  it('shows the restored site links from the right-side launcher', async () => {
     await renderHero();
 
-    const launcher = container.querySelector('button[aria-label="Expand site navigation menu"]');
+    const launcher = container.querySelector('button[aria-label="Expand social section menu"]');
     expect(launcher).not.toBeNull();
 
     await act(async () => {
