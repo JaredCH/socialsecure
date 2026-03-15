@@ -1,13 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
 
+/* ── Layout: "Main" sits flush at the screen bottom as a horizontal
+   appendage from the S circle, the other 4 arc upward around the
+   upper-left quadrant of the circle.  y is relative to the chip
+   origin (48 px up from viewport bottom, 48 px from right).        */
 const MOBILE_MENU_LAYOUT_BY_TAB = {
-  main: { x: -38, y: -8 },
-  friends: { x: -48, y: -36 },
-  gallery: { x: -52, y: -64 },
-  chat: { x: -48, y: -92 },
-  calendar: { x: -40, y: -120 }
+  main:     { x: -52, y:  6 },
+  friends:  { x: -66, y: -22 },
+  gallery:  { x: -70, y: -50 },
+  chat:     { x: -62, y: -78 },
+  calendar: { x: -46, y: -104 }
 };
+
+/* Site-wide navigation shortcuts shown above the social chips */
+const SITE_NAV_LINKS = [
+  { id: 'chat',     label: 'Chat',     path: '/chat',     icon: 'chat' },
+  { id: 'news',     label: 'News',     path: '/news',     icon: 'news' },
+  { id: 'market',   label: 'Market',   path: '/market',   icon: 'market' },
+  { id: 'discover', label: 'Discover', path: '/discover',  icon: 'discover' }
+];
 
 const buildMobileMenuLayout = (items) => {
   if (!Array.isArray(items) || items.length === 0) {
@@ -16,8 +29,8 @@ const buildMobileMenuLayout = (items) => {
 
   return items.map((item, index) => {
     const fallback = {
-      x: -96 - (index * 10),
-      y: -28 - (index * 36)
+      x: -56 - (index * 6),
+      y: 6 - (index * 28)
     };
 
     return {
@@ -53,6 +66,21 @@ const TabIcon = ({ icon, className }) => {
     photo: (
       <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16l4-4a3 3 0 014.243 0L16 16m-2-2l1-1a3 3 0 014.243 0L21 14m-6-8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+    news: (
+      <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+      </svg>
+    ),
+    market: (
+      <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+      </svg>
+    ),
+    discover: (
+      <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
       </svg>
     )
   };
@@ -90,6 +118,7 @@ const SocialHero = ({
   } = heroConfig;
   const currentAvatarSize = isMobile ? 88 : 128;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const mobileMenuItems = useMemo(() => buildMobileMenuLayout(SOCIAL_HERO_TABS), []);
 
@@ -287,12 +316,33 @@ const SocialHero = ({
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             data-testid="social-mobile-nav"
           >
-            <div className="relative h-72 w-72 overflow-visible">
+            <div className="relative h-[22rem] w-72 overflow-visible">
               <div
                 className={`absolute bottom-10 right-10 h-56 w-56 rounded-full transition-all duration-500 ${isMobileMenuOpen ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
                 style={mobileOrbitalGlowStyle}
                 aria-hidden="true"
               />
+
+              {/* ── Site-wide navigation links (slim list above social chips) ── */}
+              <nav
+                aria-label="Site navigation"
+                className={`pointer-events-auto absolute bottom-[11.5rem] right-4 flex flex-col items-end gap-[3px] transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'}`}
+              >
+                {SITE_NAV_LINKS.map((link, i) => (
+                  <button
+                    key={link.id}
+                    type="button"
+                    onClick={() => { navigate(link.path); setIsMobileMenuOpen(false); }}
+                    className="flex items-center gap-1.5 rounded-md border border-white/8 bg-slate-950/60 px-2.5 py-[3px] text-[0.6rem] font-medium tracking-wide text-white/75 backdrop-blur-xl transition-colors hover:bg-white/10 hover:text-white"
+                    style={{ transitionDelay: `${i * 30 + 80}ms` }}
+                  >
+                    <TabIcon icon={link.icon} className="h-3 w-3" />
+                    {link.label}
+                  </button>
+                ))}
+              </nav>
+
+              {/* ── Social page section chips (arc around S circle) ── */}
               <nav
                 id="social-mobile-nav-menu"
                 aria-label="Social sections"
@@ -300,7 +350,7 @@ const SocialHero = ({
               >
                 {mobileMenuItems.map((tab, index) => {
                   const isActive = activeTab === tab.id;
-                  const transitionDelay = `${index * 22}ms`;
+                  const transitionDelay = `${index * 28}ms`;
                   const transform = isMobileMenuOpen
                     ? `translate3d(${tab.x}px, ${tab.y}px, 0) scale(1)`
                     : 'translate3d(0, 0, 0) scale(0.7)';
@@ -314,7 +364,7 @@ const SocialHero = ({
                         onTabChange?.(tab.id);
                         setIsMobileMenuOpen(false);
                       }}
-                      className={`pointer-events-auto absolute bottom-12 right-12 flex w-[3.8rem] origin-bottom-right items-center gap-1 rounded-full border px-2 py-1 text-left shadow-[0_8px_20px_rgba(2,6,23,0.2)] transition-all duration-300 ease-out ${isActive ? 'border-white/20 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                      className={`pointer-events-auto absolute bottom-6 right-6 flex w-[4.2rem] origin-bottom-right items-center gap-1 rounded-full border px-2 py-[5px] text-left shadow-[0_8px_20px_rgba(2,6,23,0.2)] transition-all duration-300 ease-out ${isActive ? 'border-white/25 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
                       style={{
                         transform,
                         transitionDelay,
@@ -322,7 +372,7 @@ const SocialHero = ({
                       }}
                     >
                       <span style={{ color: isActive ? menuActiveColor : menuTextColor }} className="shrink-0">
-                        <TabIcon icon={tab.icon} className="h-4 w-4" />
+                        <TabIcon icon={tab.icon} className="h-3.5 w-3.5" />
                       </span>
                       <span className="truncate text-[0.55rem] font-semibold tracking-[0.02em]">
                         {SOCIAL_HERO_TAB_LABELS[tab.id]}
@@ -342,18 +392,18 @@ const SocialHero = ({
                 </div>
                 <button
                   type="button"
-                  className={`pointer-events-auto absolute -bottom-12 -right-12 flex h-28 w-28 items-start justify-start overflow-hidden rounded-full border text-white transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${isMobileMenuOpen ? 'scale-105 border-white/22 bg-slate-950/72 backdrop-blur-xl' : 'scale-100 border-white/14 bg-slate-950/20 backdrop-blur-md'}`}
+                  className={`pointer-events-auto absolute -bottom-6 -right-6 flex h-24 w-24 items-start justify-start overflow-hidden rounded-full border text-white transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${isMobileMenuOpen ? 'scale-105 border-white/22 bg-slate-950/72 backdrop-blur-xl' : 'scale-100 border-white/14 bg-slate-950/20 backdrop-blur-md'}`}
                   style={mobileLauncherStyle}
                   onClick={() => setIsMobileMenuOpen((prev) => !prev)}
                   aria-expanded={isMobileMenuOpen}
                   aria-controls="social-mobile-nav-menu"
                   aria-label={isMobileMenuOpen ? 'Collapse social section menu' : 'Expand social section menu'}
                 >
-                  <span className={`absolute inset-[10px] rounded-full border transition-opacity duration-300 ${isMobileMenuOpen ? 'border-white/14 opacity-100' : 'border-white/12 opacity-75'}`} aria-hidden="true" />
+                  <span className={`absolute inset-[8px] rounded-full border transition-opacity duration-300 ${isMobileMenuOpen ? 'border-white/14 opacity-100' : 'border-white/12 opacity-75'}`} aria-hidden="true" />
                   <span className={`absolute inset-0 transition-opacity duration-300 ${isMobileMenuOpen ? 'opacity-100' : 'opacity-52'}`} aria-hidden="true" style={{ background: `radial-gradient(circle at 30% 25%, ${menuActiveColor}aa, ${backgroundColor}18 40%, transparent 74%)` }} />
-                  <span className="relative ml-5 mt-4 flex flex-col items-center leading-none">
-                    <span className="text-[2.15rem] font-black tracking-[-0.16em]">S</span>
-                    <span className="mt-1 text-[0.5rem] uppercase tracking-[0.34em] text-white/72">
+                  <span className="relative ml-4 mt-3 flex flex-col items-center leading-none">
+                    <span className="text-[1.8rem] font-black tracking-[-0.16em]">S</span>
+                    <span className="text-[0.42rem] uppercase tracking-[0.28em] text-white/72">
                       {isMobileMenuOpen ? 'Close' : 'Menu'}
                     </span>
                   </span>

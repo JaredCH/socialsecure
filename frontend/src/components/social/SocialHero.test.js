@@ -1,5 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import SocialHero from './SocialHero';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -11,14 +12,16 @@ describe('SocialHero mobile navigation', () => {
   const renderHero = async (props = {}) => {
     await act(async () => {
       root.render(
-        <SocialHero
-          isMobile
-          activeTab="main"
-          onTabChange={jest.fn()}
-          profile={{ name: 'Avery Stone', location: 'Portland, OR' }}
-          heroConfig={{ showNavigation: true }}
-          {...props}
-        />
+        <MemoryRouter>
+          <SocialHero
+            isMobile
+            activeTab="main"
+            onTabChange={jest.fn()}
+            profile={{ name: 'Avery Stone', location: 'Portland, OR' }}
+            heroConfig={{ showNavigation: true }}
+            {...props}
+          />
+        </MemoryRouter>
       );
     });
   };
