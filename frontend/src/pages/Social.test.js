@@ -1,63 +1,66 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import Social from './Social';
 import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import { onFeedInteraction, onFeedPost, onTyping } from '../utils/realtime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-jest.mock('../utils/api', () => ({
-  authAPI: {
-    getProfile: jest.fn(),
-    updateProfile: jest.fn()
-  },
-  calendarAPI: {
-    getMyEvents: jest.fn(),
-    getUserCalendar: jest.fn(),
-    getUserCalendarEvents: jest.fn(),
-    deleteEvent: jest.fn()
-  },
-  chatAPI: {
-    getProfileThread: jest.fn(),
-    getConversationMessages: jest.fn()
-  },
-  circlesAPI: {
-    getCircles: jest.fn()
-  },
-  discoveryAPI: {
-    trackEvent: jest.fn(() => Promise.resolve())
-  },
-  feedAPI: {
-    getTimeline: jest.fn(),
-    getPublicUserFeed: jest.fn(),
-    deletePost: jest.fn()
-  },
-  friendsAPI: {
-    getFriends: jest.fn(),
-    getTopFriends: jest.fn(),
-    getPublicCircles: jest.fn()
-  },
-  galleryAPI: {
-    getGallery: jest.fn(),
-    deleteGalleryItem: jest.fn(),
-    updateGalleryItem: jest.fn(),
-    createGalleryItem: jest.fn(),
-    uploadGalleryItem: jest.fn()
-  },
-  moderationAPI: {
-    getBlocks: jest.fn(),
-    getMutes: jest.fn(),
-    getMyReports: jest.fn()
-  },
-  resumeAPI: {
-    getMyResume: jest.fn()
-  },
-  socialPageAPI: {
-    getConfigs: jest.fn(),
-    getSharedByUser: jest.fn()
-  }
-}));
+jest.mock('../utils/api', () => {
+  return {
+    __esModule: true,
+    authAPI: {
+      getProfile: jest.fn(),
+      updateProfile: jest.fn()
+    },
+    calendarAPI: {
+      getMyEvents: jest.fn(),
+      getUserCalendar: jest.fn(),
+      getUserCalendarEvents: jest.fn(),
+      deleteEvent: jest.fn()
+    },
+    chatAPI: {
+      getProfileThread: jest.fn(),
+      getConversationMessages: jest.fn()
+    },
+    circlesAPI: {
+      getCircles: jest.fn()
+    },
+    discoveryAPI: {
+      trackEvent: jest.fn(() => Promise.resolve())
+    },
+    feedAPI: {
+      getTimeline: jest.fn(),
+      getPublicUserFeed: jest.fn(),
+      deletePost: jest.fn()
+    },
+    friendsAPI: {
+      getFriends: jest.fn(),
+      getTopFriends: jest.fn(),
+      getPublicCircles: jest.fn()
+    },
+    galleryAPI: {
+      getGallery: jest.fn(),
+      deleteGalleryItem: jest.fn(),
+      updateGalleryItem: jest.fn(),
+      createGalleryItem: jest.fn(),
+      uploadGalleryItem: jest.fn()
+    },
+    moderationAPI: {
+      getBlocks: jest.fn(),
+      getMutes: jest.fn(),
+      getMyReports: jest.fn()
+    },
+    resumeAPI: {
+      getMyResume: jest.fn()
+    },
+    getAuthToken: jest.fn(() => 'token'),
+    socialPageAPI: {
+      getConfigs: jest.fn(),
+      getSharedByUser: jest.fn()
+    }
+  };
+});
 
 jest.mock('../utils/realtime', () => ({
   emitTypingStart: jest.fn(),
@@ -70,9 +73,22 @@ jest.mock('../utils/realtime', () => ({
   unsubscribeFromPost: jest.fn()
 }));
 
+let Social;
+
 describe('Social page hero background rendering', () => {
   let container;
   let root;
+
+  beforeAll(() => {
+    Social = require('./Social').default;
+  });
+
+  const flushRender = async (cycles = 3) => {
+    for (let index = 0; index < cycles; index += 1) {
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  };
 
   const renderPage = async () => {
     const LocationProbe = () => {
@@ -89,13 +105,15 @@ describe('Social page hero background rendering', () => {
       );
     });
     await act(async () => {
-      await Promise.resolve();
+      await flushRender();
     });
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
+    require('../utils/api').getAuthToken.mockReturnValue('token');
     localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
     window.history.replaceState({}, '', '/social');
 
     authAPI.getProfile.mockResolvedValue({
@@ -177,6 +195,7 @@ describe('Social page hero background rendering', () => {
 
   afterEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     if (root) {
       act(() => {
         root.unmount();
@@ -209,6 +228,13 @@ describe('Social page hero background rendering', () => {
     expect(guestViewButton).toBeTruthy();
     expect(container.textContent).toContain('Compose');
     expect(container.textContent).not.toContain('Post publishing is available only in owner view.');
+  });
+
+  it('uses a content-first layout without the old desktop navigation panel', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    expect(container.textContent).not.toContain('Navigation & Discovery');
+    expect(container.textContent).toContain('Everything important stays close to the feed.');
   });
 
   it('builds social chat and calendar links for friend profile context', async () => {
@@ -363,12 +389,12 @@ describe('Social page hero background rendering', () => {
     expect(saveAccessButton?.textContent).toContain('Save');
   });
 
-  it('positions owner floating controls with elevated stacking context', async () => {
+  it('surfaces owner controls inside the compact action strip', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
     const guestViewButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Guest View');
     expect(guestViewButton).toBeTruthy();
-    expect(guestViewButton.closest('div').className).toContain('top-36');
-    expect(guestViewButton.closest('div').className).toContain('z-[70]');
+    expect(container.textContent).toContain('Everything important stays close to the feed.');
+    expect(container.textContent).toContain('Stage Settings');
   });
 
   it('renders combined top friends and partner panel plus personal information panel', async () => {

@@ -46,6 +46,8 @@ const MAX_HOBBIES = 10;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
 const MAX_UPCOMING_CALENDAR_ITEMS = 6;
+const GENTLE_PROFILE_HINT_STORAGE_KEY = 'socialsecure:social-profile-hints-disabled';
+const GENTLE_PROFILE_HINT_CHANCE = 0.15;
 const CODE_MODE_SNIPPETS = [
   { label: 'Bold', value: '**bold**', syntax: '**text**', description: 'Bold text', icon: 'B', requiresSelection: false },
   { label: 'Italic', value: '*italic*', syntax: '*text*', description: 'Italic text', icon: 'I', requiresSelection: false },
@@ -158,6 +160,27 @@ const STAGE_THEME_STYLE_PATCH = {
     accentColorToken: 'emerald',
     globalStyles: { pageBackgroundColor: '#ecfdf5', panelColor: '#d1fae5', fontColor: '#14532d', headerColor: '#059669' },
     heroColor: '#059669'
+  }
+};
+
+const SURFACE_TONE_STYLES = {
+  blue: {
+    ring: 'border-sky-200/80',
+    glow: 'shadow-[0_0_0_1px_rgba(186,230,253,0.8),0_18px_45px_rgba(14,165,233,0.14)]',
+    badge: 'bg-sky-100 text-sky-700',
+    button: 'border-sky-200 text-sky-700 hover:bg-sky-50'
+  },
+  amber: {
+    ring: 'border-amber-200/80',
+    glow: 'shadow-[0_0_0_1px_rgba(253,230,138,0.8),0_18px_45px_rgba(245,158,11,0.16)]',
+    badge: 'bg-amber-100 text-amber-700',
+    button: 'border-amber-200 text-amber-700 hover:bg-amber-50'
+  },
+  emerald: {
+    ring: 'border-emerald-200/80',
+    glow: 'shadow-[0_0_0_1px_rgba(167,243,208,0.8),0_18px_45px_rgba(16,185,129,0.15)]',
+    badge: 'bg-emerald-100 text-emerald-700',
+    button: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
   }
 };
 
@@ -607,6 +630,7 @@ const Social = () => {
   const [galleryError, setGalleryError] = useState('');
   const [galleryBusy, setGalleryBusy] = useState(false);
   const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryComposerPanels, setGalleryComposerPanels] = useState({ url: false, details: false });
   const [galleryActionLoadingByImage, setGalleryActionLoadingByImage] = useState({});
   const [galleryEditById, setGalleryEditById] = useState({});
   const [heroRandomBackgroundImage, setHeroRandomBackgroundImage] = useState('');
@@ -666,6 +690,7 @@ const Social = () => {
   const [personalInfoSaveBusy, setPersonalInfoSaveBusy] = useState(false);
   const [personalInfoSaveError, setPersonalInfoSaveError] = useState('');
   const [composerVisible, setComposerVisible] = useState(false);
+  const [showProfileCompletionHint, setShowProfileCompletionHint] = useState(false);
   const [showSlimHeader, setShowSlimHeader] = useState(false);
   const localTypingTimeoutsRef = useRef({});
   const remoteTypingTimeoutsRef = useRef({});
@@ -804,6 +829,32 @@ const Social = () => {
     }
     return `/friends?user=${encodeURIComponent(friendsUsername)}`;
   }, [resolvedProfileUsername, isOwnSocialContext]);
+  const handleProfileCompletionAction = useCallback((actionId) => {
+    if (actionId === 'details') {
+      setPersonalInfoModalOpen(true);
+      setShowProfileCompletionHint(false);
+      return;
+    }
+
+    if (actionId === 'gallery') {
+      setActiveHeroTab('gallery');
+      setGalleryComposerPanels((prev) => ({ ...prev, details: true }));
+      setShowProfileCompletionHint(false);
+      return;
+    }
+
+    if (actionId === 'post') {
+      setActiveHeroTab('main');
+      setComposerVisible(true);
+      setShowProfileCompletionHint(false);
+    }
+  }, []);
+  const dismissProfileCompletionHint = useCallback((persist = false) => {
+    setShowProfileCompletionHint(false);
+    if (persist && typeof window !== 'undefined') {
+      window.localStorage.setItem(GENTLE_PROFILE_HINT_STORAGE_KEY, '1');
+    }
+  }, []);
   const socialChatLabel = !isOwnSocialContext && activeProfile?.username
     ? `Message @${activeProfile.username}`
     : 'Open chat';
@@ -2910,6 +2961,7 @@ const Social = () => {
       setGalleryUrlInput('');
       setGalleryTitleInput('');
       setGalleryCaptionInput('');
+      setGalleryComposerPanels({ url: false, details: false });
     } catch (error) {
       setGalleryError(error.response?.data?.error || 'Failed to add gallery URL.');
     } finally {
@@ -2962,6 +3014,7 @@ const Social = () => {
 
       setGalleryTitleInput('');
       setGalleryCaptionInput('');
+      setGalleryComposerPanels({ url: false, details: false });
     } catch (error) {
       setGalleryError(error.response?.data?.error || 'Failed to upload image.');
     } finally {
@@ -3549,7 +3602,16 @@ const Social = () => {
             </div>
             {feedError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">{feedError}</div> : null}
             {isAuthenticated && !realtimeEnabled ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Real-time social updates are disabled for this account. Periodic refresh remains active.</div> : null}
-            {loadingFeed ? <div className="rounded-xl border bg-slate-50 p-6 text-slate-500">Loading feed…</div> : posts.length === 0 ? <div className="rounded-xl border bg-slate-50 p-6 text-slate-500">No posts found yet.</div> : posts.map((post) => {
+            {loadingFeed ? <div className="rounded-xl border bg-slate-50 p-6 text-slate-500">Loading feed…</div> : posts.length === 0 ? renderSoftEmptyState({
+              eyebrow: 'Quiet timeline',
+              title: isOwnSocialContext ? 'Your feed is ready for its first post.' : 'Nothing has been shared here yet.',
+              description: isOwnSocialContext
+                ? 'Start with a short post, an image, or a pinned note. The timeline becomes much easier to understand once it has a clear starting point.'
+                : 'This profile has not shared any visible posts for your current access level.',
+              actionLabel: isOwnSocialContext ? 'Open composer' : null,
+              onAction: isOwnSocialContext ? () => setComposerVisible(true) : null,
+              tone: 'blue'
+            }) : posts.map((post) => {
               const postAuthor = post.authorId?.username || 'unknown';
               const postAuthorId = String(post.authorId?._id || post.authorId || '');
               const postTarget = post.targetFeedId?.username || postAuthor;
@@ -3652,50 +3714,113 @@ const Social = () => {
               </div>
             ) : null}
             {canManageGallery ? (
-              <div className="space-y-3">
-                <label className="flex items-center justify-between gap-3 rounded-xl border bg-slate-50 px-3 py-2 text-sm text-gray-700">
-                  <span>Strip image metadata on upload (EXIF/GPS/camera info)</span>
-                  <input
-                    type="checkbox"
-                    checked={stripImageMetadataOnUpload}
-                    disabled={galleryMetadataPreferenceBusy}
-                    onChange={(event) => {
-                      const enabled = event.target.checked;
-                      setStripImageMetadataOnUpload(enabled);
-                      handleToggleMetadataStripPreference(enabled);
-                    }}
-                  />
-                </label>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input type="url" value={galleryUrlInput} onChange={(event) => setGalleryUrlInput(event.target.value)} placeholder="https://example.com/photo.jpg" className="flex-1 rounded-xl border px-3 py-2" />
-                  <button type="button" onClick={handleAddGalleryUrl} disabled={galleryBusy} className="rounded-xl border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50">{galleryBusy ? 'Adding…' : 'Add URL'}</button>
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white/90 p-3 shadow-sm">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Quick add</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">Post a visual first. Details can come later.</p>
+                    <p className="mt-1 text-sm text-slate-500">Keep the panel slim by expanding only the controls you need.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100">
+                      <input type="file" accept="image/*" className="hidden" onChange={handleUploadGalleryImage} disabled={galleryBusy} />
+                      {galleryBusy ? 'Uploading…' : 'Upload image'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setGalleryComposerPanels((prev) => ({ ...prev, url: !prev.url }))}
+                      className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${galleryComposerPanels.url ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      {galleryComposerPanels.url ? 'Hide URL' : 'Add by URL'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGalleryComposerPanels((prev) => ({ ...prev, details: !prev.details }))}
+                      className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${galleryComposerPanels.details ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      {galleryComposerPanels.details ? 'Hide advanced' : 'Advanced'}
+                    </button>
+                  </div>
                 </div>
-                <input type="text" value={galleryTitleInput} onChange={(event) => setGalleryTitleInput(event.target.value)} placeholder="Optional title" maxLength={140} className="w-full rounded-xl border px-3 py-2" />
-                <input type="text" value={galleryCaptionInput} onChange={(event) => setGalleryCaptionInput(event.target.value)} placeholder="Optional caption" maxLength={280} className="w-full rounded-xl border px-3 py-2" />
-                <label className="flex flex-col gap-1 text-sm text-gray-700"><span>Audience</span><select value={galleryRelationshipAudience} onChange={(event) => setGalleryRelationshipAudience(event.target.value)} className="rounded-xl border px-3 py-2"><option value="social">Social</option><option value="secure">Secure</option></select></label>
-                <label className="inline-flex items-center gap-2 text-sm text-gray-700"><input type="file" accept="image/*" onChange={handleUploadGalleryImage} disabled={galleryBusy} /></label>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600">Audience: {RELATIONSHIP_AUDIENCE_LABELS[galleryRelationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600">Metadata strip: {stripImageMetadataOnUpload ? 'On' : 'Off'}</span>
+                </div>
+
+                {galleryComposerPanels.url ? (
+                  <div className="mt-3 rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-3">
+                    <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Image URL</label>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <input type="url" value={galleryUrlInput} onChange={(event) => setGalleryUrlInput(event.target.value)} placeholder="https://example.com/photo.jpg" className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+                      <button type="button" onClick={handleAddGalleryUrl} disabled={galleryBusy} className="rounded-xl border border-sky-500 bg-white px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-50 disabled:opacity-60">{galleryBusy ? 'Adding…' : 'Save URL'}</button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {galleryComposerPanels.details ? (
+                  <div className="mt-3 grid gap-3 rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px]">
+                    <input type="text" value={galleryTitleInput} onChange={(event) => setGalleryTitleInput(event.target.value)} placeholder="Optional title" maxLength={140} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+                    <input type="text" value={galleryCaptionInput} onChange={(event) => setGalleryCaptionInput(event.target.value)} placeholder="Optional caption" maxLength={280} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
+                    <label className="flex flex-col gap-1 text-sm text-slate-700">
+                      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Audience</span>
+                      <select value={galleryRelationshipAudience} onChange={(event) => setGalleryRelationshipAudience(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                        <option value="social">Social</option>
+                        <option value="secure">Secure</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 lg:col-span-3">
+                      <span>Strip image metadata on upload (EXIF, GPS, camera info)</span>
+                      <input
+                        type="checkbox"
+                        checked={stripImageMetadataOnUpload}
+                        disabled={galleryMetadataPreferenceBusy}
+                        onChange={(event) => {
+                          const enabled = event.target.checked;
+                          setStripImageMetadataOnUpload(enabled);
+                          handleToggleMetadataStripPreference(enabled);
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {galleryError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{galleryError}</div> : null}
-            {galleryLoading ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">Loading gallery…</div> : galleryItems.length === 0 ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">No gallery images yet.</div> : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {galleryLoading ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">Loading gallery…</div> : galleryItems.length === 0 ? renderSoftEmptyState({
+              eyebrow: 'Open canvas',
+              title: isOwnSocialContext ? 'Your gallery is empty, but it can stay elegant.' : 'No gallery images are visible right now.',
+              description: isOwnSocialContext
+                ? 'Add one strong image and let the rest stay minimal. Titles, captions, and audience settings are available only when you expand them.'
+                : 'This profile has not shared any gallery items for your current access level.',
+              actionLabel: isOwnSocialContext && canManageGallery ? 'Open advanced' : null,
+              onAction: isOwnSocialContext && canManageGallery ? () => setGalleryComposerPanels((prev) => ({ ...prev, details: true })) : null,
+              tone: 'amber'
+            }) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                 {galleryItems.map((image) => {
                   const viewerReaction = image.viewerReaction || null;
                   const imageBusy = Boolean(galleryActionLoadingByImage[image._id]);
                   const editState = galleryEditById[image._id] || null;
                   return (
-                    <article key={image._id} className="overflow-hidden rounded-2xl border bg-white">
-                      <img src={image.mediaUrl} alt="Gallery item" className="h-48 w-full object-cover" />
-                      <div className="space-y-2 p-3">
-                        {image.title ? <p className="text-sm font-semibold text-gray-900">{image.title}</p> : null}
-                        {image.caption ? <p className="whitespace-pre-wrap text-sm text-gray-700">{image.caption}</p> : null}
-                        <p className="text-xs font-medium text-gray-500">Audience: {RELATIONSHIP_AUDIENCE_LABELS[image.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</p>
+                    <article key={image._id} className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white/95 shadow-sm">
+                      <img src={image.mediaUrl} alt="Gallery item" className="h-40 w-full object-cover" />
+                      <div className="space-y-2.5 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            {image.title ? <p className="truncate text-sm font-semibold text-slate-900">{image.title}</p> : <p className="text-sm font-semibold text-slate-500">Untitled visual</p>}
+                            {image.caption ? <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm text-slate-600">{image.caption}</p> : null}
+                          </div>
+                          <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${image.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
+                            {RELATIONSHIP_AUDIENCE_LABELS[image.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
+                          </span>
+                        </div>
                         <div className="flex items-center gap-2 text-sm">
                           <button type="button" onClick={() => handleGalleryReaction(image._id, 'like')} disabled={!viewerCanReact || imageBusy} className={`rounded-lg border px-2 py-1 ${viewerReaction === 'like' ? 'border-green-600 bg-green-600 text-white' : 'border-gray-300 hover:bg-gray-50'}`}>👍 {image.likesCount || 0}</button>
                           <button type="button" onClick={() => handleGalleryReaction(image._id, 'dislike')} disabled={!viewerCanReact || imageBusy} className={`rounded-lg border px-2 py-1 ${viewerReaction === 'dislike' ? 'border-red-600 bg-red-600 text-white' : 'border-gray-300 hover:bg-gray-50'}`}>👎 {image.dislikesCount || 0}</button>
                         </div>
                         {canManageGallery ? (
-                          <div className="space-y-2 border-t pt-2">
+                          <div className="space-y-2 border-t border-slate-100 pt-2">
                             {editState ? (
                               <div className="space-y-2">
                                 {image.mediaType === 'url' ? <input type="url" value={editState.mediaUrl} onChange={(event) => handleEditGalleryField(image._id, 'mediaUrl', event.target.value)} placeholder="https://example.com/photo.jpg" className="w-full rounded-xl border px-2 py-1 text-sm" /> : null}
@@ -3938,6 +4063,54 @@ const Social = () => {
     }
     return Array.isArray(activeProfile?.personalInfo) ? activeProfile.personalInfo : [];
   }, [isOwnSocialContext, currentUser, activeProfile?.personalInfo]);
+  const profileCompletionItems = useMemo(() => {
+    if (!isOwnSocialContext || isGuestPreview) return [];
+
+    const items = [];
+
+    if (visiblePersonalInfoItems.length === 0) {
+      items.push({
+        id: 'details',
+        eyebrow: 'Complete profile',
+        title: 'Add a few details about yourself',
+        description: 'Work, hobbies, or a small personal note will make this page feel more lived in.',
+        actionLabel: 'Edit info'
+      });
+    }
+
+    if (posts.length === 0) {
+      items.push({
+        id: 'post',
+        eyebrow: 'Start the feed',
+        title: 'Publish your first update',
+        description: 'A short thought, status update, or pinned note is enough to warm up the timeline.',
+        actionLabel: 'Open composer'
+      });
+    }
+
+    if (galleryItems.length === 0) {
+      items.push({
+        id: 'gallery',
+        eyebrow: 'Add visuals',
+        title: 'Drop in a cover image or photo',
+        description: 'A single image helps the page feel complete and gives the hero something to echo.',
+        actionLabel: 'Open gallery'
+      });
+    }
+
+    return items;
+  }, [galleryItems.length, isGuestPreview, isOwnSocialContext, posts.length, visiblePersonalInfoItems.length]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const hintsDisabled = window.localStorage.getItem(GENTLE_PROFILE_HINT_STORAGE_KEY) === '1';
+    if (!isOwnSocialContext || isGuestPreview || profileCompletionItems.length === 0 || hintsDisabled) {
+      setShowProfileCompletionHint(false);
+      return;
+    }
+
+    setShowProfileCompletionHint(Math.random() < GENTLE_PROFILE_HINT_CHANCE);
+  }, [activeProfile?._id, isGuestPreview, isOwnSocialContext, profileCompletionItems.length]);
   const liveTypingCount = Object.values(commentTypingByPostId).reduce((total, entry) => total + Object.keys(entry || {}).length, 0);
   const calendarCountdowns = posts.filter((post) => post?.interaction?.type === 'countdown').slice(0, 5);
   const calendarPreviewMonthDays = useMemo(
@@ -4026,7 +4199,7 @@ const Social = () => {
       className={`overflow-hidden rounded-[1.75rem] border shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur-xl ${options.className || ''}`}
       style={{ ...hubSurfaceStyle, ...(options.style || {}) }}
     >
-      <div className="border-b border-white/30 px-5 py-4">
+      <div className="border-b border-white/30 px-4 py-3.5 sm:px-5 sm:py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">{title}</h2>
@@ -4035,9 +4208,31 @@ const Social = () => {
           {options.action}
         </div>
       </div>
-      <div className="px-5 py-5">{body}</div>
+      <div className="px-4 py-4 sm:px-5 sm:py-5">{body}</div>
     </section>
   );
+
+  const renderSoftEmptyState = ({ eyebrow, title, description, actionLabel, onAction, tone = 'blue' }) => {
+    const toneStyle = SURFACE_TONE_STYLES[tone] || SURFACE_TONE_STYLES.blue;
+    return (
+      <div className={`rounded-[1.5rem] border bg-white/90 px-4 py-4 text-sm text-slate-600 ${toneStyle.ring} ${toneStyle.glow}`}>
+        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] ${toneStyle.badge}`}>
+          {eyebrow}
+        </span>
+        <p className="mt-3 text-base font-semibold text-slate-900">{title}</p>
+        <p className="mt-2 max-w-xl leading-6 text-slate-600">{description}</p>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className={`mt-4 inline-flex rounded-full border px-4 py-2 text-xs font-semibold transition ${toneStyle.button}`}
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
+    );
+  };
 
   const renderPrivateProfileBody = () => (
     <div className="space-y-4 text-sm text-slate-700">
@@ -4058,64 +4253,116 @@ const Social = () => {
     </div>
   );
 
-  const renderNavigationDiscovery = () => renderGlassPanel(
-    'Navigation',
-    <div className="space-y-5 text-sm text-slate-700">
-      <ul className="space-y-2">
-        <li><Link to={socialProfilePath} className="flex items-center justify-between rounded-2xl bg-blue-50 px-3 py-2 font-semibold text-blue-700"><span>Social Hub</span><span aria-hidden="true">↗</span></Link></li>
-        <li><Link to={socialFriendsPath} className="block rounded-2xl px-3 py-2 hover:bg-white/60">Friends Circles</Link></li>
-        {isModuleVisible('marketplaceShortcut') ? <li><Link to="/market" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Marketplace</Link></li> : null}
-        {isModuleVisible('calendarShortcut') ? <li><Link to={socialCalendarPath} className="block rounded-2xl px-3 py-2 hover:bg-white/60">Calendar</Link></li> : null}
-        {isModuleVisible('settingsShortcut') ? <li><Link to="/settings" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Settings</Link></li> : null}
-        {isModuleVisible('referShortcut') ? <li><Link to="/refer" className="block rounded-2xl px-3 py-2 hover:bg-white/60">Refer a Friend</Link></li> : null}
-      </ul>
+  const renderStageQuickActions = () => {
+    const quickLinks = [
+      { id: 'social', label: 'Social', to: socialProfilePath, visible: true },
+      { id: 'friends', label: 'Friends', to: socialFriendsPath, visible: true },
+      { id: 'calendar', label: 'Calendar', to: socialCalendarPath, visible: isModuleVisible('calendarShortcut') || !isOwnSocialContext },
+      { id: 'chat', label: socialChatLabel, to: socialChatPath, visible: isModuleVisible('chatPanel') || !isOwnSocialContext },
+      { id: 'market', label: 'Market', to: '/market', visible: isModuleVisible('marketplaceShortcut') },
+      { id: 'settings', label: 'Settings', to: '/settings', visible: isModuleVisible('settingsShortcut') && isOwnSocialContext }
+    ].filter((link) => link.visible);
 
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">My Groups</p>
-        <div className="space-y-2">
-          {circles.length === 0 ? (
-            <div className="rounded-2xl bg-white/50 px-3 py-3 text-sm text-slate-500">No circles yet. Create one from the Friends tab.</div>
-          ) : circles.slice(0, 6).map((circle) => (
-            <div key={circle._id || circle.name} className="flex items-center gap-3 rounded-2xl bg-white/55 px-3 py-2.5">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: circle.color || accentColor }} />
-              <div>
-                <p className="font-medium text-slate-800">{circle.name}</p>
-                <p className="text-xs text-slate-500">{Array.isArray(circle.members) ? circle.members.length : 0} members</p>
+    return (
+      <section className="overflow-hidden rounded-[1.75rem] border border-white/45 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.96),rgba(255,255,255,0.82)_55%,rgba(226,232,240,0.9))] p-4 shadow-[0_26px_70px_rgba(15,23,42,0.14)] backdrop-blur-xl sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Social stage</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
+              {isOwnSocialContext ? 'Everything important stays close to the feed.' : `Explore @${resolvedProfileUsername || requestedProfileIdentifier || 'profile'} without the clutter.`}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {isOwnSocialContext
+                ? 'Post, adjust your profile, and move between core areas from one compact strip. Advanced tools stay tucked away until you need them.'
+                : 'The profile is condensed for quick scrolling, with the main feed and highlights taking priority.'}
+            </p>
+          </div>
+
+          {ownerEditingEnabled ? (
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <button
+                type="button"
+                onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                {isGuestPreview ? 'Owner View' : 'Guest View'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setComposerVisible((prev) => !prev)}
+                className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+              >
+                {composerVisible ? 'Hide Compose' : 'Compose'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDesignStudioOpen(true)}
+                className="rounded-full border border-slate-300 bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+              >
+                Stage Settings
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {quickLinks.map((link) => (
+            <Link
+              key={link.id}
+              to={link.to}
+              className="inline-flex items-center rounded-full border border-white/70 bg-white/85 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+
+        {showProfileCompletionHint && profileCompletionItems.length > 0 ? (
+          <div className="mt-4 rounded-[1.5rem] border border-amber-200/80 bg-white/88 p-4 shadow-[0_0_0_1px_rgba(253,230,138,0.72),0_18px_48px_rgba(245,158,11,0.16)]">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-amber-700">Gentle nudge</p>
+                <p className="mt-2 text-base font-semibold text-slate-900">A couple of small touches would make this page feel complete.</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">These are optional. You can ignore them, hide this hint for now, or stop seeing it entirely.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => dismissProfileCompletionHint(false)}
+                  className="rounded-full border border-slate-300 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Not now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => dismissProfileCompletionHint(true)}
+                  className="rounded-full border border-amber-200 px-3 py-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-50"
+                >
+                  Do not show again
+                </button>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Communities</p>
-        <div className="space-y-2">
-          {[
-            { name: 'Local Discovery', meta: 'Places, events, and neighborhood updates' },
-            { name: 'Secure Circle', meta: 'Private coordination for trusted contacts' },
-            { name: 'Creator Lounge', meta: 'Share projects, updates, and media drops' }
-          ].map((community) => (
-            <div key={community.name} className="rounded-2xl bg-white/55 px-3 py-3">
-              <p className="font-semibold text-slate-800">{community.name}</p>
-              <p className="mt-1 text-xs text-slate-500">{community.meta}</p>
+            <div className="mt-4 grid gap-3 lg:grid-cols-3">
+              {profileCompletionItems.slice(0, 3).map((item) => (
+                <div key={item.id} className="rounded-[1.25rem] border border-white/80 bg-white/95 p-4 shadow-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">{item.eyebrow}</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">{item.title}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{item.description}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleProfileCompletionAction(item.id)}
+                    className="mt-4 rounded-full border border-sky-200 px-3 py-1.5 text-[11px] font-semibold text-sky-700 transition hover:bg-sky-50"
+                  >
+                    {item.actionLabel}
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
-    </div>,
-    {
-      subtitle: 'Navigation & Discovery',
-      action: ownerEditingEnabled && !isGuestPreview ? (
-        <button
-          type="button"
-          onClick={() => setDesignStudioOpen(true)}
-          className="rounded-2xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-        >
-          Customize
-        </button>
-      ) : null
-    }
-  );
+          </div>
+        ) : null}
+      </section>
+    );
+  };
 
   const renderSharedDesignCard = !isOwnSocialContext && isAuthenticated && sharedDesigns.length > 0
     ? renderGlassPanel(
@@ -4299,6 +4546,7 @@ const Social = () => {
       default:
         return (
           <div className="space-y-6">
+            {renderStageQuickActions()}
             {ownerEditingEnabled && !isGuestPreview && composerVisible ? (
               renderGlassPanel('Composer', renderPanelBody('composer'), {
                 subtitle: 'Share an update to the center stage',
@@ -4473,9 +4721,16 @@ const Social = () => {
       {!isPrivateGuestLock ? renderGlassPanel(
         'Personal Information',
         visiblePersonalInfoItems.length === 0 ? (
-          <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">
-            {isOwnSocialContext ? 'Add personal details to share with friends and guests.' : 'No personal details are available for this viewer.'}
-          </div>
+          renderSoftEmptyState({
+            eyebrow: 'Profile details',
+            title: isOwnSocialContext ? 'A few profile details would go a long way.' : 'No personal details are visible here.',
+            description: isOwnSocialContext
+              ? 'Add work, hobbies, or a short identifier to make the right rail feel intentional instead of empty.'
+              : 'This profile has not shared personal information for your current access level.',
+            actionLabel: isOwnSocialContext ? 'Edit info' : null,
+            onAction: isOwnSocialContext ? openPersonalInfoModal : null,
+            tone: 'emerald'
+          })
         ) : (
           <ul className="space-y-2 text-sm text-slate-700">
             {visiblePersonalInfoItems.map((item) => (
@@ -4574,51 +4829,9 @@ const Social = () => {
           onEditClick={() => setDesignStudioOpen(true)}
         />
 
-        {isOwnSocialContext ? (
-          <div className="fixed right-4 top-36 z-[70] hidden flex-col gap-2 lg:flex">
-            <button
-              type="button"
-              onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
-              className="rounded-xl border border-white/40 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-white shadow-sm backdrop-blur-xl hover:bg-slate-800/90"
-            >
-              {isGuestPreview ? 'Owner View' : 'Guest View'}
-            </button>
-            {!isGuestPreview ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setComposerVisible((prev) => !prev)}
-                  className="rounded-xl border border-white/40 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-white shadow-sm backdrop-blur-xl hover:bg-slate-800/90"
-                >
-                  {composerVisible ? 'Hide Compose' : 'Compose'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDesignStudioOpen(true)}
-                  className="rounded-xl border border-blue-200 bg-white/90 px-3 py-2 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
-                >
-                  Stage Settings
-                </button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-
         <div className={`px-4 sm:px-6 lg:px-8 ${isMobile ? 'pb-24 pt-8' : 'pt-8'}`}>
           <div className="rounded-[2rem] border border-white/25 bg-white/8 p-4 shadow-[0_30px_90px_rgba(15,23,42,0.16)] backdrop-blur-xl sm:p-6">
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(220px,20%)_minmax(0,1fr)_minmax(280px,25%)]">
-              {!isMobile ? (
-                <aside className="space-y-6 xl:sticky xl:top-24">
-                  {renderNavigationDiscovery()}
-                  {isPrivateGuestLock ? renderGlassPanel('Profile Privacy', renderPrivateProfileBody(), {
-                    subtitle: 'Limited details are available while this account is private'
-                  }) : renderGlassPanel('Profile Snapshot', renderPanelBody('snapshot'), {
-                    subtitle: 'Identity, resume, and quick stats'
-                  })}
-                  {!isPrivateGuestLock ? renderSharedDesignCard : null}
-                </aside>
-              ) : null}
-
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,24rem)]">
               <main className="space-y-6">
                 {!isAuthenticated ? renderGlassPanel('Guest Access', renderPanelBody('guest_lookup'), {
                   subtitle: 'Load a public profile by username or user ID'
@@ -4627,6 +4840,12 @@ const Social = () => {
               </main>
 
               <aside className="space-y-6 xl:sticky xl:top-24">
+                {isPrivateGuestLock ? renderGlassPanel('Profile Privacy', renderPrivateProfileBody(), {
+                  subtitle: 'Limited details are available while this account is private'
+                }) : renderGlassPanel('Profile Snapshot', renderPanelBody('snapshot'), {
+                  subtitle: 'Identity, resume, and quick stats'
+                })}
+                {!isPrivateGuestLock ? renderSharedDesignCard : null}
                 {renderPulseRail()}
               </aside>
             </div>
