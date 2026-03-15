@@ -4912,6 +4912,7 @@ const Social = () => {
           onEditClick={() => setDesignStudioOpen(true)}
           activitySummary={heroOverlayActivity}
           onMobileMenuToggle={setHeroOverlayOpen}
+          enableMobileLauncher={false}
         />
 
         <div className={`px-4 sm:px-6 lg:px-8 ${isMobile ? 'pb-24 pt-8' : 'pt-8'}`}>

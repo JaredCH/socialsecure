@@ -19,6 +19,7 @@ import PostRegistrationWelcome from './pages/PostRegistrationWelcome';
 import ModerationDashboard from './pages/ModerationDashboard';
 import AdminNewsReview from './pages/AdminNewsReview';
 import NotificationCenter from './components/NotificationCenter';
+import GlobalSocialLauncher from './components/social/GlobalSocialLauncher';
 import NotificationSettings from './pages/NotificationSettings';
 import ResumePublic from './pages/ResumePublic';
 import MobileProfile from './pages/MobileProfile';
@@ -838,7 +839,13 @@ function App() {
             <Route path="*" element={<Navigate to={isAuthenticated ? (passwordResetRequired ? '/settings#account' : socialProfilePath) : '/'} replace />} />
           </Routes>
         </RouteMain>
-        
+
+        <GlobalSocialLauncher
+          currentUsername={user?.username || ''}
+          unreadNotificationCount={unreadNotificationCount}
+          enabled={canUseProtectedFeatures}
+        />
+
         <Toaster position="bottom-right" />
       </div>
     </Router>

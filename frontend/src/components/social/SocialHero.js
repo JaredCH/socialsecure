@@ -104,7 +104,8 @@ const SocialHero = ({
   isEditing = false,
   onEditClick,
   activitySummary = {},
-  onMobileMenuToggle
+  onMobileMenuToggle,
+  enableMobileLauncher = true
 }) => {
   const {
     name = 'User Name',
@@ -142,10 +143,10 @@ const SocialHero = ({
   const hasActivityRail = unreadNotificationCount > 0 || unreadMessageCount > 0 || notificationItems.length > 0 || messageItems.length > 0;
 
   useEffect(() => {
-    if (!isMobile || !showNavigation) {
+    if (!isMobile || !showNavigation || !enableMobileLauncher) {
       setIsMobileMenuOpen(false);
     }
-  }, [isMobile, showNavigation]);
+  }, [enableMobileLauncher, isMobile, showNavigation]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -328,7 +329,7 @@ const SocialHero = ({
       </div>
 
       {/* Mobile Navigation - Bottom Tabs */}
-      {showNavigation && isMobile && (
+      {showNavigation && isMobile && enableMobileLauncher && (
         <>
           {isMobileMenuOpen && (
             <button
