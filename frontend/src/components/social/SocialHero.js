@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
 
-const MOBILE_MENU_ARC_START_DEG = 188;
-const MOBILE_MENU_ARC_END_DEG = 268;
-const MOBILE_MENU_RADIUS = 136;
+const MOBILE_MENU_ARC_START_DEG = 196;
+const MOBILE_MENU_ARC_END_DEG = 278;
+const MOBILE_MENU_RADIUS = 152;
 
 const buildMobileMenuLayout = (items) => {
   if (!Array.isArray(items) || items.length === 0) {
@@ -151,8 +151,9 @@ const SocialHero = ({
   const nameStyle = { color: nameColor };
   const locationStyle = { color: locationColor };
   const mobileLauncherStyle = {
-    background: `radial-gradient(circle at 32% 28%, ${menuActiveColor}, ${backgroundColor})`,
-    boxShadow: `0 28px 55px ${backgroundColor}66, 0 0 0 1px ${menuTextColor}22`
+    boxShadow: isMobileMenuOpen
+      ? `0 24px 50px ${backgroundColor}55, 0 0 0 1px ${menuTextColor}1f`
+      : `0 18px 36px ${backgroundColor}22, 0 0 0 1px ${menuTextColor}14`
   };
   const mobileOrbitalGlowStyle = {
     background: `radial-gradient(circle, ${menuActiveColor}2a 0%, ${backgroundColor}00 72%)`
@@ -282,13 +283,13 @@ const SocialHero = ({
             />
           )}
           <div
-            className="pointer-events-none fixed bottom-4 right-4 z-50 md:hidden"
+            className="pointer-events-none fixed bottom-0 right-0 z-50 md:hidden"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             data-testid="social-mobile-nav"
           >
             <div className="relative h-72 w-72 overflow-visible">
               <div
-                className={`absolute bottom-2 right-2 h-56 w-56 rounded-full transition-all duration-500 ${isMobileMenuOpen ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
+                className={`absolute bottom-10 right-10 h-56 w-56 rounded-full transition-all duration-500 ${isMobileMenuOpen ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
                 style={mobileOrbitalGlowStyle}
                 aria-hidden="true"
               />
@@ -299,10 +300,10 @@ const SocialHero = ({
               >
                 {mobileMenuItems.map((tab, index) => {
                   const isActive = activeTab === tab.id;
-                  const transitionDelay = `${index * 32}ms`;
+                  const transitionDelay = `${index * 26}ms`;
                   const transform = isMobileMenuOpen
                     ? `translate3d(${tab.x}px, ${tab.y}px, 0) scale(1)`
-                    : 'translate3d(0, 0, 0) scale(0.72)';
+                    : 'translate3d(0, 0, 0) scale(0.7)';
 
                   return (
                     <button
@@ -313,7 +314,7 @@ const SocialHero = ({
                         onTabChange?.(tab.id);
                         setIsMobileMenuOpen(false);
                       }}
-                      className={`pointer-events-auto absolute bottom-0 right-0 flex min-w-[7.5rem] origin-bottom-right items-center gap-2 rounded-full border px-3 py-2 text-left shadow-[0_18px_32px_rgba(2,6,23,0.28)] transition-all duration-300 ease-out ${isActive ? 'border-white/20 bg-white text-slate-950' : 'border-white/12 bg-slate-950/86 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                      className={`pointer-events-auto absolute bottom-12 right-12 flex min-w-[5.4rem] origin-bottom-right items-center gap-2 rounded-full border px-2.5 py-2 text-left shadow-[0_16px_28px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isActive ? 'border-white/20 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
                       style={{
                         transform,
                         transitionDelay,
@@ -321,14 +322,13 @@ const SocialHero = ({
                       }}
                     >
                       <span
-                        className={`flex h-9 w-9 items-center justify-center rounded-full ${isActive ? 'bg-slate-950/8' : 'bg-white/10'}`}
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isActive ? 'bg-slate-950/8' : 'bg-white/10'}`}
                         style={{ color: isActive ? menuActiveColor : menuTextColor }}
                       >
                         <TabIcon icon={tab.icon} className="h-4 w-4" />
                       </span>
-                      <span className="flex flex-col leading-none">
-                        <span className="text-[0.65rem] uppercase tracking-[0.26em] opacity-60">Section</span>
-                        <span className="text-sm font-semibold">{SOCIAL_HERO_TAB_LABELS[tab.id]}</span>
+                      <span className="truncate text-[0.72rem] font-semibold tracking-[0.04em]">
+                        {SOCIAL_HERO_TAB_LABELS[tab.id]}
                       </span>
                     </button>
                   );
@@ -337,7 +337,7 @@ const SocialHero = ({
 
               <div className="absolute bottom-0 right-0 flex items-end gap-3">
                 <div
-                  className={`pointer-events-none rounded-2xl border border-white/10 bg-slate-950/78 px-3 py-2 text-right text-white shadow-[0_18px_40px_rgba(2,6,23,0.3)] backdrop-blur-xl transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'}`}
+                  className={`pointer-events-none absolute bottom-[4.85rem] right-[6.1rem] rounded-2xl border border-white/10 bg-slate-950/72 px-3 py-2 text-right text-white shadow-[0_18px_40px_rgba(2,6,23,0.26)] backdrop-blur-xl transition-all duration-300 ${isMobileMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'}`}
                   aria-hidden="true"
                 >
                   <div className="text-[0.6rem] uppercase tracking-[0.32em] text-white/55">Social</div>
@@ -345,18 +345,18 @@ const SocialHero = ({
                 </div>
                 <button
                   type="button"
-                  className={`pointer-events-auto relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-white/15 text-white shadow-[0_24px_48px_rgba(2,6,23,0.35)] transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${isMobileMenuOpen ? 'scale-105' : 'scale-100'}`}
+                  className={`pointer-events-auto absolute -bottom-12 -right-12 flex h-28 w-28 items-start justify-start overflow-hidden rounded-full border text-white transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${isMobileMenuOpen ? 'scale-105 border-white/22 bg-slate-950/72 backdrop-blur-xl' : 'scale-100 border-white/12 bg-slate-950/12 backdrop-blur-md'}`}
                   style={mobileLauncherStyle}
                   onClick={() => setIsMobileMenuOpen((prev) => !prev)}
                   aria-expanded={isMobileMenuOpen}
                   aria-controls="social-mobile-nav-menu"
                   aria-label={isMobileMenuOpen ? 'Collapse social section menu' : 'Expand social section menu'}
                 >
-                  <span className="absolute inset-[8px] rounded-full border border-white/12" aria-hidden="true" />
-                  <span className={`absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.34),rgba(255,255,255,0)_52%)] transition-opacity duration-300 ${isMobileMenuOpen ? 'opacity-100' : 'opacity-70'}`} aria-hidden="true" />
-                  <span className="relative flex flex-col items-center leading-none">
-                    <span className="text-3xl font-black tracking-[-0.14em]">S</span>
-                    <span className="mt-1 text-[0.54rem] uppercase tracking-[0.4em] text-white/72">
+                  <span className={`absolute inset-[10px] rounded-full border transition-opacity duration-300 ${isMobileMenuOpen ? 'border-white/14 opacity-100' : 'border-white/10 opacity-60'}`} aria-hidden="true" />
+                  <span className={`absolute inset-0 transition-opacity duration-300 ${isMobileMenuOpen ? 'opacity-100' : 'opacity-35'}`} aria-hidden="true" style={{ background: `radial-gradient(circle at 30% 25%, ${menuActiveColor}90, ${backgroundColor}10 40%, transparent 74%)` }} />
+                  <span className="relative ml-5 mt-4 flex flex-col items-center leading-none">
+                    <span className="text-[2.15rem] font-black tracking-[-0.16em]">S</span>
+                    <span className="mt-1 text-[0.5rem] uppercase tracking-[0.34em] text-white/72">
                       {isMobileMenuOpen ? 'Close' : 'Menu'}
                     </span>
                   </span>
