@@ -48,7 +48,8 @@ const { ingestAllFollowedTeams } = require('../services/newsIngestion.sports');
 const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocationIndex');
 const { ingestAllMonitoredSubreddits } = require('../services/newsIngestion.social');
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
-const { getLocationTaxonomyPayload } = require('../utils/newsLocationTaxonomy');
+const { canonicalizeStateCode, getLocationTaxonomyPayload } = require('../utils/newsLocationTaxonomy');
+const { resolveZipLocation, resolveZipLocationByCityState } = require('../services/zipLocationIndex');
 
 // ---------------------------------------------------------------------------
 // Weather constants
@@ -61,6 +62,7 @@ const OPEN_METEO_AIR_QUALITY_BASE = 'https://air-quality-api.open-meteo.com/v1/a
 
 const weatherCache = new Map();
 const weatherCacheMetrics = { hits: 0, misses: 0, errors: 0, totalLatencyMs: 0, fetchCount: 0 };
+const US_ZIP_REGEX = /^\d{5}(?:-\d{4})?$/;
 
 const OPEN_METEO_WEATHER_CODE_MAP = {
   0: { description: 'Clear sky', icon: 'sun' },
@@ -95,6 +97,37 @@ const OPEN_METEO_WEATHER_CODE_MAP = {
 
 const getOpenMeteoWeatherDescriptor = (code) =>
   OPEN_METEO_WEATHER_CODE_MAP[Number(code)] || { description: 'Unknown conditions', icon: 'cloud' };
+
+function normalizeUSState(value) {
+  return canonicalizeStateCode(value);
+}
+
+function classifySourceHealth(source = {}, now = new Date()) {
+  const lastFetchAt = source.lastFetchAt ? new Date(source.lastFetchAt) : null;
+  const status = String(source.lastFetchStatus || '').toLowerCase();
+
+  if (!lastFetchAt || Number.isNaN(lastFetchAt.getTime())) {
+    return { health: 'unknown', healthReason: 'Never fetched' };
+  }
+
+  if (status === 'error') {
+    return {
+      health: 'red',
+      healthReason: source.lastError || 'Last fetch failed'
+    };
+  }
+
+  const ageMs = now.getTime() - lastFetchAt.getTime();
+  const staleThresholdMs = 4 * 60 * 60 * 1000;
+  if (status === 'success' && ageMs <= staleThresholdMs) {
+    return { health: 'green', healthReason: 'Healthy' };
+  }
+
+  return {
+    health: 'yellow',
+    healthReason: 'Stale source health data'
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Weather helpers
@@ -140,6 +173,49 @@ async function fetchOpenMeteoGeocode(query, count = 8) {
 }
 
 async function resolveWeatherLocationCoordinates(locObj = {}) {
+  const normalizedZip = String(locObj.zipCode || '').trim();
+
+  if (normalizedZip && US_ZIP_REGEX.test(normalizedZip)) {
+    const zipLocation = await resolveZipLocation(normalizedZip, { allowGeocode: true, persist: true });
+    if (zipLocation?.latitude != null && zipLocation?.longitude != null) {
+      return {
+        lat: Number(zipLocation.latitude),
+        lon: Number(zipLocation.longitude),
+        label: locObj.label || [zipLocation.city, zipLocation.stateCode || zipLocation.state, zipLocation.zipCode].filter(Boolean).join(', '),
+        city: zipLocation.city || locObj.city || null,
+        state: zipLocation.state || locObj.state || null,
+        country: zipLocation.country || locObj.country || null,
+        countryCode: zipLocation.countryCode || locObj.countryCode || null,
+        timezone: locObj.timezone || null,
+        zipCode: zipLocation.zipCode || normalizedZip
+      };
+    }
+  }
+
+  if (locObj.city && (locObj.state || locObj.countryCode || locObj.country)) {
+    const cityStateLocation = await resolveZipLocationByCityState(
+      {
+        city: locObj.city,
+        state: locObj.state,
+        countryCode: locObj.countryCode || locObj.country
+      },
+      { allowGeocode: true, persist: true }
+    );
+    if (cityStateLocation?.latitude != null && cityStateLocation?.longitude != null) {
+      return {
+        lat: Number(cityStateLocation.latitude),
+        lon: Number(cityStateLocation.longitude),
+        label: locObj.label || [cityStateLocation.city, cityStateLocation.stateCode || cityStateLocation.state, cityStateLocation.zipCode].filter(Boolean).join(', '),
+        city: cityStateLocation.city || locObj.city || null,
+        state: cityStateLocation.state || locObj.state || null,
+        country: cityStateLocation.country || locObj.country || null,
+        countryCode: cityStateLocation.countryCode || locObj.countryCode || null,
+        timezone: locObj.timezone || null,
+        zipCode: locObj.zipCode || cityStateLocation.zipCode || null
+      };
+    }
+  }
+
   if (Number.isFinite(Number(locObj.lat)) && Number.isFinite(Number(locObj.lon))) {
     return {
       lat: Number(locObj.lat),
@@ -149,7 +225,8 @@ async function resolveWeatherLocationCoordinates(locObj = {}) {
       state: locObj.state || null,
       country: locObj.country || null,
       countryCode: locObj.countryCode || null,
-      timezone: locObj.timezone || null
+      timezone: locObj.timezone || null,
+      zipCode: normalizedZip || null
     };
   }
 
@@ -168,7 +245,8 @@ async function resolveWeatherLocationCoordinates(locObj = {}) {
       state: locObj.state || null,
       country: locObj.country || null,
       countryCode: locObj.countryCode || null,
-      timezone: locObj.timezone || null
+      timezone: locObj.timezone || null,
+      zipCode: normalizedZip || null
     };
   }
 
@@ -184,8 +262,57 @@ async function resolveWeatherLocationCoordinates(locObj = {}) {
     state: top.admin1 || locObj.state || null,
     country: top.country || locObj.country || null,
     countryCode: top.country_code || locObj.countryCode || null,
-    timezone: top.timezone || null
+    timezone: top.timezone || null,
+    zipCode: normalizedZip || null
   };
+}
+
+function applyResolvedWeatherFields(target, resolved) {
+  if (!target || !resolved) return false;
+
+  let changed = false;
+  const nextValues = {
+    label: resolved.label || target.label || null,
+    city: resolved.city || target.city || null,
+    state: resolved.state || target.state || null,
+    country: resolved.country || target.country || null,
+    countryCode: resolved.countryCode || target.countryCode || null,
+    zipCode: resolved.zipCode || target.zipCode || null,
+    lat: Number.isFinite(Number(resolved.lat)) ? Number(resolved.lat) : (Number.isFinite(Number(target.lat)) ? Number(target.lat) : null),
+    lon: Number.isFinite(Number(resolved.lon)) ? Number(resolved.lon) : (Number.isFinite(Number(target.lon)) ? Number(target.lon) : null),
+    timezone: resolved.timezone || target.timezone || null
+  };
+
+  Object.entries(nextValues).forEach(([key, value]) => {
+    const currentValue = target[key] ?? null;
+    if (currentValue !== value) {
+      target[key] = value;
+      changed = true;
+    }
+  });
+
+  return changed;
+}
+
+async function backfillWeatherLocations(preferences) {
+  if (!preferences || !Array.isArray(preferences.weatherLocations) || preferences.weatherLocations.length === 0) {
+    return preferences;
+  }
+
+  let changed = false;
+  for (const location of preferences.weatherLocations) {
+    if (Number.isFinite(Number(location?.lat)) && Number.isFinite(Number(location?.lon))) continue;
+    const resolved = await resolveWeatherLocationCoordinates(location?.toObject ? location.toObject() : location);
+    if (resolved) {
+      changed = applyResolvedWeatherFields(location, resolved) || changed;
+    }
+  }
+
+  if (changed && typeof preferences.save === 'function') {
+    await preferences.save();
+  }
+
+  return preferences;
 }
 
 /**
@@ -589,6 +716,8 @@ router.get('/preferences', authenticateToken, async (req, res) => {
     let prefs = await NewsPreferences.findOne({ user: req.user.userId });
     if (!prefs) {
       prefs = await NewsPreferences.create({ user: req.user.userId });
+    } else {
+      await backfillWeatherLocations(prefs);
     }
     // Compute registration alignment: flag mismatch between profile and news prefs
     let registrationAlignment = null;
@@ -898,6 +1027,26 @@ router.get('/weather/geocode', authenticateToken, async (req, res) => {
       });
     }
 
+    if (US_ZIP_REGEX.test(q)) {
+      const zipLocation = await resolveZipLocation(q, { allowGeocode: true, persist: true });
+      if (zipLocation) {
+        return res.json({
+          suggestions: [{
+            id: `zip:${zipLocation.zipCode}`,
+            label: [zipLocation.city, zipLocation.stateCode || zipLocation.state, zipLocation.zipCode].filter(Boolean).join(', '),
+            city: zipLocation.city || null,
+            state: zipLocation.state || null,
+            country: zipLocation.country || null,
+            countryCode: zipLocation.countryCode || null,
+            zipCode: zipLocation.zipCode || q,
+            latitude: zipLocation.latitude != null ? Number(zipLocation.latitude) : null,
+            longitude: zipLocation.longitude != null ? Number(zipLocation.longitude) : null,
+            timezone: null
+          }]
+        });
+      }
+    }
+
     const suggestions = (await fetchOpenMeteoGeocode(q, 8)).map((item) => ({
       id: `${item.id || `${item.latitude},${item.longitude}`}`,
       label: [item.name, item.admin1, item.country].filter(Boolean).join(', '),
@@ -925,6 +1074,7 @@ router.get('/weather/geocode', authenticateToken, async (req, res) => {
 router.get('/weather', authenticateToken, async (req, res) => {
   try {
     const preferences = await NewsPreferences.findOne({ user: req.user.userId });
+    await backfillWeatherLocations(preferences);
     let weatherLocations = preferences?.weatherLocations || [];
     let fallbackSource = null;
 
@@ -1023,6 +1173,11 @@ router.post('/preferences/weather-locations', authenticateToken, async (req, res
       isPrimary: false
     };
 
+    const resolved = await resolveWeatherLocationCoordinates(locationData);
+    if (resolved) {
+      applyResolvedWeatherFields(locationData, resolved);
+    }
+
     if (isPrimary || preferences.weatherLocations.length === 0) {
       locationData.isPrimary = true;
       if (isPrimary && preferences.weatherLocations.length > 0) {
@@ -1050,7 +1205,7 @@ router.put('/preferences/weather-locations', authenticateToken, async (req, res)
       return res.status(400).json({ error: 'Locations array is required' });
     }
 
-    const normalizedLocations = locations.map((loc, index) => {
+    const normalizedLocations = await Promise.all(locations.map(async (loc, index) => {
       const normalized = {
         label: loc?.label || [loc?.city, loc?.state, loc?.country].filter(Boolean).join(', '),
         city: loc?.city || null,
@@ -1066,8 +1221,12 @@ router.put('/preferences/weather-locations', authenticateToken, async (req, res)
       if (!normalized.city && !normalized.zipCode && (!normalized.lat || !normalized.lon) && !normalized.label) {
         return { error: 'Each weather location must include city, zip code, coordinates, or label' };
       }
+      const resolved = await resolveWeatherLocationCoordinates(normalized);
+      if (resolved) {
+        applyResolvedWeatherFields(normalized, resolved);
+      }
       return normalized;
-    });
+    }));
 
     const validationError = normalizedLocations.find((loc) => loc.error);
     if (validationError) return res.status(400).json({ error: validationError.error });
@@ -1355,4 +1514,14 @@ function startIngestionScheduler() {
   setTimeout(() => ingestAllMonitoredSubreddits().catch(console.error), 90 * 1000);
 }
 
-module.exports = { router, startIngestionScheduler };
+module.exports = {
+  router,
+  startIngestionScheduler,
+  internals: {
+    US_ZIP_REGEX,
+    classifySourceHealth,
+    normalizeUSState,
+    fetchWeatherForLocation,
+    weatherCache
+  }
+};

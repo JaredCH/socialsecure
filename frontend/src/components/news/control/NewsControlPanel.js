@@ -9,13 +9,13 @@ import ExportPanel from './panels/ExportPanel';
 import WeatherLocationsPanel from './panels/WeatherLocationsPanel';
 
 const TABS = [
-  { id: 'sources', label: 'Sources', icon: '📡' },
-  { id: 'keywords', label: 'Keywords', icon: '#' },
-  { id: 'locations', label: 'Locations', icon: '📍' },
-  { id: 'sports', label: 'Sports Teams', icon: '🏈' },
-  { id: 'weather', label: 'Weather', icon: '🌦️' },
-  { id: 'schedule', label: 'Schedule', icon: '⏰' },
-  { id: 'export', label: 'Export', icon: '📤' }
+  { id: 'sources', label: 'Sources', icon: 'rss_feed', summary: 'Control which feeds are active and healthy.' },
+  { id: 'keywords', label: 'Keywords', icon: 'sell', summary: 'Follow topics you want to surface first.' },
+  { id: 'locations', label: 'Locations', icon: 'location_on', summary: 'Set the places used for local news relevance.' },
+  { id: 'sports', label: 'Sports Teams', icon: 'sports_football', summary: 'Pick teams for personalized schedules and coverage.' },
+  { id: 'weather', label: 'Weather', icon: 'partly_cloudy_day', summary: 'Manage forecast locations and saved coordinates.' },
+  { id: 'schedule', label: 'Schedule', icon: 'schedule', summary: 'Tune cadence and default feed scope.' },
+  { id: 'export', label: 'Export', icon: 'upload', summary: 'Export or review your current news settings.' }
 ];
 
 export default function NewsControlPanel({
@@ -57,6 +57,7 @@ export default function NewsControlPanel({
   scopes
 }) {
   const [activeTab, setActiveTab] = useState('sources');
+  const activeTabMeta = TABS.find((tab) => tab.id === activeTab) || TABS[0];
 
   const googleNewsEnabled = preferences?.googleNewsEnabled !== false;
   const activeKeywords = preferences?.followedKeywords || [];
@@ -85,205 +86,248 @@ export default function NewsControlPanel({
     });
   }, [sources, googleNewsEnabled, isSourceEnabled]);
 
-  return (
-    <div className="border-b border-slate-200/70 bg-gradient-to-br from-white via-slate-50 to-sky-50/50 shadow-sm">
-      <div className="w-full px-4 py-4 sm:px-6 lg:px-8">
+  const summaryCards = [
+    { label: 'Enabled sources', value: `${stats.enabledCount}/${stats.totalCount}`, tone: 'from-sky-500/15 to-cyan-500/5' },
+    { label: 'Saved keywords', value: activeKeywords.length, tone: 'from-amber-500/15 to-orange-500/5' },
+    { label: 'News locations', value: locations.length, tone: 'from-emerald-500/15 to-teal-500/5' },
+    { label: 'Weather points', value: (weatherLocations || []).length, tone: 'from-indigo-500/15 to-violet-500/5' }
+  ];
 
-        {/* Header Row */}
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-black tracking-tight text-slate-900">News Control Panel</h2>
-            <p className="mt-0.5 text-xs text-slate-500">Manage sources, keywords, and preferences</p>
+  const renderActivePanel = () => {
+    if (activeTab === 'sources') {
+      return (
+        <SourcesPanel
+          sources={sources}
+          onToggleSource={onToggleSource}
+          isSourceEnabled={isSourceEnabled}
+          onToggleGoogleNews={onToggleGoogleNews}
+          googleNewsEnabled={googleNewsEnabled}
+          preferences={preferences}
+          onToggleSourceCategory={onToggleSourceCategory}
+        />
+      );
+    }
+
+    if (activeTab === 'keywords') {
+      return (
+        <KeywordsPanel
+          keywords={activeKeywords}
+          onAddKeyword={onAddKeyword}
+          onRemoveKeyword={onRemoveKeyword}
+          onRenameKeyword={onRenameKeyword}
+          newKeyword={newKeyword}
+          setNewKeyword={setNewKeyword}
+        />
+      );
+    }
+
+    if (activeTab === 'locations') {
+      return (
+        <LocationsPanel
+          locations={locations}
+          onAddLocation={onAddLocation}
+          onRemoveLocation={onRemoveLocation}
+          onSetPrimaryLocation={onSetPrimaryLocation}
+          newLocation={newLocation}
+          setNewLocation={setNewLocation}
+          locationTaxonomy={locationTaxonomy}
+          registrationAlignment={registrationAlignment}
+        />
+      );
+    }
+
+    if (activeTab === 'schedule') {
+      return (
+        <SchedulePanel
+          preferences={preferences}
+          onUpdatePreferences={onUpdatePreferences}
+          scopes={scopes}
+        />
+      );
+    }
+
+    if (activeTab === 'sports') {
+      return (
+        <SportsTeamsPanel
+          leagues={sportsLeagues}
+          followedSportsTeams={followedSportsTeams}
+          onSetAllTeams={onSetAllSportsTeams}
+          onSetLeagueTeams={onSetLeagueSportsTeams}
+          onToggleTeam={onToggleSportsTeam}
+        />
+      );
+    }
+
+    if (activeTab === 'weather') {
+      return (
+        <WeatherLocationsPanel
+          locations={weatherLocations}
+          onSearchLocations={onSearchWeatherLocations}
+          onAddLocation={onAddWeatherLocation}
+          onRemoveLocation={onRemoveWeatherLocation}
+          onSetPrimary={onSetPrimaryWeatherLocation}
+          onReorder={onReorderWeatherLocations}
+          statusMessage={weatherStatusMessage}
+          setStatusMessage={setWeatherStatusMessage}
+        />
+      );
+    }
+
+    return <ExportPanel />;
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.12),_transparent_32%),linear-gradient(180deg,_rgba(248,250,252,0.98),_rgba(255,255,255,0.96))] text-slate-900">
+      <div className="border-b border-slate-200/80 bg-white/80 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">
+              <span className="material-symbols-outlined text-sm leading-none">tune</span>
+              News workspace
+            </div>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">News Control Panel</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600">A clearer workspace for managing sources, local coverage, sports teams, and weather locations without losing context from the rest of the page.</p>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <button
               onClick={onRestore}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition-colors hover:bg-slate-50"
+              className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
               aria-label="Restore default preferences"
             >
-              Restore
+              Restore defaults
             </button>
             <button
               onClick={onRefreshHealth}
-              className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-slate-800"
+              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
               aria-label="Refresh source health"
             >
-              Refresh
+              Refresh health
             </button>
             <button
               onClick={onClose}
-              className="p-1 text-slate-400 transition-colors hover:text-slate-700"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition-colors hover:text-slate-900"
               aria-label="Close control panel"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <span className="material-symbols-outlined text-[20px] leading-none">close</span>
             </button>
           </div>
         </div>
 
-        {/* Tab Pills */}
-        <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-3 scrollbar-hide" role="tablist">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              aria-controls={`panel-${tab.id}`}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl border px-3 py-1.5 text-sm font-semibold transition-all ${
-                activeTab === tab.id
-                  ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                  : 'border-slate-200 bg-white text-slate-600 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              <span className="text-xs">{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {summaryCards.map((card) => (
+            <div key={card.label} className={`rounded-2xl border border-white/80 bg-gradient-to-br ${card.tone} px-4 py-3 shadow-sm`}>
+              <div className="text-xs font-medium text-slate-500">{card.label}</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-950">{card.value}</div>
+            </div>
           ))}
         </div>
+      </div>
 
-        {/* Two-column layout: sidebar + main */}
-        <div className="mt-3 flex gap-6">
-
-          {/* Sidebar */}
-          <div className="hidden md:block w-56 shrink-0 space-y-4">
-            {/* Stats summary */}
-            <div className="space-y-2 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Summary</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="text-slate-600">Sources</div>
-                <div className="text-right font-semibold text-slate-900">{stats.enabledCount}/{stats.totalCount}</div>
-                <div className="text-slate-600">Keywords</div>
-                <div className="text-right font-semibold text-slate-900">{activeKeywords.length}</div>
-                <div className="text-slate-600">Locations</div>
-                <div className="text-right font-semibold text-slate-900">{locations.length}</div>
-                <div className="text-slate-600">Sports Teams</div>
-                <div className="text-right font-semibold text-slate-900">{(followedSportsTeams || []).length}</div>
-                <div className="text-slate-600">Weather</div>
-                <div className="text-right font-semibold text-slate-900">{(weatherLocations || []).length}</div>
-              </div>
-              <div className="mt-1 flex items-center gap-3 border-t border-slate-200/70 pt-1">
-                <span className="flex items-center gap-1 text-[10px] text-slate-500">
-                  <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: '#10b981' }} />
-                  {stats.greenCount}
-                </span>
-                <span className="flex items-center gap-1 text-[10px] text-slate-500">
-                  <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: '#f59e0b' }} />
-                  {stats.yellowCount}
-                </span>
-                <span className="flex items-center gap-1 text-[10px] text-slate-500">
-                  <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: '#ef4444' }} />
-                  {stats.redCount}
-                </span>
-              </div>
-            </div>
-
-            {/* Section shortcuts */}
-            <div className="space-y-1">
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Sections</p>
+      <div className="min-h-0 flex-1 lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="hidden border-r border-slate-200/80 bg-white/70 px-6 py-6 backdrop-blur-xl lg:flex lg:min-h-0 lg:flex-col lg:gap-6">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Sections</div>
+            <div className="mt-3 space-y-2">
               {TABS.map((tab) => (
                 <button
                   key={tab.id}
+                  type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full rounded-lg px-2 py-1.5 text-left text-xs font-semibold transition-colors ${
+                  className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
                     activeTab === tab.id
-                      ? 'bg-slate-100 text-slate-900'
-                      : 'text-slate-600 hover:bg-slate-50'
+                      ? 'border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10'
+                      : 'border-slate-200 bg-white/85 text-slate-700 hover:border-slate-300 hover:bg-white'
                   }`}
                 >
-                  {tab.icon} {tab.label}
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-[20px] leading-none">{tab.icon}</span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold">{tab.label}</div>
+                      <div className={`mt-0.5 text-xs ${activeTab === tab.id ? 'text-white/75' : 'text-slate-500'}`}>{tab.summary}</div>
+                    </div>
+                  </div>
                 </button>
               ))}
             </div>
+          </div>
 
-            {/* Active feeds widget */}
-            <div className="rounded-2xl border border-sky-200/80 bg-sky-50/70 p-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-sky-800">Active Feeds</p>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                {activeFeeds.length > 0 ? activeFeeds.map((source) => (
-                  <div key={source.id} className="flex items-center gap-1.5 text-xs text-sky-700">
-                    <HealthDot health={source.health} healthReason={source.healthReason} size={6} />
-                    <span className="truncate">{source.name}</span>
-                    {source.wiringState === 'catalog_only' && (
-                      <span className="shrink-0 text-[9px] text-amber-600">Not wired</span>
-                    )}
-                  </div>
-                )) : (
-                  <p className="text-[11px] text-sky-400">No active feeds</p>
-                )}
+          <div className="rounded-3xl border border-sky-200/80 bg-sky-50/70 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-800">Active feeds</div>
+                <div className="mt-1 text-sm text-sky-900">{activeFeeds.length > 0 ? `${activeFeeds.length} source${activeFeeds.length === 1 ? '' : 's'} currently active` : 'No feeds enabled yet'}</div>
               </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />{stats.greenCount}</span>
+                <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-500" />{stats.yellowCount}</span>
+                <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" />{stats.redCount}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {activeFeeds.length > 0 ? activeFeeds.slice(0, 8).map((source, index) => (
+                <div key={`${source._id || source.providerId || source.id || source.name}-${index}`} className="flex items-center gap-2 rounded-2xl bg-white/85 px-3 py-2 text-sm text-slate-700">
+                  <HealthDot health={source.health} healthReason={source.healthReason} size={7} />
+                  <span className="min-w-0 flex-1 truncate">{source.name}</span>
+                  {source.wiringState === 'catalog_only' ? <span className="text-[10px] font-semibold text-amber-600">Needs wiring</span> : null}
+                </div>
+              )) : (
+                <div className="rounded-2xl bg-white/80 px-3 py-3 text-sm text-slate-500">Enable a feed to see it here.</div>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <section className="min-h-0 flex flex-col">
+          <div className="border-b border-slate-200/70 bg-white/65 px-4 py-3 backdrop-blur-xl sm:px-6 lg:hidden" role="tablist">
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-hide">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  aria-controls={`panel-${tab.id}`}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-3 py-2 text-sm font-medium transition-colors ${
+                    activeTab === tab.id
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[18px] leading-none">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Main panel content */}
-          <div className="flex-1 min-w-0" id={`panel-${activeTab}`} role="tabpanel">
-            {activeTab === 'sources' && (
-              <SourcesPanel
-                sources={sources}
-                onToggleSource={onToggleSource}
-                isSourceEnabled={isSourceEnabled}
-                onToggleGoogleNews={onToggleGoogleNews}
-                googleNewsEnabled={googleNewsEnabled}
-                preferences={preferences}
-                onToggleSourceCategory={onToggleSourceCategory}
-              />
-            )}
-            {activeTab === 'keywords' && (
-              <KeywordsPanel
-                keywords={activeKeywords}
-                onAddKeyword={onAddKeyword}
-                onRemoveKeyword={onRemoveKeyword}
-                onRenameKeyword={onRenameKeyword}
-                newKeyword={newKeyword}
-                setNewKeyword={setNewKeyword}
-              />
-            )}
-            {activeTab === 'locations' && (
-              <LocationsPanel
-                locations={locations}
-                onAddLocation={onAddLocation}
-                onRemoveLocation={onRemoveLocation}
-                onSetPrimaryLocation={onSetPrimaryLocation}
-                newLocation={newLocation}
-                setNewLocation={setNewLocation}
-                locationTaxonomy={locationTaxonomy}
-                registrationAlignment={registrationAlignment}
-              />
-            )}
-            {activeTab === 'schedule' && (
-              <SchedulePanel
-                preferences={preferences}
-                onUpdatePreferences={onUpdatePreferences}
-                scopes={scopes}
-              />
-            )}
-            {activeTab === 'sports' && (
-              <SportsTeamsPanel
-                leagues={sportsLeagues}
-                followedSportsTeams={followedSportsTeams}
-                onSetAllTeams={onSetAllSportsTeams}
-                onSetLeagueTeams={onSetLeagueSportsTeams}
-                onToggleTeam={onToggleSportsTeam}
-              />
-            )}
-            {activeTab === 'weather' && (
-              <WeatherLocationsPanel
-                locations={weatherLocations}
-                onSearchLocations={onSearchWeatherLocations}
-                onAddLocation={onAddWeatherLocation}
-                onRemoveLocation={onRemoveWeatherLocation}
-                onSetPrimary={onSetPrimaryWeatherLocation}
-                onReorder={onReorderWeatherLocations}
-                statusMessage={weatherStatusMessage}
-                setStatusMessage={setWeatherStatusMessage}
-              />
-            )}
-            {activeTab === 'export' && (
-              <ExportPanel />
-            )}
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+            <div className="mx-auto flex max-w-4xl flex-col gap-5">
+              <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:p-6">
+                <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+                      <span className="material-symbols-outlined text-[16px] leading-none">{activeTabMeta.icon}</span>
+                      {activeTabMeta.label}
+                    </div>
+                    <h3 className="mt-3 text-xl font-semibold tracking-tight text-slate-950">{activeTabMeta.label}</h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">{activeTabMeta.summary}</p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <div className="font-medium text-slate-900">Simple view</div>
+                    <div className="mt-1">Everything in this panel is grouped into one focused workspace so it is easier to scan and use.</div>
+                  </div>
+                </div>
+
+                <div className="pt-5" id={`panel-${activeTab}`} role="tabpanel">
+                  {renderActivePanel()}
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );

@@ -35,7 +35,7 @@ export default function SettingsDrawer({ isOpen, onClose, ...panelProps }) {
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[140] bg-slate-950/50 backdrop-blur-sm transition-opacity duration-300 ${
           isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
@@ -48,13 +48,13 @@ export default function SettingsDrawer({ isOpen, onClose, ...panelProps }) {
         aria-modal="true"
         aria-label="News Settings"
         className={`
-          fixed z-50 bg-white shadow-2xl flex flex-col
+          fixed z-[150] flex flex-col overflow-hidden border border-white/60 bg-white/95 shadow-[0_30px_90px_rgba(15,23,42,0.28)] backdrop-blur-xl
           transition-transform duration-300 ease-in-out
-          bottom-0 left-0 right-0 max-h-[92vh] rounded-t-2xl
-          lg:top-0 lg:right-0 lg:left-auto lg:bottom-0 lg:w-[640px] lg:max-h-full lg:rounded-none lg:rounded-l-2xl
+          bottom-0 left-0 right-0 max-h-[92vh] rounded-t-[28px]
+          lg:inset-x-6 lg:top-6 lg:bottom-6 lg:mx-auto lg:max-w-6xl lg:max-h-none lg:rounded-[32px]
           ${isOpen
             ? 'translate-y-0 lg:translate-x-0 lg:translate-y-0'
-            : 'translate-y-full lg:translate-x-full lg:translate-y-0'
+            : 'translate-y-full lg:translate-x-0 lg:translate-y-6 lg:opacity-0'
           }
         `}
       >
