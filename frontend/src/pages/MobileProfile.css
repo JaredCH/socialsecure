@@ -1,0 +1,133 @@
+.mobile-profile-page {
+  --profile-ink: #172033;
+  --profile-muted: #5d6578;
+  --profile-surface: rgba(255, 252, 247, 0.84);
+  --profile-surface-strong: rgba(255, 252, 247, 0.95);
+  --profile-outline: rgba(132, 59, 29, 0.12);
+  --profile-accent: #cb6231;
+  --profile-accent-deep: #843b1d;
+  --profile-accent-soft: #f8dcc7;
+  --profile-teal: #1f7a73;
+  --profile-shadow: 0 24px 60px rgba(90, 54, 33, 0.12);
+  min-height: 100%;
+  color: var(--profile-ink);
+  background:
+    radial-gradient(circle at top left, rgba(252, 214, 181, 0.88), transparent 32%),
+    radial-gradient(circle at top right, rgba(80, 166, 155, 0.16), transparent 24%),
+    linear-gradient(180deg, #fffaf2 0%, #f8efe1 42%, #fcfaf6 100%);
+}
+
+.mobile-profile-shell {
+  width: 100%;
+  max-width: 30rem;
+  margin: 0 auto;
+}
+
+.mobile-profile-glass {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.mobile-profile-card {
+  background: var(--profile-surface);
+  border: 1px solid var(--profile-outline);
+  box-shadow: var(--profile-shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.mobile-profile-card-strong {
+  background: var(--profile-surface-strong);
+}
+
+.mobile-profile-hero {
+  overflow: hidden;
+  border-radius: 0 0 2rem 2rem;
+  box-shadow: 0 26px 80px rgba(86, 49, 24, 0.18);
+}
+
+.mobile-profile-hero__backdrop {
+  background:
+    radial-gradient(circle at 16% 18%, rgba(255, 243, 233, 0.95), transparent 26%),
+    radial-gradient(circle at 84% 22%, rgba(255, 199, 145, 0.46), transparent 22%),
+    radial-gradient(circle at 68% 78%, rgba(47, 127, 120, 0.34), transparent 26%),
+    linear-gradient(145deg, #40211b 0%, #8f4220 38%, #c86333 66%, #f6c091 100%);
+}
+
+.mobile-profile-hero__mesh {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 1.15rem 1.15rem;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.95), transparent);
+}
+
+.mobile-profile-avatar {
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  background: linear-gradient(160deg, #fff7ef 0%, #f1d0ba 52%, #d78157 100%);
+  box-shadow: 0 18px 45px rgba(56, 28, 15, 0.32);
+}
+
+.mobile-profile-avatar__ring {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36);
+}
+
+.mobile-profile-dropdown {
+  background: rgba(255, 250, 244, 0.96);
+  border: 1px solid rgba(132, 59, 29, 0.14);
+  box-shadow: 0 22px 48px rgba(84, 44, 19, 0.16);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.mobile-profile-section-button[aria-pressed='true'] {
+  background: linear-gradient(135deg, rgba(203, 98, 49, 0.14), rgba(31, 122, 115, 0.16));
+  border-color: rgba(203, 98, 49, 0.3);
+  color: var(--profile-ink);
+  box-shadow: 0 18px 34px rgba(173, 93, 52, 0.12);
+}
+
+.mobile-profile-feed-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 251, 246, 0.9));
+}
+
+.mobile-profile-gallery-tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  min-height: 10.5rem;
+}
+
+.mobile-profile-gallery-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 20%, rgba(14, 16, 24, 0.68) 100%);
+}
+
+.mobile-profile-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.mobile-profile-calendar-cell {
+  min-height: 4.2rem;
+}
+
+.mobile-profile-type-heading {
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: -0.02em;
+}
+
+.mobile-profile-sans {
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+}
+
+@media (max-width: 420px) {
+  .mobile-profile-shell {
+    max-width: 100%;
+  }
+}

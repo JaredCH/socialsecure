@@ -22,6 +22,7 @@ jest.mock('./pages/ModerationDashboard', () => () => <div>Moderation Dashboard</
 jest.mock('./components/NotificationCenter', () => () => <div>🔔</div>);
 jest.mock('./pages/NotificationSettings', () => () => <div>Notification Settings</div>);
 jest.mock('./pages/ResumePublic', () => () => <div>Public Resume</div>);
+jest.mock('./pages/MobileProfile', () => () => <div>Mobile Profile Page</div>);
 jest.mock('react-hot-toast', () => ({ Toaster: () => null }));
 
 jest.mock('./utils/realtime', () => ({

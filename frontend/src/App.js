@@ -21,6 +21,7 @@ import AdminNewsReview from './pages/AdminNewsReview';
 import NotificationCenter from './components/NotificationCenter';
 import NotificationSettings from './pages/NotificationSettings';
 import ResumePublic from './pages/ResumePublic';
+import MobileProfile from './pages/MobileProfile';
 import { authAPI, notificationAPI, getAuthToken, setAuthToken, clearAuthToken } from './utils/api';
 import { initRealtime, disconnectRealtime } from './utils/realtime';
 import { deliverSiteNotification, shouldDisplaySiteNotification } from './utils/browserNotifications';
@@ -75,12 +76,15 @@ const RouteMain = ({ children }) => {
   const isNewsRoute = location.pathname === '/news';
   const isSocialRoute = location.pathname === '/social' || location.pathname === '/friends';
   const isCalendarRoute = location.pathname === '/calendar';
+  const isProfileRoute = location.pathname === '/profile';
 
   return (
     <main className={isChatRoute || isMapsRoute
       ? 'flex-1 min-h-0 overflow-hidden'
       : isNewsRoute
         ? 'flex-1 min-h-0 overflow-y-auto'
+      : isProfileRoute
+        ? 'mx-auto flex-1 min-h-0 w-full overflow-y-auto'
       : isSocialRoute
         ? 'mx-auto mt-8 flex-1 min-h-0 w-full overflow-y-auto'
       : isCalendarRoute
@@ -635,7 +639,19 @@ function App() {
                 )}
               </ProtectedRoute>
             )} />
-            <Route path="/profile" element={<Navigate to="/settings" replace />} />
+            <Route
+              path="/profile"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
+                >
+                  <MobileProfile user={user} />
+                </ProtectedRoute>
+              )}
+            />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/resume/:username" element={<ResumePublic />} />
             <Route
