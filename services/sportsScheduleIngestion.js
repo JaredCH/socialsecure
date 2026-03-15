@@ -37,27 +37,27 @@ const LEAGUE_SEASONS = {
   NFL: {
     seasonStartMonth: 8, // September
     seasonEndMonth: 1,   // January/February (playoffs)
-    offSeasonMonths: [3, 4, 5, 6, 7] // March through July
+    offSeasonMonths: [2, 3, 4, 5, 6, 7] // March through August preseason ramp
   },
   NBA: {
     seasonStartMonth: 9, // October
     seasonEndMonth: 5,   // May/June (playoffs)
-    offSeasonMonths: [6, 7, 8] // June through August
+    offSeasonMonths: [5, 6, 7, 8] // June through September
   },
   MLB: {
     seasonStartMonth: 3, // March/April
     seasonEndMonth: 10,  // October/November
-    offSeasonMonths: [11, 12, 1, 2] // November through February
+    offSeasonMonths: [10, 11, 0, 1] // November through February
   },
   NHL: {
     seasonStartMonth: 9, // October
     seasonEndMonth: 5,   // May/June (playoffs)
-    offSeasonMonths: [6, 7, 8] // June through August
+    offSeasonMonths: [5, 6, 7, 8] // June through September
   },
   MLS: {
     seasonStartMonth: 1, // February/March
     seasonEndMonth: 10,  // October/November (playoffs)
-    offSeasonMonths: [11, 12] // November through January
+    offSeasonMonths: [10, 11, 0] // November through January
   },
   NCAA_FOOTBALL: {
     seasonStartMonth: 7, // August
@@ -67,7 +67,7 @@ const LEAGUE_SEASONS = {
   NCAA_BASKETBALL: {
     seasonStartMonth: 9, // October/November
     seasonEndMonth: 3,   // March/April
-    offSeasonMonths: [4, 5, 6, 7, 8] // April through August
+    offSeasonMonths: [3, 4, 5, 6, 7, 8] // April through September
   },
   PREMIER_LEAGUE: {
     seasonStartMonth: 7, // August
@@ -116,7 +116,7 @@ const getNextSeasonStart = (league, now = new Date()) => {
   if (currentMonth >= leagueInfo.seasonStartMonth) {
     // We're past the season start, so next season is next cycle
     // But we might still be in season
-    if (isInSeason(league)) {
+    if (isInSeason(league, now)) {
       // Still in season, next season is after this one ends
       // For simplicity, estimate next season start
       if (leagueInfo.seasonStartMonth < leagueInfo.seasonEndMonth) {
@@ -361,6 +361,11 @@ const getLeagueStatusMap = (leagueIds = [], now = new Date()) => {
 
 const getAllLeagueStatuses = (now = new Date()) => getLeagueStatusMap(Object.keys(LEAGUE_SCOREBOARD_CONFIG), now);
 
+const cleanupLegacyMockSchedules = async () => {
+  const result = await SportsSchedule.deleteMany({ source: 'mock' });
+  return result.deletedCount || 0;
+};
+
 /**
  * Upsert schedule records to database
  */
@@ -437,6 +442,11 @@ const runSportsScheduleIngestion = async ({ now = new Date() } = {}) => {
   };
   
   try {
+    const removedLegacyMocks = await cleanupLegacyMockSchedules();
+    if (removedLegacyMocks > 0) {
+      console.log(`[sports-ingestion] Removed ${removedLegacyMocks} legacy mock schedule records`);
+    }
+
     const sportFetchers = {
       football: fetchFootballSchedules,
       basketball: fetchBasketballSchedules,
@@ -609,7 +619,8 @@ const getTeamSchedules = async (teamIds) => {
   const upcomingGames = await SportsSchedule.find({
     teamId: { $in: normalizedIds },
     gameDate: { $gte: now },
-    status: { $in: ['scheduled', 'in_progress', 'tbd'] }
+    status: { $in: ['scheduled', 'in_progress', 'tbd'] },
+    source: { $ne: 'mock' }
   }).sort({ gameDate: 1 }).lean();
 
   const nextGameByTeam = new Map();
@@ -627,11 +638,9 @@ const getTeamSchedules = async (teamIds) => {
       continue;
     }
     
-    const nextGame = nextGameByTeam.get(teamId) || null;
-    
-    // Get season status
     const seasonStatus = isInSeason(teamInfo.league, now);
     const nextSeasonStart = !seasonStatus ? getNextSeasonStart(teamInfo.league, now) : null;
+    const nextGame = seasonStatus ? (nextGameByTeam.get(teamId) || null) : null;
     
     results[teamId] = {
       teamId: teamId,
@@ -639,7 +648,6 @@ const getTeamSchedules = async (teamIds) => {
       league: teamInfo.league,
       nextGame: nextGame ? {
         date: nextGame.gameDate,
-        time: formatDisplayTime(nextGame.gameDate),
         opponent: nextGame.opponentName,
         isHome: nextGame.isHome,
         venue: nextGame.venue,
@@ -671,6 +679,7 @@ module.exports = {
   fetchSoccerSchedules,
   extractSchedulesFromScoreboard,
   buildLeagueScoreboardUrl,
+  cleanupLegacyMockSchedules,
   isInSeason,
   getNextSeasonStart,
   LEAGUE_SEASONS

@@ -98,4 +98,57 @@ describe('WeatherBar', () => {
     expect(container.textContent).toContain('Weather unavailable');
     expect(container.textContent).toContain('Add a weather or news location in preferences to load forecasts here.');
   });
+
+  it('shows wind gusts in the expanded hourly forecast', async () => {
+    newsAPI.getWeather.mockResolvedValue({
+      data: {
+        locations: [
+          {
+            _id: 'gusty-primary',
+            city: 'Austin',
+            state: 'TX',
+            isPrimary: true,
+            weather: {
+              current: {
+                temperature: 72,
+                shortForecast: 'Windy',
+                humidity: 41,
+                icon: 'cloud-sun',
+                windSpeed: 14,
+                windGust: 24,
+              },
+              high: 78,
+              low: 59,
+              hourly: [
+                {
+                  time: '2026-03-15T18:00:00.000Z',
+                  temperature: 71,
+                  icon: 'cloud-sun',
+                  precipitationProbability: 10,
+                  windSpeed: 15,
+                  windGust: 26,
+                }
+              ],
+              weekly: [],
+            },
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      root.render(<WeatherBar />);
+    });
+    await flush();
+
+    const expandButton = container.querySelector('button[aria-label="Expand weather"]');
+    expect(expandButton).toBeTruthy();
+
+    await act(async () => {
+      expandButton.click();
+    });
+
+    expect(container.textContent).toContain('Gusts 24 mph');
+    expect(container.textContent).toContain('Gust 26 mph');
+  });
 });

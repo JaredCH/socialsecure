@@ -13,6 +13,13 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
   const [leagueStatuses, setLeagueStatuses] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const userTimeZone = useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+    } catch {
+      return undefined;
+    }
+  }, []);
 
   // Normalize team IDs for comparison
   const normalizeTeamId = (team) => {
@@ -131,19 +138,31 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
     
     const gameDate = new Date(game.date);
     const now = new Date();
-    const diffDays = Math.ceil((gameDate - now) / (1000 * 60 * 60 * 24));
+    const formatDateKey = (value) => value.toLocaleDateString('en-CA', { timeZone: userTimeZone });
+    const todayKey = formatDateKey(now);
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowKey = formatDateKey(tomorrow);
+    const gameKey = formatDateKey(gameDate);
+    const localTime = gameDate.toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: userTimeZone,
+      timeZoneName: 'short'
+    });
     
-    if (diffDays < 0) return 'Past game';
-    if (diffDays === 0) return `Today, ${game.time || 'TBD'}`;
-    if (diffDays === 1) return `Tomorrow, ${game.time || 'TBD'}`;
+    if (gameDate < now) return 'Past game';
+    if (gameKey === todayKey) return `Today, ${localTime}`;
+    if (gameKey === tomorrowKey) return `Tomorrow, ${localTime}`;
     
     const dateStr = gameDate.toLocaleDateString('en-US', { 
       weekday: 'short', 
       month: 'short', 
-      day: 'numeric' 
+      day: 'numeric',
+      timeZone: userTimeZone
     });
     
-    return `${dateStr}, ${game.time || 'TBD'}`;
+    return `${dateStr}, ${localTime}`;
   };
 
   // Get display status for off-season

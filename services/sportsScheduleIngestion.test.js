@@ -4,7 +4,8 @@ const {
   fetchBaseballSchedules,
   fetchHockeySchedules,
   fetchSoccerSchedules,
-  buildLeagueScoreboardUrl
+  buildLeagueScoreboardUrl,
+  isInSeason
 } = require('./sportsScheduleIngestion');
 
 const makeTeam = (displayName, abbreviation, location, name) => ({
@@ -45,6 +46,10 @@ const createFetcher = (responsesByLeague) => jest.fn((url) => {
 });
 
 describe('sportsScheduleIngestion per-sport fetchers', () => {
+  it('treats the NFL as off-season in mid-March', () => {
+    expect(isInSeason('NFL', new Date('2026-03-15T12:00:00.000Z'))).toBe(false);
+  });
+
   it('fetches football schedules for NFL and NCAA football teams', async () => {
     const now = new Date('2025-11-15T12:00:00.000Z');
     const responses = {

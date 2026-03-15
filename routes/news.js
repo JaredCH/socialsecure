@@ -337,7 +337,7 @@ async function fetchWeatherForLocation(locObj) {
   const startMs = Date.now();
 
   try {
-    const forecastUrl = `${OPEN_METEO_FORECAST_BASE}?latitude=${encodeURIComponent(resolved.lat)}&longitude=${encodeURIComponent(resolved.lon)}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=7&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto`;
+    const forecastUrl = `${OPEN_METEO_FORECAST_BASE}?latitude=${encodeURIComponent(resolved.lat)}&longitude=${encodeURIComponent(resolved.lon)}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=7&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto`;
     const aqUrl = `${OPEN_METEO_AIR_QUALITY_BASE}?latitude=${encodeURIComponent(resolved.lat)}&longitude=${encodeURIComponent(resolved.lon)}&current=us_aqi,uv_index,grass_pollen,birch_pollen,ragweed_pollen&timezone=auto`;
 
     const [forecast, aq] = await Promise.allSettled([
@@ -361,6 +361,7 @@ async function fetchWeatherForLocation(locObj) {
         temperature: fc?.hourly?.temperature_2m?.[idx] ?? null,
         humidity: fc?.hourly?.relative_humidity_2m?.[idx] ?? null,
         windSpeed: fc?.hourly?.wind_speed_10m?.[idx] ?? null,
+        windGust: fc?.hourly?.wind_gusts_10m?.[idx] ?? null,
         precipitationProbability: fc?.hourly?.precipitation_probability?.[idx] ?? null,
         shortForecast: descriptor.description,
         icon: descriptor.icon
@@ -410,6 +411,7 @@ async function fetchWeatherForLocation(locObj) {
         temperatureUnit: 'F',
         humidity: current.relative_humidity_2m ?? null,
         windSpeed: current.wind_speed_10m ?? null,
+        windGust: current.wind_gusts_10m ?? null,
         precipitationProbability: hourly[0]?.precipitationProbability ?? null,
         weatherCode: current.weather_code ?? null,
         shortForecast: currentDescriptor.description,

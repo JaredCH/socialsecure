@@ -402,6 +402,12 @@ export default function WeatherBar({ variant = 'sticky' }) {
                 Wind {current.windSpeed} mph
               </span>
             )}
+            {current?.windGust != null && (
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm" aria-hidden="true">cyclone</span>
+                Gusts {current.windGust} mph
+              </span>
+            )}
             {current?.precipitationProbability != null && (
               <span className="flex items-center gap-1">
                 <span className="material-symbols-outlined text-sm" aria-hidden="true">water_drop</span>
@@ -473,11 +479,13 @@ export default function WeatherBar({ variant = 'sticky' }) {
               {activeTab === 'hourly' && hourly.length > 0 && (
                 <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
                   {hourly.slice(0, 12).map((h, i) => (
-                    <div key={i} className="flex flex-col items-center shrink-0 text-[10px] text-white/80 gap-0.5">
+                    <div key={i} className="flex min-w-[76px] flex-col items-center shrink-0 rounded-xl bg-white/10 px-2 py-2 text-[10px] text-white/80 gap-0.5">
                       <span>{new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}</span>
                       <span className="text-sm">{ICON_MAP[h.icon] || '🌤️'}</span>
                       <span className="font-semibold text-white">{h.temperature}°</span>
-                      <span>{h.precipitationProbability ?? '--'}%</span>
+                      <span>Rain {h.precipitationProbability ?? '--'}%</span>
+                      <span>Wind {h.windSpeed ?? '--'} mph</span>
+                      <span>Gust {h.windGust ?? '--'} mph</span>
                     </div>
                   ))}
                 </div>
