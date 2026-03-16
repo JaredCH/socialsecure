@@ -86,7 +86,7 @@ const platformCapabilities = [
 const mapDensityStats = [
   {
     title: 'User convergence',
-    description: 'Ten glowing circles spread across the city grid drift inward; each collision multiplies glow size by 1.5× the number of merging circles.'
+    description: 'Ten glowing circles spread across the city grid drift inward; each collision scales glow to 1.5× the total count at center.'
   },
   {
     title: 'Center convergence',
@@ -105,6 +105,8 @@ const DENSITY_MERGE_POINT = { x: 22, y: 49 };
 // Diameter in px for each circle – with the radial-gradient glow the visible
 // footprint is roughly 100 ft at the city-block scale shown in the background.
 const DENSITY_GLOW_SIZE = 28;
+const DENSITY_BREAKOFF_HOLD = 0.83; // hold peak until just before break-away
+const DENSITY_BREAKOFF_FRAC = 0.84; // the instant break-off glows detach
 
 // Ten user-density circles with roles that drive the multi-phase animation.
 // 'normal'     – drifts to center and fades into the cluster.
@@ -195,8 +197,6 @@ function getDensityAnimation(circle, reducedMotion) {
     case 'break-off': {
       // Converges to center at full formula scale, HOLDS that size, then
       // shrinks sharply only at the instant it breaks away from the cluster.
-      const holdFrac = 0.83;   // hold peak until just before break-away
-      const breakFrac = 0.84;  // the instant the glow detaches
       return {
         animate: {
           left:    [`${startX}%`, `${startX}%`, `${cx}%`,   `${cx}%`,   `${breakX}%`, `${breakX}%`],
@@ -206,7 +206,7 @@ function getDensityAnimation(circle, reducedMotion) {
         },
         transition: {
           duration: DENSITY_DURATION,
-          times: [0, 0.11, convergeFrac, holdFrac, breakFrac, 1],
+          times: [0, 0.11, convergeFrac, DENSITY_BREAKOFF_HOLD, DENSITY_BREAKOFF_FRAC, 1],
           repeat: Infinity,
           ease: 'easeInOut'
         }
@@ -215,7 +215,10 @@ function getDensityAnimation(circle, reducedMotion) {
     default: {
       // Normal circles grow using the collision formula when they reach center.
       // Size is maintained for the rest of the cycle – no shrinkage.
-      const peakOpacity = Math.min(0.82 + ((convergeFrac - 0.5) * 4) * 0.2, 1.0);
+      // Opacity increases for later arrivals (convergeFrac further from 0.5)
+      // to reflect higher density in the cluster.
+      const arrivalFactor = (convergeFrac - 0.5) * 4;
+      const peakOpacity = Math.min(0.82 + arrivalFactor * 0.2, 1.0);
       return {
         animate: {
           left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`],
@@ -427,7 +430,7 @@ function Home({ isAuthenticated = false }) {
                         ? { duration: 0.01 }
                         : {
                             duration: DENSITY_DURATION,
-                            times: [0, 0.2, 0.52, 0.82, 0.84, 1],
+                            times: [0, 0.2, 0.52, 0.82, DENSITY_BREAKOFF_FRAC, 1],
                             repeat: Infinity,
                             ease: 'easeInOut'
                           }
