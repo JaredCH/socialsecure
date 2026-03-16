@@ -4,6 +4,8 @@ const LINK_REGEX = /(https?:\/\/[^\s]+)/gi;
 const TRAILING_PUNCTUATION_REGEX = /[),.!?;:]+$/;
 const DEFAULT_LONG_PRESS_DELAY_MS = 550;
 const LINK_PREVIEW_PERCENTAGE = 0.25;
+const DM_MESSAGE_TEXT_CLASS = 'text-[13px] leading-5';
+const ROOM_MESSAGE_TEXT_CLASS = 'text-[14px] leading-6';
 
 const getLinkPreview = (href) => {
   const mainUrl = String(href || '').replace(/^https?:\/\//i, '');
@@ -243,6 +245,9 @@ function ChatMessageItem({
     const showAvatar = !isOwnMessage && !groupedWithNext;
     const showHeader = !isOwnMessage && !groupedWithPrevious;
     const showTimestamp = !groupedWithNext;
+    const dmAvatarNode = isOwnMessage
+      ? null
+      : (showAvatar ? avatarNode : <span className="block h-9 w-9 shrink-0" />);
 
     return (
       <article
@@ -268,7 +273,7 @@ function ChatMessageItem({
         }}
       >
         <div className={`flex max-w-[88%] items-end gap-2 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
-          {isOwnMessage ? null : (showAvatar ? avatarNode : <span className="block h-9 w-9 shrink-0" />)}
+          {dmAvatarNode}
           <div className={`flex min-w-0 flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}>
             {showHeader ? (
               <button
@@ -298,7 +303,7 @@ function ChatMessageItem({
                 isOwnMessage ? theme.messageOwn : theme.messageOther
               ].join(' ')}
             >
-              <p className="whitespace-pre-wrap break-words text-[13px] leading-5">{renderMessageContent(message.content)}</p>
+              <p className={`whitespace-pre-wrap break-words ${DM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(message.content)}</p>
               {reactionsMarkup}
             </div>
             {showTimestamp ? (
@@ -352,7 +357,7 @@ function ChatMessageItem({
             </div>
           ) : null}
           <div tabIndex={0} className="rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1">
-            <p className="whitespace-pre-wrap break-words text-[14px] leading-6">{renderMessageContent(message.content)}</p>
+            <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(message.content)}</p>
             {reactionsMarkup}
           </div>
         </div>

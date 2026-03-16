@@ -3,6 +3,7 @@ import ChatMessageItem from './ChatMessageItem';
 
 const INITIAL_RENDER_COUNT = 10;
 const LOAD_MORE_STEP = 10;
+const SCROLL_NEAR_BOTTOM_THRESHOLD_PX = 96;
 
 function ChatMessageList({
   conversationId,
@@ -29,7 +30,7 @@ function ChatMessageList({
 
   const isNearBottom = (container) => {
     if (!container) return true;
-    return (container.scrollHeight - container.scrollTop - container.clientHeight) <= 96;
+    return (container.scrollHeight - container.scrollTop - container.clientHeight) <= SCROLL_NEAR_BOTTOM_THRESHOLD_PX;
   };
 
   useEffect(() => {

@@ -178,6 +178,8 @@ const MAX_CHAT_ROOM_FETCH = 500;
 const MAX_CHAT_ROOM_RESULTS = 20;
 const MAX_FAVORITE_ROOMS = 8;
 const MAX_DM_FRIEND_PICKER_RESULTS = 12;
+const PARTICIPANT_REFRESH_INTERVAL_MS = 15000;
+const PARTICIPANT_REFRESH_DEBOUNCE_MS = 3000;
 const normalizeId = (value) => String(value || '').trim();
 const sortRoomsByName = (left, right) => String(left?.name || '').localeCompare(String(right?.name || ''));
 
@@ -361,6 +363,8 @@ function Chat() {
   const e2eeSessionRef = useRef(null);
   const passwordResolverRef = useRef(null);
   const decryptingMessageIdsRef = useRef(new Set());
+  const participantRefreshTimerRef = useRef(null);
+  const lastParticipantRefreshAtRef = useRef(0);
 
   const handleThemeChange = useCallback((nextTheme) => {
     if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
@@ -786,6 +790,32 @@ function Chat() {
     }
   }, [activeConversationId]);
 
+  const scheduleConversationUsersRefresh = useCallback(() => {
+    if (!activeConversationId) return;
+    const now = Date.now();
+    const elapsedMs = now - lastParticipantRefreshAtRef.current;
+    const runRefresh = () => {
+      lastParticipantRefreshAtRef.current = Date.now();
+      loadConversationUsers({ silent: true });
+    };
+
+    if (elapsedMs >= PARTICIPANT_REFRESH_DEBOUNCE_MS) {
+      if (participantRefreshTimerRef.current) {
+        window.clearTimeout(participantRefreshTimerRef.current);
+        participantRefreshTimerRef.current = null;
+      }
+      runRefresh();
+      return;
+    }
+
+    if (participantRefreshTimerRef.current) return;
+
+    participantRefreshTimerRef.current = window.setTimeout(() => {
+      participantRefreshTimerRef.current = null;
+      runRefresh();
+    }, PARTICIPANT_REFRESH_DEBOUNCE_MS - elapsedMs);
+  }, [activeConversationId, loadConversationUsers]);
+
   useEffect(() => {
     if (!activeConversationId) return undefined;
     joinRealtimeRoom(activeConversationId);
@@ -802,21 +832,21 @@ function Chat() {
       if (!incomingConversationId) return;
       if (incomingConversationId !== String(activeConversationId || '')) return;
       setMessages((prev) => upsertConversationMessage(prev, incomingMessage));
-      loadConversationUsers({ silent: true });
+      scheduleConversationUsersRefresh();
     });
     return () => {
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
     };
-  }, [activeConversationId, loadConversationUsers]);
+  }, [activeConversationId, scheduleConversationUsersRefresh]);
 
   useEffect(() => {
     loadConversationUsers();
     if (!activeConversationId) return undefined;
     const intervalId = window.setInterval(() => {
       loadConversationUsers({ silent: true });
-    }, 15000);
+    }, PARTICIPANT_REFRESH_INTERVAL_MS);
     return () => {
       window.clearInterval(intervalId);
     };
@@ -1048,7 +1078,7 @@ function Chat() {
       setMessages((prev) => upsertConversationMessage(prev, data.message));
       setComposerValue('');
       setLocalTyping(false);
-      loadConversationUsers({ silent: true });
+      scheduleConversationUsersRefresh();
       await refreshHub(activeChannel);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to send message');
@@ -1273,6 +1303,10 @@ function Chat() {
   }, [themeMenuOpen]);
 
   useEffect(() => () => {
+    if (participantRefreshTimerRef.current) {
+      window.clearTimeout(participantRefreshTimerRef.current);
+      participantRefreshTimerRef.current = null;
+    }
     if (userLongPressTimerRef.current) {
       clearTimeout(userLongPressTimerRef.current);
       userLongPressTimerRef.current = null;
