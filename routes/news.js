@@ -338,7 +338,7 @@ async function fetchWeatherForLocation(locObj) {
   const startMs = Date.now();
 
   try {
-    const forecastUrl = `${OPEN_METEO_FORECAST_BASE}?latitude=${encodeURIComponent(resolved.lat)}&longitude=${encodeURIComponent(resolved.lon)}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=7&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto`;
+    const forecastUrl = `${OPEN_METEO_FORECAST_BASE}?latitude=${encodeURIComponent(resolved.lat)}&longitude=${encodeURIComponent(resolved.lon)}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,surface_pressure,weather_code&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&forecast_days=7&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto`;
     const aqUrl = `${OPEN_METEO_AIR_QUALITY_BASE}?latitude=${encodeURIComponent(resolved.lat)}&longitude=${encodeURIComponent(resolved.lon)}&current=us_aqi,uv_index,grass_pollen,birch_pollen,ragweed_pollen&timezone=auto`;
 
     const [forecast, aq] = await Promise.allSettled([
@@ -376,6 +376,8 @@ async function fetchWeatherForLocation(locObj) {
         name: new Date(time).toLocaleDateString('en-US', { weekday: 'short' }),
         high: fc?.daily?.temperature_2m_max?.[idx] ?? null,
         low: fc?.daily?.temperature_2m_min?.[idx] ?? null,
+        sunrise: fc?.daily?.sunrise?.[idx] ?? null,
+        sunset: fc?.daily?.sunset?.[idx] ?? null,
         precipitationProbability: fc?.daily?.precipitation_probability_max?.[idx] ?? null,
         shortForecast: descriptor.description,
         icon: descriptor.icon
@@ -413,6 +415,7 @@ async function fetchWeatherForLocation(locObj) {
         humidity: current.relative_humidity_2m ?? null,
         windSpeed: current.wind_speed_10m ?? null,
         windGust: current.wind_gusts_10m ?? null,
+        pressure: current.surface_pressure ?? null,
         precipitationProbability: hourly[0]?.precipitationProbability ?? null,
         weatherCode: current.weather_code ?? null,
         shortForecast: currentDescriptor.description,
@@ -423,6 +426,8 @@ async function fetchWeatherForLocation(locObj) {
       hourly,
       weekly,
       forecastSummary: weekly[0]?.shortForecast || currentDescriptor.description,
+      sunrise: fc?.daily?.sunrise?.[0] ?? null,
+      sunset: fc?.daily?.sunset?.[0] ?? null,
       uvIndex,
       airQuality: usAqi !== null ? { index: usAqi, label: aqiLabel } : null,
       pollen: hasPollenData ? pollen : null,

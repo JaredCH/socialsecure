@@ -10,7 +10,6 @@ import { getCategoryIcon } from '../../constants/categoryIcons';
  *   multiSelect       {bool}     — true = multi-select mode
  *   onToggleCategory  {Function} — (key) => void
  *   onMultiSelectToggle {Function}
- *   followedTeams     {Array}    — [{ teamName }]
  *   keywords          {Array}    — [string]
  *   onRemoveKeyword   {Function} — (kw) => void
  *   onAddKeyword      {Function} — (kw) => void
@@ -26,7 +25,6 @@ export default function NewsLeftPanel({
   onToggleCategory,
   onToggleCategoryEnabled,
   onMultiSelectToggle,
-  followedTeams = [],
   keywords = [],
   onRemoveKeyword,
   onAddKeyword,
@@ -70,107 +68,19 @@ export default function NewsLeftPanel({
         </div>
       </div>
 
-      {/* Categories header + multi-select toggle */}
-      <div className="px-3 pt-3 pb-1 flex items-center justify-between">
-        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Categories</span>
+      {/* Settings */}
+      <div className="px-3 pb-2">
         <button
-          onClick={onMultiSelectToggle}
-          className={`text-[10px] font-medium px-2 py-0.5 rounded border transition-colors ${
-            multiSelect
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'text-gray-400 border-gray-200 hover:text-blue-600 hover:border-blue-300'
-          }`}
+          onClick={onOpenSettings}
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors text-xs font-medium"
         >
-          Multi
+          <span className="material-symbols-outlined text-base leading-none">settings</span>
+          Settings
         </button>
       </div>
 
-      {/* Category list */}
-      <nav className="flex-1 px-2 pb-2">
-        {/* All */}
-        <button
-          onClick={() => onToggleCategory?.(null)}
-          className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-xl mb-0.5 text-sm transition-colors ${
-            isAllActive && !multiSelect
-              ? 'bg-blue-50 text-blue-700 font-semibold'
-              : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <span className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-sm text-gray-500 leading-none">newspaper</span>
-          </span>
-          <span className="flex-1 text-left text-xs">All</span>
-        </button>
-
-        {categories.map((cat) => {
-          const { symbol, bg, text } = getCategoryIcon(cat.key);
-          const active = activeCategories.includes(cat.key);
-          const isDisabled = disabledSet.has(cat.key);
-          return (
-            <div
-              key={cat.key}
-              data-category-key={cat.key}
-              data-disabled={isDisabled ? 'true' : 'false'}
-              className={`mb-0.5 flex items-center gap-2 rounded-xl px-2 py-1 ${isDisabled ? 'opacity-65' : ''}`}
-            >
-              <button
-                onClick={() => !isDisabled && onToggleCategory?.(cat.key)}
-                className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1 text-sm transition-colors ${
-                  active
-                    ? 'bg-blue-50 text-blue-700 font-semibold'
-                    : isDisabled
-                      ? 'text-gray-400'
-                      : 'text-gray-700 hover:bg-gray-50'
-                }`}
-                aria-label={`Filter by ${cat.label}`}
-                disabled={isDisabled}
-                type="button"
-              >
-                <span className={`w-6 h-6 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
-                  <span className={`material-symbols-outlined text-sm leading-none ${text}`}>{symbol}</span>
-                </span>
-                <span className="flex-1 text-left text-xs truncate">{cat.label}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onToggleCategoryEnabled?.(cat.key, isDisabled)}
-                aria-label={isDisabled ? `Enable category ${cat.label}` : `Disable category ${cat.label}`}
-                role="switch"
-                aria-checked={!isDisabled}
-                className={`relative h-5 w-9 rounded-full border transition-colors ${
-                  isDisabled ? 'border-gray-300 bg-gray-200' : 'border-blue-500 bg-blue-500'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    isDisabled ? 'left-0.5' : 'left-4'
-                  }`}
-                />
-              </button>
-            </div>
-          );
-        })}
-      </nav>
-
-      {/* Quick Actions — Followed Sports Teams */}
-      {followedTeams.length > 0 && (
-        <div className="px-3 pt-3 pb-2 border-t border-gray-100">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">My Teams</p>
-          <div className="flex flex-wrap gap-1.5">
-            {followedTeams.map((t) => (
-              <span
-                key={t.teamName || t}
-                className="text-[11px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 font-medium"
-              >
-                {t.teamName || t}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Quick Actions — Keywords */}
-      <div className="px-3 pt-3 pb-2 border-t border-gray-100">
+      <div className="px-3 pt-2 pb-2 border-t border-gray-100">
         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Keywords</p>
         {keywords.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
@@ -210,16 +120,87 @@ export default function NewsLeftPanel({
         </div>
       </div>
 
-      {/* Settings gear */}
-      <div className="px-3 pt-2 pb-4 border-t border-gray-100">
+      {/* Categories header + multi-select toggle */}
+      <div className="px-3 pt-2 pb-1 flex items-center justify-between border-t border-gray-100">
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Categories</span>
         <button
-          onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors text-sm"
+          onClick={onMultiSelectToggle}
+          className={`text-[10px] font-medium px-2 py-0.5 rounded border transition-colors ${
+            multiSelect
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'text-gray-400 border-gray-200 hover:text-blue-600 hover:border-blue-300'
+          }`}
         >
-          <span className="material-symbols-outlined text-lg leading-none">settings</span>
-          Settings
+          Multi
         </button>
       </div>
+
+      {/* Category list */}
+      <nav className="flex-1 px-2 pb-2">
+        {/* All */}
+        <button
+          onClick={() => onToggleCategory?.(null)}
+          className={`w-full flex items-center gap-2 px-2 py-1 rounded-xl mb-0.5 text-sm transition-colors ${
+            isAllActive && !multiSelect
+              ? 'bg-blue-50 text-blue-700 font-semibold'
+              : 'text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          <span className="w-5 h-5 rounded-md bg-gray-100 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-sm text-gray-500 leading-none">newspaper</span>
+          </span>
+          <span className="flex-1 text-left text-xs leading-tight">All</span>
+        </button>
+
+        {categories.map((cat) => {
+          const { symbol, bg, text } = getCategoryIcon(cat.key);
+          const active = activeCategories.includes(cat.key);
+          const isDisabled = disabledSet.has(cat.key);
+          return (
+            <div
+              key={cat.key}
+              data-category-key={cat.key}
+              data-disabled={isDisabled ? 'true' : 'false'}
+              className={`mb-0.5 flex items-center gap-2 rounded-xl px-2 py-0.5 ${isDisabled ? 'opacity-65' : ''}`}
+            >
+              <button
+                onClick={() => !isDisabled && onToggleCategory?.(cat.key)}
+                className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-0.5 text-sm transition-colors ${
+                  active
+                    ? 'bg-blue-50 text-blue-700 font-semibold'
+                    : isDisabled
+                      ? 'text-gray-400'
+                      : 'text-gray-700 hover:bg-gray-50'
+                }`}
+                aria-label={`Filter by ${cat.label}`}
+                disabled={isDisabled}
+                type="button"
+              >
+                <span className={`w-5 h-5 rounded-md ${bg} flex items-center justify-center shrink-0`}>
+                  <span className={`material-symbols-outlined text-sm leading-none ${text}`}>{symbol}</span>
+                </span>
+                <span className="flex-1 text-left text-xs leading-tight truncate">{cat.label}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggleCategoryEnabled?.(cat.key, isDisabled)}
+                aria-label={isDisabled ? `Enable category ${cat.label}` : `Disable category ${cat.label}`}
+                role="switch"
+                aria-checked={!isDisabled}
+                className={`relative h-5 w-9 rounded-full border transition-colors ${
+                  isDisabled ? 'border-gray-300 bg-gray-200' : 'border-blue-500 bg-blue-500'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    isDisabled ? 'left-0.5' : 'left-4'
+                  }`}
+                />
+              </button>
+            </div>
+          );
+        })}
+      </nav>
     </aside>
   );
 }
