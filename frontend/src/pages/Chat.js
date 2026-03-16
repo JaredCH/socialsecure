@@ -219,6 +219,7 @@ const writeDmUnlockCache = (conversationIds, unlockDurationMinutes = DEFAULT_UNL
 };
 
 function Chat() {
+  const requestedChannel = new URLSearchParams(window.location.search).get('tab');
   const [profile, setProfile] = useState(null);
   const [loadingHub, setLoadingHub] = useState(true);
   const [activeChannel, setActiveChannel] = useState('zip');
@@ -268,6 +269,17 @@ function Chat() {
   const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(DEFAULT_UNLOCK_DURATION_MINUTES);
   const [dmFriends, setDmFriends] = useState([]);
   const [dmFriendsLoading, setDmFriendsLoading] = useState(false);
+
+  useEffect(() => {
+    if (requestedChannel === 'dm') {
+      setActiveChannel('dm');
+      return;
+    }
+
+    if (requestedChannel === 'zip' || requestedChannel === 'rooms') {
+      setActiveChannel('zip');
+    }
+  }, [requestedChannel]);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [conversationPanelTab, setConversationPanelTab] = useState('list');

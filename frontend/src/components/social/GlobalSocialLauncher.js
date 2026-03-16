@@ -4,11 +4,11 @@ import { chatAPI, notificationAPI } from '../../utils/api';
 import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
 
 const MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB = {
-  main: { x: -76, y: 2 },
-  friends: { x: -90, y: -34 },
-  gallery: { x: -84, y: -68 },
-  chat: { x: -66, y: -102 },
-  calendar: { x: -38, y: -134 }
+  main: { x: -84, y: 2 },
+  friends: { x: -84, y: -34 },
+  gallery: { x: -42, y: -68 },
+  chat: { x: -42, y: -102 },
+  calendar: { x: -42, y: -134 }
 };
 
 const SITE_NAV_LINKS = [
@@ -124,6 +124,19 @@ const resolveContextUsername = (pathname, search, currentUsername) => {
   return String(currentUsername || '').trim();
 };
 
+const normalizeUsername = (value) => String(value || '').trim().toLowerCase();
+
+const isActivityMuted = (item, timestampKey = 'createdAt') => {
+  if (!item) return false;
+  if (item.isRead || item.readAt || item.acknowledgedAt) return true;
+
+  const timestamp = new Date(item[timestampKey] || item.updatedAt || item.timestamp || 0).getTime();
+  if (!timestamp || Number.isNaN(timestamp)) return false;
+
+  const hoursOld = Math.max(0, (Date.now() - timestamp) / 3600000);
+  return hoursOld >= 24;
+};
+
 const GlobalSocialLauncher = ({ currentUsername = '', unreadNotificationCount = 0, enabled = false }) => {
   const navigate = useNavigate();
   const routeLocation = useLocation();
@@ -139,6 +152,8 @@ const GlobalSocialLauncher = ({ currentUsername = '', unreadNotificationCount = 
     () => resolveContextUsername(routeLocation.pathname, routeLocation.search, currentUsername),
     [routeLocation.pathname, routeLocation.search, currentUsername]
   );
+  const isViewingOtherSocialContext = Boolean(normalizeUsername(contextUsername))
+    && normalizeUsername(contextUsername) !== normalizeUsername(currentUsername);
 
   useEffect(() => {
     setIsOpen(false);
@@ -177,7 +192,7 @@ const GlobalSocialLauncher = ({ currentUsername = '', unreadNotificationCount = 
       }
 
       const notifications = Array.isArray(notificationsResponse.data?.notifications)
-        ? notificationsResponse.data.notifications.filter((item) => !item?.isRead).slice(0, 2)
+        ? notificationsResponse.data.notifications.slice(0, 3)
         : [];
 
       const conversations = conversationsResponse.data?.conversations || {};
@@ -245,6 +260,23 @@ const GlobalSocialLauncher = ({ currentUsername = '', unreadNotificationCount = 
       {hasActivityRail && isOpen && (
         <div className="pointer-events-none fixed inset-x-4 top-20 z-50 md:hidden">
           <div className="mx-auto flex max-w-sm flex-col gap-2">
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-sky-200/30 bg-sky-500/18 px-3 py-1.5 text-xs font-semibold text-sky-50 shadow-[0_10px_22px_rgba(2,6,23,0.28)] transition-colors hover:bg-sky-500/26"
+                aria-label="Open direct messages"
+                onClick={() => {
+                  navigate('/chat?tab=dm');
+                  setIsOpen(false);
+                }}
+              >
+                <TabIcon icon="chat" className="h-3.5 w-3.5" />
+                <span>Direct Messages</span>
+                <span className="inline-flex min-w-[1.4rem] justify-center rounded-full bg-slate-950/35 px-1.5 py-0.5 text-[0.65rem]">
+                  {activitySummary.unreadMessageCount > 99 ? '99+' : activitySummary.unreadMessageCount}
+                </span>
+              </button>
+            </div>
             {(unreadNotificationCount > 0 || activitySummary.notifications.length > 0) && (
               <div className="rounded-3xl border border-white/15 bg-slate-950/78 p-3 text-white shadow-[0_20px_50px_rgba(2,6,23,0.32)] backdrop-blur-xl">
                 <div className="flex items-center justify-between gap-3">
@@ -259,7 +291,10 @@ const GlobalSocialLauncher = ({ currentUsername = '', unreadNotificationCount = 
                 {activitySummary.notifications.length > 0 && (
                   <div className="mt-3 space-y-2">
                     {activitySummary.notifications.map((item) => (
-                      <div key={item._id || item.id || item.title} className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2">
+                      <div
+                        key={item._id || item.id || item.title}
+                        className={`rounded-2xl border border-white/10 bg-white/6 px-3 py-2 transition-opacity ${isActivityMuted(item, 'createdAt') ? 'opacity-55' : 'opacity-100'}`}
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <p className="line-clamp-2 text-sm font-medium text-white/92">{item.title || item.message || item.type || 'New activity'}</p>
                           <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.18em] text-white/45">{formatActivityTimestamp(item.createdAt || item.updatedAt)}</span>
@@ -359,7 +394,7 @@ const GlobalSocialLauncher = ({ currentUsername = '', unreadNotificationCount = 
                     navigate(buildSocialPath(contextUsername, tab.id));
                     setIsOpen(false);
                   }}
-                  className={`pointer-events-auto absolute bottom-5 right-5 flex w-[4.85rem] origin-bottom-right items-center gap-1.5 rounded-full border px-2.5 py-[7px] text-left shadow-[0_10px_22px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isActive ? 'border-white/25 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'}`}
+                  className={`pointer-events-auto absolute bottom-5 right-5 flex w-[4.85rem] origin-bottom-right items-center gap-1.5 rounded-full border px-2.5 py-[7px] text-left shadow-[0_10px_22px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isActive ? 'border-white/25 bg-white text-slate-950' : isViewingOtherSocialContext ? 'border-violet-200/35 bg-violet-500/18 text-violet-50 backdrop-blur-xl' : 'border-sky-200/30 bg-sky-500/16 text-sky-50 backdrop-blur-xl'}`}
                   style={{
                     transform: `translate3d(${tab.x}px, ${tab.y}px, 0) scale(1)`,
                     transitionDelay: `${index * 28 + 24}ms`

@@ -3,11 +3,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
 
 const MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB = {
-  main: { x: -76, y: 2 },
-  friends: { x: -90, y: -34 },
-  gallery: { x: -84, y: -68 },
-  chat: { x: -66, y: -102 },
-  calendar: { x: -38, y: -134 }
+  main: { x: -84, y: 2 },
+  friends: { x: -84, y: -34 },
+  gallery: { x: -42, y: -68 },
+  chat: { x: -42, y: -102 },
+  calendar: { x: -42, y: -134 }
 };
 
 const SITE_NAV_LINKS = [
@@ -46,6 +46,17 @@ const formatActivityTimestamp = (value) => {
   if (diffMinutes < 60) return `${diffMinutes}m`;
   if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h`;
   return `${Math.floor(diffMinutes / 1440)}d`;
+};
+
+const isActivityMuted = (item, timestampKey = 'createdAt') => {
+  if (!item) return false;
+  if (item.isRead || item.readAt || item.acknowledgedAt) return true;
+
+  const timestamp = new Date(item[timestampKey] || item.updatedAt || item.timestamp || 0).getTime();
+  if (!timestamp || Number.isNaN(timestamp)) return false;
+
+  const hoursOld = Math.max(0, (Date.now() - timestamp) / 3600000);
+  return hoursOld >= 24;
 };
 
 // Simple icon components for the tabs
@@ -136,6 +147,11 @@ const SocialHero = ({
     () => buildMobileMenuLayout(SOCIAL_HERO_TABS, MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB, -72),
     []
   );
+  const socialContextUser = useMemo(
+    () => String(new URLSearchParams(routeLocation.search).get('user') || '').trim(),
+    [routeLocation.search]
+  );
+  const isViewingOtherSocialContext = Boolean(socialContextUser);
   const unreadNotificationCount = Number(activitySummary?.unreadNotificationCount || 0);
   const unreadMessageCount = Number(activitySummary?.unreadMessageCount || 0);
   const notificationItems = Array.isArray(activitySummary?.notifications) ? activitySummary.notifications.slice(0, 2) : [];
@@ -343,6 +359,23 @@ const SocialHero = ({
           {hasActivityRail && isMobileMenuOpen && (
             <div className="pointer-events-none fixed inset-x-4 top-20 z-50 md:hidden">
               <div className="mx-auto flex max-w-sm flex-col gap-2">
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-sky-200/30 bg-sky-500/18 px-3 py-1.5 text-xs font-semibold text-sky-50 shadow-[0_10px_22px_rgba(2,6,23,0.28)] transition-colors hover:bg-sky-500/26"
+                    aria-label="Open direct messages"
+                    onClick={() => {
+                      navigate('/chat?tab=dm');
+                      setIsMobileMenuOpen(false);
+                    }}
+                  >
+                    <TabIcon icon="chat" className="h-3.5 w-3.5" />
+                    <span>Direct Messages</span>
+                    <span className="inline-flex min-w-[1.4rem] justify-center rounded-full bg-slate-950/35 px-1.5 py-0.5 text-[0.65rem]">
+                      {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                    </span>
+                  </button>
+                </div>
                 {(unreadNotificationCount > 0 || notificationItems.length > 0) && (
                   <div className="rounded-3xl border border-white/15 bg-slate-950/78 p-3 text-white shadow-[0_20px_50px_rgba(2,6,23,0.32)] backdrop-blur-xl">
                     <div className="flex items-center justify-between gap-3">
@@ -357,7 +390,10 @@ const SocialHero = ({
                     {notificationItems.length > 0 && (
                       <div className="mt-3 space-y-2">
                         {notificationItems.map((item) => (
-                          <div key={item._id || item.id || item.title} className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2">
+                          <div
+                            key={item._id || item.id || item.title}
+                            className={`rounded-2xl border border-white/10 bg-white/6 px-3 py-2 transition-opacity ${isActivityMuted(item, 'createdAt') ? 'opacity-55' : 'opacity-100'}`}
+                          >
                             <div className="flex items-start justify-between gap-3">
                               <p className="line-clamp-2 text-sm font-medium text-white/92">{item.title || item.message || item.type || 'New activity'}</p>
                               <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.18em] text-white/45">{formatActivityTimestamp(item.createdAt || item.updatedAt)}</span>
@@ -464,7 +500,7 @@ const SocialHero = ({
                         onTabChange?.(tab.id);
                         setIsMobileMenuOpen(false);
                       }}
-                      className={`pointer-events-auto absolute bottom-5 right-5 flex w-[4.85rem] origin-bottom-right items-center gap-1.5 rounded-full border px-2.5 py-[7px] text-left shadow-[0_10px_22px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isActive ? 'border-white/25 bg-white text-slate-950' : 'border-white/10 bg-slate-950/82 text-white backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                      className={`pointer-events-auto absolute bottom-5 right-5 flex w-[4.85rem] origin-bottom-right items-center gap-1.5 rounded-full border px-2.5 py-[7px] text-left shadow-[0_10px_22px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isActive ? 'border-white/25 bg-white text-slate-950' : isViewingOtherSocialContext ? 'border-violet-200/35 bg-violet-500/18 text-violet-50 backdrop-blur-xl' : 'border-sky-200/30 bg-sky-500/16 text-sky-50 backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
                       style={{
                         transform,
                         transitionDelay,
