@@ -290,6 +290,28 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).toContain('Zip 02115');
   });
 
+  it('renders the chat message panel without undefined admin moderation state errors', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+    await act(async () => {
+      await flush();
+    });
+
+    expect(container.querySelector('[data-testid="chat-message-panel"]')).not.toBeNull();
+  });
+
   it('does not show zip banner when neither profile nor hub has zip information', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: null } }
