@@ -76,7 +76,7 @@ describe('FilterBar', () => {
       categoryTrigger.click();
     });
 
-    const openMenu = container.querySelector('.absolute.top-full');
+    const openMenu = container.querySelector('[data-testid="filter-dropdown-menu"]');
     expect(openMenu).not.toBeNull();
     expect(openMenu.className).toContain('z-[70]');
   });

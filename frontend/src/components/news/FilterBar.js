@@ -48,7 +48,7 @@ function Dropdown({ label, children, icon }) {
         <span className={`material-symbols-outlined text-sm leading-none transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
       </button>
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-[70] bg-white rounded-xl shadow-xl ring-1 ring-gray-200 min-w-[200px] overflow-hidden">
+        <div data-testid="filter-dropdown-menu" className="absolute top-full mt-1 left-0 z-[70] bg-white rounded-xl shadow-xl ring-1 ring-gray-200 min-w-[200px] overflow-hidden">
           {children({ close: () => setOpen(false) })}
         </div>
       )}
