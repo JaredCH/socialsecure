@@ -121,9 +121,21 @@ friendshipSchema.statics.getFriends = async function(userId) {
     ]
   }).populate('requester recipient', 'username realName avatarUrl city state country');
 
-  return friendships.map(f => {
-    const friend = f.requester._id.toString() === userId.toString() ? f.recipient : f.requester;
-    return {
+  return friendships.reduce((acc, f) => {
+    const requesterId = String(f?.requester?._id || '');
+    const recipientId = String(f?.recipient?._id || '');
+    if (!requesterId || !recipientId) {
+      return acc;
+    }
+
+    const viewerId = String(userId || '');
+    const isRequester = requesterId === viewerId;
+    const friend = isRequester ? f.recipient : f.requester;
+    if (!friend?._id) {
+      return acc;
+    }
+
+    acc.push({
       _id: friend._id,
       username: friend.username,
       realName: friend.realName,
@@ -133,12 +145,13 @@ friendshipSchema.statics.getFriends = async function(userId) {
       country: friend.country,
       friendshipId: f._id,
       friendsSince: f.acceptedAt,
-      category: (f.requester._id.toString() === userId.toString() ? f.requesterCategory : f.recipientCategory) || 'social',
+      category: (isRequester ? f.requesterCategory : f.recipientCategory) || 'social',
       partnerStatus: ['none', 'pending', 'accepted'].includes(f.partnerStatus) ? f.partnerStatus : 'none',
-      partnerRequestedByViewer: String(f.partnerRequestedBy || '') === String(userId || ''),
+      partnerRequestedByViewer: String(f.partnerRequestedBy || '') === viewerId,
       partnerRequestedAt: f.partnerRequestedAt || null
-    };
-  });
+    });
+    return acc;
+  }, []);
 };
 
 // Static method to get incoming friend requests
