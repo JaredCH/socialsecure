@@ -220,5 +220,9 @@ describe('WeatherBar', () => {
     });
 
     expect(container.textContent).toContain('Hourly');
+    const expandedPanel = container.querySelector('[data-testid="weather-card-expanded"]');
+    expect(expandedPanel).toBeTruthy();
+    expect(expandedPanel.className).toContain('max-h-[24rem]');
+    expect(expandedPanel.className).toContain('overflow-y-auto');
   });
 });

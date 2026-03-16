@@ -204,7 +204,7 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
         </div>
       </div>
       
-      <div className="px-4 py-3 space-y-3 max-h-64 overflow-y-auto">
+      <div className="px-4 py-3 space-y-3 max-h-[21.5rem] overflow-y-auto">
         {loading && (
           <div className="flex items-center justify-center py-4">
             <div className="w-5 h-5 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
