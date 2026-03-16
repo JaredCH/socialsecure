@@ -23,6 +23,14 @@ const DEFAULT_SECURITY_PREFERENCES = {
   sessionTimeout: 60,
   requirePasswordForSensitive: true
 };
+const DEFAULT_PROFILE_FIELD_VISIBILITY = {
+  streetAddress: 'secure',
+  phone: 'secure',
+  email: 'secure',
+  ageGroup: 'social',
+  sex: 'social',
+  race: 'social'
+};
 export const INFO_VISIBILITY_OPTIONS = [
   { value: 'social', label: 'Social', color: 'green' },
   { value: 'secure', label: 'Secure', color: 'red' }
@@ -167,6 +175,7 @@ function OnboardingWizard({
   const [encryptionPassword, setEncryptionPassword] = useState('');
   const [confirmEncryptionPassword, setConfirmEncryptionPassword] = useState('');
   const [byoPgpPublicKey, setByoPgpPublicKey] = useState('');
+  const [pgpSectionOpen, setPgpSectionOpen] = useState(false);
   const [generatedPrivateKey, setGeneratedPrivateKey] = useState('');
   const [seedPhrase, setSeedPhrase] = useState('');
   const [seedPhraseQrDataUrl, setSeedPhraseQrDataUrl] = useState('');
@@ -196,14 +205,7 @@ function OnboardingWizard({
     ageGroup: '',
     sex: '',
     race: '',
-    profileFieldVisibility: {
-      streetAddress: 'social',
-      phone: 'social',
-      email: 'social',
-      ageGroup: 'social',
-      sex: 'social',
-      race: 'social'
-    }
+    profileFieldVisibility: DEFAULT_PROFILE_FIELD_VISIBILITY
   });
 
   const initialStep = useMemo(() => {
@@ -544,10 +546,12 @@ function OnboardingWizard({
         return (
           <div key={index} className="flex-1">
             <div
-              className={`h-2 rounded-full ${completed ? 'bg-green-500' : active ? 'bg-blue-500' : 'bg-gray-200'}`}
+              className={`h-2 rounded-full transition-colors ${
+                completed ? 'bg-emerald-500' : active ? 'bg-blue-500' : 'bg-slate-200'
+              }`}
               aria-hidden="true"
             />
-            <p className={`text-xs mt-1 text-center ${active ? 'text-blue-600 font-semibold' : 'text-gray-500'}`}>
+            <p className={`text-xs mt-1 text-center ${active ? 'text-blue-700 font-semibold' : 'text-slate-500'}`}>
               Step {index}
             </p>
           </div>
@@ -557,37 +561,42 @@ function OnboardingWizard({
   );
 
   return (
-    <div className="max-w-2xl mx-auto bg-white rounded-lg shadow p-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Security Onboarding</h1>
-      <p className="text-sm text-gray-600 mt-1">
+    <div className="max-w-3xl mx-auto rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-blue-100 p-6 sm:p-8">
+      <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900">Security Onboarding</h1>
+      <p className="text-sm text-slate-600 mt-1">
         Complete all 3 steps to unlock Feed, Chat, and Market features.
       </p>
 
       {stepIndicator}
 
-      <p className="text-xs uppercase tracking-wide text-gray-500 mb-4">{STEP_LABELS[step - 1]}</p>
+      <p className="text-xs uppercase tracking-wide text-slate-500 mb-4">{STEP_LABELS[step - 1]}</p>
 
       {step === 1 && (
-        <form onSubmit={handleStepOne} className="space-y-4">
-          <h2 className="text-lg font-medium">Step 1: Encryption Setup</h2>
-          <p className="text-sm text-gray-600">
-            Add your encryption password and bring your own PGP public key. If you leave the key blank, we generate one locally.
+        <form onSubmit={handleStepOne} className="space-y-5">
+          <div className="rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
+            <h2 className="text-lg font-semibold text-slate-900">Step 1: Encryption Setup</h2>
+            <p className="text-sm text-slate-600 mt-1">
+              Add your encryption password and optionally bring your own PGP public key.
+            </p>
+          </div>
+          <p className="text-sm text-slate-600">
+            If you leave BYOPGP blank, SocialSecure generates your PGP keys locally from your encryption password.
           </p>
 
           {user?.hasEncryptionPassword ? (
             <>
-              <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-2">
+              <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                 Encryption password already configured for this account.
               </div>
               <input
                 type="password"
                 value={encryptionPassword}
                 onChange={(event) => setEncryptionPassword(event.target.value)}
-                className="w-full border rounded p-2"
+                className="w-full border border-slate-300 rounded-lg p-2.5 bg-white"
                 placeholder="Enter encryption password to generate local PGP keys"
                 minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
               />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-slate-500">
                 If you do not paste a BYOPGP public key, enter your encryption password so we can generate a local key pair.
               </p>
             </>
@@ -597,7 +606,7 @@ function OnboardingWizard({
                 type="password"
                 value={encryptionPassword}
                 onChange={(event) => setEncryptionPassword(event.target.value)}
-                className="w-full border rounded p-2"
+                className="w-full border border-slate-300 rounded-lg p-2.5 bg-white"
                 placeholder="Set encryption password"
                 minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
                 required
@@ -606,19 +615,19 @@ function OnboardingWizard({
                 type="password"
                 value={confirmEncryptionPassword}
                 onChange={(event) => setConfirmEncryptionPassword(event.target.value)}
-                className="w-full border rounded p-2"
+                className="w-full border border-slate-300 rounded-lg p-2.5 bg-white"
                 placeholder="Confirm encryption password"
                 minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
                 required
               />
-              <div className="rounded border border-gray-200 bg-gray-50 p-3">
-                <p className="text-sm font-medium text-gray-700">Encryption password requirements</p>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-medium text-slate-700">Encryption password requirements</p>
                 <ul className="mt-2 space-y-1 text-sm">
                   {passwordEvaluation.requirementChecks.map((requirement) => (
                     <li
                       key={requirement.id}
                       className={`flex items-center justify-between gap-2 ${
-                        requirement.met ? 'text-green-700' : 'text-gray-600'
+                        requirement.met ? 'text-emerald-700' : 'text-slate-600'
                       }`}
                     >
                       <span className="flex items-center gap-2">
@@ -629,28 +638,46 @@ function OnboardingWizard({
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2 text-sm text-gray-700" aria-live="polite" role="status">
+                <p className="mt-2 text-sm text-slate-700" aria-live="polite" role="status">
                   Strength: <span className="font-medium">{passwordEvaluation.strengthLabel}</span>
                 </p>
               </div>
             </>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">BYOPGP Public Key (optional)</label>
-            <textarea
-              value={byoPgpPublicKey}
-              onChange={(event) => setByoPgpPublicKey(event.target.value)}
-              className="w-full border rounded p-2"
-              rows={6}
-              placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Leave blank to generate a key pair locally from your encryption password.
-            </p>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80">
+            <button
+              type="button"
+              onClick={() => setPgpSectionOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left"
+              aria-expanded={pgpSectionOpen}
+              aria-controls="onboarding-optional-pgp"
+              aria-label={pgpSectionOpen ? 'Collapse BYOPGP public key section' : 'Expand BYOPGP public key section'}
+            >
+              <span className="text-sm font-semibold text-slate-800">BYOPGP Public Key (Optional)</span>
+              <span className="text-sm text-slate-500">{pgpSectionOpen ? 'Hide' : 'Add key'} {pgpSectionOpen ? '▲' : '▼'}</span>
+            </button>
+            {pgpSectionOpen && (
+              <div id="onboarding-optional-pgp" className="border-t border-slate-200 px-4 pb-4 pt-2">
+                <textarea
+                  value={byoPgpPublicKey}
+                  onChange={(event) => setByoPgpPublicKey(event.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 bg-white"
+                  rows={6}
+                  placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Leave blank to generate a key pair locally from your encryption password.
+                </p>
+              </div>
+            )}
           </div>
 
-          <button type="submit" disabled={submitting} className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium disabled:opacity-50"
+          >
             {submitting ? 'Configuring...' : 'Save and Continue'}
           </button>
         </form>
@@ -901,24 +928,24 @@ function OnboardingWizard({
           </fieldset>
 
           {/* ─── Section C: Personal Information ─── */}
-          <fieldset className="rounded-lg border border-gray-200 p-4 space-y-3">
-            <legend className="text-sm font-semibold text-gray-800 px-1">Personal Information (Optional)</legend>
-            <div className="bg-blue-50 border border-blue-200 rounded p-3">
-              <p className="text-sm text-blue-800">
-                None of these fields are mandatory. Each field has a visibility toggle:
-                <span className="inline-block ml-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800 border border-green-300">Social</span>
-                {' '}= visible to your broader trusted friends &amp; circles,
+          <fieldset className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+            <legend className="text-sm font-semibold text-slate-800 px-1">Personal Information (Optional)</legend>
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-900">
+                These fields are optional. Default visibility is
                 <span className="inline-block ml-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800 border border-red-300">Secure</span>
-                {' '}= restricted to only your closest trusted contacts.
+                {' '}for Home address, Phone number, and Email, and
+                <span className="inline-block ml-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800 border border-green-300">Social</span>
+                {' '}for all other fields.
               </p>
-              <p className="text-xs text-blue-700 mt-1">
-                The public will never see this information. Only the circles or friends you explicitly grant access to through our Social V Secure system will have visibility.
+              <p className="text-xs text-blue-800 mt-1">
+                You can switch any field between Social and Secure at any time.
               </p>
             </div>
 
             <div className="space-y-4">
               {PERSONAL_INFO_FIELDS.map((field) => {
-                const visibility = personalInfo.profileFieldVisibility[field.key] || 'social';
+                const visibility = personalInfo.profileFieldVisibility[field.key] || DEFAULT_PROFILE_FIELD_VISIBILITY[field.key] || 'social';
                 return (
                   <div key={field.key} className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -977,27 +1004,27 @@ function OnboardingWizard({
               {/* Email visibility */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">Email</label>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleVisibilityToggle('email', 'social')}
-                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition ${
-                        (personalInfo.profileFieldVisibility.email || 'social') === 'social'
-                          ? 'bg-green-100 text-green-800 border-green-400'
-                          : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-green-50'
-                      }`}
+                    <label className="text-sm font-medium text-gray-700">Email</label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleVisibilityToggle('email', 'social')}
+                        className={`px-2 py-0.5 rounded text-xs font-semibold border transition ${
+                          (personalInfo.profileFieldVisibility.email || DEFAULT_PROFILE_FIELD_VISIBILITY.email) === 'social'
+                            ? 'bg-green-100 text-green-800 border-green-400'
+                            : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-green-50'
+                        }`}
                     >
                       Social
                     </button>
                     <button
-                      type="button"
-                      onClick={() => handleVisibilityToggle('email', 'secure')}
-                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition ${
-                        (personalInfo.profileFieldVisibility.email || 'social') === 'secure'
-                          ? 'bg-red-100 text-red-800 border-red-400'
-                          : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-red-50'
-                      }`}
+                        type="button"
+                        onClick={() => handleVisibilityToggle('email', 'secure')}
+                        className={`px-2 py-0.5 rounded text-xs font-semibold border transition ${
+                          (personalInfo.profileFieldVisibility.email || DEFAULT_PROFILE_FIELD_VISIBILITY.email) === 'secure'
+                            ? 'bg-red-100 text-red-800 border-red-400'
+                            : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-red-50'
+                        }`}
                     >
                       Secure
                     </button>

@@ -143,6 +143,32 @@ describe('OnboardingWizard step 1 existing encryption password flow', () => {
     );
     expect(authAPI.updateOnboardingProgress).not.toHaveBeenCalled();
   });
+
+  it('keeps optional BYOPGP input collapsed until user expands it', async () => {
+    await act(async () => {
+      root.render(
+        <OnboardingWizard
+          user={{ _id: 'u1', email: 'user@example.com', hasEncryptionPassword: true, hasPGP: false }}
+          onboarding={{ currentStep: 1 }}
+          onProgressSaved={onProgressSaved}
+          onCompleted={onCompleted}
+          refreshEncryptionPasswordStatus={refreshEncryptionPasswordStatus}
+        />
+      );
+    });
+
+    expect(container.querySelector('textarea[placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"]')).toBeNull();
+
+    const toggleButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent.includes('BYOPGP Public Key (Optional)')
+    );
+
+    await act(async () => {
+      toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('textarea[placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"]')).not.toBeNull();
+  });
 });
 
 describe('OnboardingWizard Step 3 additional information flow', () => {
@@ -359,9 +385,12 @@ describe('OnboardingWizard Step 3 additional information flow', () => {
       sex: '',
       race: '',
       profileFieldVisibility: expect.objectContaining({
-        streetAddress: 'social',
-        phone: 'social',
-        email: 'social'
+        streetAddress: 'secure',
+        phone: 'secure',
+        email: 'secure',
+        ageGroup: 'social',
+        sex: 'social',
+        race: 'social'
       })
     }));
     expect(authAPI.completeOnboarding).toHaveBeenCalled();
@@ -370,7 +399,7 @@ describe('OnboardingWizard Step 3 additional information flow', () => {
     expect(toast.success).toHaveBeenCalledWith('Onboarding completed');
   });
 
-  it('lets users switch a personal field to secure visibility', async () => {
+  it('lets users switch a personal field to social visibility', async () => {
     await act(async () => {
       root.render(
         <OnboardingWizard
@@ -387,12 +416,12 @@ describe('OnboardingWizard Step 3 additional information flow', () => {
       (label) => label.textContent.trim() === 'Home address'
     );
     const homeAddressHeaderRow = homeAddressLabel.parentElement;
-    const homeAddressSecureButton = Array.from(homeAddressHeaderRow.querySelectorAll('button')).find(
-      (button) => button.textContent.trim() === 'Secure'
+    const homeAddressSocialButton = Array.from(homeAddressHeaderRow.querySelectorAll('button')).find(
+      (button) => button.textContent.trim() === 'Social'
     );
 
     await act(async () => {
-      homeAddressSecureButton.click();
+      homeAddressSocialButton.click();
     });
 
     await act(async () => {
@@ -401,7 +430,7 @@ describe('OnboardingWizard Step 3 additional information flow', () => {
 
     expect(authAPI.updateProfile).toHaveBeenCalledWith(expect.objectContaining({
       profileFieldVisibility: expect.objectContaining({
-        streetAddress: 'secure'
+        streetAddress: 'social'
       })
     }));
   });
