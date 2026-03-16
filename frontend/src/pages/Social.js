@@ -7,7 +7,6 @@ import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
 import NotificationCenter from '../components/NotificationCenter';
-import SecurityScore from '../components/SecurityScore';
 import PresenceIndicator from '../components/PresenceIndicator';
 import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
 import SocialHero from '../components/social/SocialHero';
@@ -4701,205 +4700,6 @@ const Social = () => {
     <div className="space-y-6">
       {isPrivateGuestLock ? renderGlassPanel('Access Locked', renderPrivateProfileBody(), {
         subtitle: 'Pulse, live activity, and messaging stay hidden while this profile is private'
-      }) : renderGlassPanel(
-        'Top 5 Friends + Partner / Spouse',
-        <div className="space-y-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top Friends</p>
-            {topFriends.length === 0 ? (
-              <div className="mt-2 rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">Top friends are private or not configured yet.</div>
-            ) : (
-              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
-                {topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend, index) => (
-                  <div key={friend._id || friend.username} className="rounded-2xl bg-white/55 p-3 text-center">
-                    <div className="mx-auto h-16 w-16">{renderFriendAvatar(friend, 'h-16 w-16')}</div>
-                    <p className="mt-2 truncate text-sm font-semibold text-slate-900">@{friend.username}</p>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Top {index + 1}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3 border-t border-white/50 pt-4 text-sm text-slate-700">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Partner / Spouse</p>
-            {(activePartnerFriend || incomingPartnerRequests.length > 0 || outgoingPartnerRequest || availablePartnerCandidates.length > 0) ? (
-              <>
-                {activePartnerFriend ? (
-                  <div className="rounded-2xl bg-emerald-50 px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      {renderFriendAvatar(activePartnerFriend)}
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Listed partner</p>
-                        <p className="mt-1 font-semibold text-slate-900">@{activePartnerFriend.username}</p>
-                      </div>
-                    </div>
-                    {isOwnSocialContext && !isGuestPreview ? (
-                      <button
-                        type="button"
-                        onClick={() => handlePartnerListingAction(activePartnerFriend.friendshipId, 'clear')}
-                        disabled={partnerActionBusyFriendshipId === String(activePartnerFriend.friendshipId)}
-                        className="mt-3 rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-60"
-                      >
-                        Remove listing
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {incomingPartnerRequests.map((friend) => (
-                  <div key={`partner-incoming-${friend.friendshipId || friend._id}`} className="rounded-2xl bg-amber-50 px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      {renderFriendAvatar(friend)}
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Incoming request</p>
-                        <p className="mt-1 font-semibold text-slate-900">@{friend.username}</p>
-                      </div>
-                    </div>
-                    {isOwnSocialContext && !isGuestPreview ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handlePartnerListingAction(friend.friendshipId, 'accept')}
-                          disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
-                          className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-60"
-                        >
-                          Accept
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handlePartnerListingAction(friend.friendshipId, 'deny')}
-                          disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
-                          className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-white disabled:opacity-60"
-                        >
-                          Deny
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-
-                {!activePartnerFriend && outgoingPartnerRequest ? (
-                  <div className="rounded-2xl bg-blue-50 px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      {renderFriendAvatar(outgoingPartnerRequest)}
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Pending request</p>
-                        <p className="mt-1 font-semibold text-slate-900">@{outgoingPartnerRequest.username}</p>
-                      </div>
-                    </div>
-                    {isOwnSocialContext && !isGuestPreview ? (
-                      <button
-                        type="button"
-                        onClick={() => handlePartnerListingAction(outgoingPartnerRequest.friendshipId, 'clear')}
-                        disabled={partnerActionBusyFriendshipId === String(outgoingPartnerRequest.friendshipId)}
-                        className="mt-3 rounded-xl border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-white disabled:opacity-60"
-                      >
-                        Cancel request
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {isOwnSocialContext && !isGuestPreview && !activePartnerFriend ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Send request</p>
-                    {availablePartnerCandidates.length === 0 ? (
-                      <p className="rounded-2xl bg-white/55 px-3 py-3 text-xs text-slate-500">No available friends to request right now.</p>
-                    ) : availablePartnerCandidates.map((friend) => (
-                      <button
-                        key={`partner-candidate-${friend.friendshipId || friend._id}`}
-                        type="button"
-                        onClick={() => handlePartnerListingAction(friend.friendshipId, 'request')}
-                        disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
-                        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50/50 disabled:opacity-60"
-                      >
-                        <span>@{friend.username}</span>
-                        <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] uppercase tracking-wide text-blue-700">Request</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-
-                {partnerActionError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{partnerActionError}</div> : null}
-              </>
-            ) : (
-              <div className="rounded-2xl bg-white/55 px-4 py-4 text-sm text-slate-500">
-                No partner listing activity yet.
-              </div>
-            )}
-          </div>
-        </div>,
-        { subtitle: 'Top 5 ranking with relationship spotlight' }
-      )}
-
-      {!isPrivateGuestLock ? renderGlassPanel(
-        'Personal Information',
-        visiblePersonalInfoItems.length === 0 ? (
-          renderSoftEmptyState({
-            eyebrow: 'Profile details',
-            title: isOwnSocialContext ? 'A few profile details would go a long way.' : 'No personal details are visible here.',
-            description: isOwnSocialContext
-              ? 'Add work, hobbies, or a short identifier to make the right rail feel intentional instead of empty.'
-              : 'This profile has not shared personal information for your current access level.',
-            actionLabel: isOwnSocialContext ? 'Edit info' : null,
-            onAction: isOwnSocialContext ? openPersonalInfoModal : null,
-            tone: 'emerald'
-          })
-        ) : (
-          <ul className="space-y-2 text-sm text-slate-700">
-            {visiblePersonalInfoItems.map((item) => (
-              <li key={item.id} className="rounded-2xl bg-white/60 px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold text-slate-900">{item.label}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${item.visibility === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-700'}`}>
-                    {item.visibility === 'secure' ? 'Secure' : 'Social'}
-                  </span>
-                </div>
-                <p className="mt-1 text-slate-700">{item.value}</p>
-              </li>
-            ))}
-          </ul>
-        ),
-        {
-          subtitle: 'Shared with friends and guests based on social/secure visibility',
-          action: (isOwnSocialContext && !isGuestPreview) ? (
-            <button
-              type="button"
-              aria-label="Edit personal information"
-              onClick={openPersonalInfoModal}
-              className="rounded-xl border border-slate-300 bg-white/80 px-2.5 py-1.5 text-sm font-semibold text-slate-700 hover:bg-white"
-            >
-              ✎
-            </button>
-          ) : null
-        }
-      ) : null}
-
-      {!isPrivateGuestLock ? renderGlassPanel(
-        'Live Activity',
-        <div className="grid grid-cols-2 gap-3 text-sm text-slate-700">
-          {[
-            { label: 'Realtime', value: realtimeEnabled ? 'On' : 'Polling' },
-            { label: 'Online Friends', value: onlineFriends.length },
-            { label: 'Live Typing', value: liveTypingCount },
-            { label: 'Gallery Items', value: galleryItems.length }
-          ].map((item) => (
-            <div key={item.label} className="rounded-2xl bg-white/55 px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{item.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-900" style={item.label === 'Realtime' ? { color: accentColor } : undefined}>{item.value}</p>
-            </div>
-          ))}
-        </div>,
-        { subtitle: null }
-      ) : null}
-
-      {!isPrivateGuestLock ? renderGlassPanel('Chat', renderPanelBody('chat_panel'), {
-        subtitle: null
-      }) : null}
-
-      {isAuthenticated && !isGuestPreview && !isPrivateGuestLock ? renderGlassPanel('Moderation', renderPanelBody('moderation_status'), {
-        subtitle: null
       }) : null}
     </div>
   );
@@ -5029,126 +4829,169 @@ const Social = () => {
           <aside className="space-y-5" style={isMobile ? {} : { order: -1 }}>
             {/* About Panel */}
             {!isPrivateGuestLock ? (
-              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
-                <div className="border-b border-white/10 px-4 py-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">About</h3>
-                </div>
-                <div className="px-4 py-3 text-sm text-slate-300">
-                  {activeProfile?.bio || activeProfile?.tagline || <span className="text-slate-500">No bio shared yet.</span>}
+              <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+                <div className="h-0.5" style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor2})` }} />
+                <div className="px-4 py-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">About</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                    {activeProfile?.bio || activeProfile?.tagline || <span className="italic text-slate-500">No bio shared yet.</span>}
+                  </p>
                 </div>
               </div>
             ) : null}
 
             {/* Details Panel */}
             {!isPrivateGuestLock ? (
-              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
-                <div className="border-b border-white/10 px-4 py-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Details</h3>
-                </div>
-                <div className="space-y-2 px-4 py-3 text-sm text-slate-300">
-                  {activeProfile?.location ? <p>📍 {activeProfile.location}</p> : null}
-                  {activeProfile?.website ? <p>🌐 <a href={activeProfile.website} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: accentColor }}>{activeProfile.website}</a></p> : null}
-                  {activeProfile?.pronouns ? <p>💬 {activeProfile.pronouns}</p> : null}
-                  {activeProfile?.createdAt ? <p>📅 Joined {new Date(activeProfile.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p> : null}
-                  {ownerResumeMeta ? <p>📄 <Link to={`/resume/${activeProfile?.username}`} className="underline" style={{ color: accentColor }}>View Resume</Link></p> : null}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Security Score Widget */}
-            {isAuthenticated && isOwnSocialContext ? (
-              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
-                <div className="border-b border-white/10 px-4 py-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Security Score</h3>
-                </div>
-                <div className="px-4 py-3">
-                  <SecurityScore score={currentUser?.securityScore || 0} breakdown={currentUser?.securityBreakdown || {}} />
-                </div>
-              </div>
-            ) : null}
-
-            {/* Circles Panel */}
-            {!isPrivateGuestLock ? (
-              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
-                <div className="border-b border-white/10 px-4 py-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Circles</h3>
-                </div>
-                <div className="px-4 py-3">
-                  {circles.length > 0 ? (
-                    <div className="space-y-2">
-                      {circles.map((circle) => (
-                        <div key={circle._id || circle.name} className="flex items-center gap-2 text-sm text-slate-300">
-                          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: circle.color || accentColor }} />
-                          <span>{circle.name}</span>
-                          {circle.memberCount != null ? <span className="ml-auto text-xs text-slate-500">{circle.memberCount}</span> : null}
-                        </div>
-                      ))}
-                      {ownerEditingEnabled ? (
-                        <button type="button" onClick={() => handleHeroTabChange('friends')} className="mt-2 text-xs font-semibold" style={{ color: accentColor }}>Manage Circles</button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">No circles visible.</p>
-                  )}
-                  <CircleSpiderDiagram circles={circles} accentColor={accentColor} />
+              <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+                <div className="px-4 py-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Details</h3>
+                  <div className="mt-3 space-y-2.5">
+                    {activeProfile?.location ? <div className="flex items-center gap-2.5 text-sm text-slate-300"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>📍</span>{activeProfile.location}</div> : null}
+                    {activeProfile?.website ? <div className="flex items-center gap-2.5 text-sm"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>🌐</span><a href={activeProfile.website} target="_blank" rel="noopener noreferrer" className="truncate hover:underline" style={{ color: accentColor }}>{activeProfile.website}</a></div> : null}
+                    {activeProfile?.pronouns ? <div className="flex items-center gap-2.5 text-sm text-slate-300"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>💬</span>{activeProfile.pronouns}</div> : null}
+                    {activeProfile?.createdAt ? <div className="flex items-center gap-2.5 text-sm text-slate-300"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>📅</span>Joined {new Date(activeProfile.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div> : null}
+                    {ownerResumeMeta ? <div className="flex items-center gap-2.5 text-sm"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>📄</span><Link to={`/resume/${activeProfile?.username}`} className="hover:underline" style={{ color: accentColor }}>View Resume</Link></div> : null}
+                  </div>
                 </div>
               </div>
             ) : null}
 
             {/* Top Friends Widget */}
             {!isPrivateGuestLock ? (
-              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
-                <div className="border-b border-white/10 px-4 py-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Top Friends</h3>
-                </div>
-                <div className="px-4 py-3">
-                  {topFriends.length > 0 ? (
-                    <div className="grid grid-cols-5 gap-2">
-                      {topFriends.slice(0, 5).map((friend) => (
-                        <Link key={friend._id} to={`/social?user=${friend.username}`} className="group flex flex-col items-center gap-1">
-                          <div className="relative">
-                            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
-                              {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
+              <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+                <div className="px-4 py-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Top Friends</h3>
+                  <div className="mt-3">
+                    {topFriends.length > 0 ? (
+                      <div className="grid grid-cols-5 gap-2">
+                        {topFriends.slice(0, 5).map((friend) => (
+                          <Link key={friend._id} to={`/social?user=${friend.username}`} className="group flex flex-col items-center gap-1.5 rounded-xl p-1.5 transition-colors hover:bg-white/5">
+                            <div className="relative">
+                              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10 text-xs font-semibold text-white transition-all group-hover:ring-white/25" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                                {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
+                              </div>
+                              <PresenceIndicator presence={friend.presence} />
                             </div>
-                            <PresenceIndicator presence={friend.presence} />
-                          </div>
-                          <span className="truncate text-[10px] text-slate-400 group-hover:text-slate-200">{friend.realName || friend.username}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">No top friends configured.</p>
-                  )}
+                            <span className="truncate text-[10px] text-slate-500 group-hover:text-slate-300">{friend.realName || friend.username}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">No top friends configured.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : null}
 
-            {/* Now Playing Widget (Coming Soon placeholder) */}
-            <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
-              <div className="border-b border-white/10 px-4 py-3">
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Now Playing</h3>
-              </div>
-              <div className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl text-lg" style={{ background: `linear-gradient(135deg, ${accentColor}33, ${accentColor2}33)` }}>🎵</div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-300">Nothing playing</p>
-                    <p className="text-xs text-slate-500">Coming Soon</p>
+            {/* Partner / Spouse Panel */}
+            {!isPrivateGuestLock ? (
+              <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+                <div className="px-4 py-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Partner / Spouse</h3>
+                  <div className="mt-3">
+                  {(activePartnerFriend || incomingPartnerRequests.length > 0 || outgoingPartnerRequest || availablePartnerCandidates.length > 0) ? (
+                    <div className="space-y-3">
+                      {activePartnerFriend ? (
+                        <div className="flex items-center gap-3 rounded-xl bg-emerald-500/10 px-3 py-3">
+                          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                            {activePartnerFriend.avatarUrl ? <img src={activePartnerFriend.avatarUrl} alt={activePartnerFriend.username} className="h-full w-full object-cover" /> : (activePartnerFriend.realName || activePartnerFriend.username || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">Listed partner</p>
+                            <p className="truncate text-sm font-semibold text-slate-200">@{activePartnerFriend.username}</p>
+                          </div>
+                          {isOwnSocialContext && !isGuestPreview ? (
+                            <button
+                              type="button"
+                              onClick={() => handlePartnerListingAction(activePartnerFriend.friendshipId, 'clear')}
+                              disabled={partnerActionBusyFriendshipId === String(activePartnerFriend.friendshipId)}
+                              className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-red-400 hover:border-red-400/30 disabled:opacity-60"
+                            >
+                              Remove
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {incomingPartnerRequests.map((friend) => (
+                        <div key={`partner-incoming-${friend.friendshipId || friend._id}`} className="flex items-center gap-3 rounded-xl bg-amber-500/10 px-3 py-3">
+                          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                            {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">Incoming request</p>
+                            <p className="truncate text-sm font-semibold text-slate-200">@{friend.username}</p>
+                          </div>
+                          {isOwnSocialContext && !isGuestPreview ? (
+                            <div className="flex gap-1">
+                              <button type="button" onClick={() => handlePartnerListingAction(friend.friendshipId, 'accept')} disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)} className="rounded-lg border border-emerald-400/30 px-2 py-1 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-400/10 disabled:opacity-60">Accept</button>
+                              <button type="button" onClick={() => handlePartnerListingAction(friend.friendshipId, 'deny')} disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)} className="rounded-lg border border-red-400/30 px-2 py-1 text-[10px] font-semibold text-red-400 hover:bg-red-400/10 disabled:opacity-60">Deny</button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+
+                      {!activePartnerFriend && outgoingPartnerRequest ? (
+                        <div className="flex items-center gap-3 rounded-xl bg-blue-500/10 px-3 py-3">
+                          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                            {outgoingPartnerRequest.avatarUrl ? <img src={outgoingPartnerRequest.avatarUrl} alt={outgoingPartnerRequest.username} className="h-full w-full object-cover" /> : (outgoingPartnerRequest.realName || outgoingPartnerRequest.username || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-400">Pending request</p>
+                            <p className="truncate text-sm font-semibold text-slate-200">@{outgoingPartnerRequest.username}</p>
+                          </div>
+                          {isOwnSocialContext && !isGuestPreview ? (
+                            <button type="button" onClick={() => handlePartnerListingAction(outgoingPartnerRequest.friendshipId, 'clear')} disabled={partnerActionBusyFriendshipId === String(outgoingPartnerRequest.friendshipId)} className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-red-400 disabled:opacity-60">Cancel</button>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {isOwnSocialContext && !isGuestPreview && !activePartnerFriend && availablePartnerCandidates.length > 0 ? (
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Send request</p>
+                          {availablePartnerCandidates.map((friend) => (
+                            <button
+                              key={`partner-candidate-${friend.friendshipId || friend._id}`}
+                              type="button"
+                              onClick={() => handlePartnerListingAction(friend.friendshipId, 'request')}
+                              disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
+                              className="flex w-full items-center justify-between rounded-xl border border-white/10 px-3 py-2 text-left text-xs font-semibold text-slate-300 hover:border-blue-400/30 hover:bg-blue-500/10 disabled:opacity-60"
+                            >
+                              <span>@{friend.username}</span>
+                              <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-blue-400">Request</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {partnerActionError ? <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{partnerActionError}</div> : null}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">No partner listing activity yet.</p>
+                  )}
                   </div>
                 </div>
-                <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+              </div>
+            ) : null}
+
+            {/* Now Playing Widget */}
+            <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+              <div className="px-4 py-4">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Now Playing</h3>
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-lg" style={{ background: `linear-gradient(135deg, ${accentColor}22, ${accentColor2}22)` }}>🎵</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-300">Nothing playing</p>
+                    <p className="text-[10px] text-slate-500">Coming Soon</p>
+                  </div>
+                </div>
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/[0.06]">
                   <div className="h-full w-0 rounded-full" style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor2})` }} />
                 </div>
               </div>
             </div>
 
-            {/* Profile Snapshot (existing) */}
-            {isPrivateGuestLock ? renderGlassPanel('Profile Privacy', renderPrivateProfileBody(), {
-              subtitle: 'Limited details are available while this account is private'
-            }) : renderGlassPanel('Profile Snapshot', renderPanelBody('snapshot'), {
-              subtitle: 'Identity, resume, and quick stats'
-            })}
-            {!isPrivateGuestLock ? renderSharedDesignCard : null}
             {renderPulseRail()}
           </aside>
         </div>
