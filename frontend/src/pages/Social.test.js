@@ -128,6 +128,17 @@ describe('Social page hero background rendering', () => {
     });
   };
 
+  const switchToTab = async (tabLabel) => {
+    const tab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes(tabLabel));
+    expect(tab).toBeDefined();
+    await act(async () => {
+      tab?.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     require('../utils/api').getAuthToken.mockReturnValue('token');
@@ -392,14 +403,7 @@ describe('Social page hero background rendering', () => {
   it('keeps owner chat access controls collapsed behind a compact toggle', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
 
-    const chatTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Chat'));
-    expect(chatTab).toBeDefined();
-    await act(async () => {
-      chatTab?.click();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await switchToTab('Chat');
 
     const controlsToggle = container.querySelector('button[aria-label="Toggle chat access controls"]');
     expect(controlsToggle).toBeTruthy();
@@ -558,14 +562,7 @@ describe('Social page hero background rendering', () => {
 
     await expect(renderPage()).resolves.toBeUndefined();
 
-    const chatTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Chat'));
-    expect(chatTab).toBeDefined();
-    await act(async () => {
-      chatTab?.click();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await switchToTab('Chat');
 
     expect(chatAPI.getProfileThread).toHaveBeenCalledWith('u-2');
     expect(chatAPI.getConversationMessages).toHaveBeenCalledWith('thread-guest', 1, 25);
