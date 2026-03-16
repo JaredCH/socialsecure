@@ -114,6 +114,10 @@ friendshipSchema.statics.findFriendship = async function(userId1, userId2) {
 
 // Static method to get friends of a user
 friendshipSchema.statics.getFriends = async function(userId) {
+  if (!userId) {
+    return [];
+  }
+
   const friendships = await this.find({
     $or: [
       { requester: userId, status: 'accepted' },
@@ -121,14 +125,14 @@ friendshipSchema.statics.getFriends = async function(userId) {
     ]
   }).populate('requester recipient', 'username realName avatarUrl city state country');
 
+  const viewerId = String(userId);
   return friendships.reduce((acc, f) => {
-    const requesterId = String(f?.requester?._id || '');
-    const recipientId = String(f?.recipient?._id || '');
+    const requesterId = f?.requester?._id ? String(f.requester._id) : null;
+    const recipientId = f?.recipient?._id ? String(f.recipient._id) : null;
     if (!requesterId || !recipientId) {
       return acc;
     }
 
-    const viewerId = String(userId || '');
     const isRequester = requesterId === viewerId;
     const friend = isRequester ? f.recipient : f.requester;
     if (!friend?._id) {

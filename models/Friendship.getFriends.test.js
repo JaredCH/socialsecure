@@ -1,6 +1,13 @@
 const Friendship = require('./Friendship');
 
 describe('Friendship.getFriends', () => {
+  it('returns an empty list when userId is missing', async () => {
+    const find = jest.fn();
+    const friends = await Friendship.getFriends.call({ find }, null);
+    expect(friends).toEqual([]);
+    expect(find).not.toHaveBeenCalled();
+  });
+
   it('skips malformed populated friendships instead of throwing', async () => {
     const populate = jest.fn().mockResolvedValue([
       {
@@ -12,6 +19,22 @@ describe('Friendship.getFriends', () => {
         partnerStatus: 'none'
       },
       {
+        _id: 'friendship-1b',
+        requester: { _id: 'viewer-1', username: 'viewer' },
+        recipient: null,
+        requesterCategory: 'secure',
+        recipientCategory: 'social',
+        partnerStatus: 'none'
+      },
+      {
+        _id: 'friendship-1c',
+        requester: null,
+        recipient: null,
+        requesterCategory: 'secure',
+        recipientCategory: 'social',
+        partnerStatus: 'none'
+      },
+      {
         _id: 'friendship-2',
         requester: { _id: 'viewer-1', username: 'viewer' },
         recipient: { _id: 'friend-2', username: 'bob' },
@@ -19,6 +42,14 @@ describe('Friendship.getFriends', () => {
         recipientCategory: 'social',
         partnerStatus: 'pending',
         partnerRequestedBy: 'viewer-1'
+      },
+      {
+        _id: 'friendship-3',
+        requester: { _id: 'viewer-1', username: 'viewer' },
+        recipient: { username: 'no-id-user' },
+        requesterCategory: 'secure',
+        recipientCategory: 'social',
+        partnerStatus: 'none'
       }
     ]);
     const find = jest.fn().mockReturnValue({ populate });
