@@ -611,6 +611,18 @@ describe('Chat zip room indicator', () => {
     const desktopGrid = container.querySelector('div.grid.flex-1.min-h-0');
     expect(desktopGrid).not.toBeNull();
     expect(desktopGrid.className).toContain('lg:grid-cols-[2.6fr_8fr_2.2fr]');
+    expect(desktopGrid.className).toContain('gap-1');
+    expect(desktopGrid.className).toContain('p-1');
+
+    const pageHeader = container.querySelector('[data-testid="chat-page-header"]');
+    expect(pageHeader).not.toBeNull();
+    expect(pageHeader.className).toContain('px-2');
+    expect(pageHeader.className).toContain('py-1.5');
+
+    const workspaceHeader = container.querySelector('[data-testid="chat-workspace-header"]');
+    expect(workspaceHeader).not.toBeNull();
+    expect(workspaceHeader.className).toContain('px-1.5');
+    expect(workspaceHeader.className).toContain('py-1');
 
     const emptyMessages = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'No messages yet.');
     expect(emptyMessages).not.toBeUndefined();
@@ -622,6 +634,42 @@ describe('Chat zip room indicator', () => {
     const sidebars = container.querySelectorAll('aside');
     expect(sidebars.length).toBeGreaterThanOrEqual(2);
     expect(sidebars[0].querySelector('.overflow-y-auto')).not.toBeNull();
+  });
+
+  it('keeps the composer in normal flow while a locked DM overlay is visible', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const messagePanel = container.querySelector('[data-testid="chat-message-panel"]');
+    expect(messagePanel).not.toBeNull();
+    expect(messagePanel.className).toContain('overflow-hidden');
+    expect(messagePanel.querySelector('div.overflow-y-auto')).not.toBeNull();
+
+    const composerShell = container.querySelector('[data-testid="chat-composer-shell"]');
+    expect(composerShell).not.toBeNull();
+    expect(composerShell.className).toContain('shrink-0');
+    expect(composerShell.className).not.toContain('sticky');
+
+    expect(container.querySelector('[data-testid="dm-lock-overlay"]')).not.toBeNull();
+    expect(container.querySelector('textarea').disabled).toBe(true);
   });
 
   it('persists the selected theme to localStorage', async () => {

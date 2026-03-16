@@ -146,19 +146,13 @@ describe('Chat DM decrypt fallback when visible ids are unavailable', () => {
       await flush();
     });
 
-    const unlockDmButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock DM');
-    await act(async () => {
-      unlockDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flush();
-    });
-
     const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
     await act(async () => {
       setInputValue(passwordInput, 'secret-password');
       await flush();
     });
 
-    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock secure messages');
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
     await act(async () => {
       unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();

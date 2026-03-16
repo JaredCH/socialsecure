@@ -1452,7 +1452,10 @@ function Chat() {
 
   return (
     <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${activeTheme.shell}`}>
-      <header className={`border-b px-3 py-2 md:px-4 md:py-2.5 ${activeTheme.panelGlass}`}>
+      <header
+        className={`border-b px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2.5 ${activeTheme.panelGlass}`}
+        data-testid="chat-page-header"
+      >
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold">Secure Chat</h2>
@@ -1461,8 +1464,8 @@ function Chat() {
             </p>
           </div>
         </div>
-        <div className="mt-2">
-          <div className={`grid grid-cols-2 gap-1.5 rounded-xl border p-1 ${activeTheme.panel}`}>
+        <div className="mt-1.5 sm:mt-2">
+          <div className={`grid grid-cols-2 gap-1 rounded-xl border p-1 sm:gap-1.5 ${activeTheme.panel}`}>
             {CHANNELS.map((channel) => (
               <button
                 key={channel.key}
@@ -1472,7 +1475,7 @@ function Chat() {
                   setMobileWorkspaceOpen(false);
                 }}
                 className={[
-                  'rounded-lg px-3 py-2 text-xs font-semibold transition',
+                  'rounded-lg px-2.5 py-1.5 text-xs font-semibold transition sm:px-3 sm:py-2',
                   activeChannel === channel.key ? activeTheme.subtle : 'opacity-80 hover:opacity-100'
                 ].join(' ')}
               >
@@ -1483,11 +1486,14 @@ function Chat() {
         </div>
       </header>
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[2.6fr_8fr_2.2fr]">
+      <div
+        className="grid flex-1 min-h-0 grid-cols-1 gap-1 p-1 sm:gap-2 sm:p-2 md:gap-3 md:p-3 lg:grid-cols-[2.6fr_8fr_2.2fr]"
+        data-testid="chat-layout-grid"
+      >
         <aside
           className={[
             mobileWorkspaceOpen ? 'hidden' : 'flex',
-            'min-h-0 flex-col rounded-2xl border p-2 md:p-3 lg:flex',
+            'min-h-0 flex-col rounded-2xl border p-1.5 sm:p-2 md:p-3 lg:flex',
             activeTheme.panel
           ].join(' ')}
         >
@@ -1822,11 +1828,14 @@ function Chat() {
         <section
           className={[
             mobileWorkspaceOpen ? 'flex' : 'hidden',
-            'min-h-0 flex-col rounded-2xl border px-2 pb-2 pt-1 md:p-3 lg:flex',
+            'min-h-0 flex-col rounded-2xl border px-1.5 pb-1.5 pt-1 sm:px-2 sm:pb-2 md:p-3 lg:flex',
             activeTheme.panel
           ].join(' ')}
         >
-          <header className={`relative sticky top-0 z-40 mb-2 rounded border px-2 py-1.5 ${activeTheme.panelGlass}`}>
+          <header
+            className={`relative sticky top-0 z-40 mb-1.5 rounded border px-1.5 py-1 sm:mb-2 sm:px-2 sm:py-1.5 ${activeTheme.panelGlass}`}
+            data-testid="chat-workspace-header"
+          >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <button
@@ -1860,7 +1869,7 @@ function Chat() {
                       event.stopPropagation();
                       setThemeMenuOpen((open) => !open);
                     }}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${activeTheme.subtle}`}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold sm:px-3 sm:py-1.5 ${activeTheme.subtle}`}
                     aria-label="Open chat theme menu"
                     aria-expanded={themeMenuOpen}
                   >
@@ -1902,7 +1911,7 @@ function Chat() {
                     </option>
                   ))}
                 </select>
-                <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold ${activeTheme.panel}`}>
+                <span className={`hidden items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold sm:inline-flex ${activeTheme.panel}`}>
                   <span className={activeTheme.senderAccent}>Aa</span>
                   <span>Theme-tuned accents</span>
                 </span>
@@ -1933,7 +1942,7 @@ function Chat() {
           </header>
 
           {openChatTabs.length > 0 ? (
-            <div className="mb-2 overflow-x-auto" data-open-chat-tabs>
+            <div className="mb-1.5 overflow-x-auto sm:mb-2" data-open-chat-tabs>
               <div className="flex min-w-max items-center gap-1">
                 {openChatTabs.map((conversation) => {
                   const conversationId = String(conversation._id);
@@ -1975,7 +1984,7 @@ function Chat() {
             <div className="mb-3 rounded border border-red-400 bg-red-50 p-2 text-sm text-red-700">{messagesError}</div>
           ) : null}
 
-          <div className="relative flex-1 min-h-0">
+          <div className="relative flex-1 min-h-0 overflow-hidden" data-testid="chat-message-panel">
             <ChatMessageList
               conversationId={activeConversationId}
               conversationType={activeConversation?.type}
@@ -1994,21 +2003,21 @@ function Chat() {
             />
             {activeConversation?.type === 'dm' && activeConversationId && !dmUnlockedByConversation[String(activeConversationId)] ? (
               <div
-                className="absolute inset-3 z-20 flex items-center justify-center rounded-2xl border border-red-400/80 bg-gradient-to-br from-red-950/95 via-red-900/92 to-rose-950/95 p-4 text-red-50 shadow-[0_22px_55px_rgba(127,29,29,0.45)] backdrop-blur-sm"
+                className="absolute inset-2 z-20 flex items-center justify-center rounded-2xl border border-red-400/80 bg-gradient-to-br from-red-950/95 via-red-900/92 to-rose-950/95 p-3 text-red-50 shadow-[0_22px_55px_rgba(127,29,29,0.45)] backdrop-blur-sm sm:inset-3 sm:p-4"
                 data-testid="dm-lock-overlay"
               >
                 <form
-                  className="w-full max-w-md rounded-2xl border border-red-300/35 bg-black/20 p-4 shadow-2xl backdrop-blur-md"
+                  className="w-full max-w-md rounded-2xl border border-red-300/35 bg-black/20 p-3 shadow-2xl backdrop-blur-md sm:p-4"
                   onSubmit={async (event) => {
                     event.preventDefault();
                     await handleUnlockActiveDM();
                   }}
                 >
-                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-red-200/70 bg-red-500/20 text-3xl shadow-[0_0_28px_rgba(248,113,113,0.38)]">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-red-200/70 bg-red-500/20 text-2xl shadow-[0_0_28px_rgba(248,113,113,0.38)] sm:h-14 sm:w-14 sm:text-3xl">
                     🔒
                   </div>
-                  <h3 className="text-center text-lg font-semibold">Encrypted conversation locked</h3>
-                  <p className="mt-2 text-center text-sm text-red-100/90">
+                  <h3 className="text-center text-base font-semibold sm:text-lg">Encrypted conversation locked</h3>
+                  <p className="mt-2 text-center text-xs text-red-100/90 sm:text-sm">
                     Enter your encryption password to reveal this direct message. Press Enter or use Unlock when you're ready.
                   </p>
                   <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.16em]" htmlFor="dm-unlock-password">
@@ -2060,7 +2069,7 @@ function Chat() {
               </div>
             ) : null}
 
-            <div className="sticky bottom-0 pb-[env(safe-area-inset-bottom)]">
+            <div className="shrink-0 pb-[env(safe-area-inset-bottom)]" data-testid="chat-composer-shell">
               <ChatComposerBar
                 composerValue={composerValue}
                 setComposerValue={setComposerValue}
