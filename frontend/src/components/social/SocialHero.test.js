@@ -145,4 +145,53 @@ describe('SocialHero mobile navigation', () => {
     expect(container.textContent).toContain('Messages');
     expect(container.textContent).toContain('Nora');
   });
+
+  it('shows direct messages quick action in activity rail', async () => {
+    await renderHero({
+      activitySummary: {
+        unreadNotificationCount: 0,
+        unreadMessageCount: 3,
+        notifications: [],
+        messages: [
+          { id: 'm1', title: 'Nora', summary: '3 unread messages', timestamp: new Date().toISOString() }
+        ]
+      }
+    });
+
+    const launcher = container.querySelector('button[aria-label="Expand social section menu"]');
+
+    await act(async () => {
+      launcher.click();
+    });
+
+    expect(container.querySelector('button[aria-label="Open direct messages"]')).not.toBeNull();
+    expect(container.textContent).toContain('Direct Messages');
+  });
+
+  it('fades acknowledged alerts in recent activity', async () => {
+    await renderHero({
+      activitySummary: {
+        unreadNotificationCount: 0,
+        unreadMessageCount: 0,
+        notifications: [
+          { _id: 'n1', title: 'Seen alert', isRead: true, createdAt: new Date(Date.now() - 172800000).toISOString() }
+        ],
+        messages: []
+      }
+    });
+
+    const launcher = container.querySelector('button[aria-label="Expand social section menu"]');
+
+    await act(async () => {
+      launcher.click();
+    });
+
+    const seenAlertCard = Array.from(container.querySelectorAll('div')).find(
+      (node) => typeof node.className === 'string'
+        && node.className.includes('rounded-2xl')
+        && node.textContent.includes('Seen alert')
+    );
+    expect(seenAlertCard).toBeDefined();
+    expect(seenAlertCard.className).toContain('opacity-55');
+  });
 });

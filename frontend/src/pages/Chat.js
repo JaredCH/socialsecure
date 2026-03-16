@@ -268,6 +268,21 @@ function Chat() {
   const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(DEFAULT_UNLOCK_DURATION_MINUTES);
   const [dmFriends, setDmFriends] = useState([]);
   const [dmFriendsLoading, setDmFriendsLoading] = useState(false);
+  const search = window.location.search;
+
+  useEffect(() => {
+    const requestedChannel = new URLSearchParams(search).get('tab');
+
+    if (requestedChannel === 'dm') {
+      setActiveChannel('dm');
+      return;
+    }
+
+    // "rooms" is kept as a legacy alias that maps to the zip/rooms channel.
+    if (requestedChannel === 'zip' || requestedChannel === 'rooms') {
+      setActiveChannel('zip');
+    }
+  }, [search]);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [conversationPanelTab, setConversationPanelTab] = useState('list');
