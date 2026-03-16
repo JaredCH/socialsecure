@@ -157,7 +157,7 @@ conversationMessageSchema.statics.toPublicMessageShape = function toPublicMessag
   if (isDmConversation) {
     return {
       ...base,
-      content: '[Encrypted message]',
+      content: message.content || '',
       e2ee: null
     };
   }
