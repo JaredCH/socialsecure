@@ -83,62 +83,45 @@ const platformCapabilities = [
   }
 ];
 
-const floatingMapBadges = [
+const mapDensityStats = [
   {
-    icon: '📍',
-    label: 'Location sharing',
-    conversation: 'Live pin sync',
-    className: '-left-2 top-12 md:left-0 md:top-10'
+    title: 'Hundreds of users',
+    description: 'Dots begin spread across the map, then drift inward to show how a community gathers around shared places.'
   },
   {
-    icon: '🔥',
-    label: 'Density overlay',
-    conversation: 'Heatmap live',
-    className: 'right-3 top-3 md:right-6 md:top-8'
+    title: 'Center convergence',
+    description: 'Every red glow eases toward the middle until individual users visually compress into one denser field.'
   },
   {
-    icon: '🧭',
-    label: 'Nearby activity',
-    conversation: 'Local view',
-    className: 'left-8 bottom-12 md:left-12 md:bottom-16'
-  },
-  {
-    icon: '👥',
-    label: 'Population trend',
-    conversation: 'Cluster alert',
-    className: 'right-0 bottom-4 md:right-4 md:bottom-10'
+    title: 'Transparent heat overlay',
+    description: 'The darkest red shows the heaviest concentration while lower-density areas stay softly faded at the edges.'
   }
 ];
 
-const sharedLocations = [
-  { id: 'loc1', x: 22, y: 68, size: 'lg', label: 'Shared location' },
-  { id: 'loc2', x: 39, y: 44, size: 'md', label: 'City meetup' },
-  { id: 'loc3', x: 57, y: 28, size: 'md', label: 'Downtown pulse' },
-  { id: 'loc4', x: 64, y: 60, size: 'md', label: 'Neighborhood check-in' },
-  { id: 'loc5', x: 79, y: 21, size: 'sm', label: 'North cluster' },
-  { id: 'loc6', x: 83, y: 41, size: 'sm', label: 'Market density' },
-  { id: 'loc7', x: 76, y: 75, size: 'sm', label: 'Event hotspot' }
-];
+const convergingUserDots = Array.from({ length: 180 }, (_, index) => {
+  const startX = 8 + ((index * 37) % 84);
+  const startY = 10 + ((index * 29 + (index % 7) * 5) % 76);
+  const angle = (((index * 19) % 360) * Math.PI) / 180;
+  const targetX = 50 + Math.cos(angle) * (4 + (index % 5) * 1.4);
+  const targetY = 50 + Math.sin(angle) * (3 + (index % 4) * 1.1);
 
-const densityHotspots = [
-  { id: 'heat1', x: '14%', y: '18%', size: 120, color: 'rgba(56, 189, 248, 0.25)' },
-  { id: 'heat2', x: '48%', y: '14%', size: 150, color: 'rgba(249, 115, 22, 0.22)' },
-  { id: 'heat3', x: '62%', y: '42%', size: 170, color: 'rgba(239, 68, 68, 0.22)' },
-  { id: 'heat4', x: '28%', y: '58%', size: 135, color: 'rgba(16, 185, 129, 0.2)' },
-  { id: 'heat5', x: '72%', y: '70%', size: 120, color: 'rgba(168, 85, 247, 0.18)' }
-];
+  return {
+    id: `user-dot-${index}`,
+    startX,
+    startY,
+    targetX: Number(targetX.toFixed(2)),
+    targetY: Number(targetY.toFixed(2)),
+    size: index % 9 === 0 ? 8 : index % 3 === 0 ? 6 : 5,
+    delay: (index % 24) * 0.08,
+    duration: 6 + (index % 7) * 0.35
+  };
+});
 
-const directMessageMoments = [
-  { sender: 'Ava', text: 'Heading your way — sending the exact pin in DM.', align: 'left' },
-  { sender: 'You', text: 'Got it. The route and meetup details stay encrypted.', align: 'right' },
-  { sender: 'Marcus', text: 'Switching from the public room to a locked conversation now.', align: 'left' },
-  { sender: 'You', text: 'Perfect. Keep the plan private, share the update when we arrive.', align: 'right' }
-];
-
-const nodeRadius = {
-  lg: 4.5,
-  md: 3.4,
-  sm: 2.5
+const messagePreview = {
+  plainText: 'Meet me at the center marker at 7:30. I will share the final route here.',
+  encryptedText: '7F-A91C / 4D-223B / 88-LOCK / 2A-77C1',
+  sendCipherRows: ['8X4A 1F77 23CC 9D0E', 'L0CK 77AA 91C2 E4F8', '2C91 A7FF 0E1D 6B20'],
+  unlockCipherRows: ['94AF 00C1 7E22 D4B8', 'KEY? 19AD 44C0 7F10', 'D3CR 7A91 55EF 0AA2']
 };
 
 function Home({ isAuthenticated = false }) {
@@ -194,8 +177,8 @@ function Home({ isAuthenticated = false }) {
                 into one platform so you can manage friendships without trading away privacy.
               </p>
               <p className="mt-4 max-w-2xl text-sm text-blue-200 sm:text-base">
-                Scroll through parallax layers, preview the live map system with location sharing and density overlays,
-                then drop into encrypted direct messages when a conversation needs to stay private.
+                Watch hundreds of users drift across a generic map into a shared red density glow, then follow a direct
+                message as it encrypts, sends, and unlocks on the other side.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
@@ -256,21 +239,21 @@ function Home({ isAuthenticated = false }) {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-200">Map intelligence</p>
-                    <h2 className="mt-2 text-xl font-semibold">Parallax community map</h2>
+                    <h2 className="mt-2 text-xl font-semibold">Community density map</h2>
                   </div>
-                  <div className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                    Live pins • Heat overlays
+                  <div className="rounded-full border border-rose-400/30 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-100">
+                    Hundreds of users • Center glow
                   </div>
                 </div>
 
                 <div
                   data-testid="hero-map-system"
-                  className="relative mt-5 h-[22rem] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.16),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(15,23,42,0.75))]"
+                  className="relative mt-5 h-[22rem] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(248,113,113,0.08),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.98),rgba(15,23,42,0.82))]"
                 >
                   <motion.div
                     aria-hidden="true"
-                    className="absolute inset-0 opacity-30"
-                    animate={prefersReducedMotion ? {} : { opacity: [0.2, 0.35, 0.22], scale: [1, 1.03, 1] }}
+                    className="absolute inset-0 opacity-25"
+                    animate={prefersReducedMotion ? {} : { opacity: [0.18, 0.3, 0.2], scale: [1, 1.02, 1] }}
                     transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
                     style={{
                       backgroundImage:
@@ -280,164 +263,109 @@ function Home({ isAuthenticated = false }) {
                   />
                   <motion.div
                     aria-hidden="true"
-                    className="absolute inset-0 bg-[radial-gradient(circle_at_25%_15%,rgba(59,130,246,0.22),transparent_28%),radial-gradient(circle_at_78%_65%,rgba(16,185,129,0.18),transparent_26%),radial-gradient(circle_at_92%_30%,rgba(129,140,248,0.18),transparent_24%)]"
+                    className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(248,113,113,0.2),transparent_24%),radial-gradient(circle_at_50%_50%,rgba(239,68,68,0.12),transparent_38%),radial-gradient(circle_at_22%_26%,rgba(248,113,113,0.08),transparent_26%),radial-gradient(circle_at_80%_72%,rgba(248,113,113,0.08),transparent_24%)]"
                     style={{ y: middleLayerY }}
                   />
-
-                  {densityHotspots.map((hotspot, index) => (
-                    <motion.div
-                      key={hotspot.id}
-                      aria-hidden="true"
-                      className="absolute rounded-full blur-3xl"
-                      style={{
-                        left: hotspot.x,
-                        top: hotspot.y,
-                        width: hotspot.size,
-                        height: hotspot.size,
-                        backgroundColor: hotspot.color
-                      }}
-                      animate={prefersReducedMotion ? {} : { scale: [0.92, 1.08, 0.98], opacity: [0.55, 0.92, 0.65] }}
-                      transition={{
-                        duration: prefersReducedMotion ? 0 : 6 + index,
-                        repeat: prefersReducedMotion ? 0 : Infinity,
-                        ease: 'easeInOut',
-                        delay: prefersReducedMotion ? 0 : index * 0.4
-                      }}
-                    />
-                  ))}
-
-                  {floatingMapBadges.map((item, index) => (
-                    <motion.div
-                      key={item.label}
-                      data-testid="floating-map-badge"
-                      className={`absolute w-28 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 shadow-lg backdrop-blur ${item.className}`}
-                      initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.94 }}
-                      animate={
-                        prefersReducedMotion
-                          ? { opacity: 1 }
-                          : {
-                              opacity: 1,
-                              y: [0, index % 2 === 0 ? -14 : 12, 0]
-                            }
-                      }
-                      transition={{
-                        duration: prefersReducedMotion ? 0 : 5 + index,
-                        delay: prefersReducedMotion ? 0 : 0.45 + index * 0.15,
-                        repeat: prefersReducedMotion ? 0 : Infinity,
-                        ease: 'easeInOut'
-                      }}
-                    >
-                      <p className="text-sm font-semibold text-white">
-                        <span className="mr-1" aria-hidden="true">
-                          {item.icon}
-                        </span>
-                        {item.label}
-                      </p>
-                      <p className="mt-1 text-xs text-blue-100">{item.conversation}</p>
-                    </motion.div>
-                  ))}
 
                   <svg
                     viewBox="0 0 100 100"
                     className="absolute inset-0 h-full w-full"
                     role="img"
-                    aria-label="Map diagram showing shared locations, activity routes, and population density overlays"
+                    aria-label="Generic community map with hundreds of users converging into a dense red center overlay"
                   >
-                    <defs>
-                      <linearGradient id="map-route-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#60a5fa" />
-                        <stop offset="50%" stopColor="#38bdf8" />
-                        <stop offset="100%" stopColor="#f97316" />
-                      </linearGradient>
-                    </defs>
-
-                    <motion.path
-                      d="M 18 72 Q 30 56 42 46 T 60 30 T 81 22"
-                      fill="none"
-                      stroke="url(#map-route-gradient)"
-                      strokeWidth="0.85"
-                      strokeLinecap="round"
-                      strokeDasharray="1.8 1.8"
-                      initial={prefersReducedMotion ? false : { pathLength: 0, opacity: 0.45 }}
-                      animate={prefersReducedMotion ? { pathLength: 1, opacity: 0.8 } : { pathLength: 1, opacity: [0.5, 1, 0.7] }}
-                      transition={{
-                        duration: prefersReducedMotion ? 0.01 : 1.05,
-                        repeat: prefersReducedMotion ? 0 : Infinity,
-                        repeatDelay: prefersReducedMotion ? 0 : 2.8,
-                        ease: 'easeInOut'
-                      }}
+                    <path
+                      d="M 9 28 C 14 18 24 16 33 20 C 43 24 53 20 57 26 C 61 33 58 40 48 44 C 38 48 23 47 16 41 C 10 36 7 33 9 28 Z"
+                      fill="rgba(226,232,240,0.08)"
+                      stroke="rgba(248,250,252,0.12)"
+                      strokeWidth="0.45"
                     />
-                    <motion.path
-                      d="M 40 46 Q 54 50 66 62 T 78 76"
-                      fill="none"
-                      stroke="rgba(52, 211, 153, 0.9)"
-                      strokeWidth="0.75"
-                      strokeLinecap="round"
-                      strokeDasharray="1.4 2"
-                      initial={prefersReducedMotion ? false : { pathLength: 0, opacity: 0.35 }}
-                      animate={prefersReducedMotion ? { pathLength: 1, opacity: 0.75 } : { pathLength: 1, opacity: [0.35, 0.95, 0.55] }}
-                      transition={{
-                        duration: prefersReducedMotion ? 0.01 : 0.95,
-                        delay: prefersReducedMotion ? 0 : 0.2,
-                        repeat: prefersReducedMotion ? 0 : Infinity,
-                        repeatDelay: prefersReducedMotion ? 0 : 3.1,
-                        ease: 'easeInOut'
-                      }}
+                    <path
+                      d="M 58 23 C 66 16 79 18 86 26 C 92 33 93 43 87 50 C 80 58 67 60 60 53 C 53 47 51 31 58 23 Z"
+                      fill="rgba(226,232,240,0.07)"
+                      stroke="rgba(248,250,252,0.1)"
+                      strokeWidth="0.45"
                     />
-
-                    {sharedLocations.map((node, index) => (
-                      <motion.g
-                        key={node.id}
-                        initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.7 }}
-                        animate={prefersReducedMotion ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [1, 1.08, 1] }}
-                        transition={{
-                          duration: prefersReducedMotion ? 0.01 : 1.1,
-                          delay: prefersReducedMotion ? 0 : 0.18 + index * 0.08,
-                          repeat: prefersReducedMotion ? 0 : Infinity,
-                          repeatDelay: prefersReducedMotion ? 0 : 2.8,
-                          ease: 'easeInOut'
-                        }}
-                      >
-                        <circle
-                          cx={node.x}
-                          cy={node.y}
-                          r={nodeRadius[node.size] * 1.8}
-                          fill={node.id === 'loc1' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(249, 115, 22, 0.12)'}
-                        />
-                        <circle
-                          cx={node.x}
-                          cy={node.y}
-                          r={nodeRadius[node.size]}
-                          fill={node.id === 'loc1' ? '#34d399' : '#fde68a'}
-                          stroke={node.id === 'loc1' ? '#6ee7b7' : '#fdba74'}
-                          strokeWidth="0.45"
-                        />
-                      </motion.g>
-                    ))}
+                    <path
+                      d="M 22 58 C 29 52 40 54 46 61 C 52 68 50 77 43 82 C 35 87 22 85 16 77 C 11 70 14 63 22 58 Z"
+                      fill="rgba(226,232,240,0.08)"
+                      stroke="rgba(248,250,252,0.1)"
+                      strokeWidth="0.45"
+                    />
+                    <path
+                      d="M 60 61 C 69 55 82 57 88 65 C 94 73 90 84 80 88 C 71 91 59 88 54 79 C 49 70 52 66 60 61 Z"
+                      fill="rgba(226,232,240,0.07)"
+                      stroke="rgba(248,250,252,0.1)"
+                      strokeWidth="0.45"
+                    />
+                    <circle cx="50" cy="50" r="10" fill="rgba(248,113,113,0.16)" />
+                    <circle cx="50" cy="50" r="6.5" fill="rgba(239,68,68,0.16)" />
                   </svg>
 
+                  <motion.div
+                    aria-hidden="true"
+                    className="absolute left-1/2 top-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,_rgba(239,68,68,0.5)_0%,_rgba(239,68,68,0.22)_30%,_rgba(239,68,68,0.08)_58%,_transparent_78%)] blur-2xl"
+                    initial={prefersReducedMotion ? false : { opacity: 0.16, scale: 0.72 }}
+                    animate={prefersReducedMotion ? { opacity: 0.35, scale: 1 } : { opacity: [0.2, 0.42, 0.28], scale: [0.78, 1.1, 0.92] }}
+                    transition={{ duration: prefersReducedMotion ? 0.01 : 6.5, repeat: prefersReducedMotion ? 0 : Infinity, ease: 'easeInOut' }}
+                  />
+                  <motion.div
+                    aria-hidden="true"
+                    className="absolute left-1/2 top-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,_rgba(127,29,29,0.32)_0%,_rgba(220,38,38,0.2)_22%,_rgba(248,113,113,0.12)_45%,_rgba(248,113,113,0.06)_62%,_transparent_82%)] blur-3xl"
+                    initial={prefersReducedMotion ? false : { opacity: 0.1, scale: 0.68 }}
+                    animate={prefersReducedMotion ? { opacity: 0.28, scale: 1 } : { opacity: [0.14, 0.3, 0.2], scale: [0.72, 1.08, 0.9] }}
+                    transition={{ duration: prefersReducedMotion ? 0.01 : 7.5, delay: prefersReducedMotion ? 0 : 0.4, repeat: prefersReducedMotion ? 0 : Infinity, ease: 'easeInOut' }}
+                  />
+
+                  {convergingUserDots.map((dot) => (
+                    <motion.div
+                      key={dot.id}
+                      data-testid="hero-map-dot"
+                      className="absolute rounded-full bg-rose-400"
+                      style={{
+                        left: `${dot.startX}%`,
+                        top: `${dot.startY}%`,
+                        width: dot.size,
+                        height: dot.size,
+                        boxShadow: '0 0 12px rgba(248, 113, 113, 0.95)',
+                        opacity: 0.7
+                      }}
+                      initial={prefersReducedMotion ? false : { scale: 0.72, opacity: 0.35 }}
+                      animate={
+                        prefersReducedMotion
+                          ? { left: `${dot.targetX}%`, top: `${dot.targetY}%`, scale: 1, opacity: 0.85 }
+                          : {
+                              left: [`${dot.startX}%`, `${dot.targetX}%`],
+                              top: [`${dot.startY}%`, `${dot.targetY}%`],
+                              scale: [0.75, 1.15, 0.95],
+                              opacity: [0.4, 0.88, 0.7]
+                            }
+                      }
+                      transition={{
+                        duration: prefersReducedMotion ? 0.01 : dot.duration,
+                        delay: prefersReducedMotion ? 0 : dot.delay,
+                        repeat: prefersReducedMotion ? 0 : Infinity,
+                        repeatType: 'reverse',
+                        ease: 'easeInOut'
+                      }}
+                    />
+                  ))}
+
                   <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 backdrop-blur">
-                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-200">Map layers in motion</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-200">Converging user density</p>
                     <p className="mt-2 text-sm text-blue-50">
-                      Shared locations, local activity, and population density heatmap overlays animate together so the
-                      map system feels alive before users ever open the full feature.
+                      Hundreds of glowing user dots travel toward the center until they visually merge into a single red
+                      density field with a darker core and softly faded edges.
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-200">Location sharing</p>
-                    <p className="mt-2 text-sm text-blue-100">Drop precise meetup points onto the map without leaving the platform.</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-sm font-semibold uppercase tracking-[0.22em] text-orange-200">Heatmap overlays</p>
-                    <p className="mt-2 text-sm text-blue-100">Visualize population density and activity pockets with layered color intensity.</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-sm font-semibold uppercase tracking-[0.22em] text-sky-200">Local awareness</p>
-                    <p className="mt-2 text-sm text-blue-100">Track neighborhood trends and nearby activity with motion-rich layers.</p>
-                  </div>
+                  {mapDensityStats.map((item) => (
+                    <div key={item.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <p className="text-sm font-semibold uppercase tracking-[0.22em] text-rose-200">{item.title}</p>
+                      <p className="mt-2 text-sm text-blue-100">{item.description}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </motion.div>
@@ -459,17 +387,18 @@ function Home({ isAuthenticated = false }) {
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">Animated privacy showcase</p>
             <h2 className="mt-3 text-2xl font-bold sm:text-3xl">Encrypted direct messaging, presented as a living conversation</h2>
             <p className="mt-4 max-w-2xl text-sm text-slate-300 sm:text-base">
-              After users discover people and places on the map, the next step is a private channel. This section shows
-              encrypted direct messages moving in real time, with lock-state visuals and copy that reinforces private-by-default communication.
+              After the map draws people together, the conversation moves into a private channel. This preview now
+              shows the full send-and-open flow: a message is typed, matrix-style ciphering takes over during
+              encryption, the payload arrives, and the receiving user unlocks it back into readable text.
             </p>
             <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-semibold text-white">Locked delivery</p>
-                <p className="mt-2 text-sm text-slate-300">Every DM is encrypted so meetup details, addresses, and plans stay between participants.</p>
+                <p className="text-sm font-semibold text-white">Matrix-style ciphering</p>
+                <p className="mt-2 text-sm text-slate-300">Submission animates through red cipher glyphs so visitors can see readable text turn into an encrypted payload.</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-semibold text-white">Bring your own PGP</p>
-                <p className="mt-2 text-sm text-slate-300">Advanced users can layer in their own keys while everyday users still get simple protection.</p>
+                <p className="text-sm font-semibold text-white">Unlock on the other side</p>
+                <p className="mt-2 text-sm text-slate-300">The receiving user sees a new message prompt, enters an encryption password, and watches the text decode in reverse.</p>
               </div>
             </div>
           </div>
@@ -486,48 +415,119 @@ function Home({ isAuthenticated = false }) {
                 <p className="mt-1 text-xs uppercase tracking-[0.22em] text-emerald-200">End-to-end encrypted</p>
               </div>
               <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                Keys verified
+                Message in motion
               </div>
             </div>
 
-            <div className="relative mt-5 space-y-3">
-              {directMessageMoments.map((message, index) => (
-                <motion.div
-                  key={`${message.sender}-${index}`}
-                  data-testid="animated-dm-bubble"
-                  className={`max-w-[85%] rounded-2xl border px-4 py-3 text-sm shadow-lg ${
-                    message.align === 'right'
-                      ? 'ml-auto border-sky-400/25 bg-sky-400/10 text-sky-50'
-                      : 'border-white/10 bg-slate-900/80 text-slate-100'
-                  }`}
-                  initial={prefersReducedMotion ? false : { opacity: 0, x: message.align === 'right' ? 18 : -18 }}
-                  animate={
-                    prefersReducedMotion
-                      ? { opacity: 1 }
-                      : {
-                          opacity: 1,
-                          x: 0,
-                          y: [0, index % 2 === 0 ? -6 : 6, 0]
-                        }
-                  }
-                  transition={{
-                    duration: prefersReducedMotion ? 0.01 : 0.65,
-                    delay: prefersReducedMotion ? 0 : index * 0.16,
-                    repeat: prefersReducedMotion ? 0 : Infinity,
-                    repeatDelay: prefersReducedMotion ? 0 : 4.8,
-                    ease: 'easeInOut'
-                  }}
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">{message.sender}</p>
-                  <p className="mt-2">{message.text}</p>
-                </motion.div>
-              ))}
+            <div className="relative mt-5 grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+              <motion.div
+                data-testid="dm-flow-stage"
+                className="rounded-3xl border border-white/10 bg-slate-900/80 p-4 shadow-lg"
+                initial={prefersReducedMotion ? false : { opacity: 0, x: -18 }}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+                transition={{ duration: prefersReducedMotion ? 0.01 : 0.6 }}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">You type</p>
+                <div className="mt-3 rounded-2xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm text-sky-50">
+                  {messagePreview.plainText}
+                </div>
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <span className="text-xs text-slate-400">Submit securely</span>
+                  <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                    Sending…
+                  </span>
+                </div>
+                <div className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-rose-200">During submission</p>
+                  <div className="mt-3 space-y-2 font-mono text-xs text-rose-100/90">
+                    {messagePreview.sendCipherRows.map((row, index) => (
+                      <motion.p
+                        key={row}
+                        data-testid="dm-cipher-row"
+                        initial={prefersReducedMotion ? false : { opacity: 0.25, x: -10 }}
+                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.3, 1, 0.55], x: [0, 4, 0] }}
+                        transition={{
+                          duration: prefersReducedMotion ? 0.01 : 1.8,
+                          delay: prefersReducedMotion ? 0 : index * 0.2,
+                          repeat: prefersReducedMotion ? 0 : Infinity,
+                          ease: 'easeInOut'
+                        }}
+                      >
+                        {row}
+                      </motion.p>
+                    ))}
+                  </div>
+                  <p className="mt-3 rounded-2xl border border-white/10 bg-slate-950/60 px-3 py-2 font-mono text-xs text-rose-100">
+                    {messagePreview.encryptedText}
+                  </p>
+                </div>
+              </motion.div>
+
+              <motion.div
+                data-testid="dm-flow-stage"
+                className="rounded-3xl border border-white/10 bg-slate-900/80 p-4 shadow-lg"
+                initial={prefersReducedMotion ? false : { opacity: 0, x: 18 }}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+                transition={{ duration: prefersReducedMotion ? 0.01 : 0.6, delay: prefersReducedMotion ? 0 : 0.08 }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">Other user</p>
+                    <p className="mt-1 text-sm text-white">New message</p>
+                  </div>
+                  <span className="rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-100">
+                    Incoming secure payload
+                  </span>
+                </div>
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">Encryption password required</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="flex-1 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 font-mono text-sm text-slate-200">
+                      ••••••••
+                    </div>
+                    <button type="button" className="rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-200">
+                      Unlock
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Encrypted text</p>
+                    <p className="mt-2 font-mono text-xs text-rose-100">{messagePreview.encryptedText}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Matrix cipher</p>
+                    <div className="mt-2 space-y-2 font-mono text-xs text-emerald-200/90">
+                      {messagePreview.unlockCipherRows.map((row, index) => (
+                        <motion.p
+                          key={row}
+                          data-testid="dm-cipher-row"
+                          initial={prefersReducedMotion ? false : { opacity: 0.25, x: 10 }}
+                          animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.3, 1, 0.6], x: [0, -4, 0] }}
+                          transition={{
+                            duration: prefersReducedMotion ? 0.01 : 1.9,
+                            delay: prefersReducedMotion ? 0 : 0.25 + index * 0.2,
+                            repeat: prefersReducedMotion ? 0 : Infinity,
+                            ease: 'easeInOut'
+                          }}
+                        >
+                          {row}
+                        </motion.p>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Plain readable text</p>
+                    <p className="mt-2 text-sm text-emerald-50">{messagePreview.plainText}</p>
+                  </div>
+                </div>
+              </motion.div>
             </div>
 
             <div className="mt-5 flex flex-wrap gap-3 text-xs text-slate-300">
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">🔒 Encrypted by default</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">🗝️ Optional BYO PGP</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">📨 Private meetup coordination</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">⌘ Matrix-style encryption preview</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">🗝️ Password-gated message reveal</span>
             </div>
           </motion.div>
         </div>
