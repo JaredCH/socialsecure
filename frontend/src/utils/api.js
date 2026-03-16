@@ -367,6 +367,7 @@ export const chatAPI = {
     return api.get(`/chat/conversations/${conversationId}/keys/packages/sync?${params.toString()}`);
   },
   startDM: (targetUserId) => api.post('/chat/dm/start', { targetUserId }),
+  deleteConversation: (conversationId) => api.delete(`/chat/conversations/${encodeURIComponent(conversationId)}`),
   getProfileThread: (userId) => api.get(`/chat/profile/${encodeURIComponent(userId)}/thread`),
   updateProfileThreadSettings: (userId, payload) =>
     api.put(`/chat/profile/${encodeURIComponent(userId)}/thread/settings`, payload),

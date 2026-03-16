@@ -31,6 +31,7 @@ jest.mock('../utils/api', () => ({
     getRoomUsers: jest.fn(),
     sendMessage: jest.fn(),
     startDM: jest.fn(),
+    deleteConversation: jest.fn(),
     getProfileThread: jest.fn(),
     deleteRoom: jest.fn()
   },
@@ -1291,6 +1292,51 @@ describe('Chat zip room indicator', () => {
     const dmHeaderLink = container.querySelector('a[aria-label="Open @buddy social page"]');
     expect(dmHeaderLink).not.toBeNull();
     expect(dmHeaderLink.getAttribute('href')).toBe('/social?user=buddy');
+  });
+
+  it('shows a delete button on DM conversations and removes conversation on click', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    chatAPI.deleteConversation.mockResolvedValue({ data: { success: true } });
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const deleteButton = container.querySelector('button[aria-label="Delete conversation with @buddy"]');
+    expect(deleteButton).not.toBeNull();
+
+    window.confirm = jest.fn(() => true);
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await act(async () => {
+      deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(chatAPI.deleteConversation).toHaveBeenCalledWith('dm1');
   });
 
   it('renders sender names with theme-selected accent styling', async () => {

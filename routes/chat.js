@@ -3278,6 +3278,50 @@ router.post(
   }
 );
 
+router.delete('/conversations/:conversationId', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    const userId = String(req.user.userId);
+    const { conversationId } = req.params;
+
+    const conversation = await ChatConversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (conversation.type !== 'dm') {
+      return res.status(400).json({ error: 'Only direct message conversations can be deleted' });
+    }
+
+    if (!isConversationParticipant(conversation, userId)) {
+      return res.status(403).json({ error: 'Access denied for this conversation' });
+    }
+
+    const participantIds = getConversationParticipantIds(conversation);
+    const otherUserId = participantIds.find((id) => id !== userId) || null;
+
+    await ConversationMessage.deleteMany({ conversationId: conversation._id });
+    await ConversationKeyPackage.deleteMany({ conversationId: conversation._id });
+    await conversation.deleteOne();
+
+    if (otherUserId) {
+      const deletingUser = await User.findById(userId).select('username').lean();
+      const deletingUsername = deletingUser?.username || 'A user';
+      await createNotification({
+        recipientId: otherUserId,
+        senderId: userId,
+        type: 'system',
+        title: 'Conversation deleted',
+        body: `@${deletingUsername} deleted a direct message conversation with you.`
+      });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting conversation:', error);
+    return res.status(500).json({ error: 'Failed to delete conversation' });
+  }
+});
+
 router.get('/profile/:userId/thread', unifiedChatLimiter, optionalAuthenticateToken, async (req, res) => {
   try {
     const viewerId = req.user?.userId ? String(req.user.userId) : '';
