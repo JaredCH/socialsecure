@@ -77,3 +77,73 @@ describe('newsFeedBuilder marijuana category filter', () => {
     }));
   });
 });
+
+describe('newsFeedBuilder trending tier location scoping', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ArticleImpression.getDeprioritisedArticleIds.mockResolvedValue([]);
+    Article.countDocuments.mockResolvedValue(0);
+  });
+
+  it('excludes out-of-state local articles from the trending tier for a TX user', async () => {
+    // User in Texas (78666 = San Marcos, TX)
+    NewsPreferences.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null)
+    });
+    User.findById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          city: 'San Marcos',
+          state: 'TX',
+          country: 'US',
+          zipCode: '78666'
+        })
+      })
+    });
+
+    const queries = [];
+    Article.find.mockImplementation((query) => {
+      queries.push(JSON.parse(JSON.stringify(query)));
+      return createFindChain([]);
+    });
+
+    await buildFeed('user-tx', { category: 'all', limit: 5 });
+
+    // The trending tier query (tier 4) should contain a location scope filter.
+    // We look for a query with the viralScore threshold and the $or clause that
+    // excludes out-of-state local articles.
+    const trendingQuery = queries.find(
+      (q) => q.viralScore && q.$or && q.$or.some((clause) => clause.pipeline && clause.pipeline.$ne === 'local')
+    );
+
+    expect(trendingQuery).toBeDefined();
+    // Must include a clause allowing the user's state through
+    const stateClause = trendingQuery.$or.find((c) => c['locationTags.states'] === 'tx');
+    expect(stateClause).toBeDefined();
+  });
+
+  it('does not add location filter to trending tier when user has no state', async () => {
+    NewsPreferences.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null)
+    });
+    User.findById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null)
+      })
+    });
+
+    const queries = [];
+    Article.find.mockImplementation((query) => {
+      queries.push(JSON.parse(JSON.stringify(query)));
+      return createFindChain([]);
+    });
+
+    await buildFeed('user-unknown', { category: 'all', limit: 5 });
+
+    // No trending query should have the pipeline-exclusion $or clause
+    const trendingQueries = queries.filter(
+      (q) => q.viralScore && q.$or && q.$or.some((clause) => clause.pipeline && clause.pipeline.$ne === 'local')
+    );
+    expect(trendingQueries).toHaveLength(0);
+  });
+});

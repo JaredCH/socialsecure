@@ -105,3 +105,81 @@ describe('newsIngestion.categories marijuana tagging', () => {
     );
   });
 });
+
+describe('newsIngestion.categories location tagging', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockParseURL.mockResolvedValue({ items: [] });
+    Article.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null)
+    });
+    Article.updateOne.mockResolvedValue({ modifiedCount: 0 });
+    Article.updateMany.mockResolvedValue({ modifiedCount: 0 });
+    Article.create.mockResolvedValue({ _id: 'created-loc-1' });
+  });
+
+  it('extracts Florida location tags from title mentioning Florida', async () => {
+    mockParseURL.mockResolvedValue({
+      items: [
+        {
+          title: 'Florida Man arrested after bizarre incident',
+          link: 'https://example.com/florida-man',
+          contentSnippet: 'Local authorities responded quickly.'
+        }
+      ]
+    });
+
+    await ingestCategory('technology');
+
+    expect(Article.create).toHaveBeenCalledWith(expect.objectContaining({
+      locationTags: expect.objectContaining({
+        states: expect.arrayContaining(['fl', 'florida']),
+        countries: ['us']
+      }),
+      localityLevel: 'state',
+      scopeReason: 'state_mention'
+    }));
+  });
+
+  it('extracts city-level location tags from "Tampa, FL" pattern', async () => {
+    mockParseURL.mockResolvedValue({
+      items: [
+        {
+          title: 'New tech hub announced in Tampa, FL',
+          link: 'https://example.com/tampa-tech',
+          contentSnippet: 'The development will create 500 jobs.'
+        }
+      ]
+    });
+
+    await ingestCategory('technology');
+
+    expect(Article.create).toHaveBeenCalledWith(expect.objectContaining({
+      locationTags: expect.objectContaining({
+        cities: expect.arrayContaining(['tampa']),
+        states: expect.arrayContaining(['fl', 'florida'])
+      }),
+      localityLevel: 'city',
+      scopeReason: 'city_mention'
+    }));
+  });
+
+  it('keeps global locality for articles with no location signals', async () => {
+    mockParseURL.mockResolvedValue({
+      items: [
+        {
+          title: 'AI research breakthrough stuns experts',
+          link: 'https://example.com/ai-research',
+          contentSnippet: 'The new model outperforms all benchmarks.'
+        }
+      ]
+    });
+
+    await ingestCategory('technology');
+
+    expect(Article.create).toHaveBeenCalledWith(expect.objectContaining({
+      localityLevel: 'global',
+      scopeReason: 'source_default'
+    }));
+  });
+});
