@@ -146,8 +146,9 @@ const unifiedChatLimiter = rateLimit({
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 500;
 const DEFAULT_DISCOVERY_LIMIT = 20;
-const MAX_DISCOVERY_LIMIT = 100;
+const MAX_DISCOVERY_LIMIT = 500;
 const MESSAGE_TYPES = ['text', 'action', 'system', 'command', 'meetup-invite'];
+const CHAT_GLOBAL_COOLDOWN_MS = 20 * 1000;
 
 const COMMAND_DATA_LIMITS = {
   command: 64,
@@ -398,6 +399,55 @@ const resolveLeanDoc = async (query) => (
     ? query.lean()
     : query
 );
+
+const isPrivilegedChatUser = (user) => Boolean(user?.isAdmin || user?.isModerator);
+
+const getLatestChatTimestamp = async (query) => {
+  const result = await resolveLeanDoc(query);
+  if (!result?.createdAt) return null;
+  const timestamp = new Date(result.createdAt).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+const getGlobalChatCooldown = async (userId) => {
+  const windowStart = new Date(Date.now() - CHAT_GLOBAL_COOLDOWN_MS);
+  const [recentRoomMessageAt, recentConversationMessageAt] = await Promise.all([
+    getLatestChatTimestamp(
+      ChatMessage.findOne({
+        userId,
+        messageType: { $ne: 'system' },
+        createdAt: { $gte: windowStart }
+      })
+        .select('createdAt')
+        .sort({ createdAt: -1 })
+    ),
+    getLatestChatTimestamp(
+      ConversationMessage.findOne({
+        userId,
+        chatScope: 'chat',
+        messageType: { $ne: 'system' },
+        createdAt: { $gte: windowStart }
+      })
+        .select('createdAt')
+        .sort({ createdAt: -1 })
+    )
+  ]);
+
+  const latestTimestamp = Math.max(recentRoomMessageAt || 0, recentConversationMessageAt || 0);
+  if (!latestTimestamp) {
+    return { allowed: true, retryAfter: 0 };
+  }
+
+  const retryAfterMs = (latestTimestamp + CHAT_GLOBAL_COOLDOWN_MS) - Date.now();
+  if (retryAfterMs <= 0) {
+    return { allowed: true, retryAfter: 0 };
+  }
+
+  return {
+    allowed: false,
+    retryAfter: Math.max(1, Math.ceil(retryAfterMs / 1000))
+  };
+};
 
 const isValidMessageType = (messageType) => MESSAGE_TYPES.includes(messageType);
 
@@ -851,7 +901,7 @@ router.get('/rooms/events/upcoming', discoveryLimiter, authenticateToken, async 
 // All chat rooms endpoint must be explicitly requested by the user.
 router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) => {
   try {
-    await ChatRoom.ensureDefaultStateRooms();
+    await ChatRoom.ensureDefaultDiscoveryRooms();
 
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = parseDiscoveryLimit(req.query.limit);
@@ -859,6 +909,8 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
     const allowedRoomFilter = {
       $or: [
         { type: 'state' },
+        { type: 'county' },
+        { type: 'topic' },
         { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
       ]
     };
@@ -1039,16 +1091,16 @@ router.post('/rooms/:roomId/messages', [
       return res.status(403).json({ error: 'Cannot send messages due to block settings in this room' });
     }
     
-    // Check rate limit for non-resident cities
-    const userLocationKey = user.zipCode || user.city || '';
-    const roomLocationKey = room.zipCode || room.city || '';
-    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userLocationKey, roomLocationKey);
-    
-    if (!rateLimitCheck.allowed) {
-      return res.status(429).json({ 
-        error: 'Rate limit exceeded', 
-        message: 'Only 1 message per 15 seconds allowed for non-resident cities' 
-      });
+    const isPrivilegedUser = isPrivilegedChatUser(user);
+    if (!isPrivilegedUser) {
+      const cooldown = await getGlobalChatCooldown(userId);
+      if (!cooldown.allowed) {
+        return res.status(429).json({
+          error: 'Chat cooldown active',
+          message: `You can send one chat message every 20 seconds. Try again in ${cooldown.retryAfter}s.`,
+          retryAfter: cooldown.retryAfter
+        });
+      }
     }
     
     // Create message
@@ -1062,7 +1114,7 @@ router.post('/rooms/:roomId/messages', [
       mediaType: mediaType === 'audio' ? 'audio' : null,
       audio: normalizedAudio,
       commandData: sanitizeCommandData(commandData),
-      rateLimitKey: userLocationKey === roomLocationKey ? null : `${userId}:${roomId}:external`
+      rateLimitKey: null
     };
     
     // Add location if provided
@@ -1105,7 +1157,7 @@ router.post('/rooms/:roomId/messages', [
       message: publicMessage,
       rateLimit: {
         allowed: true,
-        remaining: rateLimitCheck.remaining
+        retryAfter: 0
       }
     });
   } catch (error) {
@@ -1322,15 +1374,16 @@ router.post('/rooms/:roomId/messages/e2ee', [
       return res.status(409).json({ error: 'Duplicate clientMessageId for sender device' });
     }
 
-    const userLocationKey = user.zipCode || user.city || '';
-    const roomLocationKey = room.zipCode || room.city || '';
-    const rateLimitCheck = await ChatMessage.checkRateLimit(userId, roomId, userLocationKey, roomLocationKey);
-
-    if (!rateLimitCheck.allowed) {
-      return res.status(429).json({
-        error: 'Rate limit exceeded',
-        message: 'Only 1 message per 15 seconds allowed for non-resident cities'
-      });
+    const isPrivilegedUser = isPrivilegedChatUser(user);
+    if (!isPrivilegedUser) {
+      const cooldown = await getGlobalChatCooldown(userId);
+      if (!cooldown.allowed) {
+        return res.status(429).json({
+          error: 'Chat cooldown active',
+          message: `You can send one chat message every 20 seconds. Try again in ${cooldown.retryAfter}s.`,
+          retryAfter: cooldown.retryAfter
+        });
+      }
     }
 
     const messageData = {
@@ -1341,7 +1394,7 @@ router.post('/rooms/:roomId/messages/e2ee', [
       isEncrypted: true,
       messageType: normalizeMessageType(messageType),
       commandData: sanitizeCommandData(commandData),
-      rateLimitKey: userLocationKey === roomLocationKey ? null : `${userId}:${roomId}:external`,
+      rateLimitKey: null,
       e2ee: {
         enabled: true,
         migrationFlag: 'native-e2ee',
@@ -1393,7 +1446,7 @@ router.post('/rooms/:roomId/messages/e2ee', [
       messageData: publicMessage,
       rateLimit: {
         allowed: true,
-        remaining: rateLimitCheck.remaining
+        retryAfter: 0
       }
     });
   } catch (error) {
@@ -2814,9 +2867,24 @@ router.post(
       return res.status(400).json({ error: 'Message content is required for non-DM conversations' });
     }
 
+    if (conversation.type !== 'dm') {
+      const sendingUser = await User.findById(userId).select('isAdmin');
+      if (!isPrivilegedChatUser(sendingUser)) {
+        const cooldown = await getGlobalChatCooldown(userId);
+        if (!cooldown.allowed) {
+          return res.status(429).json({
+            error: 'Chat cooldown active',
+            message: `You can send one chat message every 20 seconds. Try again in ${cooldown.retryAfter}s.`,
+            retryAfter: cooldown.retryAfter
+          });
+        }
+      }
+    }
+
     const createPayload = {
       conversationId: conversation._id,
       userId,
+      chatScope: conversation.type === 'dm' ? 'dm' : 'chat',
       messageType,
       commandData
     };

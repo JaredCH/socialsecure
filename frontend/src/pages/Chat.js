@@ -164,12 +164,12 @@ const LOCKED_DM_PLACEHOLDER = '🔒 Conversation locked. Unlock to view encrypte
 const INITIAL_MESSAGES_PAGE_SIZE = 40;
 const OLDER_MESSAGES_PAGE_SIZE = 10;
 const DM_DECRYPT_BATCH_SIZE = 5;
-const MAX_CHAT_ROOM_FETCH = 120;
+const MAX_CHAT_ROOM_FETCH = 500;
 const MAX_CHAT_ROOM_RESULTS = 20;
-const MAX_STATE_ROOM_RESULTS = 8;
 const MAX_FAVORITE_ROOMS = 8;
 const MAX_DM_FRIEND_PICKER_RESULTS = 12;
 const normalizeId = (value) => String(value || '').trim();
+const sortRoomsByName = (left, right) => String(left?.name || '').localeCompare(String(right?.name || ''));
 
 const upsertConversationMessage = (messages, incomingMessage) => {
   const normalizedId = String(incomingMessage?._id || '').trim();
@@ -576,8 +576,29 @@ function Chat() {
     [allChatRooms, favoriteRoomIds]
   );
 
-  const stateRooms = useMemo(
-    () => allChatRooms.filter((room) => room.type === 'state').slice(0, MAX_STATE_ROOM_RESULTS),
+  const stateRoomGroups = useMemo(() => {
+    const countyRoomsByState = allChatRooms
+      .filter((room) => room.type === 'county')
+      .sort(sortRoomsByName)
+      .reduce((acc, room) => {
+        const stateCode = String(room.state || '').trim();
+        if (!stateCode) return acc;
+        if (!acc[stateCode]) acc[stateCode] = [];
+        acc[stateCode].push(room);
+        return acc;
+      }, {});
+
+    return allChatRooms
+      .filter((room) => room.type === 'state')
+      .sort(sortRoomsByName)
+      .map((room) => ({
+        room,
+        counties: countyRoomsByState[String(room.state || '').trim()] || []
+      }));
+  }, [allChatRooms]);
+
+  const topicRooms = useMemo(
+    () => allChatRooms.filter((room) => room.type === 'topic').sort(sortRoomsByName),
     [allChatRooms]
   );
 
@@ -1428,17 +1449,99 @@ function Chat() {
                     <details className={`rounded border p-1.5 ${activeTheme.panel}`}>
                       <summary className="cursor-pointer text-xs font-semibold">State Chats</summary>
                       <ul className="mt-2 space-y-1 text-xs">
-                        {stateRooms.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
-                        {stateRooms.map((room) => (
-                          <li key={String(room._id)} className="rounded border px-2 py-1">
-                            <div className="flex items-center justify-between gap-2">
+                        {stateRoomGroups.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
+                        {stateRoomGroups.map(({ room, counties }) => {
+                          const roomId = String(room._id);
+                          const joinedState = Boolean(joinedRoomIds[roomId]);
+                          return (
+                            <li key={roomId} className="rounded border px-2 py-1" data-discovery-state={room.name}>
+                              <details>
+                                <summary
+                                  className="cursor-pointer font-medium"
+                                  data-discovery-state-summary={room.name}
+                                >
+                                  {room.name}
+                                </summary>
+                                <div className="mt-2 space-y-2">
+                                  <div className="flex items-center justify-between gap-2 rounded border px-2 py-1">
+                                    <span>State room</span>
+                                    {!joinedState ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleJoinRoom(room._id)}
+                                        className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
+                                      >
+                                        Join
+                                      </button>
+                                    ) : (
+                                      <span className="opacity-70">Joined</span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase opacity-80">County Chats</p>
+                                    <ul className="mt-1 space-y-1">
+                                      {counties.length === 0 ? <li className="opacity-75">No county chats available.</li> : null}
+                                      {counties.map((countyRoom) => {
+                                        const countyRoomId = String(countyRoom._id);
+                                        const joinedCounty = Boolean(joinedRoomIds[countyRoomId]);
+                                        return (
+                                          <li
+                                            key={countyRoomId}
+                                            className="flex items-center justify-between gap-2 rounded border px-2 py-1"
+                                            data-discovery-county={countyRoom.name}
+                                          >
+                                            <span>{countyRoom.name}</span>
+                                            {!joinedCounty ? (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleJoinRoom(countyRoom._id)}
+                                                className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
+                                              >
+                                                Join
+                                              </button>
+                                            ) : (
+                                              <span className="opacity-70">Joined</span>
+                                            )}
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  </div>
+                                </div>
+                              </details>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </details>
+                    <details className={`rounded border p-1.5 ${activeTheme.panel}`}>
+                      <summary className="cursor-pointer text-xs font-semibold">Topics</summary>
+                      <ul className="mt-2 space-y-1 text-xs">
+                        {topicRooms.length === 0 ? <li className="opacity-75">No topic chats available.</li> : null}
+                        {topicRooms.map((room) => {
+                          const roomId = String(room._id);
+                          const joined = Boolean(joinedRoomIds[roomId]);
+                          return (
+                            <li
+                              key={roomId}
+                              className="flex items-center justify-between gap-2 rounded border px-2 py-1"
+                              data-topic-room={room.name}
+                            >
                               <span>{room.name}</span>
-                              {!joinedRoomIds[String(room._id)] ? (
-                                <button type="button" onClick={() => handleJoinRoom(room._id)} className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}>Join</button>
-                              ) : null}
-                            </div>
-                          </li>
-                        ))}
+                              {!joined ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleJoinRoom(room._id)}
+                                  className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
+                                >
+                                  Join
+                                </button>
+                              ) : (
+                                <span className="opacity-70">Joined</span>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                     </details>
                   </div>

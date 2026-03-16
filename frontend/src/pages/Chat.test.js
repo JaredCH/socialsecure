@@ -259,6 +259,54 @@ describe('Chat zip room indicator', () => {
     ]);
   });
 
+  it('renders alphabetical state chats with county rooms and a topics dropdown', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'topic-tech', type: 'topic', name: 'Technology' },
+          { _id: 'state-wy', type: 'state', name: 'Wyoming', state: 'WY' },
+          { _id: 'county-la', type: 'county', name: 'Los Angeles County, California', state: 'CA', county: 'Los Angeles County' },
+          { _id: 'topic-ai', type: 'topic', name: 'AI' },
+          { _id: 'state-ca', type: 'state', name: 'California', state: 'CA' },
+          { _id: 'county-orange', type: 'county', name: 'Orange County, California', state: 'CA', county: 'Orange County' },
+          { _id: 'state-al', type: 'state', name: 'Alabama', state: 'AL' },
+          { _id: 'county-mobile', type: 'county', name: 'Mobile County, Alabama', state: 'AL', county: 'Mobile County' }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    const stateSummaries = Array.from(container.querySelectorAll('[data-discovery-state-summary]'))
+      .map((node) => node.textContent);
+    expect(stateSummaries).toEqual(['Alabama', 'California', 'Wyoming']);
+
+    const countyRows = Array.from(container.querySelectorAll('[data-discovery-county]'))
+      .map((node) => node.getAttribute('data-discovery-county'));
+    expect(countyRows).toEqual([
+      'Mobile County, Alabama',
+      'Los Angeles County, California',
+      'Orange County, California'
+    ]);
+
+    const topicRows = Array.from(container.querySelectorAll('[data-topic-room]'))
+      .map((node) => node.getAttribute('data-topic-room'));
+    expect(topicRows).toEqual(['AI', 'Technology']);
+    expect(container.textContent).toContain('Topics');
+  });
+
   it('filters DM conversations and starts a new DM from the plus picker', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }

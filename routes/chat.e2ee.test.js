@@ -10,13 +10,21 @@ const mockDeviceKey = { findOne: jest.fn() };
 const mockUser = { findById: jest.fn() };
 const mockRoomKeyPackage = {};
 const mockChatConversation = {};
-const mockConversationMessage = {};
+const mockConversationMessage = { findOne: jest.fn() };
 const mockConversationKeyPackage = {};
 const mockBlockList = { findOne: jest.fn() };
 
 const createSelectLean = (value) => ({
   select: jest.fn().mockReturnValue({
     lean: jest.fn().mockResolvedValue(value)
+  })
+});
+const createSelectLeanOrSort = (value) => ({
+  select: jest.fn().mockReturnValue({
+    lean: jest.fn().mockResolvedValue(value),
+    sort: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue(value)
+    })
   })
 });
 const createLean = (value) => ({
@@ -96,6 +104,8 @@ describe('Chat E2EE boundary hardening', () => {
     mockBlockList.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue(createLeanResult(null))
     });
+    mockChatMessage.findOne.mockReturnValue(createSelectLeanOrSort(null));
+    mockConversationMessage.findOne.mockReturnValue(createSelectLeanOrSort(null));
   });
 
   it('rejects plaintext on E2EE message endpoint', async () => {
@@ -144,6 +154,28 @@ describe('Chat E2EE boundary hardening', () => {
 
     expect(response.status).toBe(403);
     expect(response.body.error).toMatch(/Sender device is not registered/);
+  });
+
+  it('enforces the shared 20 second cooldown on chat room messages', async () => {
+    const app = buildApp();
+
+    mockChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', incrementMessageCount: jest.fn(), addMember: jest.fn(), members: [] });
+    mockUser.findById
+      .mockImplementationOnce(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] }, isAdmin: false }))
+      .mockImplementationOnce(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] }, isAdmin: false }));
+    mockConversationMessage.findOne.mockReturnValue(createSelectLeanOrSort({
+      _id: 'recent-conversation-message',
+      createdAt: new Date()
+    }));
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'hello room' });
+
+    expect(response.status).toBe(429);
+    expect(response.body.error).toBe('Chat cooldown active');
+    expect(mockChatMessage).not.toHaveBeenCalled();
   });
 
   it('rejects replayed clientMessageId for same sender device', async () => {
@@ -326,8 +358,7 @@ describe('Chat E2EE boundary hardening', () => {
     mockChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', incrementMessageCount: jest.fn(), addMember: jest.fn() });
     mockUser.findById.mockImplementation(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] } }));
     mockDeviceKey.findOne.mockReturnValue(createLeanResult({ _id: 'device-record' }));
-    mockChatMessage.findOne.mockReturnValue(createSelectLean(null));
-    mockChatMessage.checkRateLimit = jest.fn().mockResolvedValue({ allowed: true, remaining: 1 });
+    mockChatMessage.findOne.mockReturnValue(createSelectLeanOrSort(null));
     mockChatMessage.mockImplementation(() => savedDoc);
 
     const response = await request(app)
@@ -351,7 +382,6 @@ describe('Chat E2EE boundary hardening', () => {
     const app = buildApp();
     mockChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', members: ['user-1'], incrementMessageCount: jest.fn(), addMember: jest.fn() });
     mockUser.findById.mockReturnValue(createUserDoc({ _id: 'user-1', city: 'City', location: { coordinates: [0, 0] }, onboardingStatus: 'completed' }));
-    mockChatMessage.checkRateLimit = jest.fn().mockResolvedValue({ allowed: true, remaining: 1 });
 
     const response = await request(app)
       .post('/api/chat/rooms/room-1/messages')

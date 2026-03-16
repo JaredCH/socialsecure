@@ -38,6 +38,12 @@ const conversationMessageSchema = new mongoose.Schema({
       message: 'senderNameColor must be a valid hex color'
     }
   },
+  chatScope: {
+    type: String,
+    enum: ['chat', 'dm'],
+    default: 'chat',
+    index: true
+  },
   e2ee: {
     enabled: {
       type: Boolean,
