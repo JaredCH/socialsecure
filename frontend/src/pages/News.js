@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { newsAPI } from '../utils/api';
 import WeatherBar from '../components/news/WeatherBar';
 import FilterBar from '../components/news/FilterBar';
@@ -55,6 +55,7 @@ function News() {
   // ── UI state ───────────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen]       = useState(false);
   const [selectedArticle, setSelectedArticle] = useState(null);
+  const desktopFeedRef = useRef(null);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   const bootstrap = useCallback(async () => {
@@ -90,6 +91,53 @@ function News() {
   };
 
   const feedCategory = activeCategories.length === 1 ? activeCategories[0] : null;
+  const hiddenCategories = useMemo(
+    () => (preferences?.hiddenCategories || []).map((value) => String(value || '').trim()).filter(Boolean),
+    [preferences]
+  );
+  const hiddenCategorySet = useMemo(() => new Set(hiddenCategories), [hiddenCategories]);
+
+  const sortedCategories = useMemo(() => {
+    const normalizeLabel = (category) => String(category?.label || '').toLowerCase();
+    return [...CATEGORIES].sort((a, b) => {
+      const aHidden = hiddenCategorySet.has(a.key);
+      const bHidden = hiddenCategorySet.has(b.key);
+      if (aHidden !== bHidden) return aHidden ? 1 : -1;
+      return normalizeLabel(a).localeCompare(normalizeLabel(b));
+    });
+  }, [hiddenCategorySet]);
+
+  const enabledCategories = useMemo(
+    () => sortedCategories.filter((category) => !hiddenCategorySet.has(category.key)),
+    [sortedCategories, hiddenCategorySet]
+  );
+
+  const handleToggleCategoryEnabled = useCallback(async (categoryKey, currentlyEnabled) => {
+    const key = String(categoryKey || '').trim();
+    if (!key) return;
+    const hidden = new Set(hiddenCategories);
+    if (currentlyEnabled) hidden.add(key);
+    else hidden.delete(key);
+    try {
+      const response = await newsAPI.updateHiddenCategories(Array.from(hidden));
+      setPreferences(response.data?.preferences || null);
+    } catch (err) {
+      console.error('toggleHiddenCategory', err);
+    }
+  }, [hiddenCategories]);
+
+  useEffect(() => {
+    if (!activeCategories.length) return;
+    const filtered = activeCategories.filter((category) => !hiddenCategorySet.has(category));
+    if (filtered.length !== activeCategories.length) setActiveCategories(filtered);
+  }, [activeCategories, hiddenCategorySet]);
+
+  useEffect(() => {
+    const id = window.requestAnimationFrame(() => {
+      desktopFeedRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, []);
 
   // ── Keyword handlers ───────────────────────────────────────────────────────
   const handleAddKeyword = useCallback(async (kw) => {
@@ -223,7 +271,7 @@ function News() {
         <WeatherBar variant="sticky" />
         <div className="border-b border-slate-200 bg-white">
           <FilterBar
-            categories={CATEGORIES}
+            categories={enabledCategories}
             activeCategory={feedCategory}
             onCategoryChange={handleToggleCategory}
             onSearch={setSearchQuery}
@@ -237,7 +285,7 @@ function News() {
         <div data-testid="news-mobile-feed" className="flex-1 overflow-y-auto p-3">
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <AlgorithmicFeed
-              categories={CATEGORIES}
+              categories={enabledCategories}
               activeCategory={feedCategory}
               activeRegion={activeRegion}
               activeDate={activeDate}
@@ -247,21 +295,25 @@ function News() {
           </div>
         </div>
         <button
-          className="fixed bottom-20 right-4 z-40 h-12 w-12 rounded-full bg-blue-600 text-white shadow-lg ring-4 ring-white/90 flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-transform"
+          className="fixed bottom-20 right-2 z-40 h-14 w-14 rounded-full border border-white/20 bg-slate-950/75 text-white shadow-[0_18px_36px_rgba(2,6,23,0.35)] backdrop-blur-xl flex items-center justify-center active:scale-95 transition-transform"
           onClick={() => setSettingsOpen(true)}
           aria-label="Open news settings"
         >
-          <span className="material-symbols-outlined text-xl leading-none">settings</span>
+          <span className="absolute inset-[7px] rounded-full border border-white/15" aria-hidden="true" />
+          <span className="absolute inset-[12px] rounded-full bg-white/[0.04]" aria-hidden="true" />
+          <span className="relative material-symbols-outlined text-[1.3rem] leading-none">settings</span>
         </button>
       </div>
 
       {/* ─── Desktop layout (>= lg) ────────────────────────────────────────── */}
       <div className="hidden lg:flex h-full min-h-0 overflow-hidden bg-slate-100 p-4 gap-4">
         <NewsLeftPanel
-          categories={CATEGORIES}
+          categories={sortedCategories}
           activeCategories={activeCategories}
+          disabledCategories={hiddenCategories}
           multiSelect={multiSelect}
           onToggleCategory={handleToggleCategory}
+          onToggleCategoryEnabled={handleToggleCategoryEnabled}
           onMultiSelectToggle={() => setMultiSelect((v) => !v)}
           followedTeams={followedTeams}
           keywords={keywords}
@@ -278,7 +330,7 @@ function News() {
           </div>
           <div className="border-b border-slate-200">
             <FilterBar
-              categories={CATEGORIES}
+              categories={enabledCategories}
               activeCategory={feedCategory}
               onCategoryChange={handleToggleCategory}
               onSearch={setSearchQuery}
@@ -288,9 +340,13 @@ function News() {
               activeDate={activeDate}
             />
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-4">
+          <div
+            ref={desktopFeedRef}
+            tabIndex={-1}
+            className="flex-1 min-h-0 overflow-y-auto p-4 focus:outline-none"
+          >
             <AlgorithmicFeed
-              categories={CATEGORIES}
+              categories={enabledCategories}
               activeCategory={feedCategory}
               activeRegion={activeRegion}
               activeDate={activeDate}

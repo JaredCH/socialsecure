@@ -21,8 +21,10 @@ import { getCategoryIcon } from '../../constants/categoryIcons';
 export default function NewsLeftPanel({
   categories = [],
   activeCategories = [],
+  disabledCategories = [],
   multiSelect = false,
   onToggleCategory,
+  onToggleCategoryEnabled,
   onMultiSelectToggle,
   followedTeams = [],
   keywords = [],
@@ -33,6 +35,10 @@ export default function NewsLeftPanel({
   onOpenSettings,
 }) {
   const [kwInput, setKwInput] = React.useState('');
+  const disabledSet = React.useMemo(
+    () => new Set((disabledCategories || []).map((value) => String(value || '').trim()).filter(Boolean)),
+    [disabledCategories]
+  );
 
   const handleAddKeyword = () => {
     const trimmed = kwInput.trim().toLowerCase();
@@ -84,36 +90,61 @@ export default function NewsLeftPanel({
         {/* All */}
         <button
           onClick={() => onToggleCategory?.(null)}
-          className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-xl mb-0.5 text-sm transition-colors ${
+          className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-xl mb-0.5 text-sm transition-colors ${
             isAllActive && !multiSelect
               ? 'bg-blue-50 text-blue-700 font-semibold'
               : 'text-gray-700 hover:bg-gray-50'
           }`}
         >
-          <span className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-base text-gray-500 leading-none">newspaper</span>
+          <span className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-sm text-gray-500 leading-none">newspaper</span>
           </span>
-          <span className="flex-1 text-left text-sm">All</span>
+          <span className="flex-1 text-left text-xs">All</span>
         </button>
 
         {categories.map((cat) => {
           const { symbol, bg, text } = getCategoryIcon(cat.key);
           const active = activeCategories.includes(cat.key);
+          const isDisabled = disabledSet.has(cat.key);
           return (
-            <button
+            <div
               key={cat.key}
-              onClick={() => onToggleCategory?.(cat.key)}
-              className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-xl mb-0.5 text-sm transition-colors ${
-                active
-                  ? 'bg-blue-50 text-blue-700 font-semibold'
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
+              data-category-key={cat.key}
+              data-disabled={isDisabled ? 'true' : 'false'}
+              className={`mb-0.5 flex items-center gap-2 rounded-xl px-2 py-1 ${isDisabled ? 'opacity-65' : ''}`}
             >
-              <span className={`w-7 h-7 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
-                <span className={`material-symbols-outlined text-base leading-none ${text}`}>{symbol}</span>
-              </span>
-              <span className="flex-1 text-left text-sm truncate">{cat.label}</span>
-            </button>
+              <button
+                onClick={() => !isDisabled && onToggleCategory?.(cat.key)}
+                className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1 text-sm transition-colors ${
+                  active
+                    ? 'bg-blue-50 text-blue-700 font-semibold'
+                    : isDisabled
+                      ? 'text-gray-400'
+                      : 'text-gray-700 hover:bg-gray-50'
+                }`}
+                aria-label={`Filter by ${cat.label}`}
+                type="button"
+              >
+                <span className={`w-6 h-6 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+                  <span className={`material-symbols-outlined text-sm leading-none ${text}`}>{symbol}</span>
+                </span>
+                <span className="flex-1 text-left text-xs truncate">{cat.label}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggleCategoryEnabled?.(cat.key, !isDisabled)}
+                aria-label={isDisabled ? `Enable category ${cat.label}` : `Disable category ${cat.label}`}
+                className={`relative h-5 w-9 rounded-full border transition-colors ${
+                  isDisabled ? 'border-gray-300 bg-gray-200' : 'border-blue-500 bg-blue-500'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    isDisabled ? 'left-0.5' : 'left-4'
+                  }`}
+                />
+              </button>
+            </div>
           );
         })}
       </nav>
