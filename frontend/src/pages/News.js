@@ -36,6 +36,8 @@ function News() {
     country: { code: 'US', name: 'United States' },
     states: [],
     citiesByState: {},
+    preferredStateCode: '',
+    preferredStateName: '',
   });
   const [registrationAlignment, setRegistrationAlignment] = useState(null);
   const [weatherStatusMessage, setWeatherStatusMessage]   = useState('');
@@ -280,6 +282,7 @@ function News() {
             onDateChange={setActiveDate}
             activeRegion={activeRegion}
             activeDate={activeDate}
+            locationTaxonomy={locationTaxonomy}
           />
         </div>
         <div data-testid="news-mobile-feed" className="flex-1 overflow-y-auto p-3">
@@ -338,6 +341,7 @@ function News() {
               onDateChange={setActiveDate}
               activeRegion={activeRegion}
               activeDate={activeDate}
+              locationTaxonomy={locationTaxonomy}
             />
           </div>
           <div
