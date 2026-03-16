@@ -50,7 +50,9 @@ const CHAT_THEMES = [
     input: 'border-slate-300 bg-white/95 text-slate-900',
     messagesShell: 'bg-slate-50/90',
     messageOwn: 'bg-blue-600 text-white',
-    messageOther: 'bg-white text-slate-900'
+    messageOther: 'bg-white text-slate-900',
+    senderAccent: 'text-blue-700',
+    roomHover: 'hover:bg-slate-200/65'
   },
   {
     key: 'midnight',
@@ -63,7 +65,9 @@ const CHAT_THEMES = [
     input: 'border-cyan-700 bg-slate-950/95 text-cyan-100',
     messagesShell: 'bg-slate-950/35',
     messageOwn: 'bg-cyan-400/25 text-cyan-50',
-    messageOther: 'bg-slate-800/95 text-slate-100'
+    messageOther: 'bg-slate-800/95 text-slate-100',
+    senderAccent: 'text-cyan-300',
+    roomHover: 'hover:bg-slate-800/65'
   },
   {
     key: 'ocean',
@@ -76,7 +80,9 @@ const CHAT_THEMES = [
     input: 'border-cyan-600 bg-cyan-950/95 text-cyan-50',
     messagesShell: 'bg-cyan-950/35',
     messageOwn: 'bg-cyan-300/25 text-cyan-50',
-    messageOther: 'bg-cyan-900/95 text-cyan-50'
+    messageOther: 'bg-cyan-900/95 text-cyan-50',
+    senderAccent: 'text-cyan-200',
+    roomHover: 'hover:bg-cyan-900/60'
   },
   {
     key: 'terminal',
@@ -89,7 +95,9 @@ const CHAT_THEMES = [
     input: 'border-lime-700 bg-zinc-950/95 text-lime-200',
     messagesShell: 'bg-zinc-950/45',
     messageOwn: 'bg-lime-500/25 text-lime-100',
-    messageOther: 'bg-zinc-900/95 text-lime-100'
+    messageOther: 'bg-zinc-900/95 text-lime-100',
+    senderAccent: 'text-lime-300',
+    roomHover: 'hover:bg-zinc-800/70'
   },
   {
     key: 'sunset',
@@ -102,7 +110,9 @@ const CHAT_THEMES = [
     input: 'border-orange-300 bg-white/95 text-orange-950',
     messagesShell: 'bg-orange-50/85',
     messageOwn: 'bg-orange-500 text-white',
-    messageOther: 'bg-white text-orange-950'
+    messageOther: 'bg-white text-orange-950',
+    senderAccent: 'text-orange-700',
+    roomHover: 'hover:bg-orange-100/80'
   },
   {
     key: 'lavender',
@@ -115,7 +125,9 @@ const CHAT_THEMES = [
     input: 'border-violet-300 bg-white/95 text-violet-950',
     messagesShell: 'bg-violet-50/85',
     messageOwn: 'bg-violet-500 text-white',
-    messageOther: 'bg-white text-violet-950'
+    messageOther: 'bg-white text-violet-950',
+    senderAccent: 'text-violet-700',
+    roomHover: 'hover:bg-violet-100/80'
   }
 ];
 
@@ -150,8 +162,6 @@ const getPresenceState = (lastActiveAt) => {
     : { label: 'Away', tone: 'bg-amber-400' };
 };
 
-const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
-const DEFAULT_CHAT_NAME_COLOR = '#2563eb';
 const DEFAULT_CHAT_THEME = 'midnight';
 const LONG_PRESS_DELAY_MS = 550;
 const USER_MENU_WIDTH_PX = 240;
@@ -168,6 +178,8 @@ const MAX_CHAT_ROOM_FETCH = 500;
 const MAX_CHAT_ROOM_RESULTS = 20;
 const MAX_FAVORITE_ROOMS = 8;
 const MAX_DM_FRIEND_PICKER_RESULTS = 12;
+const PARTICIPANT_REFRESH_INTERVAL_MS = 15000;
+const PARTICIPANT_REFRESH_DEBOUNCE_MS = 3000;
 const normalizeId = (value) => String(value || '').trim();
 const sortRoomsByName = (left, right) => String(left?.name || '').localeCompare(String(right?.name || ''));
 
@@ -315,15 +327,6 @@ function Chat() {
     }
     return DEFAULT_CHAT_THEME;
   });
-  const [nameColor, setNameColor] = useState(() => {
-    try {
-      const saved = localStorage.getItem('chatNameColor');
-      if (saved && HEX_COLOR_REGEX.test(saved)) return saved;
-    } catch {
-      // ignore localStorage errors
-    }
-    return DEFAULT_CHAT_NAME_COLOR;
-  });
   const [roomUsers, setRoomUsers] = useState([]);
   const [roomUsersLoading, setRoomUsersLoading] = useState(false);
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
@@ -360,22 +363,14 @@ function Chat() {
   const e2eeSessionRef = useRef(null);
   const passwordResolverRef = useRef(null);
   const decryptingMessageIdsRef = useRef(new Set());
+  const participantRefreshTimerRef = useRef(null);
+  const lastParticipantRefreshAtRef = useRef(0);
 
   const handleThemeChange = useCallback((nextTheme) => {
     if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
     setTheme(nextTheme);
     try {
       localStorage.setItem('chatTheme', nextTheme);
-    } catch {
-      // ignore localStorage errors
-    }
-  }, []);
-
-  const handleNameColorChange = useCallback((nextColor) => {
-    if (!HEX_COLOR_REGEX.test(String(nextColor || ''))) return;
-    setNameColor(nextColor);
-    try {
-      localStorage.setItem('chatNameColor', nextColor);
     } catch {
       // ignore localStorage errors
     }
@@ -770,6 +765,57 @@ function Chat() {
     }
   }, [activeConversationId, messagesHasMore, messagesLoadingOlder, messagesPage]);
 
+  const loadConversationUsers = useCallback(async ({ silent = false } = {}) => {
+    if (!activeConversationId) {
+      setRoomUsers([]);
+      return;
+    }
+
+    if (!silent) {
+      setRoomUsersLoading(true);
+    }
+
+    try {
+      const { data } = await chatAPI.getConversationUsers(activeConversationId);
+      setRoomUsers(Array.isArray(data?.users) ? data.users : []);
+    } catch (error) {
+      if (!silent) {
+        setRoomUsers([]);
+        toast.error(error.response?.data?.error || 'Failed to load room users');
+      }
+    } finally {
+      if (!silent) {
+        setRoomUsersLoading(false);
+      }
+    }
+  }, [activeConversationId]);
+
+  const scheduleConversationUsersRefresh = useCallback(() => {
+    if (!activeConversationId) return;
+    const now = Date.now();
+    const elapsedMs = now - lastParticipantRefreshAtRef.current;
+    const runRefresh = () => {
+      lastParticipantRefreshAtRef.current = Date.now();
+      loadConversationUsers({ silent: true });
+    };
+
+    if (elapsedMs >= PARTICIPANT_REFRESH_DEBOUNCE_MS) {
+      if (participantRefreshTimerRef.current) {
+        window.clearTimeout(participantRefreshTimerRef.current);
+        participantRefreshTimerRef.current = null;
+      }
+      runRefresh();
+      return;
+    }
+
+    if (participantRefreshTimerRef.current) return;
+
+    participantRefreshTimerRef.current = window.setTimeout(() => {
+      participantRefreshTimerRef.current = null;
+      runRefresh();
+    }, PARTICIPANT_REFRESH_DEBOUNCE_MS - elapsedMs);
+  }, [activeConversationId, loadConversationUsers]);
+
   useEffect(() => {
     if (!activeConversationId) return undefined;
     joinRealtimeRoom(activeConversationId);
@@ -786,35 +832,25 @@ function Chat() {
       if (!incomingConversationId) return;
       if (incomingConversationId !== String(activeConversationId || '')) return;
       setMessages((prev) => upsertConversationMessage(prev, incomingMessage));
+      scheduleConversationUsersRefresh();
     });
     return () => {
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
     };
-  }, [activeConversationId]);
+  }, [activeConversationId, scheduleConversationUsersRefresh]);
 
   useEffect(() => {
-    const loadRoomUsers = async () => {
-      if (!activeConversationId) {
-        setRoomUsers([]);
-        return;
-      }
-
-      setRoomUsersLoading(true);
-      try {
-        const { data } = await chatAPI.getConversationUsers(activeConversationId);
-        setRoomUsers(Array.isArray(data?.users) ? data.users : []);
-      } catch (error) {
-        setRoomUsers([]);
-        toast.error(error.response?.data?.error || 'Failed to load room users');
-      } finally {
-        setRoomUsersLoading(false);
-      }
+    loadConversationUsers();
+    if (!activeConversationId) return undefined;
+    const intervalId = window.setInterval(() => {
+      loadConversationUsers({ silent: true });
+    }, PARTICIPANT_REFRESH_INTERVAL_MS);
+    return () => {
+      window.clearInterval(intervalId);
     };
-
-    loadRoomUsers();
-  }, [activeConversationId]);
+  }, [activeConversationId, loadConversationUsers]);
 
   useEffect(() => {
     if (!composerValue.trim()) {
@@ -1034,8 +1070,7 @@ function Chat() {
         await session.persist();
       } else {
         const response = await chatAPI.sendConversationMessage(activeConversationId, {
-          content: contentToSend,
-          senderNameColor: nameColor
+          content: contentToSend
         });
         data = response.data;
       }
@@ -1043,6 +1078,7 @@ function Chat() {
       setMessages((prev) => upsertConversationMessage(prev, data.message));
       setComposerValue('');
       setLocalTyping(false);
+      scheduleConversationUsersRefresh();
       await refreshHub(activeChannel);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to send message');
@@ -1145,14 +1181,6 @@ function Chat() {
     e2eeSessionRef.current = null;
     toast.success('Direct message locked.');
   }, [activeConversation?.type, activeConversationId, persistDmUnlockCache]);
-
-  const handleClearDmUnlockCache = useCallback(() => {
-    clearCookie(DM_UNLOCK_COOKIE_NAME);
-    setDmUnlockedByConversation({});
-    setDecryptedDmContentById({});
-    e2eeSessionRef.current = null;
-    toast.success('Saved DM unlock access reset.');
-  }, []);
 
   useEffect(() => {
     if (!profile?._id) return;
@@ -1275,6 +1303,10 @@ function Chat() {
   }, [themeMenuOpen]);
 
   useEffect(() => () => {
+    if (participantRefreshTimerRef.current) {
+      window.clearTimeout(participantRefreshTimerRef.current);
+      participantRefreshTimerRef.current = null;
+    }
     if (userLongPressTimerRef.current) {
       clearTimeout(userLongPressTimerRef.current);
       userLongPressTimerRef.current = null;
@@ -1707,16 +1739,10 @@ function Chat() {
                     </option>
                   ))}
                 </select>
-                <label className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold ${activeTheme.panel}`}>
-                  <span>Name</span>
-                  <input
-                    type="color"
-                    value={nameColor}
-                    onChange={(event) => handleNameColorChange(event.target.value)}
-                    className="h-7 w-7 cursor-pointer rounded-full border border-slate-300 bg-transparent p-0.5 shadow-inner"
-                    aria-label="Set your chat name color"
-                  />
-                </label>
+                <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold ${activeTheme.panel}`}>
+                  <span className={activeTheme.senderAccent}>Aa</span>
+                  <span>Theme-tuned accents</span>
+                </span>
                 {activeConversationUser?.username ? (
                   <a
                     href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
@@ -1765,6 +1791,7 @@ function Chat() {
 
           <ChatMessageList
             conversationId={activeConversationId}
+            conversationType={activeConversation?.type}
             messages={renderedMessages}
             loading={messagesLoading}
             profile={profile}
@@ -1811,109 +1838,93 @@ function Chat() {
         <aside className={`hidden min-h-0 flex-col rounded-2xl border p-2 md:p-3 lg:flex ${activeTheme.panel}`}>
           <div className={`sticky top-0 z-10 rounded border p-3 ${activeTheme.panelGlass}`}>
             <h3 className="font-semibold uppercase tracking-[0.1em]">
-              {activeConversation?.type === 'dm' ? 'DM Security' : 'Conversation Details'}
+              {activeConversation?.type === 'dm' ? 'Participants' : 'Conversation Details'}
             </h3>
             {activeConversation ? (
               <>
                 <p className="text-xs opacity-80">{getConversationLabel(activeConversation)}</p>
-                <p className="text-[11px] font-mono opacity-80 mt-1">Status: {conversationPresence.label}</p>
+                <p className="mt-1 text-[11px] font-mono opacity-80">
+                  {activeConversation?.type === 'dm'
+                    ? `${roomUsers.length || (Array.isArray(activeConversation?.participants) ? activeConversation.participants.length : 0) || 0} participants`
+                    : `Status: ${conversationPresence.label}`}
+                </p>
               </>
             ) : (
               <p className="text-xs opacity-80">Select a room to view details.</p>
             )}
             {activeConversation?.type === 'dm' ? (
-              <>
-                <p className="mt-2 text-xs opacity-80">Encryption: E2EE AES-256</p>
-                <p className="text-xs opacity-80">Unlock Timeout: {unlockDurationMinutes}m</p>
-              </>
+              <p className="mt-2 text-xs opacity-80">This panel stays focused on everyone inside the direct message.</p>
             ) : null}
           </div>
 
           <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
             <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-              <h4 className="text-sm font-semibold">Users in Room</h4>
-              <p className="mt-1 text-[11px] opacity-80">Click, right-click, or long-press a user for quick actions.</p>
-              <div className="mt-2 rounded border overflow-auto max-h-56">
+              <h4 className="text-sm font-semibold">
+                {activeConversation?.type === 'dm' ? 'People in this DM' : 'Users in Room'}
+              </h4>
+              <p className="mt-1 text-[11px] opacity-80">
+                Click, right-click, or long-press a user for quick actions.
+              </p>
+              <div className={`mt-2 rounded border overflow-auto ${activeConversation?.type === 'dm' ? 'h-full min-h-[20rem]' : 'max-h-56'}`}>
                 {roomUsersLoading ? (
                   <p className="p-2 text-xs opacity-80">Loading users...</p>
                 ) : roomUsers.length === 0 ? (
                   <p className="p-2 text-xs opacity-80">No users to display.</p>
                 ) : (
                   <ul className="divide-y">
-                    {roomUsers.map((user) => {
-                      const status = getPresenceState(user.lastActiveAt || user.updatedAt || user.lastSeenAt);
-                      return (
-                        <li
-                          key={String(user._id)}
-                          className="flex cursor-pointer items-center justify-between gap-2 p-2 text-sm"
-                          onClick={(event) => openUserContextMenu(event, user)}
-                          onContextMenu={(event) => openUserContextMenu(event, user)}
-                          onTouchStart={(event) => {
-                            const touch = event.touches?.[0];
-                            if (!touch) return;
-                            if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
-                            userLongPressTimerRef.current = setTimeout(() => {
-                              openUserContextMenu(event, user, { x: touch.clientX, y: touch.clientY });
-                            }, LONG_PRESS_DELAY_MS);
-                          }}
-                          onTouchEnd={() => {
-                            if (userLongPressTimerRef.current) {
-                              clearTimeout(userLongPressTimerRef.current);
-                              userLongPressTimerRef.current = null;
-                            }
-                          }}
-                        >
-                          <span>@{user.username || user.realName || 'user'}</span>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase opacity-80">
-                            <span className={`h-2 w-2 rounded-full ${status.tone}`} />
-                            {status.label}
-                          </span>
-                        </li>
-                      );
-                    })}
+                    {roomUsers.map((user) => (
+                      <li
+                        key={String(user._id)}
+                        className="flex cursor-pointer items-center gap-3 p-2 text-sm"
+                        onClick={(event) => openUserContextMenu(event, user)}
+                        onContextMenu={(event) => openUserContextMenu(event, user)}
+                        onTouchStart={(event) => {
+                          const touch = event.touches?.[0];
+                          if (!touch) return;
+                          if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
+                          userLongPressTimerRef.current = setTimeout(() => {
+                            openUserContextMenu(event, user, { x: touch.clientX, y: touch.clientY });
+                          }, LONG_PRESS_DELAY_MS);
+                        }}
+                        onTouchEnd={() => {
+                          if (userLongPressTimerRef.current) {
+                            clearTimeout(userLongPressTimerRef.current);
+                            userLongPressTimerRef.current = null;
+                          }
+                        }}
+                      >
+                        <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${activeTheme.subtle}`}>
+                          {String(user.username || user.realName || 'user').slice(0, 1).toUpperCase()}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold">@{user.username || user.realName || 'user'}</p>
+                          <p className="truncate text-[11px] opacity-75">
+                            {String(user._id) === String(profile?._id) ? 'You' : 'Available in this conversation'}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
                   </ul>
                 )}
               </div>
             </section>
 
-            <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-              <h4 className="text-sm font-semibold">Shared Media / Links</h4>
-              {sharedMediaSnippets.length === 0 ? (
-                <p className="mt-2 text-xs opacity-80">No shared media yet.</p>
-              ) : (
-                <ul className="mt-2 space-y-1 text-xs">
-                  {sharedMediaSnippets.map((message) => (
-                    <li key={String(message._id)} className="rounded border px-2 py-1">
-                      {(message.content || '').slice(0, 70)}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-            {activeConversation?.type === 'dm' ? (
+            {activeConversation?.type === 'dm' ? null : (
               <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                <h4 className="text-sm font-semibold">DM Security</h4>
-                <p className="mt-1 text-[11px] opacity-80">Set how long secure DM access stays unlocked on this device.</p>
-                <label className="mt-2 block text-xs font-semibold" htmlFor="dm-unlock-duration">Unlock duration</label>
-                <select
-                  id="dm-unlock-duration"
-                  value={String(unlockDurationMinutes)}
-                  onChange={(event) => setUnlockDurationMinutes(Number(event.target.value) || DEFAULT_UNLOCK_DURATION_MINUTES)}
-                  className={`mt-1 w-full rounded border px-2 py-1 text-xs ${activeTheme.input}`}
-                >
-                  {UNLOCK_DURATION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleClearDmUnlockCache}
-                  className={`mt-3 rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
-                >
-                  Reset cached DM access
-                </button>
+                <h4 className="text-sm font-semibold">Shared Media / Links</h4>
+                {sharedMediaSnippets.length === 0 ? (
+                  <p className="mt-2 text-xs opacity-80">No shared media yet.</p>
+                ) : (
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {sharedMediaSnippets.map((message) => (
+                      <li key={String(message._id)} className="rounded border px-2 py-1">
+                        {(message.content || '').slice(0, 70)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
-            ) : null}
+            )}
           </div>
         </aside>
       </div>
