@@ -1446,9 +1446,12 @@ function Chat() {
     if (activeConversation.type === 'dm') return activeConversation.peer || null;
     return null;
   }, [activeConversation]);
-  const activeMenuLabel = activeConversation
-    ? getConversationLabel(activeConversation)
-    : (activeChannel === 'dm' ? 'Direct Messages' : (resolvedZipCode ? `Zip ${resolvedZipCode}` : 'Secure Chat'));
+  const activeMenuLabel = useMemo(() => {
+    if (activeConversation) return getConversationLabel(activeConversation);
+    if (activeChannel === 'dm') return 'Direct Messages';
+    if (resolvedZipCode) return `Zip ${resolvedZipCode}`;
+    return 'Secure Chat';
+  }, [activeChannel, activeConversation, resolvedZipCode]);
   const activeMenuIcon = activeConversation ? getConversationTabIcon(activeConversation) : (activeChannel === 'dm' ? '✉️' : '💬');
 
   if (loadingHub) {
@@ -1608,7 +1611,7 @@ function Chat() {
                     <button
                       type="button"
                       onClick={() => openConversationById(conversationId)}
-                      className="inline-flex min-w-0 max-w-[10rem] items-center gap-1.5 px-2.5 py-1 text-left text-[11px] font-semibold"
+                      className="inline-flex min-w-0 max-w-40 items-center gap-1.5 px-2.5 py-1 text-left text-[11px] font-semibold"
                       data-open-chat-tab={label}
                       title={`${getChatTabTypeLabel(conversation)} · ${label}`}
                     >
@@ -1626,7 +1629,7 @@ function Chat() {
                   </div>
                 );
               })}
-              <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.panel}`}>
+              <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.panelGlass}`}>
                 {openChatTabs.length}/{MAX_OPEN_CHAT_TABS}
               </span>
             </div>
@@ -1634,10 +1637,12 @@ function Chat() {
         ) : null}
 
         {activeConversation?.type === 'dm' ? (
-          <div className={`mt-1 rounded-full border px-2 py-1 text-[10px] ${activeTheme.panelGlass}`}>
-            {profile?.hasPGP
-              ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
-              : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
+          <div className="mt-1 flex">
+            <div className={`inline-flex max-w-full rounded-full border px-2 py-1 text-[10px] leading-relaxed ${activeTheme.panelGlass}`}>
+              {profile?.hasPGP
+                ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
+                : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
+            </div>
           </div>
         ) : null}
       </header>
