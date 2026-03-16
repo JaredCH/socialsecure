@@ -68,6 +68,7 @@ function extractLocationContext(title = '', description = '') {
   // -----------------------------------------------------------------------
   // 1. "City, ST" pattern  (e.g. "Tampa, FL" or "San Marcos, TX")
   //    High-confidence: the author explicitly paired a city and state code.
+  //    City portion: 1–25 chars (covers "Tampa" up to "West Palm Beach, FL").
   // -----------------------------------------------------------------------
   const cityStateMatches = fullText.match(/\b([A-Z][a-zA-Z.'\s]{1,25}),\s*([A-Z]{2})\b/g) || [];
   for (const m of cityStateMatches) {

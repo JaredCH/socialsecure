@@ -84,5 +84,11 @@ describe('newsLocationExtractor', () => {
       expect(extractLocationContext('', '')).toBeNull();
       expect(extractLocationContext()).toBeNull();
     });
+
+    it('detects state when title is undefined but description has location', () => {
+      const result = extractLocationContext(undefined, 'The Ohio legislature passed new reforms.');
+      expect(result).not.toBeNull();
+      expect(result.locationTags.states).toEqual(expect.arrayContaining(['oh', 'ohio']));
+    });
   });
 });

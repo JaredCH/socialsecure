@@ -229,7 +229,8 @@ async function fetchTrendingTier(categoryFilter, excludeIds, limit = TRENDING_LI
     baseConditions.$or = [
       { pipeline: { $ne: 'local' } },                        // non-local articles always allowed
       { 'locationTags.states': stateLower },                  // local articles matching user state
-      { 'locationTags.states': { $exists: true, $size: 0 } }, // local articles with no state tag
+      { 'locationTags.states': { $exists: false } },          // articles with no locationTags.states field
+      { 'locationTags.states': { $size: 0 } },               // articles with empty states array
     ];
   }
 
