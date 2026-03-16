@@ -57,6 +57,7 @@ jest.mock('../services/realtime', () => ({
 
 const jwt = require('jsonwebtoken');
 const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload } = require('../services/realtime');
+const { createNotification } = require('../services/notifications');
 const chatRouter = require('./chat');
 
 const buildApp = () => {
@@ -757,5 +758,70 @@ describe('Unified chat hub routes', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.errors?.[0]?.msg).toMatch(/Attachments are not supported/);
+  });
+
+  it('allows a DM participant to delete their conversation and notifies the other user', async () => {
+    const app = buildApp();
+    const deleteOneDoc = jest.fn().mockResolvedValue(undefined);
+    mockChatConversation.findById.mockResolvedValue({
+      _id: 'dm-conv-1',
+      type: 'dm',
+      participants: ['507f1f77bcf86cd799439011', 'other-user-1'],
+      deleteOne: deleteOneDoc
+    });
+    mockConversationMessage.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 3 });
+    mockConversationKeyPackage.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 1 });
+    mockUser.findById
+      .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
+      .mockImplementationOnce(() => createSelectLean({ _id: '507f1f77bcf86cd799439011', username: 'alpha' }));
+    createNotification.mockResolvedValue({});
+
+    const response = await request(app)
+      .delete('/api/chat/conversations/dm-conv-1')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(mockConversationMessage.deleteMany).toHaveBeenCalledWith({ conversationId: 'dm-conv-1' });
+    expect(mockConversationKeyPackage.deleteMany).toHaveBeenCalledWith({ conversationId: 'dm-conv-1' });
+    expect(deleteOneDoc).toHaveBeenCalled();
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      recipientId: 'other-user-1',
+      senderId: '507f1f77bcf86cd799439011',
+      type: 'system',
+      title: 'Conversation deleted'
+    }));
+  });
+
+  it('rejects deleting a non-DM conversation', async () => {
+    const app = buildApp();
+    mockChatConversation.findById.mockResolvedValue({
+      _id: 'zip-conv-1',
+      type: 'zip-room',
+      participants: ['507f1f77bcf86cd799439011']
+    });
+
+    const response = await request(app)
+      .delete('/api/chat/conversations/zip-conv-1')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/Only direct message/);
+  });
+
+  it('rejects deleting a conversation by a non-participant', async () => {
+    const app = buildApp();
+    mockChatConversation.findById.mockResolvedValue({
+      _id: 'dm-conv-2',
+      type: 'dm',
+      participants: ['other-user-a', 'other-user-b']
+    });
+
+    const response = await request(app)
+      .delete('/api/chat/conversations/dm-conv-2')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toMatch(/Access denied/);
   });
 });
