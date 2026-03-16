@@ -277,8 +277,23 @@ export default function WeatherBar({ variant = 'sticky' }) {
                 <span className="truncate max-w-[11rem]">
                   {current?.shortForecast || weather.forecastSummary || 'Loading...'}
                 </span>
-                {high != null && low != null ? <span>↑{high}° ↓{low}°</span> : null}
-                {current?.humidity != null ? <span>💧{current.humidity}%</span> : null}
+                {high != null && low != null ? (
+                  <span>
+                    <span aria-hidden="true">↑</span>
+                    <span className="sr-only">High </span>
+                    {high}°
+                    <span className="ml-1" aria-hidden="true">↓</span>
+                    <span className="sr-only">Low </span>
+                    {low}°
+                  </span>
+                ) : null}
+                {current?.humidity != null ? (
+                  <span>
+                    <span aria-hidden="true">💧</span>
+                    <span className="sr-only">Humidity </span>
+                    {current.humidity}%
+                  </span>
+                ) : null}
               </div>
             </div>
             <span className="text-4xl leading-none shrink-0" aria-hidden="true">{currentIcon}</span>
@@ -391,15 +406,41 @@ export default function WeatherBar({ variant = 'sticky' }) {
 
               {/* Metric badges */}
               <div className="flex flex-wrap gap-1.5 text-[9px] text-white/85">
-                {high != null && <span className="rounded-full bg-white/10 px-2 py-0.5">↑ {high}°</span>}
-                {low != null && <span className="rounded-full bg-white/10 px-2 py-0.5">↓ {low}°</span>}
-                {current?.humidity != null && <span className="rounded-full bg-white/10 px-2 py-0.5">💧 {current.humidity}%</span>}
-                {current?.windSpeed != null && <span className="rounded-full bg-white/10 px-2 py-0.5">🌬️ Air {current.windSpeed} mph</span>}
-                {current?.windGust != null && <span className="rounded-full bg-white/10 px-2 py-0.5">🌀 Gust {current.windGust} mph</span>}
+                {high != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">↑</span>
+                    <span className="sr-only">High </span>
+                    {' '}{high}°
+                  </span>
+                )}
+                {low != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">↓</span>
+                    <span className="sr-only">Low </span>
+                    {' '}{low}°
+                  </span>
+                )}
+                {current?.humidity != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">💧</span>
+                    <span className="sr-only">Humidity </span>
+                    {' '}{current.humidity}%
+                  </span>
+                )}
+                {current?.windSpeed != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">🌬️</span> Air {current.windSpeed} mph
+                  </span>
+                )}
+                {current?.windGust != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">🌀</span> Gust {current.windGust} mph
+                  </span>
+                )}
                 {pressure != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Pressure {Math.round(pressure)} hPa</span>}
                 {airQuality?.index != null && <span className="rounded-full bg-white/10 px-2 py-0.5">AQI {airQuality.index}</span>}
-                {sunriseLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">🌅 Sunrise {sunriseLabel}</span>}
-                {sunsetLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">🌇 Sunset {sunsetLabel}</span>}
+                {sunriseLabel && <span className="rounded-full bg-white/10 px-2 py-0.5"><span aria-hidden="true">🌅</span> Sunrise {sunriseLabel}</span>}
+                {sunsetLabel && <span className="rounded-full bg-white/10 px-2 py-0.5"><span aria-hidden="true">🌇</span> Sunset {sunsetLabel}</span>}
               </div>
             </div>
           )}
