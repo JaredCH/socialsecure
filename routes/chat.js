@@ -2840,10 +2840,16 @@ router.post(
     conversation.messageCount = (conversation.messageCount || 0) + 1;
     await conversation.save();
     await message.populate('userId', '_id username realName');
+    const publicMessage = message.toPublicMessage({ conversationType: conversation.type });
+    const targetUserIds = getConversationParticipantIds(conversation);
+    emitChatMessage({
+      userIds: targetUserIds.length > 0 ? targetUserIds : [String(userId)],
+      message: publicMessage
+    });
 
     return res.status(201).json({
       success: true,
-      message: message.toPublicMessage({ conversationType: conversation.type })
+      message: publicMessage
     });
   } catch (error) {
     if (error?.code === 11000) {

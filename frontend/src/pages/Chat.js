@@ -4,6 +4,7 @@ import ChatComposerBar from '../components/chat/ChatComposerBar';
 import ChatMessageList from '../components/chat/ChatMessageList';
 import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
 import { parseSlashCommand, runSlashCommand } from '../utils/chatCommands';
+import { joinRealtimeRoom, leaveRealtimeRoom, onChatMessage } from '../utils/realtime';
 import {
   createWrappedRoomKeyPackage,
   decryptEnvelope,
@@ -157,6 +158,25 @@ const USER_MENU_HEIGHT_PX = 220;
 const DM_UNLOCK_COOKIE_NAME = 'socialsecure_dm_unlock_v1';
 const DEFAULT_UNLOCK_DURATION_MINUTES = 30;
 const LOCKED_DM_PLACEHOLDER = '🔒 Conversation locked. Unlock to view encrypted messages.';
+const INITIAL_MESSAGES_PAGE_SIZE = 40;
+const OLDER_MESSAGES_PAGE_SIZE = 10;
+const DM_DECRYPT_BATCH_SIZE = 5;
+
+const upsertConversationMessage = (messages, incomingMessage) => {
+  const normalizedId = String(incomingMessage?._id || '').trim();
+  if (!normalizedId) return Array.isArray(messages) ? messages : [];
+  const existing = Array.isArray(messages) ? messages : [];
+  const existingIndex = existing.findIndex((message) => String(message?._id) === normalizedId);
+  if (existingIndex >= 0) {
+    const next = [...existing];
+    next[existingIndex] = {
+      ...next[existingIndex],
+      ...incomingMessage
+    };
+    return next;
+  }
+  return [...existing, incomingMessage];
+};
 
 const readCookie = (name) => {
   const source = typeof document?.cookie === 'string' ? document.cookie : '';
@@ -232,7 +252,11 @@ function Chat() {
   const [messages, setMessages] = useState([]);
   const [decryptedDmContentById, setDecryptedDmContentById] = useState({});
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesPage, setMessagesPage] = useState(1);
+  const [messagesHasMore, setMessagesHasMore] = useState(false);
+  const [messagesLoadingOlder, setMessagesLoadingOlder] = useState(false);
   const [messagesError, setMessagesError] = useState('');
+  const [visibleMessageIds, setVisibleMessageIds] = useState([]);
   const [composerValue, setComposerValue] = useState('');
   const [sending, setSending] = useState(false);
   const [localTyping, setLocalTyping] = useState(false);
@@ -296,6 +320,7 @@ function Chat() {
   const userLongPressTimerRef = useRef(null);
   const e2eeSessionRef = useRef(null);
   const passwordResolverRef = useRef(null);
+  const decryptingMessageIdsRef = useRef(new Set());
 
   const handleThemeChange = useCallback((nextTheme) => {
     if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
@@ -315,6 +340,18 @@ function Chat() {
     } catch {
       // ignore localStorage errors
     }
+  }, []);
+
+  const handleVisibleMessageIdsChange = useCallback((nextIds) => {
+    const normalizedNext = Array.isArray(nextIds)
+      ? nextIds.map((id) => String(id || '')).filter(Boolean)
+      : [];
+    setVisibleMessageIds((prev) => {
+      if (prev.length === normalizedNext.length && prev.every((id, index) => id === normalizedNext[index])) {
+        return prev;
+      }
+      return normalizedNext;
+    });
   }, []);
 
   const conversationList = useMemo(() => {
@@ -341,6 +378,8 @@ function Chat() {
   useEffect(() => {
     setDecryptedDmContentById({});
     setReactionByMessageId({});
+    setVisibleMessageIds([]);
+    decryptingMessageIdsRef.current = new Set();
   }, [activeConversationId, activeConversation?.type]);
 
   useEffect(() => {
@@ -496,6 +535,8 @@ function Chat() {
     const loadMessages = async () => {
       if (!activeConversationId) {
         setMessages([]);
+        setMessagesPage(1);
+        setMessagesHasMore(false);
         setMessagesError('');
         return;
       }
@@ -503,10 +544,14 @@ function Chat() {
       setMessagesLoading(true);
       setMessagesError('');
       try {
-        const { data } = await chatAPI.getConversationMessages(activeConversationId, 1, 100);
+        const { data } = await chatAPI.getConversationMessages(activeConversationId, 1, INITIAL_MESSAGES_PAGE_SIZE);
         setMessages(Array.isArray(data.messages) ? data.messages : []);
+        setMessagesPage(1);
+        setMessagesHasMore(Boolean(data?.hasMore));
       } catch (error) {
         setMessages([]);
+        setMessagesPage(1);
+        setMessagesHasMore(false);
         setMessagesError(error.response?.data?.error || 'Failed to load conversation messages');
       } finally {
         setMessagesLoading(false);
@@ -514,6 +559,55 @@ function Chat() {
     };
 
     loadMessages();
+  }, [activeConversationId]);
+
+  const handleLoadOlderMessages = useCallback(async () => {
+    if (!activeConversationId || messagesLoadingOlder || !messagesHasMore) return 0;
+    const nextPage = messagesPage + 1;
+    setMessagesLoadingOlder(true);
+    try {
+      const { data } = await chatAPI.getConversationMessages(activeConversationId, nextPage, OLDER_MESSAGES_PAGE_SIZE);
+      const olderMessages = Array.isArray(data?.messages) ? data.messages : [];
+      if (olderMessages.length > 0) {
+        setMessages((prev) => {
+          const existingById = new Set((Array.isArray(prev) ? prev : []).map((message) => String(message?._id)));
+          const uniqueOlderMessages = olderMessages.filter((message) => !existingById.has(String(message?._id)));
+          if (uniqueOlderMessages.length === 0) return prev;
+          return [...uniqueOlderMessages, ...prev];
+        });
+      }
+      setMessagesPage(nextPage);
+      setMessagesHasMore(Boolean(data?.hasMore));
+      return olderMessages.length;
+    } catch {
+      return 0;
+    } finally {
+      setMessagesLoadingOlder(false);
+    }
+  }, [activeConversationId, messagesHasMore, messagesLoadingOlder, messagesPage]);
+
+  useEffect(() => {
+    if (!activeConversationId) return undefined;
+    joinRealtimeRoom(activeConversationId);
+    return () => {
+      leaveRealtimeRoom(activeConversationId);
+    };
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    const unsubscribe = onChatMessage((payload) => {
+      const incomingMessage = payload?.message;
+      if (!incomingMessage) return;
+      const incomingConversationId = String(incomingMessage.conversationId || '');
+      if (!incomingConversationId) return;
+      if (incomingConversationId !== String(activeConversationId || '')) return;
+      setMessages((prev) => upsertConversationMessage(prev, incomingMessage));
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -576,9 +670,18 @@ function Chat() {
   useEffect(() => {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
     if (!dmUnlockedByConversation[String(activeConversationId)]) return;
-    const encryptedMessages = messages.filter((message) => message?.e2ee?.ciphertext);
+    const visibleIdSet = new Set(visibleMessageIds);
+    const encryptedMessages = messages.filter((message) => (
+      message?.e2ee?.ciphertext && visibleIdSet.has(String(message._id))
+    ));
     if (encryptedMessages.length === 0) return;
-    const pendingMessages = encryptedMessages.filter((message) => !decryptedDmContentById[String(message._id)]);
+    const pendingMessages = [...encryptedMessages]
+      .reverse()
+      .filter((message) => (
+        !decryptedDmContentById[String(message._id)]
+        && !decryptingMessageIdsRef.current.has(String(message._id))
+      ))
+      .slice(0, DM_DECRYPT_BATCH_SIZE);
     if (pendingMessages.length === 0) return;
 
     let cancelled = false;
@@ -587,14 +690,18 @@ function Chat() {
         const session = await ensureE2EESession();
         const decryptedEntries = {};
         for (const message of pendingMessages) {
+          const messageId = String(message._id);
+          decryptingMessageIdsRef.current.add(messageId);
           try {
-            decryptedEntries[String(message._id)] = await decryptEnvelope({
+            decryptedEntries[messageId] = await decryptEnvelope({
               session,
               roomId: activeConversationId,
               envelope: message.e2ee
             });
           } catch {
             // keep encrypted placeholder when key is unavailable
+          } finally {
+            decryptingMessageIdsRef.current.delete(messageId);
           }
         }
         if (!cancelled && Object.keys(decryptedEntries).length > 0) {
@@ -615,10 +722,10 @@ function Chat() {
   }, [
     activeConversation?.type,
     activeConversationId,
-    decryptedDmContentById,
     dmUnlockedByConversation,
     ensureE2EESession,
-    messages
+    messages,
+    visibleMessageIds
   ]);
 
   const handlePasswordUnlock = useCallback(async () => {
@@ -743,7 +850,7 @@ function Chat() {
         data = response.data;
       }
 
-      setMessages((prev) => [...prev, data.message]);
+      setMessages((prev) => upsertConversationMessage(prev, data.message));
       setComposerValue('');
       setLocalTyping(false);
       await refreshHub(activeChannel);
@@ -1323,6 +1430,9 @@ function Chat() {
             reactionOptions={MESSAGE_REACTIONS}
             onToggleReaction={handleToggleMessageReaction}
             longPressDelayMs={LONG_PRESS_DELAY_MS}
+            hasMoreMessages={messagesHasMore}
+            onLoadOlderMessages={handleLoadOlderMessages}
+            onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
           />
 
           <div className="mt-1 space-y-1">

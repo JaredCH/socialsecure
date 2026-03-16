@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useRef } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 
 const LINK_REGEX = /(https?:\/\/[^\s]+)/gi;
 const TRAILING_PUNCTUATION_REGEX = /[),.!?;:]+$/;
@@ -145,6 +145,7 @@ function ChatMessageItem({
     };
   const longPressTimerRef = useRef(null);
   const normalizedCurrentUserId = String(currentUserId || '');
+  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const menuUser = message.userId?._id ? {
     _id: message.userId._id,
     username: message.userId.username,
@@ -160,7 +161,7 @@ function ChatMessageItem({
 
   const triggerUserMenu = (event, point) => {
     if (!menuUser || typeof onOpenUserMenu !== 'function') return;
-    if (event?.target?.closest('a')) return;
+    if (event?.target?.closest('a, [data-chat-no-user-menu="true"]')) return;
     onOpenUserMenu(event, menuUser, point);
   };
 
@@ -220,20 +221,8 @@ function ChatMessageItem({
             <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
           </header>
           <p className="whitespace-pre-wrap break-words text-[13px] leading-4">{renderMessageContent(message.content)}</p>
-          <div className={`absolute right-1 top-full z-10 mt-0.5 hidden items-center gap-2 rounded border px-1 py-0.5 text-[10px] opacity-95 shadow-sm group-hover:flex group-focus-within:flex ${theme.subtle}`}>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] opacity-80">
             <span className="font-mono">{fullTimestamp}</span>
-            {reactionOptions.map((reaction) => (
-              <button
-                key={reaction.key}
-                type="button"
-                className="rounded border px-1 leading-3 font-mono hover:opacity-85"
-                aria-label={`React with ${reaction.label}`}
-                title={reaction.label}
-                onClick={() => onToggleReaction?.(message._id, reaction.key)}
-              >
-                {reaction.emoji}
-              </button>
-            ))}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {reactionOptions.map((reaction) => {
@@ -244,7 +233,11 @@ function ChatMessageItem({
                 <button
                   key={reaction.key}
                   type="button"
-                  onClick={() => onToggleReaction?.(message._id, reaction.key)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggleReaction?.(message._id, reaction.key);
+                  }}
+                  data-chat-no-user-menu="true"
                   className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${reactedByMe ? 'font-semibold' : ''}`}
                   title={reaction.label}
                 >
@@ -253,18 +246,48 @@ function ChatMessageItem({
                 </button>
               );
             })}
-            {reactionOptions.map((reaction) => (
+            <div className="relative">
               <button
-                key={`pick-${reaction.key}`}
                 type="button"
-                onClick={() => onToggleReaction?.(message._id, reaction.key)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setReactionPickerOpen((open) => !open);
+                }}
+                data-chat-no-user-menu="true"
                 className="rounded-full border px-1 py-0.5 text-[10px] opacity-75 hover:opacity-100"
-                aria-label={`Add ${reaction.label} reaction`}
-                title={reaction.label}
+                aria-label="Open reaction picker"
+                title="Add reaction"
               >
-                {reaction.emoji}
+                😊
               </button>
-            ))}
+              {reactionPickerOpen ? (
+                <div
+                  className={[
+                    'absolute bottom-full z-20 mb-1 flex items-center gap-1 rounded border px-1 py-1 text-[10px] shadow-sm',
+                    isOwnMessage ? 'right-0' : 'left-0',
+                    theme.subtle
+                  ].join(' ')}
+                >
+                  {reactionOptions.map((reaction) => (
+                    <button
+                      key={`pick-${reaction.key}`}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onToggleReaction?.(message._id, reaction.key);
+                        setReactionPickerOpen(false);
+                      }}
+                      data-chat-no-user-menu="true"
+                      className="rounded border px-1 py-0.5 text-[10px] hover:opacity-100"
+                      aria-label={`Add ${reaction.label} reaction`}
+                      title={reaction.label}
+                    >
+                      {reaction.emoji}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
