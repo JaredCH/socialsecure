@@ -1310,7 +1310,12 @@ function Maps() {
 
       {/* Create Spotlight Modal */}
       {showCreateSpotlight && (
-        <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50">
+        <div
+          className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Create Spotlight"
+        >
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-4">✨ Create Spotlight</h2>
 
@@ -1379,7 +1384,12 @@ function Maps() {
       )}
 
       {showFavoritesModal && (
-        <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50">
+        <div
+          className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Save Favorite"
+        >
           <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xl font-bold text-gray-900">★ Save Favorite</h2>
@@ -1402,6 +1412,7 @@ function Maps() {
                   type="text"
                   value={favoriteForm.address}
                   onChange={(event) => setFavoriteForm({ address: event.target.value })}
+                  aria-label="Favorite address"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   placeholder="123 Main St, Austin, TX"
                 />

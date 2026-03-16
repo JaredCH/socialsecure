@@ -300,7 +300,7 @@ describe('Maps mobile-first controls', () => {
     });
     await flushPromises();
 
-    const addressInput = container.querySelector('input[placeholder="123 Main St, Austin, TX"]');
+    const addressInput = container.querySelector('input[aria-label="Favorite address"]');
     const modalForm = Array.from(container.querySelectorAll('form'))
       .find((form) => form.textContent.includes('Use Current Location'));
     const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -334,8 +334,7 @@ describe('Maps mobile-first controls', () => {
     });
     await flushPromises();
 
-    const favoritesModal = Array.from(container.querySelectorAll('div'))
-      .find((element) => element.textContent.includes('★ Save Favorite') && element.className.includes('bg-black/50'));
+    const favoritesModal = container.querySelector('[role="dialog"][aria-label="Save Favorite"]');
 
     expect(favoritesModal).not.toBeNull();
     expect(favoritesModal.className).toContain('z-[700]');
@@ -422,7 +421,7 @@ describe('Maps mobile-first controls', () => {
     });
     await flushPromises();
 
-    const addressInput = container.querySelector('input[placeholder="123 Main St, Austin, TX"]');
+    const addressInput = container.querySelector('input[aria-label="Favorite address"]');
     const modalForm = Array.from(container.querySelectorAll('form'))
       .find((form) => form.textContent.includes('Use Current Location'));
     const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
