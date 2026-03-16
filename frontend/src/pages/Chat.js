@@ -164,6 +164,12 @@ const LOCKED_DM_PLACEHOLDER = '🔒 Conversation locked. Unlock to view encrypte
 const INITIAL_MESSAGES_PAGE_SIZE = 40;
 const OLDER_MESSAGES_PAGE_SIZE = 10;
 const DM_DECRYPT_BATCH_SIZE = 5;
+const MAX_CHAT_ROOM_FETCH = 120;
+const MAX_CHAT_ROOM_RESULTS = 20;
+const MAX_STATE_ROOM_RESULTS = 8;
+const MAX_FAVORITE_ROOMS = 8;
+const MAX_DM_FRIEND_PICKER_RESULTS = 12;
+const normalizeId = (value) => String(value || '').trim();
 
 const upsertConversationMessage = (messages, incomingMessage) => {
   const normalizedId = String(incomingMessage?._id || '').trim();
@@ -276,7 +282,7 @@ function Chat() {
       const parsed = JSON.parse(localStorage.getItem(FAVORITE_ROOM_IDS_KEY) || '[]');
       if (!Array.isArray(parsed)) return {};
       return parsed.reduce((acc, roomId) => {
-        const normalizedId = String(roomId || '').trim();
+        const normalizedId = normalizeId(roomId);
         if (normalizedId) acc[normalizedId] = true;
         return acc;
       }, {});
@@ -289,7 +295,7 @@ function Chat() {
       const parsed = JSON.parse(localStorage.getItem(DM_READ_CACHE_KEY) || '{}');
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
       return Object.entries(parsed).reduce((acc, [conversationId, readAt]) => {
-        const normalizedId = String(conversationId || '').trim();
+        const normalizedId = normalizeId(conversationId);
         const parsedReadAt = Number(readAt);
         if (normalizedId && Number.isFinite(parsedReadAt) && parsedReadAt > 0) {
           acc[normalizedId] = parsedReadAt;
@@ -483,13 +489,13 @@ function Chat() {
     Promise.resolve()
       .then(() => chatAPI.syncLocationRooms?.())
       .catch(() => null)
-      .then(() => chatAPI.getAllRooms(1, 250))
+      .then(() => chatAPI.getAllRooms(1, MAX_CHAT_ROOM_FETCH))
       .then(({ data }) => {
         if (cancelled) return;
         const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
         setAllChatRooms(rooms);
         const nextJoinedIds = rooms.reduce((acc, room) => {
-          const roomId = String(room?._id || '');
+          const roomId = normalizeId(room?._id);
           if (!roomId) return acc;
           const members = Array.isArray(room?.members) ? room.members.map((memberId) => String(memberId)) : [];
           if (members.includes(String(profile?._id))) {
@@ -555,14 +561,14 @@ function Chat() {
 
   const chatRoomsByQuery = useMemo(() => {
     const query = roomQuery.trim().toLowerCase();
-    if (!query) return allChatRooms.slice(0, 20);
+    if (!query) return allChatRooms.slice(0, MAX_CHAT_ROOM_RESULTS);
     return allChatRooms
       .filter((room) => {
         const label = String(room.name || '').toLowerCase();
         const location = [room.city, room.state, room.country, room.county].filter(Boolean).join(' ').toLowerCase();
         return label.includes(query) || location.includes(query);
       })
-      .slice(0, 20);
+      .slice(0, MAX_CHAT_ROOM_RESULTS);
   }, [allChatRooms, roomQuery]);
 
   const favoriteRooms = useMemo(
@@ -571,7 +577,7 @@ function Chat() {
   );
 
   const stateRooms = useMemo(
-    () => allChatRooms.filter((room) => room.type === 'state').slice(0, 8),
+    () => allChatRooms.filter((room) => room.type === 'state').slice(0, MAX_STATE_ROOM_RESULTS),
     [allChatRooms]
   );
 
@@ -1021,7 +1027,7 @@ function Chat() {
   }, [refreshHub]);
 
   const handleJoinRoom = useCallback(async (roomId) => {
-    const normalizedRoomId = String(roomId || '').trim();
+    const normalizedRoomId = normalizeId(roomId);
     if (!normalizedRoomId || typeof chatAPI.joinRoom !== 'function') return;
     try {
       await chatAPI.joinRoom(normalizedRoomId);
@@ -1036,7 +1042,7 @@ function Chat() {
   }, []);
 
   const handleToggleFavoriteRoom = useCallback((roomId) => {
-    const normalizedRoomId = String(roomId || '').trim();
+    const normalizedRoomId = normalizeId(roomId);
     if (!normalizedRoomId) return;
     setFavoriteRoomIds((prev) => ({
       ...prev,
@@ -1311,7 +1317,7 @@ function Chat() {
                       {!dmFriendsLoading && filteredFriendCandidates.length === 0 ? <p className="mt-2 text-xs opacity-80">No matching friends.</p> : null}
                       {filteredFriendCandidates.length > 0 ? (
                         <ul className="mt-2 space-y-1 text-xs">
-                          {filteredFriendCandidates.slice(0, 12).map((friend) => (
+                        {filteredFriendCandidates.slice(0, MAX_DM_FRIEND_PICKER_RESULTS).map((friend) => (
                             <li key={String(friend._id)} className="flex items-center justify-between gap-2 rounded border p-1.5">
                               <span>@{friend.username || friend.realName || 'friend'}</span>
                               <button
@@ -1352,6 +1358,7 @@ function Chat() {
                                 <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
                                   {conversation.__hasUnread ? <span className="h-2 w-2 rounded-full bg-sky-500" /> : null}
                                   <span className={`h-2 w-2 rounded-full ${status.tone}`} />
+                                  <span>{status.label}</span>
                                 </span>
                               </div>
                             </button>
@@ -1410,7 +1417,7 @@ function Chat() {
                     <div className="mt-2">
                       <p className="text-[10px] font-semibold uppercase opacity-80">Favorites</p>
                       <ul className="mt-1 space-y-1 text-xs">
-                        {favoriteRooms.slice(0, 8).map((room) => (
+                        {favoriteRooms.slice(0, MAX_FAVORITE_ROOMS).map((room) => (
                           <li key={`favorite-${String(room._id)}`} className="flex items-center justify-between gap-2 rounded border p-1.5">
                             <span>{room.name}</span>
                             <button type="button" onClick={() => handleToggleFavoriteRoom(room._id)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Remove</button>
@@ -1469,7 +1476,7 @@ function Chat() {
                                 setActiveConversationId(String(conversation._id));
                                 setMobileWorkspaceOpen(true);
                               }}
-                              className={`w-full rounded border px-2.5 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
+                              className={`w-full rounded-xl border px-2.5 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
                             >
                               <span className="font-medium">{getConversationLabel(conversation)}</span>
                             </button>
