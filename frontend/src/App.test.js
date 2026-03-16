@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { authAPI, notificationAPI, getAuthToken } from './utils/api';
+import { authAPI, notificationAPI, getAuthToken, clearAuthToken } from './utils/api';
 
 jest.mock('./pages/Home', () => () => <div>Home Page</div>);
 jest.mock('./pages/Login', () => () => <div>Login Page</div>);
@@ -221,6 +221,52 @@ describe('App navbar features dropdown', () => {
     expect(main.className).toContain('w-full');
     expect(main.className).not.toContain('container');
     expect(container.textContent).toContain('Social Page');
+  });
+
+  it('redirects to home after logout from a protected route', async () => {
+    localStorage.setItem('token', 'token');
+    window.history.pushState({}, '', '/social');
+
+    await renderApp();
+    expect(window.location.pathname).toBe('/social');
+
+    const logoutButton = Array.from(container.querySelectorAll('button'))
+      .find((node) => node.textContent === 'Logout');
+    expect(logoutButton).toBeTruthy();
+
+    await act(async () => {
+      logoutButton.click();
+      await Promise.resolve();
+    });
+
+    expect(clearAuthToken).toHaveBeenCalled();
+    expect(container.textContent).toContain('Home Page');
+    expect(container.textContent).not.toContain('Login Page');
+  });
+
+  it('does not clear a newer token when an older bootstrap profile request fails', async () => {
+    localStorage.setItem('token', 'old-token');
+    clearAuthToken.mockImplementation(() => {
+      localStorage.removeItem('token');
+    });
+    let rejectProfile;
+    authAPI.getProfile.mockImplementationOnce(() => new Promise((_, reject) => {
+      rejectProfile = reject;
+    }));
+
+    await act(async () => {
+      root.render(<App />);
+    });
+
+    localStorage.setItem('token', 'new-token');
+
+    await act(async () => {
+      rejectProfile(new Error('unauthorized'));
+      await Promise.resolve();
+    });
+
+    expect(clearAuthToken).not.toHaveBeenCalled();
+    expect(localStorage.getItem('token')).toBe('new-token');
   });
 
 });
