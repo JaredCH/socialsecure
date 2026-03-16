@@ -602,6 +602,7 @@ export const createWrappedRoomKeyPackage = async ({
   recipientPublicKey
 }) => {
   const recipientCryptoKey = await importEcdhPublicKey(recipientPublicKey);
+  // Sender derives shared key for encryption; recipient derives the same key for decryption
   const sharedKey = await deriveEcdhAesKey(session.getEncryptionPrivateKey(), recipientCryptoKey, ['encrypt']);
   const senderPublicKeyJwk = await session.getPublicEncryptionKeyJwk();
 
@@ -661,6 +662,7 @@ export const ingestWrappedRoomKeyPackage = async ({ session, pkg }) => {
   }
 
   const senderCryptoKey = await importEcdhPublicKey(pkg.senderPublicKey);
+  // Recipient derives same shared key for decryption (sender derived it for encryption)
   const sharedKey = await deriveEcdhAesKey(session.getEncryptionPrivateKey(), senderCryptoKey, ['decrypt']);
 
   const plaintextBytes = await decryptAesGcm({

@@ -680,7 +680,7 @@ const validateRoomKeyPackagePayload = (payload) => {
   }
 
   if (payload.senderPublicKey != null && (typeof payload.senderPublicKey !== 'string' || payload.senderPublicKey.length > E2EE_LIMITS.publicKey)) {
-    return 'senderPublicKey exceeds allowed size';
+    return 'senderPublicKey must be a string within allowed size';
   }
 
   if (!Number.isInteger(payload.keyVersion) || payload.keyVersion < 1 || payload.keyVersion > 1000000) {
