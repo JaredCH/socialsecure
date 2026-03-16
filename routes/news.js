@@ -58,6 +58,7 @@ const { resolveZipLocation, resolveZipLocationByCityState } = require('../servic
 // ---------------------------------------------------------------------------
 const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000;   // 10 minutes
 const WEATHER_WIDGET_REFRESH_SECONDS = 600;
+const WEATHER_HOURLY_WINDOW_LIMIT = 24;
 const OPEN_METEO_FORECAST_BASE = 'https://api.open-meteo.com/v1/forecast';
 const OPEN_METEO_GEOCODING_BASE = 'https://geocoding-api.open-meteo.com/v1/search';
 const OPEN_METEO_AIR_QUALITY_BASE = 'https://air-quality-api.open-meteo.com/v1/air-quality';
@@ -136,6 +137,106 @@ function classifySourceHealth(source = {}, now = new Date()) {
 // ---------------------------------------------------------------------------
 function buildWeatherCacheKey(lat, lon) {
   return `weather:${Number(lat).toFixed(2)}:${Number(lon).toFixed(2)}`;
+}
+
+function parseLocalDateTimeParts(value) {
+  const match = String(value || '').trim().match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
+  );
+  if (!match) return null;
+
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+    second: Number(match[6] || 0)
+  };
+}
+
+function buildLocalDateTimeKey(parts) {
+  if (!parts) return null;
+
+  const year = String(parts.year).padStart(4, '0');
+  const month = String(parts.month).padStart(2, '0');
+  const day = String(parts.day).padStart(2, '0');
+  const hour = String(parts.hour).padStart(2, '0');
+  const minute = String(parts.minute).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function getTimeZoneLocalDateTimeParts(date, timeZone) {
+  if (!timeZone) return null;
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  });
+
+  const formattedParts = formatter.formatToParts(date).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+
+  return {
+    year: Number(formattedParts.year),
+    month: Number(formattedParts.month),
+    day: Number(formattedParts.day),
+    hour: Number(formattedParts.hour),
+    minute: Number(formattedParts.minute),
+    second: Number(formattedParts.second)
+  };
+}
+
+function getNextTopOfHourKey(parts) {
+  if (!parts) return null;
+
+  const roundedHour = (parts.minute > 0 || parts.second > 0)
+    ? parts.hour + 1
+    : parts.hour;
+  const dayCursor = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  dayCursor.setUTCDate(dayCursor.getUTCDate() + Math.floor(roundedHour / 24));
+
+  return buildLocalDateTimeKey({
+    year: dayCursor.getUTCFullYear(),
+    month: dayCursor.getUTCMonth() + 1,
+    day: dayCursor.getUTCDate(),
+    hour: roundedHour % 24,
+    minute: 0
+  });
+}
+
+function getUpcomingHourlyForecastWindow(hourlyTime, { currentTime = null, timeZone = null, now = null, limit = WEATHER_HOURLY_WINDOW_LIMIT } = {}) {
+  if (!Array.isArray(hourlyTime) || hourlyTime.length === 0) return [];
+
+  const normalizedHourly = hourlyTime
+    .map((time, index) => {
+      const parts = parseLocalDateTimeParts(time);
+      if (!parts) return null;
+      return { time, index, key: buildLocalDateTimeKey(parts) };
+    })
+    .filter(Boolean);
+
+  if (normalizedHourly.length === 0) return [];
+
+  const effectiveNow = now || new Date();
+  const referenceParts =
+    parseLocalDateTimeParts(currentTime) ||
+    getTimeZoneLocalDateTimeParts(effectiveNow, timeZone);
+  const startKey = getNextTopOfHourKey(referenceParts);
+
+  const upcoming = startKey
+    ? normalizedHourly.filter(({ key }) => key >= startKey)
+    : normalizedHourly;
+
+  return (upcoming.length > 0 ? upcoming : normalizedHourly).slice(0, limit);
 }
 
 const parseCoordinateQuery = (value = '') => {
@@ -355,15 +456,22 @@ async function fetchWeatherForLocation(locObj) {
 
     const currentDescriptor = getOpenMeteoWeatherDescriptor(current.weather_code);
 
-    const hourly = hourlyTime.slice(0, 12).map((time, idx) => {
-      const descriptor = getOpenMeteoWeatherDescriptor(fc?.hourly?.weather_code?.[idx]);
+    const hourlyWindow = getUpcomingHourlyForecastWindow(hourlyTime, {
+      currentTime: current.time,
+      timeZone: fc?.timezone || resolved?.timezone || null,
+      now: new Date(),
+      limit: WEATHER_HOURLY_WINDOW_LIMIT
+    });
+
+    const hourly = hourlyWindow.map(({ time, index }) => {
+      const descriptor = getOpenMeteoWeatherDescriptor(fc?.hourly?.weather_code?.[index]);
       return {
         time,
-        temperature: fc?.hourly?.temperature_2m?.[idx] ?? null,
-        humidity: fc?.hourly?.relative_humidity_2m?.[idx] ?? null,
-        windSpeed: fc?.hourly?.wind_speed_10m?.[idx] ?? null,
-        windGust: fc?.hourly?.wind_gusts_10m?.[idx] ?? null,
-        precipitationProbability: fc?.hourly?.precipitation_probability?.[idx] ?? null,
+        temperature: fc?.hourly?.temperature_2m?.[index] ?? null,
+        humidity: fc?.hourly?.relative_humidity_2m?.[index] ?? null,
+        windSpeed: fc?.hourly?.wind_speed_10m?.[index] ?? null,
+        windGust: fc?.hourly?.wind_gusts_10m?.[index] ?? null,
+        precipitationProbability: fc?.hourly?.precipitation_probability?.[index] ?? null,
         shortForecast: descriptor.description,
         icon: descriptor.icon
       };
@@ -1690,6 +1798,7 @@ module.exports = {
   startIngestionScheduler,
   internals: {
     US_ZIP_REGEX,
+    getUpcomingHourlyForecastWindow,
     classifySourceHealth,
     normalizeUSState,
     fetchWeatherForLocation,

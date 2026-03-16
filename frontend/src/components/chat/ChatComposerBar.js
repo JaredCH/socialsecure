@@ -10,7 +10,10 @@ function ChatComposerBar({
   disabled,
   sending,
   theme,
-  onComposerError
+  onComposerError,
+  secondaryActionLabel,
+  onSecondaryAction,
+  secondaryActionDisabled = false
 }) {
   const textAreaRef = useRef(null);
   const [showEmojiTray, setShowEmojiTray] = useState(false);
@@ -92,6 +95,17 @@ function ChatComposerBar({
           rows={1}
           placeholder={disabled ? 'Choose a conversation to message' : 'Type your message'}
         />
+
+        {secondaryActionLabel ? (
+          <button
+            type="button"
+            onClick={onSecondaryAction}
+            disabled={!onSecondaryAction || secondaryActionDisabled}
+            className={`rounded border px-3 py-1.5 text-sm font-semibold transition duration-150 active:scale-95 disabled:opacity-50 ${theme.subtle}`}
+          >
+            {secondaryActionLabel}
+          </button>
+        ) : null}
 
         <button
           type="submit"
