@@ -184,7 +184,7 @@ export default function AlgorithmicFeed({
   const sentinelRef = useRef(null);
 
   useEffect(() => {
-    if (!sentinelRef.current || !hasMore || loading) return;
+    if (!sentinelRef.current || !hasMore || loading || String(searchQuery || '').trim()) return;
 
     const observer = new IntersectionObserver(
       async ([entry]) => {
@@ -215,7 +215,7 @@ export default function AlgorithmicFeed({
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-}, [hasMore, loading, loadingMore, page, articles, buildFeedParams]);
+}, [hasMore, loading, loadingMore, page, articles, buildFeedParams, searchQuery]);
 
   const normalizedSearch = useMemo(() => String(searchQuery || '').trim().toLowerCase(), [searchQuery]);
   const isSearchActive = normalizedSearch.length > 0;
