@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { Link } from 'react-router-dom';
 
 const featureHighlights = [
@@ -82,24 +83,130 @@ const platformCapabilities = [
   }
 ];
 
+const floatingEncryptionIcons = [
+  {
+    icon: '🔐',
+    label: 'Encrypted DM',
+    conversation: 'msg.enc',
+    className: '-left-2 top-12 md:left-0 md:top-10'
+  },
+  {
+    icon: '🛡️',
+    label: 'Trust circle',
+    conversation: 'friends-only',
+    className: 'right-3 top-3 md:right-6 md:top-8'
+  },
+  {
+    icon: '🗝️',
+    label: 'PGP key',
+    conversation: 'BYO key',
+    className: 'left-8 bottom-12 md:left-12 md:bottom-16'
+  },
+  {
+    icon: '💬',
+    label: 'Secure reply',
+    conversation: 'route locked',
+    className: 'right-0 bottom-4 md:right-4 md:bottom-10'
+  }
+];
+
+const networkNodes = [
+  { id: 'u1', x: 16, y: 70, size: 'lg', label: 'You' },
+  { id: 'u2', x: 36, y: 48, size: 'md', label: 'Friend' },
+  { id: 'u3', x: 55, y: 32, size: 'md', label: 'Circle A' },
+  { id: 'u4', x: 55, y: 66, size: 'md', label: 'Circle B' },
+  { id: 'u5', x: 76, y: 14, size: 'sm', label: 'Node 1' },
+  { id: 'u6', x: 82, y: 26, size: 'sm', label: 'Node 2' },
+  { id: 'u7', x: 86, y: 40, size: 'sm', label: 'Node 3' },
+  { id: 'u8', x: 84, y: 56, size: 'sm', label: 'Node 4' },
+  { id: 'u9', x: 78, y: 72, size: 'sm', label: 'Node 5' },
+  { id: 'u10', x: 71, y: 86, size: 'sm', label: 'Node 6' },
+  { id: 'u11', x: 92, y: 58, size: 'sm', label: 'Node 7' },
+  { id: 'u12', x: 92, y: 80, size: 'sm', label: 'Node 8' }
+];
+
+const networkLinks = [
+  { from: 'u1', to: 'u2', stage: 0, curve: 10 },
+  { from: 'u2', to: 'u3', stage: 1, curve: 8 },
+  { from: 'u2', to: 'u4', stage: 1, curve: -6 },
+  { from: 'u3', to: 'u5', stage: 2, curve: 7 },
+  { from: 'u3', to: 'u6', stage: 2, curve: 2 },
+  { from: 'u3', to: 'u7', stage: 2, curve: -4 },
+  { from: 'u3', to: 'u8', stage: 2, curve: -9 },
+  { from: 'u4', to: 'u9', stage: 2, curve: -4 },
+  { from: 'u4', to: 'u10', stage: 2, curve: -9 },
+  { from: 'u4', to: 'u11', stage: 2, curve: 3 },
+  { from: 'u4', to: 'u12', stage: 2, curve: -2 }
+];
+
+const nodeRadius = {
+  lg: 4.5,
+  md: 3.4,
+  sm: 2.5
+};
+
+function buildCurvePath(start, end, curve = 0) {
+  const controlX = (start.x + end.x) / 2;
+  const controlY = (start.y + end.y) / 2 - curve;
+
+  return `M ${start.x} ${start.y} Q ${controlX} ${controlY} ${end.x} ${end.y}`;
+}
+
 function Home({ isAuthenticated = false }) {
+  const prefersReducedMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll();
+  const backgroundLayerY = useTransform(scrollYProgress, [0, 0.45], [0, prefersReducedMotion ? 0 : -90]);
+  const middleLayerY = useTransform(scrollYProgress, [0, 0.45], [0, prefersReducedMotion ? 0 : 55]);
+  const foregroundLayerY = useTransform(scrollYProgress, [0, 0.45], [0, prefersReducedMotion ? 0 : -35]);
+
   return (
     <div className="space-y-10 pb-10">
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 text-white shadow-xl">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(96,165,250,0.35)_0%,_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(129,140,248,0.35)_0%,_transparent_46%)]" />
+        <motion.div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(96,165,250,0.3)_0%,_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(129,140,248,0.28)_0%,_transparent_46%)]"
+          style={{ y: backgroundLayerY }}
+        />
+        <motion.div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.28)_0%,_transparent_65%)] blur-3xl"
+          style={{ y: middleLayerY }}
+        />
+        <motion.div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-20"
+          style={{ y: foregroundLayerY }}
+        >
+          <div className="h-full w-full bg-[linear-gradient(rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.16)_1px,transparent_1px)] bg-[size:72px_72px]" />
+        </motion.div>
+
         <div className="relative px-6 py-10 md:px-10 md:py-14 lg:px-16 lg:py-16">
-            <p className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.2em] text-blue-100">
-              One platform • Social v Secure made simple
-          </p>
+          <motion.p
+            initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
+            animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.55 }}
+            className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.2em] text-blue-100"
+          >
+            One platform • Social v Secure made simple
+          </motion.p>
 
           <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-center">
-            <div className="lg:col-span-7">
+            <motion.div
+              className="lg:col-span-7"
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
+              animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
+              transition={{ duration: 0.65, delay: 0.08 }}
+            >
               <h1 className="text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
                 One secure home for your people, plans, and private conversations.
               </h1>
               <p className="mt-4 max-w-2xl text-base text-blue-100 sm:text-lg">
                 SocialSecure brings your feed, circles, maps, watch parties, calendar, and encrypted direct messages
                 into one platform so you can manage friendships without trading away privacy.
+              </p>
+              <p className="mt-4 max-w-2xl text-sm text-blue-200 sm:text-base">
+                Scroll through parallax layers, see encrypted conversations floating in motion, and watch a secure
+                connection map grow from one trusted person into a wider network.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
@@ -148,29 +255,173 @@ function Home({ isAuthenticated = false }) {
                 <span>✓ Circles, calendars, maps, and watch parties</span>
                 <span>✓ Social v Secure friend management</span>
               </div>
-            </div>
+            </motion.div>
 
-            <div className="lg:col-span-5">
-              <div className="rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur">
-                <h2 className="text-xl font-semibold">Why SocialSecure stands out</h2>
-                <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/15 bg-slate-950/30 p-4">
-                    <p className="text-3xl font-bold">1</p>
-                    <p className="mt-2 text-sm text-blue-100">One platform for feed, chat, maps, events, and profiles.</p>
+            <motion.div
+              className="relative lg:col-span-5"
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 26 }}
+              animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.18 }}
+            >
+              <div className="rounded-[2rem] border border-white/20 bg-slate-950/35 p-5 shadow-2xl backdrop-blur">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-200">Live secure growth</p>
+                    <h2 className="mt-2 text-xl font-semibold">Parallax connection map</h2>
                   </div>
-                  <div className="rounded-2xl border border-white/15 bg-slate-950/30 p-4">
-                    <p className="text-3xl font-bold">2</p>
-                    <p className="mt-2 text-sm text-blue-100">Two modes of connection: social sharing and secure messaging.</p>
+                  <div className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                    1 → 2 → 8 secure hops
                   </div>
-                  <div className="rounded-2xl border border-white/15 bg-slate-950/30 p-4 sm:col-span-2">
-                    <p className="text-sm font-semibold uppercase tracking-wide text-blue-100">Built for trust</p>
+                </div>
+
+                <div
+                  data-testid="hero-network-map"
+                  className="relative mt-5 h-[22rem] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.16),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(15,23,42,0.75))]"
+                >
+                  <motion.div
+                    aria-hidden="true"
+                    className="absolute inset-0 opacity-30"
+                    animate={prefersReducedMotion ? {} : { opacity: [0.2, 0.35, 0.22], scale: [1, 1.03, 1] }}
+                    transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{
+                      backgroundImage:
+                        'linear-gradient(rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.18) 1px, transparent 1px)',
+                      backgroundSize: '42px 42px'
+                    }}
+                  />
+                  <motion.div
+                    aria-hidden="true"
+                    className="absolute inset-0 bg-[radial-gradient(circle_at_25%_15%,rgba(59,130,246,0.22),transparent_28%),radial-gradient(circle_at_78%_65%,rgba(16,185,129,0.18),transparent_26%),radial-gradient(circle_at_92%_30%,rgba(129,140,248,0.18),transparent_24%)]"
+                    style={{ y: middleLayerY }}
+                  />
+
+                  {floatingEncryptionIcons.map((item, index) => (
+                    <motion.div
+                      key={item.label}
+                      data-testid="floating-encryption-icon"
+                      className={`absolute w-28 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 shadow-lg backdrop-blur ${item.className}`}
+                      initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.94 }}
+                      animate={
+                        prefersReducedMotion
+                          ? { opacity: 1 }
+                          : {
+                              opacity: 1,
+                              y: [0, index % 2 === 0 ? -14 : 12, 0]
+                            }
+                      }
+                      transition={{
+                        duration: prefersReducedMotion ? 0 : 5 + index,
+                        delay: prefersReducedMotion ? 0 : 0.45 + index * 0.15,
+                        repeat: prefersReducedMotion ? 0 : Infinity,
+                        ease: 'easeInOut'
+                      }}
+                    >
+                      <p className="text-sm font-semibold text-white">
+                        <span className="mr-1" aria-hidden="true">
+                          {item.icon}
+                        </span>
+                        {item.label}
+                      </p>
+                      <p className="mt-1 text-xs text-blue-100">{item.conversation}</p>
+                    </motion.div>
+                  ))}
+
+                  <svg
+                    viewBox="0 0 100 100"
+                    className="absolute inset-0 h-full w-full"
+                    role="img"
+                    aria-label="Network diagram showing secure connections branching from one user to trusted contacts"
+                  >
+                    <defs>
+                      <linearGradient id="network-line-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#60a5fa" />
+                        <stop offset="50%" stopColor="#38bdf8" />
+                        <stop offset="100%" stopColor="#34d399" />
+                      </linearGradient>
+                    </defs>
+
+                    {networkLinks.map((link, index) => {
+                      const start = networkNodes.find((node) => node.id === link.from);
+                      const end = networkNodes.find((node) => node.id === link.to);
+                      const delay = link.stage * 0.6 + index * 0.08;
+
+                      return (
+                        <motion.path
+                          key={`${link.from}-${link.to}`}
+                          d={buildCurvePath(start, end, link.curve)}
+                          fill="none"
+                          stroke="url(#network-line-gradient)"
+                          strokeWidth="0.65"
+                          strokeLinecap="round"
+                          initial={prefersReducedMotion ? false : { pathLength: 0, opacity: 0.35 }}
+                          animate={prefersReducedMotion ? { pathLength: 1, opacity: 0.9 } : { pathLength: 1, opacity: [0.4, 1, 0.8] }}
+                          transition={{
+                            duration: prefersReducedMotion ? 0.01 : 0.95,
+                            delay,
+                            repeat: prefersReducedMotion ? 0 : Infinity,
+                            repeatDelay: prefersReducedMotion ? 0 : 3.2,
+                            ease: 'easeInOut'
+                          }}
+                        />
+                      );
+                    })}
+
+                    {networkNodes.map((node, index) => (
+                      <motion.g
+                        key={node.id}
+                        initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.7 }}
+                        animate={prefersReducedMotion ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [1, 1.08, 1] }}
+                        transition={{
+                          duration: prefersReducedMotion ? 0.01 : 1.1,
+                          delay: prefersReducedMotion ? 0 : 0.18 + index * 0.08,
+                          repeat: prefersReducedMotion ? 0 : Infinity,
+                          repeatDelay: prefersReducedMotion ? 0 : 2.8,
+                          ease: 'easeInOut'
+                        }}
+                      >
+                        <circle
+                          cx={node.x}
+                          cy={node.y}
+                          r={nodeRadius[node.size] * 1.8}
+                          fill="rgba(96, 165, 250, 0.14)"
+                        />
+                        <circle
+                          cx={node.x}
+                          cy={node.y}
+                          r={nodeRadius[node.size]}
+                          fill={node.id === 'u1' ? '#34d399' : '#e0f2fe'}
+                          stroke={node.id === 'u1' ? '#6ee7b7' : '#93c5fd'}
+                          strokeWidth="0.45"
+                        />
+                      </motion.g>
+                    ))}
+                  </svg>
+
+                  <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 backdrop-blur">
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-200">Encryption in motion</p>
                     <p className="mt-2 text-sm text-blue-50">
-                      Start in public community spaces, then move private details into protected conversations with encryption and optional personal PGP keys.
+                      One trusted connection becomes two shared circles, then grows into a wider protected community with
+                      every line drawn in sequence.
                     </p>
                   </div>
                 </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-2xl font-bold">1</p>
+                    <p className="mt-2 text-sm text-blue-100">Start with one secure conversation.</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-2xl font-bold">2</p>
+                    <p className="mt-2 text-sm text-blue-100">Branch into trusted circles with smooth fades.</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-2xl font-bold">8</p>
+                    <p className="mt-2 text-sm text-blue-100">Grow the network without losing privacy controls.</p>
+                  </div>
+                </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>

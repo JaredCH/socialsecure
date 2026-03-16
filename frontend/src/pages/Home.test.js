@@ -70,4 +70,14 @@ describe('Home landing page', () => {
     expect(container.textContent).toContain('Profiles, resumes, and blogs');
     expect(container.querySelector('a[href="#platform-overview"]')).not.toBeNull();
   });
+
+  it('renders the animated hero connection map and encryption callouts', async () => {
+    await renderHome({ isAuthenticated: false });
+
+    expect(container.querySelector('[data-testid="hero-network-map"]')).not.toBeNull();
+    expect(container.querySelectorAll('[data-testid="floating-encryption-icon"]')).toHaveLength(4);
+    expect(container.textContent).toContain('Parallax connection map');
+    expect(container.textContent).toContain('1 → 2 → 8 secure hops');
+    expect(container.textContent).toContain('Encryption in motion');
+  });
 });
