@@ -25,6 +25,7 @@ const NewsPreferences = require('../models/NewsPreferences');
 const User = require('../models/User');
 const Article = require('../models/Article');
 const ArticleImpression = require('../models/ArticleImpression');
+const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 
 // ---------------------------------------------------------------------------
 // Auth middleware (mirrors the pattern used across all route files)
@@ -481,6 +482,19 @@ function requireAdminApiKey(req, res, next) {
   try { valid = crypto.timingSafeEqual(secretBuf, providedBuf); } catch { valid = false; }
   if (!valid || provided.length !== secret.length) return res.status(403).json({ error: 'Invalid admin API key' });
   next();
+}
+
+async function requireAdminUser(req, res, next) {
+  try {
+    const requester = await User.findById(req.user.userId).select('_id isAdmin');
+    if (!requester?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    return next();
+  } catch (error) {
+    console.error('Error validating admin access:', error);
+    return res.status(500).json({ error: 'Failed to validate admin access' });
+  }
 }
 
 // ===========================================================================
@@ -1446,61 +1460,224 @@ router.get('/search', authenticateToken, async (req, res) => {
   }
 });
 
+const INGESTION_PIPELINES = ['local', 'categories', 'sports', 'social'];
+const INGESTION_INTERVAL_MS = 30 * 60 * 1000;
+const SOURCE_ADAPTER_KEY_MAP = {
+  'Google News': 'categories',
+  Reuters: 'categories',
+  'BBC News': 'categories',
+  NPR: 'categories',
+  'Associated Press': 'categories',
+  'PBS NewsHour': 'categories',
+  CNN: 'categories',
+  'The Guardian': 'categories',
+  'New York Times': 'categories',
+  'Wall Street Journal': 'categories',
+  TechCrunch: 'categories',
+  'Yahoo News': 'categories',
+  ESPN: 'sports',
+  GDELT: 'categories',
+  Reddit: 'social'
+};
+
+let _schedulerStarted = false;
+let schedulerStartedAt = null;
+let lastIngestionRunAt = null;
+
+function markIngestionRun() {
+  lastIngestionRunAt = new Date();
+}
+
+function enqueuePipeline(pipeline) {
+  markIngestionRun();
+  if (pipeline === 'local') {
+    return ingestAllKnownLocations().catch((err) => console.error('[news] local ingest error:', err));
+  }
+  if (pipeline === 'categories') {
+    return ingestAllCategories().catch((err) => console.error('[news] category ingest error:', err));
+  }
+  if (pipeline === 'sports') {
+    return ingestAllFollowedTeams().catch((err) => console.error('[news] sports ingest error:', err));
+  }
+  if (pipeline === 'social') {
+    return ingestAllMonitoredSubreddits().catch((err) => console.error('[news] reddit ingest error:', err));
+  }
+  return Promise.resolve();
+}
+
+function launchIngestionPipelines(requested = INGESTION_PIPELINES) {
+  const valid = requested.filter((pipeline) => INGESTION_PIPELINES.includes(pipeline));
+  valid.forEach((pipeline) => { enqueuePipeline(pipeline); });
+  return { startedAt: new Date().toISOString(), pipelines: valid };
+}
+
 router.post('/admin/ingest', requireAdminApiKey, async (req, res) => {
   const requested = Array.isArray(req.body?.pipelines)
     ? req.body.pipelines
-    : ['local', 'categories', 'sports', 'social'];
+    : INGESTION_PIPELINES;
 
-  const tasks = {};
-  if (requested.includes('local'))      tasks.local = ingestAllKnownLocations();
-  if (requested.includes('categories')) tasks.categories = ingestAllCategories();
-  if (requested.includes('sports'))     tasks.sports = ingestAllFollowedTeams();
-  if (requested.includes('social'))     tasks.social = ingestAllMonitoredSubreddits();
+  const result = launchIngestionPipelines(requested);
+  res.json({ ok: true, ...result });
+});
 
-  // Fire-and-forget — don't await; respond immediately
-  const startedAt = new Date().toISOString();
-  Object.values(tasks).forEach((p) => p.catch((err) => console.error('[admin/ingest] pipeline error:', err)));
+router.post('/ingest', authenticateToken, requireAdminUser, async (req, res) => {
+  const requested = Array.isArray(req.body?.pipelines)
+    ? req.body.pipelines
+    : INGESTION_PIPELINES;
 
-  res.json({ ok: true, startedAt, pipelines: Object.keys(tasks) });
+  const result = launchIngestionPipelines(requested);
+  res.json({ ok: true, ...result });
+});
+
+router.post('/ingest/:sourceKey', authenticateToken, requireAdminUser, async (req, res) => {
+  const sourceKey = decodeURIComponent(req.params.sourceKey || '').trim();
+  const pipeline = INGESTION_PIPELINES.includes(sourceKey)
+    ? sourceKey
+    : (SOURCE_ADAPTER_KEY_MAP[sourceKey] || null);
+
+  if (!pipeline) {
+    return res.status(400).json({ error: 'Unknown source key' });
+  }
+
+  const result = launchIngestionPipelines([pipeline]);
+  return res.json({ ok: true, sourceKey, pipeline, ...result });
+});
+
+router.get('/schedule-info', authenticateToken, requireAdminUser, async (req, res) => {
+  const now = new Date();
+  let nextRunAt = null;
+  if (lastIngestionRunAt) {
+    nextRunAt = new Date(lastIngestionRunAt.getTime() + INGESTION_INTERVAL_MS);
+  } else if (schedulerStartedAt && _schedulerStarted) {
+    nextRunAt = new Date(schedulerStartedAt.getTime() + INGESTION_INTERVAL_MS);
+  }
+
+  return res.json({
+    schedulerRunning: _schedulerStarted,
+    schedulerStartedAt,
+    lastIngestionRunAt,
+    nextRunAt,
+    msUntilNextRun: nextRunAt ? Math.max(0, nextRunAt.getTime() - now.getTime()) : null,
+    intervalMs: INGESTION_INTERVAL_MS
+  });
+});
+
+router.get('/ingestion-stats', authenticateToken, requireAdminUser, async (req, res) => {
+  try {
+    const now = new Date();
+    const last24h = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+
+    const [today, week, activeArticles, byScopeRows, byStatusRows, bySourceRows] = await Promise.all([
+      NewsIngestionRecord.countDocuments({ ingestedAt: { $gte: startOfDay } }),
+      NewsIngestionRecord.countDocuments({ ingestedAt: { $gte: weekAgo } }),
+      Article.countDocuments({ isActive: { $ne: false } }),
+      NewsIngestionRecord.aggregate([
+        { $match: { ingestedAt: { $gte: last24h } } },
+        { $group: { _id: '$resolvedScope', count: { $sum: 1 } } }
+      ]),
+      NewsIngestionRecord.aggregate([
+        { $match: { ingestedAt: { $gte: last24h } } },
+        { $group: { _id: '$dedupe.outcome', count: { $sum: 1 } } }
+      ]),
+      NewsIngestionRecord.aggregate([
+        { $match: { ingestedAt: { $gte: last24h } } },
+        {
+          $group: {
+            _id: '$source.name',
+            total: { $sum: 1 },
+            processed: {
+              $sum: {
+                $cond: [{ $eq: ['$processingStatus', 'processed'] }, 1, 0]
+              }
+            },
+            failed: {
+              $sum: {
+                $cond: [{ $eq: ['$processingStatus', 'failed'] }, 1, 0]
+              }
+            }
+          }
+        },
+        { $sort: { total: -1, _id: 1 } },
+        { $limit: 100 }
+      ])
+    ]);
+
+    const toMap = (rows = []) => rows.reduce((acc, row) => {
+      const key = row?._id || 'unknown';
+      acc[key] = row?.count || 0;
+      return acc;
+    }, {});
+
+    const bySource = bySourceRows.map((row) => ({
+      source: row?._id || 'unknown',
+      total: row?.total || 0,
+      processed: row?.processed || 0,
+      failed: row?.failed || 0
+    }));
+
+    const nameToAdapterKey = bySource.reduce((acc, row) => {
+      if (SOURCE_ADAPTER_KEY_MAP[row.source]) {
+        acc[row.source] = SOURCE_ADAPTER_KEY_MAP[row.source];
+      }
+      return acc;
+    }, {});
+
+    return res.json({
+      totals: {
+        today,
+        week,
+        activeArticles
+      },
+      byScope: toMap(byScopeRows),
+      byStatus: toMap(byStatusRows),
+      bySource,
+      nameToAdapterKey,
+      generatedAt: now.toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching ingestion stats:', error);
+    return res.status(500).json({ error: 'Failed to fetch ingestion stats' });
+  }
 });
 
 // ===========================================================================
 // SCHEDULER
 // ===========================================================================
 
-let _schedulerStarted = false;
-
 function startIngestionScheduler() {
   if (_schedulerStarted) return;
   _schedulerStarted = true;
+  schedulerStartedAt = new Date();
 
   console.log('[news] Starting ingestion schedulers...');
 
   // Pipeline 1 · Local — every 30 minutes
   setInterval(() => {
-    ingestAllKnownLocations().catch((err) => console.error('[news] local ingest error:', err));
-  }, 30 * 60 * 1000);
+    enqueuePipeline('local');
+  }, INGESTION_INTERVAL_MS);
 
   // Pipeline 2 · Categories — every 2 hours
   setInterval(() => {
-    ingestAllCategories().catch((err) => console.error('[news] category ingest error:', err));
+    enqueuePipeline('categories');
   }, 2 * 60 * 60 * 1000);
 
   // Pipeline 3 · Sports teams — every 4 hours
   setInterval(() => {
-    ingestAllFollowedTeams().catch((err) => console.error('[news] sports ingest error:', err));
+    enqueuePipeline('sports');
   }, 4 * 60 * 60 * 1000);
 
   // Pipeline 4 · Reddit — every 30 minutes
   setInterval(() => {
-    ingestAllMonitoredSubreddits().catch((err) => console.error('[news] reddit ingest error:', err));
-  }, 30 * 60 * 1000);
+    enqueuePipeline('social');
+  }, INGESTION_INTERVAL_MS);
 
   // Kick off an initial run (staggered to spread load)
-  setTimeout(() => ingestAllCategories().catch(console.error), 10 * 1000);
-  setTimeout(() => ingestAllKnownLocations().catch(console.error), 30 * 1000);
-  setTimeout(() => ingestAllFollowedTeams().catch(console.error), 60 * 1000);
-  setTimeout(() => ingestAllMonitoredSubreddits().catch(console.error), 90 * 1000);
+  setTimeout(() => enqueuePipeline('categories'), 10 * 1000);
+  setTimeout(() => enqueuePipeline('local'), 30 * 1000);
+  setTimeout(() => enqueuePipeline('sports'), 60 * 1000);
+  setTimeout(() => enqueuePipeline('social'), 90 * 1000);
 }
 
 module.exports = {
