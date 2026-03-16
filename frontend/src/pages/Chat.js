@@ -152,6 +152,7 @@ const getPresenceState = (lastActiveAt) => {
 
 const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const DEFAULT_CHAT_NAME_COLOR = '#2563eb';
+const DEFAULT_CHAT_THEME = 'midnight';
 const LONG_PRESS_DELAY_MS = 550;
 const USER_MENU_WIDTH_PX = 240;
 const USER_MENU_HEIGHT_PX = 220;
@@ -273,7 +274,7 @@ function Chat() {
     } catch {
       // ignore localStorage errors
     }
-    return CHAT_THEMES[0].key;
+    return DEFAULT_CHAT_THEME;
   });
   const [nameColor, setNameColor] = useState(() => {
     try {
@@ -1118,7 +1119,7 @@ function Chat() {
       <header className={`border-b px-3 py-2 md:px-4 md:py-2.5 ${activeTheme.panelGlass}`}>
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Chat workspace</h2>
+            <h2 className="truncate text-sm font-semibold">Secure Chat</h2>
             <p className="truncate text-[10px] opacity-80 md:text-xs">
               @{profile?.username || 'you'}{resolvedZipCode ? ` • Zip ${resolvedZipCode}` : ''}
             </p>
@@ -1126,7 +1127,55 @@ function Chat() {
         </div>
       </header>
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[1.7fr_8fr_2fr]">
+      <div className="grid flex-1 min-h-0 grid-cols-1 gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[56px_1.8fr_8fr_2.2fr]">
+        <nav className={`hidden min-h-0 flex-col items-center gap-3 rounded-2xl border py-3 lg:flex ${activeTheme.panel}`} aria-label="Workspace rail">
+          <button
+            type="button"
+            onClick={() => {
+              setConversationPanelTab('list');
+              setMobileWorkspaceOpen(false);
+            }}
+            className={`h-9 w-9 rounded-xl border text-sm ${activeTheme.subtle}`}
+          >
+            💬
+            <span className="sr-only">Open chat hub</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveChannel('zip');
+              setConversationPanelTab('list');
+              setMobileWorkspaceOpen(false);
+            }}
+            className={`h-9 w-9 rounded-xl border text-sm ${activeTheme.subtle}`}
+          >
+            🗂️
+            <span className="sr-only">View rooms</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveChannel('dm');
+              setConversationPanelTab('list');
+              setMobileWorkspaceOpen(false);
+            }}
+            className={`h-9 w-9 rounded-xl border text-sm ${activeTheme.subtle}`}
+          >
+            👤
+            <span className="sr-only">View direct messages</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConversationPanelTab('search');
+              setMobileWorkspaceOpen(false);
+            }}
+            className={`mt-auto h-9 w-9 rounded-xl border text-sm ${activeTheme.subtle}`}
+          >
+            ⚙️
+            <span className="sr-only">Open search</span>
+          </button>
+        </nav>
         <aside
           className={[
             mobileWorkspaceOpen ? 'hidden' : 'flex',
@@ -1136,6 +1185,7 @@ function Chat() {
         >
           <div className="sticky top-0 z-10 space-y-2 pb-2">
             <h3 className="font-semibold">Conversations</h3>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-75">Channels</p>
             <div className={`grid grid-cols-2 gap-1.5 rounded border p-1 ${activeTheme.panelGlass}`}>
               {CHANNELS.map((channel) => (
                 <button
@@ -1255,7 +1305,9 @@ function Chat() {
                   </section>
                 ) : null}
                 <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                  <p className="text-xs font-semibold">{activeChannel === 'dm' ? 'Direct message threads' : 'Room list'}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">
+                    {activeChannel === 'dm' ? 'Direct Messages' : 'Zip Rooms'}
+                  </p>
                   {conversationList.length === 0 ? (
                     <p className="mt-2 text-xs opacity-80">No conversations available here yet.</p>
                   ) : (
@@ -1467,7 +1519,9 @@ function Chat() {
 
         <aside className={`hidden min-h-0 flex-col rounded-2xl border p-2 md:p-3 lg:flex ${activeTheme.panel}`}>
           <div className={`sticky top-0 z-10 rounded border p-3 ${activeTheme.panelGlass}`}>
-            <h3 className="font-semibold">Conversation Details</h3>
+            <h3 className="font-semibold uppercase tracking-[0.1em]">
+              {activeConversation?.type === 'dm' ? 'DM Security' : 'Conversation Details'}
+            </h3>
             {activeConversation ? (
               <>
                 <p className="text-xs opacity-80">{getConversationLabel(activeConversation)}</p>
@@ -1476,7 +1530,12 @@ function Chat() {
             ) : (
               <p className="text-xs opacity-80">Select a room to view details.</p>
             )}
-            <p className="mt-2 text-xs opacity-80">About: Refreshed glass-style workspace focused on readability and quick access to actions.</p>
+            {activeConversation?.type === 'dm' ? (
+              <>
+                <p className="mt-2 text-xs opacity-80">Encryption: E2EE AES-256</p>
+                <p className="text-xs opacity-80">Unlock Timeout: {unlockDurationMinutes}m</p>
+              </>
+            ) : null}
           </div>
 
           <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">

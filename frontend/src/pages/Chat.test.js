@@ -333,7 +333,7 @@ describe('Chat zip room indicator', () => {
 
     const desktopGrid = container.querySelector('div.grid.flex-1.min-h-0');
     expect(desktopGrid).not.toBeNull();
-    expect(desktopGrid.className).toContain('lg:grid-cols-[1.7fr_8fr_2fr]');
+    expect(desktopGrid.className).toContain('lg:grid-cols-[56px_1.8fr_8fr_2.2fr]');
 
     const emptyMessages = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'No messages yet.');
     expect(emptyMessages).not.toBeUndefined();
@@ -365,7 +365,7 @@ describe('Chat zip room indicator', () => {
 
     const themeSelect = container.querySelector('select');
     expect(themeSelect).not.toBeNull();
-    expect(themeSelect.value).toBe('classic');
+    expect(themeSelect.value).toBe('midnight');
     expect(localStorage.getItem('chatTheme')).toBeNull();
 
     await act(async () => {
@@ -422,7 +422,7 @@ describe('Chat zip room indicator', () => {
 
     const themeSelect = container.querySelector('select');
     expect(themeSelect).not.toBeNull();
-    expect(themeSelect.value).toBe('classic');
+    expect(themeSelect.value).toBe('midnight');
   });
 
   it('sends transformed slash command content with selected name color', async () => {
