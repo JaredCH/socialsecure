@@ -318,6 +318,38 @@ describe('Chat zip room indicator', () => {
     ]);
   });
 
+  it('renders channel tabs, room info, and open chat tabs in one menu bar', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const menuBar = container.querySelector('[data-chat-menu-bar]');
+    expect(menuBar).not.toBeNull();
+
+    const channelTabs = menuBar.querySelector('[data-chat-channel-tabs]');
+    expect(channelTabs).not.toBeNull();
+    expect(Array.from(channelTabs.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
+      'Chat',
+      'Direct Messages'
+    ]);
+
+    expect(menuBar.textContent).toContain('Zip 02115');
+    expect(menuBar.textContent).toContain('Live conversation');
+    expect(menuBar.querySelector('[data-open-chat-tab="Zip 02115"]')).not.toBeNull();
+    expect(menuBar.textContent).toContain('1/6');
+  });
+
   it('renders alphabetical state chats with county rooms and a topics dropdown', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }

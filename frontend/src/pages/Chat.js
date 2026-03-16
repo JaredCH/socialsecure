@@ -191,6 +191,11 @@ const getChatTabTypeLabel = (conversation) => {
   if (isRoomConversation(conversation)) return 'Room';
   return 'Zip';
 };
+const getConversationTabIcon = (conversation) => {
+  if (conversation?.type === 'dm') return '✉️';
+  if (isRoomConversation(conversation)) return '#';
+  return '📍';
+};
 const addCurrentUserToRoomEntry = (entry, profileId) => {
   const normalizedProfileId = normalizeId(profileId);
   if (String(entry?._id || '') === '') return entry;
@@ -1441,6 +1446,10 @@ function Chat() {
     if (activeConversation.type === 'dm') return activeConversation.peer || null;
     return null;
   }, [activeConversation]);
+  const activeMenuLabel = activeConversation
+    ? getConversationLabel(activeConversation)
+    : (activeChannel === 'dm' ? 'Direct Messages' : (resolvedZipCode ? `Zip ${resolvedZipCode}` : 'Secure Chat'));
+  const activeMenuIcon = activeConversation ? getConversationTabIcon(activeConversation) : (activeChannel === 'dm' ? '✉️' : '💬');
 
   if (loadingHub) {
     return (
@@ -1452,17 +1461,38 @@ function Chat() {
 
   return (
     <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${activeTheme.shell}`}>
-      <header className={`border-b px-3 py-2 md:px-4 md:py-2.5 ${activeTheme.panelGlass}`}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Secure Chat</h2>
-            <p className="truncate text-[10px] opacity-80 md:text-xs">
-              @{profile?.username || 'you'}{resolvedZipCode ? ` • Zip ${resolvedZipCode}` : ''}
-            </p>
+      <header className={`sticky top-0 z-40 border-b px-2 py-1.5 md:px-3 md:py-2 ${activeTheme.panelGlass}`} data-chat-menu-bar>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setMobileWorkspaceOpen(false)}
+            className={[
+              mobileWorkspaceOpen ? 'inline-flex' : 'hidden',
+              `items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold lg:hidden ${activeTheme.subtle}`
+            ].join(' ')}
+            aria-label="Back to conversations"
+          >
+            <span aria-hidden="true">←</span>
+            <span>Back</span>
+          </button>
+
+          <div className={`inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border px-2.5 py-1 ${activeTheme.panel}`}>
+            <span aria-hidden="true" className="text-xs">{activeMenuIcon}</span>
+            {activeConversation?.type === 'dm' && activeConversationUser?.username ? (
+              <a
+                href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
+                className={`truncate text-xs font-semibold ${activeTheme.senderAccent} hover:opacity-80`}
+                aria-label={`Open @${activeConversationUser.username} social page`}
+              >
+                @{activeConversationUser.username}
+              </a>
+            ) : (
+              <span className="truncate text-xs font-semibold">{activeMenuLabel}</span>
+            )}
+            {activeConversation ? <span className="hidden text-[10px] font-mono opacity-70 sm:inline">Live conversation</span> : null}
           </div>
-        </div>
-        <div className="mt-2">
-          <div className={`grid grid-cols-2 gap-1.5 rounded-xl border p-1 ${activeTheme.panel}`}>
+
+          <div className={`inline-flex items-center gap-1 rounded-full border p-0.5 ${activeTheme.panel}`} data-chat-channel-tabs>
             {CHANNELS.map((channel) => (
               <button
                 key={channel.key}
@@ -1472,7 +1502,7 @@ function Chat() {
                   setMobileWorkspaceOpen(false);
                 }}
                 className={[
-                  'rounded-lg px-3 py-2 text-xs font-semibold transition',
+                  'rounded-full px-2.5 py-1 text-[10px] font-semibold transition sm:px-3 sm:text-xs',
                   activeChannel === channel.key ? activeTheme.subtle : 'opacity-80 hover:opacity-100'
                 ].join(' ')}
               >
@@ -1480,7 +1510,136 @@ function Chat() {
               </button>
             ))}
           </div>
+
+          {resolvedZipCode ? (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${activeTheme.panel}`}>
+              <span aria-hidden="true">📍</span>
+              <span>Zip {resolvedZipCode}</span>
+            </span>
+          ) : null}
+
+          {activeConversation ? (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${activeTheme.panel}`}>
+              <span className={`h-2 w-2 rounded-full ${conversationPresence.tone}`} />
+              {conversationPresence.label}
+            </span>
+          ) : null}
+
+          <div className="relative ml-auto">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setThemeMenuOpen((open) => !open);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold sm:text-xs ${activeTheme.subtle}`}
+              aria-label="Open chat theme menu"
+              aria-expanded={themeMenuOpen}
+            >
+              <span aria-hidden="true">🎨</span>
+              <span>Theme</span>
+            </button>
+            {themeMenuOpen ? (
+              <div
+                className={`absolute right-0 top-10 z-50 min-w-44 rounded-xl border p-1.5 text-xs shadow-xl ${activeTheme.panelGlass}`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {CHAT_THEMES.map((themeOption) => (
+                  <button
+                    key={themeOption.key}
+                    type="button"
+                    onClick={() => {
+                      handleThemeChange(themeOption.key);
+                      setThemeMenuOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded px-2 py-1 text-left hover:opacity-80 ${theme === themeOption.key ? 'font-semibold' : ''}`}
+                  >
+                    <span>{themeOption.label}</span>
+                    {theme === themeOption.key ? <span>✓</span> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <label className="sr-only" htmlFor="chat-theme-select-fallback">Theme</label>
+          <select
+            id="chat-theme-select-fallback"
+            value={theme}
+            onChange={(event) => handleThemeChange(event.target.value)}
+            className="sr-only"
+          >
+            {CHAT_THEMES.map((themeOption) => (
+              <option key={themeOption.key} value={themeOption.key}>
+                {themeOption.label}
+              </option>
+            ))}
+          </select>
+
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.panel}`}>
+            <span className={activeTheme.senderAccent}>Aa</span>
+            <span className="hidden sm:inline">Theme-tuned accents</span>
+            <span className="sm:hidden">Accent</span>
+          </span>
+
+          {activeConversationUser?.username ? (
+            <a
+              href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
+              className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.subtle}`}
+              aria-label={`View @${activeConversationUser.username} profile`}
+            >
+              👤
+            </a>
+          ) : null}
         </div>
+
+        {openChatTabs.length > 0 ? (
+          <div className="mt-1 overflow-x-auto pb-0.5" data-open-chat-tabs>
+            <div className="flex min-w-max items-center gap-1">
+              {openChatTabs.map((conversation) => {
+                const conversationId = String(conversation._id);
+                const selected = conversationId === String(activeConversationId);
+                const label = getConversationLabel(conversation);
+                return (
+                  <div
+                    key={`open-chat-tab-${conversationId}`}
+                    className={`flex items-stretch rounded-full border ${selected ? activeTheme.subtle : activeTheme.panelGlass}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openConversationById(conversationId)}
+                      className="inline-flex min-w-0 max-w-[10rem] items-center gap-1.5 px-2.5 py-1 text-left text-[11px] font-semibold"
+                      data-open-chat-tab={label}
+                      title={`${getChatTabTypeLabel(conversation)} · ${label}`}
+                    >
+                      <span aria-hidden="true" className="shrink-0 text-[10px] opacity-75">{getConversationTabIcon(conversation)}</span>
+                      <span className="truncate">{label}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCloseOpenTab(conversationId)}
+                      className="border-l px-2 text-[11px] opacity-80 hover:opacity-100"
+                      aria-label={`Close ${label} tab`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+              <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.panel}`}>
+                {openChatTabs.length}/{MAX_OPEN_CHAT_TABS}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {activeConversation?.type === 'dm' ? (
+          <div className={`mt-1 rounded-full border px-2 py-1 text-[10px] ${activeTheme.panelGlass}`}>
+            {profile?.hasPGP
+              ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
+              : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
+          </div>
+        ) : null}
       </header>
 
       <div className="grid flex-1 min-h-0 grid-cols-1 gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[2.6fr_8fr_2.2fr]">
@@ -1826,151 +1985,6 @@ function Chat() {
             activeTheme.panel
           ].join(' ')}
         >
-          <header className={`relative sticky top-0 z-40 mb-2 rounded border px-2 py-1.5 ${activeTheme.panelGlass}`}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMobileWorkspaceOpen(false)}
-                  className={`rounded border px-2 py-1 text-xs lg:hidden ${activeTheme.subtle}`}
-                  aria-label="Back to conversations"
-                >
-                  ← Back
-                </button>
-                <div className="min-w-0">
-                  {activeConversation?.type === 'dm' && activeConversationUser?.username ? (
-                    <a
-                      href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
-                      className={`inline-flex max-w-full items-center gap-1 truncate text-sm font-semibold ${activeTheme.senderAccent} hover:opacity-80`}
-                      aria-label={`Open @${activeConversationUser.username} social page`}
-                    >
-                      <span className="truncate">@{activeConversationUser.username}</span>
-                    </a>
-                  ) : (
-                    <h3 className="text-sm font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
-                  )}
-                  <p className="text-xs font-mono opacity-75">Live conversation</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setThemeMenuOpen((open) => !open);
-                    }}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${activeTheme.subtle}`}
-                    aria-label="Open chat theme menu"
-                    aria-expanded={themeMenuOpen}
-                  >
-                    <span aria-hidden="true">🎨</span>
-                    <span>Theme</span>
-                  </button>
-                  {themeMenuOpen ? (
-                    <div
-                      className={`absolute right-0 top-11 z-50 min-w-44 rounded-xl border p-1.5 text-xs shadow-xl ${activeTheme.panelGlass}`}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {CHAT_THEMES.map((themeOption) => (
-                        <button
-                          key={themeOption.key}
-                          type="button"
-                          onClick={() => {
-                            handleThemeChange(themeOption.key);
-                            setThemeMenuOpen(false);
-                          }}
-                          className={`flex w-full items-center justify-between rounded px-2 py-1 text-left hover:opacity-80 ${theme === themeOption.key ? 'font-semibold' : ''}`}
-                        >
-                          <span>{themeOption.label}</span>
-                          {theme === themeOption.key ? <span>✓</span> : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                <label className="sr-only" htmlFor="chat-theme-select-fallback">Theme</label>
-                <select
-                  id="chat-theme-select-fallback"
-                  value={theme}
-                  onChange={(event) => handleThemeChange(event.target.value)}
-                  className="sr-only"
-                >
-                  {CHAT_THEMES.map((themeOption) => (
-                    <option key={themeOption.key} value={themeOption.key}>
-                      {themeOption.label}
-                    </option>
-                  ))}
-                </select>
-                <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold ${activeTheme.panel}`}>
-                  <span className={activeTheme.senderAccent}>Aa</span>
-                  <span>Theme-tuned accents</span>
-                </span>
-                {activeConversationUser?.username ? (
-                  <a
-                    href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
-                    className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle}`}
-                    aria-label={`View @${activeConversationUser.username} profile`}
-                  >
-                    👤
-                  </a>
-                ) : null}
-                {activeConversation ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
-                    <span className={`h-2 w-2 rounded-full ${conversationPresence.tone}`} />
-                    {conversationPresence.label}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            {activeConversation?.type === 'dm' ? (
-              <div className={`mt-2 rounded border px-2 py-1 text-[10px] ${activeTheme.panelGlass}`}>
-                {profile?.hasPGP
-                  ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
-                  : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
-              </div>
-            ) : null}
-          </header>
-
-          {openChatTabs.length > 0 ? (
-            <div className="mb-2 overflow-x-auto" data-open-chat-tabs>
-              <div className="flex min-w-max items-center gap-1">
-                {openChatTabs.map((conversation) => {
-                  const conversationId = String(conversation._id);
-                  const selected = conversationId === String(activeConversationId);
-                  const label = getConversationLabel(conversation);
-                  return (
-                    <div
-                      key={`open-chat-tab-${conversationId}`}
-                      className={`flex items-stretch rounded-xl border ${selected ? activeTheme.subtle : activeTheme.panelGlass}`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => openConversationById(conversationId)}
-                        className="min-w-[8rem] max-w-[12rem] px-3 py-1.5 text-left"
-                        data-open-chat-tab={label}
-                      >
-                        <p className="truncate text-xs font-semibold">{label}</p>
-                        <p className="text-[10px] uppercase opacity-70">{getChatTabTypeLabel(conversation)}</p>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCloseOpenTab(conversationId)}
-                        className="border-l px-2 text-xs opacity-80 hover:opacity-100"
-                        aria-label={`Close ${label} tab`}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  );
-                })}
-                <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.panelGlass}`}>
-                  {openChatTabs.length}/{MAX_OPEN_CHAT_TABS}
-                </span>
-              </div>
-            </div>
-          ) : null}
-
           {messagesError ? (
             <div className="mb-3 rounded border border-red-400 bg-red-50 p-2 text-sm text-red-700">{messagesError}</div>
           ) : null}
