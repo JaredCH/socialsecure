@@ -42,78 +42,78 @@ const CHAT_THEMES = [
   {
     key: 'classic',
     label: 'Classic Light',
-    shell: 'bg-slate-100 text-slate-900',
-    panel: 'border-slate-300 bg-white/80 backdrop-blur-sm',
-    panelGlass: 'border-slate-300 bg-white/85 backdrop-blur-md',
-    accent: 'border border-blue-700 bg-blue-700 text-white hover:bg-blue-800',
-    subtle: 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200',
-    input: 'border-slate-300 bg-white text-slate-900',
-    messagesShell: 'border-slate-300 bg-gradient-to-b from-white to-slate-100',
+    shell: 'bg-gradient-to-br from-slate-100 via-white to-slate-200 text-slate-900',
+    panel: 'border-slate-300/90 bg-white/75 backdrop-blur-xl shadow-[0_12px_30px_rgba(15,23,42,0.08)]',
+    panelGlass: 'border-slate-300/90 bg-white/85 backdrop-blur-2xl shadow-[0_12px_30px_rgba(15,23,42,0.10)]',
+    accent: 'border border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
+    subtle: 'border-slate-300 bg-slate-100/95 text-slate-700 hover:bg-slate-200',
+    input: 'border-slate-300 bg-white/95 text-slate-900',
+    messagesShell: 'border-slate-300 bg-gradient-to-b from-white via-slate-50 to-slate-100',
     messageOwn: 'border-blue-700 bg-blue-100',
     messageOther: 'border-slate-400 bg-white'
   },
   {
     key: 'midnight',
     label: 'Midnight',
-    shell: 'bg-slate-950 text-slate-100',
-    panel: 'border-cyan-700/70 bg-slate-900/85 backdrop-blur-sm',
-    panelGlass: 'border-cyan-700/70 bg-slate-900/90 backdrop-blur-md',
+    shell: 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100',
+    panel: 'border-cyan-700/70 bg-slate-900/70 backdrop-blur-xl shadow-[0_16px_35px_rgba(8,145,178,0.22)]',
+    panelGlass: 'border-cyan-700/70 bg-slate-900/80 backdrop-blur-2xl shadow-[0_16px_35px_rgba(8,145,178,0.26)]',
     accent: 'border border-cyan-400 bg-cyan-400 text-slate-950 hover:bg-cyan-300',
-    subtle: 'border-cyan-800 bg-slate-800 text-cyan-100 hover:bg-slate-700',
-    input: 'border-cyan-700 bg-slate-950 text-cyan-100',
-    messagesShell: 'border-cyan-700 bg-gradient-to-b from-slate-900 to-slate-950',
+    subtle: 'border-cyan-800 bg-slate-800/90 text-cyan-100 hover:bg-slate-700',
+    input: 'border-cyan-700 bg-slate-950/95 text-cyan-100',
+    messagesShell: 'border-cyan-700 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950',
     messageOwn: 'border-cyan-400 bg-cyan-400/20',
     messageOther: 'border-slate-600 bg-slate-800'
   },
   {
     key: 'ocean',
     label: 'Ocean',
-    shell: 'bg-cyan-950 text-cyan-50',
-    panel: 'border-cyan-700 bg-cyan-900/85 backdrop-blur-sm',
-    panelGlass: 'border-cyan-600 bg-cyan-900/90 backdrop-blur-md',
+    shell: 'bg-gradient-to-br from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50',
+    panel: 'border-cyan-700 bg-cyan-900/70 backdrop-blur-xl shadow-[0_16px_35px_rgba(14,116,144,0.28)]',
+    panelGlass: 'border-cyan-600 bg-cyan-900/80 backdrop-blur-2xl shadow-[0_16px_35px_rgba(14,116,144,0.32)]',
     accent: 'border border-cyan-300 bg-cyan-300 text-cyan-950 hover:bg-cyan-200',
-    subtle: 'border-cyan-700 bg-cyan-800 text-cyan-50 hover:bg-cyan-700',
-    input: 'border-cyan-600 bg-cyan-950 text-cyan-50',
-    messagesShell: 'border-cyan-700 bg-gradient-to-b from-cyan-900 to-cyan-950',
+    subtle: 'border-cyan-700 bg-cyan-800/95 text-cyan-50 hover:bg-cyan-700',
+    input: 'border-cyan-600 bg-cyan-950/95 text-cyan-50',
+    messagesShell: 'border-cyan-700 bg-gradient-to-b from-cyan-900 via-cyan-900 to-cyan-950',
     messageOwn: 'border-cyan-300 bg-cyan-300/20',
     messageOther: 'border-cyan-700 bg-cyan-900'
   },
   {
     key: 'terminal',
     label: 'Terminal',
-    shell: 'bg-zinc-950 text-lime-200',
-    panel: 'border-lime-700 bg-zinc-900/90 backdrop-blur-sm',
-    panelGlass: 'border-lime-700 bg-zinc-900/95 backdrop-blur-md',
+    shell: 'bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-lime-200',
+    panel: 'border-lime-700 bg-zinc-900/75 backdrop-blur-xl shadow-[0_16px_35px_rgba(77,124,15,0.25)]',
+    panelGlass: 'border-lime-700 bg-zinc-900/85 backdrop-blur-2xl shadow-[0_16px_35px_rgba(77,124,15,0.3)]',
     accent: 'border border-lime-500 bg-lime-500 text-zinc-950 hover:bg-lime-400',
-    subtle: 'border-lime-800 bg-zinc-800 text-lime-200 hover:bg-zinc-700',
-    input: 'border-lime-700 bg-zinc-950 text-lime-200',
-    messagesShell: 'border-lime-700 bg-zinc-950',
+    subtle: 'border-lime-800 bg-zinc-800/95 text-lime-200 hover:bg-zinc-700',
+    input: 'border-lime-700 bg-zinc-950/95 text-lime-200',
+    messagesShell: 'border-lime-700 bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950',
     messageOwn: 'border-lime-500 bg-lime-500/20',
     messageOther: 'border-lime-800 bg-zinc-900'
   },
   {
     key: 'sunset',
     label: 'Sunset',
-    shell: 'bg-orange-50 text-orange-950',
-    panel: 'border-orange-300 bg-white/85 backdrop-blur-sm',
-    panelGlass: 'border-orange-300 bg-white/95 backdrop-blur-md',
+    shell: 'bg-gradient-to-br from-orange-50 via-amber-50 to-rose-100 text-orange-950',
+    panel: 'border-orange-300/90 bg-white/80 backdrop-blur-xl shadow-[0_14px_32px_rgba(194,65,12,0.14)]',
+    panelGlass: 'border-orange-300/90 bg-white/88 backdrop-blur-2xl shadow-[0_14px_32px_rgba(194,65,12,0.18)]',
     accent: 'border border-orange-600 bg-orange-600 text-white hover:bg-orange-700',
-    subtle: 'border-orange-300 bg-orange-100 text-orange-900 hover:bg-orange-200',
-    input: 'border-orange-300 bg-white text-orange-950',
-    messagesShell: 'border-orange-300 bg-gradient-to-b from-white to-orange-100',
+    subtle: 'border-orange-300 bg-orange-100/95 text-orange-900 hover:bg-orange-200',
+    input: 'border-orange-300 bg-white/95 text-orange-950',
+    messagesShell: 'border-orange-300 bg-gradient-to-b from-white via-orange-50 to-orange-100',
     messageOwn: 'border-orange-600 bg-orange-200',
     messageOther: 'border-orange-300 bg-white'
   },
   {
     key: 'lavender',
     label: 'Lavender',
-    shell: 'bg-violet-50 text-violet-950',
-    panel: 'border-violet-300 bg-white/85 backdrop-blur-sm',
-    panelGlass: 'border-violet-300 bg-white/95 backdrop-blur-md',
+    shell: 'bg-gradient-to-br from-violet-50 via-fuchsia-50 to-violet-100 text-violet-950',
+    panel: 'border-violet-300/90 bg-white/80 backdrop-blur-xl shadow-[0_14px_32px_rgba(109,40,217,0.12)]',
+    panelGlass: 'border-violet-300/90 bg-white/90 backdrop-blur-2xl shadow-[0_14px_32px_rgba(109,40,217,0.16)]',
     accent: 'border border-violet-600 bg-violet-600 text-white hover:bg-violet-700',
-    subtle: 'border-violet-300 bg-violet-100 text-violet-900 hover:bg-violet-200',
-    input: 'border-violet-300 bg-white text-violet-950',
-    messagesShell: 'border-violet-300 bg-gradient-to-b from-white to-violet-100',
+    subtle: 'border-violet-300 bg-violet-100/95 text-violet-900 hover:bg-violet-200',
+    input: 'border-violet-300 bg-white/95 text-violet-950',
+    messagesShell: 'border-violet-300 bg-gradient-to-b from-white via-violet-50 to-violet-100',
     messageOwn: 'border-violet-600 bg-violet-200',
     messageOther: 'border-violet-300 bg-white'
   }
@@ -1115,22 +1115,22 @@ function Chat() {
 
   return (
     <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${activeTheme.shell}`}>
-      <header className={`border-b px-2 py-1.5 md:px-3 ${activeTheme.panelGlass}`}>
+      <header className={`border-b px-3 py-2 md:px-4 md:py-2.5 ${activeTheme.panelGlass}`}>
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Chat</h2>
-            <p className="truncate text-[10px] opacity-80">
+            <h2 className="truncate text-sm font-semibold tracking-wide uppercase">Chat Workspace</h2>
+            <p className="truncate text-[10px] opacity-80 md:text-xs">
               @{profile?.username || 'you'}{resolvedZipCode ? ` • Zip ${resolvedZipCode}` : ''}
             </p>
           </div>
         </div>
       </header>
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[1.5fr_9fr_1.5fr]">
+      <div className="grid flex-1 min-h-0 grid-cols-1 gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[1.7fr_8fr_2fr]">
         <aside
           className={[
             mobileWorkspaceOpen ? 'hidden' : 'flex',
-            'min-h-0 flex-col border-b p-2 md:p-3 lg:flex lg:border-b-0 lg:border-r',
+            'min-h-0 flex-col rounded-2xl border p-2 md:p-3 lg:flex',
             activeTheme.panel
           ].join(' ')}
         >
@@ -1295,7 +1295,7 @@ function Chat() {
         <section
           className={[
             mobileWorkspaceOpen ? 'flex' : 'hidden',
-            'min-h-0 flex-col border-b px-2 pb-2 pt-1 md:p-3 lg:flex lg:border-b-0 lg:border-r',
+            'min-h-0 flex-col rounded-2xl border px-2 pb-2 pt-1 md:p-3 lg:flex',
             activeTheme.panel
           ].join(' ')}
         >
@@ -1310,9 +1310,9 @@ function Chat() {
                 >
                   ← Back
                 </button>
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-sm font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
-                  <p className="text-[10px] font-mono opacity-75">Mobile chat</p>
+                  <p className="text-[10px] font-mono opacity-75 md:text-[11px]">Live conversation</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -1465,7 +1465,7 @@ function Chat() {
           </div>
         </section>
 
-        <aside className={`hidden min-h-0 flex-col p-2 md:p-3 lg:flex ${activeTheme.panel}`}>
+        <aside className={`hidden min-h-0 flex-col rounded-2xl border p-2 md:p-3 lg:flex ${activeTheme.panel}`}>
           <div className={`sticky top-0 z-10 rounded border p-3 ${activeTheme.panelGlass}`}>
             <h3 className="font-semibold">Conversation Details</h3>
             {activeConversation ? (
@@ -1476,7 +1476,7 @@ function Chat() {
             ) : (
               <p className="text-xs opacity-80">Select a room to view details.</p>
             )}
-            <p className="mt-2 text-xs opacity-80">About: Retro-modern workspace with neon borders and classic buddy presence markers.</p>
+            <p className="mt-2 text-xs opacity-80">About: Refreshed glass-style workspace focused on readability and quick access to actions.</p>
           </div>
 
           <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">

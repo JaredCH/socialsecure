@@ -333,7 +333,7 @@ describe('Chat zip room indicator', () => {
 
     const desktopGrid = container.querySelector('div.grid.flex-1.min-h-0');
     expect(desktopGrid).not.toBeNull();
-    expect(desktopGrid.className).toContain('lg:grid-cols-[1.5fr_9fr_1.5fr]');
+    expect(desktopGrid.className).toContain('lg:grid-cols-[1.7fr_8fr_2fr]');
 
     const emptyMessages = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'No messages yet.');
     expect(emptyMessages).not.toBeUndefined();
