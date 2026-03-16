@@ -696,6 +696,8 @@ export const moderationAPI = {
   removeInfraction: (userId, infractionIndex) => api.delete(`/moderation/control-panel/users/${encodeURIComponent(userId)}/infractions/${encodeURIComponent(infractionIndex)}`),
   deletePostByAdmin: (postId) => api.delete(`/moderation/control-panel/posts/${encodeURIComponent(postId)}`),
   deleteMessageByAdmin: (messageId, type = 'room') => api.delete(`/moderation/control-panel/messages/${encodeURIComponent(messageId)}?type=${encodeURIComponent(type)}`),
+  removeMessageByAdmin: (messageId, type = 'room') => api.post(`/moderation/control-panel/messages/${encodeURIComponent(messageId)}/remove?type=${encodeURIComponent(type)}`),
+  restoreMessageByAdmin: (messageId, type = 'room') => api.delete(`/moderation/control-panel/messages/${encodeURIComponent(messageId)}/remove?type=${encodeURIComponent(type)}`),
   deleteUserByAdmin: (userId) => api.delete(`/moderation/control-panel/users/${encodeURIComponent(userId)}`),
   getContentFilter: () => api.get('/moderation/control-panel/content-filter'),
   updateContentFilter: (data) => api.put('/moderation/control-panel/content-filter', data),

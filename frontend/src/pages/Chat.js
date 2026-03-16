@@ -379,6 +379,8 @@ function Chat() {
   }, [search]);
   const [passwordInput, setPasswordInput] = useState('');
   const [reactionByMessageId, setReactionByMessageId] = useState({});
+  const [adminMessageActionIds, setAdminMessageActionIds] = useState([]);
+  const [adminMuteActionUserIds, setAdminMuteActionUserIds] = useState([]);
   const [userContextMenu, setUserContextMenu] = useState({
     open: false,
     x: 0,
@@ -1384,6 +1386,74 @@ function Chat() {
     });
   }, [profile?._id]);
 
+  const handleToggleAdminMessageRemoval = useCallback(async (message) => {
+    const messageId = String(message?._id || '').trim();
+    if (!profile?.isAdmin || !messageId || activeConversation?.type === 'dm') return;
+
+    const messageType = isRoomConversation(activeConversation) ? 'room' : 'conversation';
+    setAdminMessageActionIds((prev) => (prev.includes(messageId) ? prev : [...prev, messageId]));
+    try {
+      const response = message?.moderation?.removedByAdmin
+        ? await moderationAPI.restoreMessageByAdmin(messageId, messageType)
+        : await moderationAPI.removeMessageByAdmin(messageId, messageType);
+      setMessages((prev) => upsertConversationMessage(prev, response.data?.message || {}));
+      toast.success(message?.moderation?.removedByAdmin ? 'Message restored' : 'Message removed');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update message');
+    } finally {
+      setAdminMessageActionIds((prev) => prev.filter((entry) => entry !== messageId));
+    }
+  }, [activeConversation, profile?.isAdmin]);
+
+  const handleToggleAdminUserMute = useCallback(async (user) => {
+    const userId = String(user?._id || '').trim();
+    if (!profile?.isAdmin || !userId || userId === String(profile?._id || '')) return;
+
+    const isMuted = roomUsers.some((entry) => {
+      if (String(entry?._id || '') !== userId) return false;
+      const mutedUntilTs = new Date(entry?.mutedUntil || 0).getTime();
+      return Number.isFinite(mutedUntilTs) && mutedUntilTs > Date.now();
+    });
+    setAdminMuteActionUserIds((prev) => (prev.includes(userId) ? prev : [...prev, userId]));
+    try {
+      if (isMuted) {
+        await moderationAPI.unmuteUserByAdmin(userId);
+      } else {
+        await moderationAPI.muteUserByAdmin(userId, {
+          durationKey: '2h',
+          reason: 'Muted by site Admin from chat room'
+        });
+      }
+      setRoomUsers((prev) => {
+        const nextMutedUntil = isMuted ? null : new Date(Date.now() + (2 * 60 * 60 * 1000)).toISOString();
+        let found = false;
+        const nextUsers = prev.map((entry) => {
+          if (String(entry?._id || '') !== userId) return entry;
+          found = true;
+          return {
+            ...entry,
+            mutedUntil: nextMutedUntil
+          };
+        });
+        if (found) return nextUsers;
+        return [
+          ...nextUsers,
+          {
+            _id: userId,
+            username: user?.username || null,
+            realName: user?.realName || null,
+            mutedUntil: nextMutedUntil
+          }
+        ];
+      });
+      toast.success(isMuted ? 'User unmuted' : 'User muted for 2 hours');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update user mute');
+    } finally {
+      setAdminMuteActionUserIds((prev) => prev.filter((entry) => entry !== userId));
+    }
+  }, [profile?._id, profile?.isAdmin, roomUsers]);
+
   useEffect(() => {
     if (!userContextMenu.open) return undefined;
     const handleWindowClick = () => setUserContextMenu((prev) => ({ ...prev, open: false }));
@@ -1441,6 +1511,26 @@ function Chat() {
     if (activeConversation.type === 'dm') return activeConversation.peer || null;
     return null;
   }, [activeConversation]);
+  const adminMutedUserIds = useMemo(() => {
+    const now = Date.now();
+    return new Set(
+      (Array.isArray(roomUsers) ? roomUsers : [])
+        .filter((user) => {
+          const mutedUntilTs = new Date(user?.mutedUntil || 0).getTime();
+          return Number.isFinite(mutedUntilTs) && mutedUntilTs > now;
+        })
+        .map((user) => String(user?._id || ''))
+        .filter(Boolean)
+    );
+  }, [roomUsers]);
+  const adminProcessingMessageIds = useMemo(
+    () => new Set(adminMessageActionIds.map((messageId) => String(messageId || '')).filter(Boolean)),
+    [adminMessageActionIds]
+  );
+  const adminProcessingUserIds = useMemo(
+    () => new Set(adminMuteActionUserIds.map((userId) => String(userId || '')).filter(Boolean)),
+    [adminMuteActionUserIds]
+  );
 
   if (loadingHub) {
     return (
@@ -1991,6 +2081,12 @@ function Chat() {
               hasMoreMessages={messagesHasMore}
               onLoadOlderMessages={handleLoadOlderMessages}
               onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
+              showAdminActions={!!profile?.isAdmin && activeConversation?.type !== 'dm'}
+              adminMutedUserIds={adminMutedUserIds}
+              adminProcessingMessageIds={adminProcessingMessageIds}
+              adminProcessingUserIds={adminProcessingUserIds}
+              onToggleAdminMessageRemoval={handleToggleAdminMessageRemoval}
+              onToggleAdminUserMute={handleToggleAdminUserMute}
             />
             {activeConversation?.type === 'dm' && activeConversationId && !dmUnlockedByConversation[String(activeConversationId)] ? (
               <div

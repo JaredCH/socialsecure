@@ -19,11 +19,14 @@ const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
 const NewsPreferences = require('../models/NewsPreferences');
 const SiteContentFilter = require('../models/SiteContentFilter');
+const { emitChatMessage } = require('../services/realtime');
 const { normalizeFilterWords } = require('../utils/contentFilter');
 
 const REPORT_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const REPORT_LIMIT_MAX = 5;
+const ADMIN_REMOVED_MESSAGE_TEXT = 'Removed by site Admin';
 const CONTROL_PANEL_MUTE_DURATIONS = {
+  '2h': 2,
   '24h': 24,
   '48h': 48,
   '72h': 72,
@@ -107,6 +110,142 @@ const haversineMiles = (lat1, lon1, lat2, lon2) => {
 };
 const hasValidCoordinates = (entry = {}) => Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude);
 const toUniqueStrings = (values = []) => [...new Set(values.filter(Boolean))];
+const cloneModerationValue = (value) => {
+  if (value == null) return value;
+  return JSON.parse(JSON.stringify(value));
+};
+const clearRoomAudio = (message) => {
+  if (!message?.audio || typeof message.audio !== 'object') return;
+  message.audio.storageKey = null;
+  message.audio.url = null;
+  message.audio.durationMs = null;
+  message.audio.waveformBins = [];
+  message.audio.mimeType = null;
+  message.audio.sizeBytes = null;
+};
+const applyAdminMessageRemoval = (message, adminUserId) => {
+  if (!message) return;
+  const currentModeration = message.moderation?.toObject?.() || message.moderation || {};
+  const originalPayload = currentModeration.originalPayload || {
+    content: message.content ?? null,
+    messageType: message.messageType || 'text',
+    mediaType: message.mediaType ?? null,
+    audio: cloneModerationValue(message.audio ?? null),
+    commandData: cloneModerationValue(message.commandData ?? null),
+    senderNameColor: message.senderNameColor ?? null,
+    chatScope: message.chatScope ?? null,
+    encryptedContent: message.encryptedContent ?? null,
+    isEncrypted: !!message.isEncrypted,
+    e2ee: cloneModerationValue(message.e2ee ?? null)
+  };
+
+  message.moderation = {
+    ...currentModeration,
+    removedByAdmin: true,
+    removedByAdminAt: new Date(),
+    removedByAdminBy: adminUserId,
+    originalPayload
+  };
+  message.content = ADMIN_REMOVED_MESSAGE_TEXT;
+  message.messageType = 'text';
+  if ('mediaType' in message) {
+    message.mediaType = null;
+    clearRoomAudio(message);
+  }
+  if ('commandData' in message) {
+    message.commandData = null;
+  }
+  if ('senderNameColor' in message) {
+    message.senderNameColor = null;
+  }
+  if ('chatScope' in message && message.chatScope !== 'dm') {
+    message.chatScope = 'chat';
+  }
+  if ('encryptedContent' in message) {
+    message.encryptedContent = null;
+  }
+  if ('isEncrypted' in message) {
+    message.isEncrypted = false;
+  }
+  if ('e2ee' in message) {
+    message.e2ee = { enabled: false };
+  }
+};
+const restoreAdminMessageRemoval = (message) => {
+  if (!message?.moderation?.removedByAdmin || !message.moderation.originalPayload) {
+    return false;
+  }
+
+  const snapshot = message.moderation.originalPayload || {};
+  message.content = snapshot.content ?? '';
+  message.messageType = snapshot.messageType || 'text';
+  if ('mediaType' in message) {
+    message.mediaType = snapshot.mediaType ?? null;
+    const nextAudio = snapshot.audio || {};
+    if (message.audio && typeof message.audio === 'object') {
+      message.audio.storageKey = nextAudio.storageKey ?? null;
+      message.audio.url = nextAudio.url ?? null;
+      message.audio.durationMs = nextAudio.durationMs ?? null;
+      message.audio.waveformBins = Array.isArray(nextAudio.waveformBins) ? nextAudio.waveformBins : [];
+      message.audio.mimeType = nextAudio.mimeType ?? null;
+      message.audio.sizeBytes = nextAudio.sizeBytes ?? null;
+    }
+  }
+  if ('commandData' in message) {
+    message.commandData = cloneModerationValue(snapshot.commandData ?? null);
+  }
+  if ('senderNameColor' in message) {
+    message.senderNameColor = snapshot.senderNameColor ?? null;
+  }
+  if ('chatScope' in message && snapshot.chatScope) {
+    message.chatScope = snapshot.chatScope;
+  }
+  if ('encryptedContent' in message) {
+    message.encryptedContent = snapshot.encryptedContent ?? null;
+  }
+  if ('isEncrypted' in message) {
+    message.isEncrypted = !!snapshot.isEncrypted;
+  }
+  if ('e2ee' in message) {
+    message.e2ee = cloneModerationValue(snapshot.e2ee ?? { enabled: false });
+  }
+
+  message.moderation = {
+    ...(message.moderation?.toObject?.() || message.moderation || {}),
+    removedByAdmin: false,
+    removedByAdminAt: null,
+    removedByAdminBy: null,
+    originalPayload: null
+  };
+  return true;
+};
+const parseAdminMessageType = (value) => (String(value || 'room').toLowerCase() === 'conversation' ? 'conversation' : 'room');
+const getAdminMessageContext = async (messageId, type) => {
+  if (type === 'conversation') {
+    const message = await ConversationMessage.findById(messageId);
+    if (!message) return null;
+    const conversation = await ChatConversation.findById(message.conversationId).select('_id type participants').lean();
+    return { message, conversation };
+  }
+
+  const message = await ChatMessage.findById(messageId);
+  if (!message) return null;
+  const room = await ChatRoom.findById(message.roomId).select('_id members').lean();
+  return { message, room };
+};
+const emitAdminUpdatedMessage = ({ type, message, room, conversation }) => {
+  const messageDoc = message?.toObject ? message.toObject() : message;
+  const publicMessage = type === 'conversation'
+    ? ConversationMessage.toPublicMessageShape(messageDoc, { conversationType: conversation?.type || 'chat' })
+    : ChatMessage.toPublicMessageShape(messageDoc);
+  const targetUserIds = type === 'conversation'
+    ? (Array.isArray(conversation?.participants) ? conversation.participants : [])
+    : (Array.isArray(room?.members) ? room.members : []);
+  if (targetUserIds.length > 0) {
+    emitChatMessage({ userIds: targetUserIds, message: publicMessage });
+  }
+  return publicMessage;
+};
 const getSiteContentFilter = async () => {
   const existing = await SiteContentFilter.findOne({ key: 'global' }).lean();
   return {
@@ -1231,6 +1370,56 @@ router.delete('/control-panel/messages/:messageId', authenticateToken, requireAd
   } catch (error) {
     console.error('Control panel delete message error:', error);
     return res.status(500).json({ error: 'Failed to delete message' });
+  }
+});
+
+router.post('/control-panel/messages/:messageId/remove', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const messageType = parseAdminMessageType(req.query.type);
+    const context = await getAdminMessageContext(req.params.messageId, messageType);
+    if (!context?.message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    applyAdminMessageRemoval(context.message, req.user._id);
+    await context.message.save();
+    const message = emitAdminUpdatedMessage({
+      type: messageType,
+      message: context.message,
+      room: context.room,
+      conversation: context.conversation
+    });
+
+    return res.json({ success: true, message });
+  } catch (error) {
+    console.error('Control panel remove message error:', error);
+    return res.status(500).json({ error: 'Failed to remove message' });
+  }
+});
+
+router.delete('/control-panel/messages/:messageId/remove', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const messageType = parseAdminMessageType(req.query.type);
+    const context = await getAdminMessageContext(req.params.messageId, messageType);
+    if (!context?.message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    if (!restoreAdminMessageRemoval(context.message)) {
+      return res.status(400).json({ error: 'Message is not removed by admin' });
+    }
+    await context.message.save();
+    const message = emitAdminUpdatedMessage({
+      type: messageType,
+      message: context.message,
+      room: context.room,
+      conversation: context.conversation
+    });
+
+    return res.json({ success: true, message });
+  } catch (error) {
+    console.error('Control panel restore message error:', error);
+    return res.status(500).json({ error: 'Failed to restore message' });
   }
 });
 

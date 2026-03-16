@@ -37,7 +37,11 @@ jest.mock('../utils/api', () => ({
     getFriends: jest.fn()
   },
   moderationAPI: {
-    blockUser: jest.fn()
+    blockUser: jest.fn(),
+    muteUserByAdmin: jest.fn(),
+    unmuteUserByAdmin: jest.fn(),
+    removeMessageByAdmin: jest.fn(),
+    restoreMessageByAdmin: jest.fn()
   },
   userAPI: {}
 }));
@@ -208,6 +212,30 @@ describe('Chat zip room indicator', () => {
     friendsAPI.sendRequest.mockResolvedValue({ data: { success: true } });
     friendsAPI.getFriends.mockResolvedValue({ data: { friends: [] } });
     moderationAPI.blockUser.mockResolvedValue({ data: { success: true } });
+    moderationAPI.muteUserByAdmin.mockResolvedValue({ data: { success: true } });
+    moderationAPI.unmuteUserByAdmin.mockResolvedValue({ data: { success: true } });
+    moderationAPI.removeMessageByAdmin.mockResolvedValue({
+      data: {
+        message: {
+          _id: 'room-m-1',
+          content: 'Removed by site Admin',
+          moderation: { removedByAdmin: true, removedByAdminAt: new Date().toISOString() },
+          userId: { _id: 'u2', username: 'buddy' },
+          createdAt: new Date().toISOString()
+        }
+      }
+    });
+    moderationAPI.restoreMessageByAdmin.mockResolvedValue({
+      data: {
+        message: {
+          _id: 'room-m-1',
+          content: 'room ok',
+          moderation: { removedByAdmin: false, removedByAdminAt: null },
+          userId: { _id: 'u2', username: 'buddy' },
+          createdAt: new Date().toISOString()
+        }
+      }
+    });
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       writable: true,
@@ -1697,6 +1725,103 @@ describe('Chat zip room indicator', () => {
     });
 
     expect(container.querySelector('button[aria-label="Add Like reaction"]')).not.toBeNull();
+  });
+
+  it('shows admin remove and 2 hour mute controls with undo actions in room chats', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115', isAdmin: true } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({
+      data: {
+        messages: [{
+          _id: 'room-m-1',
+          content: 'room ok',
+          moderation: { removedByAdmin: false, removedByAdminAt: null },
+          userId: { _id: 'u2', username: 'buddy' },
+          createdAt: '2024-01-01T13:41:25'
+        }]
+      }
+    });
+    chatAPI.getConversationUsers.mockResolvedValue({
+      data: {
+        users: [
+          { _id: 'u1', username: 'alpha', mutedUntil: null },
+          { _id: 'u2', username: 'buddy', mutedUntil: null }
+        ]
+      }
+    });
+    moderationAPI.removeMessageByAdmin.mockResolvedValue({
+      data: {
+        message: {
+          _id: 'room-m-1',
+          content: 'Removed by site Admin',
+          moderation: { removedByAdmin: true, removedByAdminAt: '2024-01-01T14:00:00.000Z' },
+          userId: { _id: 'u2', username: 'buddy' },
+          createdAt: '2024-01-01T13:41:25'
+        }
+      }
+    });
+    moderationAPI.restoreMessageByAdmin.mockResolvedValue({
+      data: {
+        message: {
+          _id: 'room-m-1',
+          content: 'room ok',
+          moderation: { removedByAdmin: false, removedByAdminAt: null },
+          userId: { _id: 'u2', username: 'buddy' },
+          createdAt: '2024-01-01T13:41:25'
+        }
+      }
+    });
+
+    await renderChat();
+    await act(async () => {
+      await flush();
+    });
+
+    const removeButton = container.querySelector('button[aria-label="Remove message"]');
+    const muteButton = container.querySelector('button[aria-label="Mute user for 2 hours"]');
+    expect(removeButton).not.toBeNull();
+    expect(muteButton).not.toBeNull();
+
+    await act(async () => {
+      removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(moderationAPI.removeMessageByAdmin).toHaveBeenCalledWith('room-m-1', 'conversation');
+    expect(container.textContent).toContain('Removed by site Admin');
+    expect(container.querySelector('button[aria-label="Undo remove message"]')).not.toBeNull();
+
+    await act(async () => {
+      muteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(moderationAPI.muteUserByAdmin).toHaveBeenCalledWith('u2', expect.objectContaining({ durationKey: '2h' }));
+    expect(container.querySelector('button[aria-label="Undo 2 hour mute"]')).not.toBeNull();
+
+    const undoRemoveButton = container.querySelector('button[aria-label="Undo remove message"]');
+    const undoMuteButton = container.querySelector('button[aria-label="Undo 2 hour mute"]');
+
+    await act(async () => {
+      undoRemoveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      undoMuteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(moderationAPI.restoreMessageByAdmin).toHaveBeenCalledWith('room-m-1', 'conversation');
+    expect(moderationAPI.unmuteUserByAdmin).toHaveBeenCalledWith('u2');
+    expect(container.querySelector('button[aria-label="Remove message"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Mute user for 2 hours"]')).not.toBeNull();
   });
 
   it('renders compact timestamps for chat messages', async () => {

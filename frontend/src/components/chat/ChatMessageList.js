@@ -20,7 +20,13 @@ function ChatMessageList({
   longPressDelayMs,
   onVisibleMessageIdsChange,
   hasMoreMessages,
-  onLoadOlderMessages
+  onLoadOlderMessages,
+  showAdminActions = false,
+  adminMutedUserIds,
+  adminProcessingMessageIds,
+  adminProcessingUserIds,
+  onToggleAdminMessageRemoval,
+  onToggleAdminUserMute
 }) {
   const scrollRef = useRef(null);
   const previousConversationIdRef = useRef(String(conversationId || ''));
@@ -168,13 +174,19 @@ function ChatMessageList({
               censorSensitiveWords={censorSensitiveWords}
               theme={theme}
               onOpenUserMenu={onOpenUserMenu}
-              reactionsByType={reactionsByMessageId?.[String(message._id)] || {}}
-              reactionOptions={reactionOptions}
-              onToggleReaction={onToggleReaction}
-              longPressDelayMs={longPressDelayMs}
-            />
-          ))
-        )}
+               reactionsByType={reactionsByMessageId?.[String(message._id)] || {}}
+               reactionOptions={reactionOptions}
+               onToggleReaction={onToggleReaction}
+               longPressDelayMs={longPressDelayMs}
+               showAdminActions={showAdminActions}
+               adminMutedUserIds={adminMutedUserIds}
+               adminProcessingMessageIds={adminProcessingMessageIds}
+               adminProcessingUserIds={adminProcessingUserIds}
+               onToggleAdminMessageRemoval={onToggleAdminMessageRemoval}
+               onToggleAdminUserMute={onToggleAdminUserMute}
+             />
+           ))
+         )}
       </div>
     </div>
   );
