@@ -124,6 +124,7 @@ export const onFeedInteraction = (callback) => bindListener('feed:interaction', 
 export const onChatMessage = (callback) => bindListener('chat:message', callback);
 export const onTyping = (callback) => bindListener('typing', callback);
 export const onFriendPresence = (callback) => bindListener('friend:presence', callback);
+export const onPresenceUpdate = (callback) => bindListener('presence:update', callback);
 
 export const disconnectRealtime = () => {
   if (!socket) return;

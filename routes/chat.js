@@ -20,7 +20,7 @@ const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const SiteContentFilter = require('../models/SiteContentFilter');
 const { createNotification } = require('../services/notifications');
-const { emitChatMessage } = require('../services/realtime');
+const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload } = require('../services/realtime');
 const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
 const {
   findExactFilterWord,
@@ -386,7 +386,7 @@ const resolveProfileThreadPermissions = async (conversation, viewerId) => {
   };
 };
 
-const formatConversationSummary = (conversation, usersById, currentUserId) => {
+const formatConversationSummary = (conversation, usersById, currentUserId, presenceMap = new Map()) => {
   const base = {
     _id: conversation._id,
     type: conversation.type,
@@ -408,7 +408,8 @@ const formatConversationSummary = (conversation, usersById, currentUserId) => {
       peer: peer ? {
         _id: peer._id,
         username: peer.username,
-        realName: peer.realName
+        realName: peer.realName,
+        presence: buildPresencePayload(peer._id, presenceMap.get(String(peer._id)), peer.realtimePreferences)
       } : null
     };
   }
@@ -422,7 +423,8 @@ const formatConversationSummary = (conversation, usersById, currentUserId) => {
       profileUser: profileUser ? {
         _id: profileUser._id,
         username: profileUser.username,
-        realName: profileUser.realName
+        realName: profileUser.realName,
+        presence: buildPresencePayload(profileUser._id, presenceMap.get(String(profileUser._id)), profileUser.realtimePreferences)
       } : null
     };
   }
@@ -2308,16 +2310,20 @@ router.get('/rooms/:roomId/users', roomReadLimiter, authenticateToken, async (re
     }
 
     const memberIds = Array.isArray(room.members) ? room.members : [];
-    const users = memberIds.length > 0
-      ? await User.find({ _id: { $in: memberIds } }).select('_id username realName mutedUntil').lean()
-      : [];
+    const [users, presenceMap] = await Promise.all([
+      memberIds.length > 0
+        ? User.find({ _id: { $in: memberIds } }).select('_id username realName mutedUntil realtimePreferences').lean()
+        : [],
+      getPresenceMapForUsers(memberIds)
+    ]);
 
     const sortedUsers = users
         .map((u) => ({
           _id: u._id,
           username: u.username || null,
           realName: u.realName || null,
-          mutedUntil: u.mutedUntil || null
+          mutedUntil: u.mutedUntil || null,
+          presence: buildPresencePayload(u._id, presenceMap.get(String(u._id)), u.realtimePreferences)
         }))
       .sort((a, b) => {
         const aName = (a.username || a.realName || '').toLowerCase();
@@ -2506,9 +2512,12 @@ router.get('/conversations', unifiedChatLimiter, authenticateToken, async (req, 
       }
     });
 
-    const relatedUsers = relatedUserIds.size > 0
-      ? await User.find({ _id: { $in: [...relatedUserIds] } }).select('_id username realName').lean()
-      : [];
+    const [relatedUsers, presenceMap] = await Promise.all([
+      relatedUserIds.size > 0
+        ? User.find({ _id: { $in: [...relatedUserIds] } }).select('_id username realName realtimePreferences').lean()
+        : [],
+      getPresenceMapForUsers([...relatedUserIds])
+    ]);
     const usersById = new Map(relatedUsers.map((relatedUser) => [String(relatedUser._id), relatedUser]));
 
     return res.json({
@@ -2516,12 +2525,12 @@ router.get('/conversations', unifiedChatLimiter, authenticateToken, async (req, 
       conversations: {
         zip: {
           current: currentZipConversation
-            ? formatConversationSummary(currentZipConversation, usersById, userId)
+            ? formatConversationSummary(currentZipConversation, usersById, userId, presenceMap)
             : null,
-          nearby: nearbyZipConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId))
+          nearby: nearbyZipConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId, presenceMap))
         },
-        dm: dmConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId)),
-        profile: profileConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId))
+        dm: dmConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId, presenceMap)),
+        profile: profileConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId, presenceMap))
       }
     });
   } catch (error) {
@@ -2630,16 +2639,20 @@ router.get('/conversations/:conversationId/users', unifiedChatLimiter, authentic
       participantIds.add(String(userId));
     }
 
-    const users = await User.find({ _id: { $in: [...participantIds] } })
-      .select('_id username realName mutedUntil')
-      .lean();
+    const [users, presenceMap] = await Promise.all([
+      User.find({ _id: { $in: [...participantIds] } })
+        .select('_id username realName mutedUntil realtimePreferences')
+        .lean(),
+      getPresenceMapForUsers([...participantIds])
+    ]);
 
     const sortedUsers = users
       .map((u) => ({
         _id: u._id,
         username: u.username || null,
         realName: u.realName || null,
-        mutedUntil: u.mutedUntil || null
+        mutedUntil: u.mutedUntil || null,
+        presence: buildPresencePayload(u._id, presenceMap.get(String(u._id)), u.realtimePreferences)
       }))
       .sort((a, b) => {
         const aName = (a.username || a.realName || '').toLowerCase();

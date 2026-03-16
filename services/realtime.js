@@ -1,11 +1,14 @@
 const jwt = require('jsonwebtoken');
 const Friendship = require('../models/Friendship');
+const ChatConversation = require('../models/ChatConversation');
+const ChatRoom = require('../models/ChatRoom');
 const Presence = require('../models/Presence');
 const User = require('../models/User');
 const { normalizeRealtimePreferences } = require('../utils/realtimePreferences');
 
 const MAX_REPLAY_EVENTS = 50;
 const TYPING_RATE_LIMIT_MS = 800;
+const INACTIVE_PRESENCE_WINDOW_MS = 5 * 60 * 1000;
 
 let ioInstance = null;
 let eventCounter = 0;
@@ -102,6 +105,42 @@ const getFriendIds = async (userId) => {
   return [...ids];
 };
 
+const toTimestamp = (value) => {
+  const timestamp = new Date(value || 0).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+const normalizePresenceRecord = (presence, referenceTime = Date.now()) => {
+  if (!presence) {
+    return {
+      status: 'offline',
+      lastSeen: null,
+      lastActivity: null
+    };
+  }
+
+  const rawStatus = String(presence.status || '').trim().toLowerCase();
+  if (rawStatus === 'online') {
+    return {
+      ...presence,
+      status: 'online'
+    };
+  }
+
+  const lastSeenTimestamp = toTimestamp(presence.lastSeen);
+  if (lastSeenTimestamp > 0 && (referenceTime - lastSeenTimestamp) < INACTIVE_PRESENCE_WINDOW_MS) {
+    return {
+      ...presence,
+      status: 'inactive'
+    };
+  }
+
+  return {
+    ...presence,
+    status: 'offline'
+  };
+};
+
 const buildPresencePayload = (userId, presence, preferencesInput = {}) => {
   const preferences = normalizeRealtimePreferences(preferencesInput);
   if (!preferences.showPresence) {
@@ -112,10 +151,11 @@ const buildPresencePayload = (userId, presence, preferencesInput = {}) => {
     };
   }
 
+  const normalizedPresence = normalizePresenceRecord(presence);
   return {
     userId: String(userId),
-    status: presence?.status === 'online' ? 'online' : 'offline',
-    lastSeen: preferences.showLastSeen ? presence?.lastSeen || null : null
+    status: normalizedPresence.status,
+    lastSeen: preferences.showLastSeen ? normalizedPresence.lastSeen || null : null
   };
 };
 
@@ -123,13 +163,25 @@ const broadcastPresenceUpdate = async (userId) => {
   const normalizedUserId = String(userId || '').trim();
   if (!normalizedUserId) return;
 
-  const [friendIds, presence, user] = await Promise.all([
+  const [friendIds, presence, user, chatRooms, conversations] = await Promise.all([
     getFriendIds(normalizedUserId),
     Presence.findOne({ userId: normalizedUserId }).select('status lastSeen lastActivity').lean(),
-    User.findById(normalizedUserId).select('realtimePreferences').lean()
+    User.findById(normalizedUserId).select('realtimePreferences').lean(),
+    ChatRoom.find({ members: normalizedUserId }).select('_id').lean(),
+    ChatConversation.find({ participants: normalizedUserId }).select('_id').lean()
   ]);
 
-  emitToUsers(friendIds, 'friend:presence', buildPresencePayload(normalizedUserId, presence, user?.realtimePreferences));
+  const payload = buildPresencePayload(normalizedUserId, presence, user?.realtimePreferences);
+
+  emitToUsers(friendIds, 'friend:presence', payload);
+
+  const roomIds = new Set([
+    ...chatRooms.map((room) => String(room?._id || '')).filter(Boolean),
+    ...conversations.map((conversation) => String(conversation?._id || '')).filter(Boolean)
+  ]);
+  for (const roomId of roomIds) {
+    emitToSocketRoom(`room:${roomId}`, 'presence:update', payload);
+  }
 };
 
 const updatePresenceConnection = async (userId, socketId, isConnected) => {
@@ -156,7 +208,7 @@ const updatePresenceConnection = async (userId, socketId, isConnected) => {
     { userId: normalizedUserId },
     {
       $set: {
-        status: socketIds.length > 0 ? 'online' : 'offline',
+        status: socketIds.length > 0 ? 'online' : 'inactive',
         lastActivity: now,
         lastSeen: socketIds.length > 0 ? null : now,
         socketIds
@@ -368,5 +420,6 @@ module.exports = {
   emitChatMessage,
   getFriendIds,
   getPresenceMapForUsers,
-  buildPresencePayload
+  buildPresencePayload,
+  normalizePresenceRecord
 };

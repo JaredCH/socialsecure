@@ -10,7 +10,7 @@ const presenceSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['online', 'offline'],
+    enum: ['online', 'inactive', 'offline'],
     default: 'offline'
   },
   lastSeen: {
