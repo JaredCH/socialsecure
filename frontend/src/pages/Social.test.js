@@ -79,6 +79,19 @@ jest.mock('../utils/realtime', () => ({
   unsubscribeFromPost: jest.fn()
 }));
 
+jest.mock('../components/NotificationCenter', () => {
+  return function MockNotificationCenter() { return null; };
+});
+jest.mock('../components/SecurityScore', () => {
+  return function MockSecurityScore() { return null; };
+});
+jest.mock('../components/PresenceIndicator', () => {
+  return function MockPresenceIndicator() { return null; };
+});
+jest.mock('../components/social/GuestPreviewNotice', () => {
+  return function MockGuestPreviewNotice() { return null; };
+});
+
 let Social;
 
 describe('Social page hero background rendering', () => {
