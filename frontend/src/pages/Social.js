@@ -5016,7 +5016,7 @@ const Social = () => {
 
       {/* Main Two-Column Layout */}
       <div className="mx-auto max-w-7xl px-4 pb-12 pt-6 sm:px-6">
-        <div className="grid grid-cols-1 gap-6" style={{ gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 300px' }}>
+        <div className="grid grid-cols-1 gap-6" style={{ gridTemplateColumns: isMobile ? '1fr' : '300px minmax(0, 1fr)' }}>
           {/* Main Content Area */}
           <main className="min-w-0 space-y-6">
             {!isAuthenticated ? renderGlassPanel('Guest Access', renderPanelBody('guest_lookup'), {
