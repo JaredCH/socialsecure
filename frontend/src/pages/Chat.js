@@ -1682,13 +1682,14 @@ function Chat() {
         data-chat-menu-bar
         data-testid="chat-page-header"
       >
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-start gap-2 md:items-center">
           <button
             type="button"
             onClick={() => setMobileWorkspaceOpen(false)}
             className={[
               mobileWorkspaceOpen ? 'inline-flex' : 'hidden',
-              `items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold lg:hidden ${activeTheme.subtle}`
+              `items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[10px] font-semibold lg:hidden ${activeTheme.subtle}`
             ].join(' ')}
             aria-label="Back to conversations"
           >
@@ -1696,72 +1697,77 @@ function Chat() {
             <span>Back</span>
           </button>
 
-          <div className={`inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border px-2.5 py-1 ${activeTheme.panel}`}>
-            <span aria-hidden="true" className="text-xs">{activeMenuIcon}</span>
-            {activeConversation?.type === 'dm' && activeConversationUser?.username ? (
-              <a
-                href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
-                className={`truncate text-xs font-semibold ${activeTheme.senderAccent} hover:opacity-80`}
-                aria-label={`Open @${activeConversationUser.username} social page`}
-              >
-                @{activeConversationUser.username}
-              </a>
-            ) : (
-              <span className="truncate text-xs font-semibold">{activeMenuLabel}</span>
-            )}
-            {activeConversation ? <span className="hidden text-[10px] font-mono opacity-70 sm:inline">Live conversation</span> : null}
+          <div className={`min-w-0 flex-1 rounded-2xl border px-3 py-2 ${activeTheme.panel}`}>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span aria-hidden="true" className="text-sm">{activeMenuIcon}</span>
+              {activeConversation?.type === 'dm' && activeConversationUser?.username ? (
+                <a
+                  href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
+                  className={`truncate text-sm font-semibold ${activeTheme.senderAccent} hover:opacity-80`}
+                  aria-label={`Open @${activeConversationUser.username} social page`}
+                >
+                  @{activeConversationUser.username}
+                </a>
+              ) : (
+                <span className="truncate text-sm font-semibold">{activeMenuLabel}</span>
+              )}
+              {activeConversation ? (
+                <span className="rounded-md border px-1.5 py-0.5 text-[10px] font-mono opacity-70">
+                  Live conversation
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+              {resolvedZipCode ? (
+                <span className="inline-flex items-center gap-1.5 opacity-80">
+                  <span aria-hidden="true">📍</span>
+                  <span className="font-semibold uppercase tracking-[0.16em]">Zip {resolvedZipCode}</span>
+                </span>
+              ) : null}
+
+              {activeConversation ? (
+                <span className="inline-flex items-center gap-1.5 opacity-80">
+                  <span className={`h-2 w-2 rounded-full ${conversationPresence.tone}`} />
+                  <span className="font-semibold uppercase tracking-[0.16em]">{conversationPresence.label}</span>
+                </span>
+              ) : null}
+            </div>
           </div>
 
-          <div className={`inline-flex items-center gap-1 rounded-full border p-0.5 ${activeTheme.panel}`} data-chat-channel-tabs>
-            {CHANNELS.map((channel) => (
-              <button
-                key={channel.key}
-                type="button"
-                onClick={() => {
-                  setActiveChannel(channel.key);
-                  setMobileWorkspaceOpen(false);
-                }}
-                className={[
-                  'rounded-full px-2.5 py-1 text-[10px] font-semibold transition sm:px-3 sm:text-xs',
-                  activeChannel === channel.key ? activeTheme.subtle : 'opacity-80 hover:opacity-100'
-                ].join(' ')}
-              >
-                {channel.label}
-              </button>
-            ))}
-          </div>
-
-          {resolvedZipCode ? (
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${activeTheme.panel}`}>
-              <span aria-hidden="true">📍</span>
-              <span>Zip {resolvedZipCode}</span>
-            </span>
+          {activeConversationUser?.username ? (
+            <a
+              href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
+              className={`inline-flex items-center justify-center rounded-xl border px-2.5 py-2 text-[10px] font-semibold ${activeTheme.subtle}`}
+              aria-label={`View @${activeConversationUser.username} profile`}
+            >
+              👤
+            </a>
           ) : null}
 
-          {activeConversation ? (
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${activeTheme.panel}`}>
-              <span className={`h-2 w-2 rounded-full ${conversationPresence.tone}`} />
-              {conversationPresence.label}
-            </span>
-          ) : null}
-
-          <div className="relative ml-auto">
+          <div className="relative w-full sm:ml-auto sm:w-auto">
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
                 setThemeMenuOpen((open) => !open);
               }}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold sm:text-xs ${activeTheme.subtle}`}
+              className={`flex w-full items-center justify-between gap-2 rounded-2xl border px-3 py-2 text-left text-[11px] font-semibold sm:min-w-52 sm:text-xs ${activeTheme.subtle}`}
               aria-label="Open chat theme menu"
               aria-expanded={themeMenuOpen}
             >
-              <span aria-hidden="true">🎨</span>
-              <span>Theme</span>
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden="true">🎨</span>
+                <span>Theme</span>
+              </span>
+              <span className="flex items-center gap-1 opacity-80">
+                <span className="hidden sm:inline">{activeTheme.label}</span>
+                <span aria-hidden="true">{themeMenuOpen ? '▴' : '▾'}</span>
+              </span>
             </button>
             {themeMenuOpen ? (
               <div
-                className={`absolute right-0 top-10 z-50 min-w-44 rounded-xl border p-1.5 text-xs shadow-xl ${activeTheme.panelGlass}`}
+                className={`absolute right-0 top-[calc(100%+0.5rem)] z-50 min-w-full rounded-2xl border p-1.5 text-xs shadow-xl sm:min-w-52 ${activeTheme.panelGlass}`}
                 onClick={(event) => event.stopPropagation()}
               >
                 {CHAT_THEMES.map((themeOption) => (
@@ -1772,7 +1778,10 @@ function Chat() {
                       handleThemeChange(themeOption.key);
                       setThemeMenuOpen(false);
                     }}
-                    className={`flex w-full items-center justify-between rounded px-2 py-1 text-left hover:opacity-80 ${theme === themeOption.key ? 'font-semibold' : ''}`}
+                    className={[
+                      'flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left transition hover:opacity-85',
+                      theme === themeOption.key ? `${activeTheme.subtle} font-semibold` : ''
+                    ].join(' ')}
                   >
                     <span>{themeOption.label}</span>
                     {theme === themeOption.key ? <span>✓</span> : null}
@@ -1780,6 +1789,41 @@ function Chat() {
                 ))}
               </div>
             ) : null}
+          </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={`inline-flex items-center gap-1 rounded-2xl border p-1 ${activeTheme.panel}`}
+            data-chat-channel-tabs
+            role="tablist"
+            aria-label="Chat channels"
+          >
+            {CHANNELS.map((channel) => (
+              <button
+                key={channel.key}
+                type="button"
+                onClick={() => {
+                  setActiveChannel(channel.key);
+                  setMobileWorkspaceOpen(false);
+                }}
+                className={[
+                  'rounded-xl px-3 py-1.5 text-[11px] font-semibold transition sm:text-xs',
+                  activeChannel === channel.key ? activeTheme.subtle : 'opacity-80 hover:opacity-100'
+                ].join(' ')}
+                role="tab"
+                aria-selected={activeChannel === channel.key}
+              >
+                {channel.label}
+              </button>
+            ))}
+          </div>
+
+          {openChatTabs.length > 0 ? (
+            <span className="ml-auto text-[11px] font-semibold opacity-70">
+              {openChatTabs.length}/{MAX_OPEN_CHAT_TABS}
+            </span>
+          ) : null}
           </div>
 
           <label className="sr-only" htmlFor="chat-theme-select-fallback">Theme</label>
@@ -1795,27 +1839,11 @@ function Chat() {
               </option>
             ))}
           </select>
-
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.panel}`}>
-            <span className={activeTheme.senderAccent}>Aa</span>
-            <span className="hidden sm:inline">Theme-tuned accents</span>
-            <span className="sm:hidden">Accent</span>
-          </span>
-
-          {activeConversationUser?.username ? (
-            <a
-              href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
-              className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.subtle}`}
-              aria-label={`View @${activeConversationUser.username} profile`}
-            >
-              👤
-            </a>
-          ) : null}
         </div>
 
         {openChatTabs.length > 0 ? (
           <div className="mt-1 overflow-x-auto pb-0.5" data-open-chat-tabs>
-            <div className="flex min-w-max items-center gap-1">
+            <div className="flex min-w-max items-center gap-1.5" role="tablist" aria-label="Open chat conversations">
               {openChatTabs.map((conversation) => {
                 const conversationId = String(conversation._id);
                 const selected = conversationId === String(activeConversationId);
@@ -1823,14 +1851,16 @@ function Chat() {
                 return (
                   <div
                     key={`open-chat-tab-${conversationId}`}
-                    className={`flex items-stretch rounded-full border ${selected ? activeTheme.subtle : activeTheme.panelGlass}`}
+                    className={`flex items-stretch overflow-hidden rounded-xl border ${selected ? activeTheme.subtle : activeTheme.panelGlass}`}
                   >
                     <button
                       type="button"
                       onClick={() => openConversationById(conversationId)}
-                      className="inline-flex min-w-0 max-w-40 items-center gap-1.5 px-2.5 py-1 text-left text-[11px] font-semibold"
+                      className="inline-flex min-w-0 max-w-40 items-center gap-1.5 px-3 py-2 text-left text-[11px] font-semibold"
                       data-open-chat-tab={label}
                       title={`${getChatTabTypeLabel(conversation)} · ${label}`}
+                      role="tab"
+                      aria-selected={selected}
                     >
                       <span aria-hidden="true" className="shrink-0 text-[10px] opacity-75">{getConversationTabIcon(conversation)}</span>
                       <span className="truncate">{label}</span>
@@ -1838,7 +1868,7 @@ function Chat() {
                     <button
                       type="button"
                       onClick={() => handleCloseOpenTab(conversationId)}
-                      className="border-l px-2 text-[11px] opacity-80 hover:opacity-100"
+                      className="border-l px-2.5 text-[11px] opacity-80 hover:opacity-100"
                       aria-label={`Close ${label} tab`}
                     >
                       ×
@@ -1846,9 +1876,6 @@ function Chat() {
                   </div>
                 );
               })}
-              <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.panelGlass}`}>
-                {openChatTabs.length}/{MAX_OPEN_CHAT_TABS}
-              </span>
             </div>
           </div>
         ) : null}
