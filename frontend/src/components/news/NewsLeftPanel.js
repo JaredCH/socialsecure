@@ -123,6 +123,7 @@ export default function NewsLeftPanel({
                       : 'text-gray-700 hover:bg-gray-50'
                 }`}
                 aria-label={`Filter by ${cat.label}`}
+                disabled={isDisabled}
                 type="button"
               >
                 <span className={`w-6 h-6 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
@@ -132,8 +133,10 @@ export default function NewsLeftPanel({
               </button>
               <button
                 type="button"
-                onClick={() => onToggleCategoryEnabled?.(cat.key, !isDisabled)}
+                onClick={() => onToggleCategoryEnabled?.(cat.key, isDisabled)}
                 aria-label={isDisabled ? `Enable category ${cat.label}` : `Disable category ${cat.label}`}
+                role="switch"
+                aria-checked={!isDisabled}
                 className={`relative h-5 w-9 rounded-full border transition-colors ${
                   isDisabled ? 'border-gray-300 bg-gray-200' : 'border-blue-500 bg-blue-500'
                 }`}

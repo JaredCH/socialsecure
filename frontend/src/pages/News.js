@@ -112,12 +112,12 @@ function News() {
     [sortedCategories, hiddenCategorySet]
   );
 
-  const handleToggleCategoryEnabled = useCallback(async (categoryKey, currentlyEnabled) => {
+  const handleToggleCategoryEnabled = useCallback(async (categoryKey, currentlyDisabled) => {
     const key = String(categoryKey || '').trim();
     if (!key) return;
     const hidden = new Set(hiddenCategories);
-    if (currentlyEnabled) hidden.add(key);
-    else hidden.delete(key);
+    if (currentlyDisabled) hidden.delete(key);
+    else hidden.add(key);
     try {
       const response = await newsAPI.updateHiddenCategories(Array.from(hidden));
       setPreferences(response.data?.preferences || null);
@@ -130,7 +130,7 @@ function News() {
     if (!activeCategories.length) return;
     const filtered = activeCategories.filter((category) => !hiddenCategorySet.has(category));
     if (filtered.length !== activeCategories.length) setActiveCategories(filtered);
-  }, [activeCategories, hiddenCategorySet]);
+  }, [activeCategories, hiddenCategorySet, setActiveCategories]);
 
   useEffect(() => {
     const id = window.requestAnimationFrame(() => {
