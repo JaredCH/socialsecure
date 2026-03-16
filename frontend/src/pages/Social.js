@@ -6,7 +6,6 @@ import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
-import NotificationCenter from '../components/NotificationCenter';
 import PresenceIndicator from '../components/PresenceIndicator';
 import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
 import SocialHero from '../components/social/SocialHero';
@@ -4367,117 +4366,6 @@ const Social = () => {
     </div>
   );
 
-  const renderStageQuickActions = () => {
-    const quickLinks = [
-      { id: 'social', label: 'Social', to: socialProfilePath, visible: true },
-      { id: 'friends', label: 'Friends', to: socialFriendsPath, visible: true },
-      { id: 'calendar', label: 'Calendar', to: socialCalendarPath, visible: isModuleVisible('calendarShortcut') || !isOwnSocialContext },
-      { id: 'chat', label: socialChatLabel, to: socialChatPath, visible: isModuleVisible('chatPanel') || !isOwnSocialContext },
-      { id: 'market', label: 'Market', to: '/market', visible: isModuleVisible('marketplaceShortcut') },
-      { id: 'settings', label: 'Settings', to: '/settings', visible: isModuleVisible('settingsShortcut') && isOwnSocialContext }
-    ].filter((link) => link.visible);
-
-    return (
-      <section className="overflow-hidden rounded-[1.75rem] border border-white/45 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.96),rgba(255,255,255,0.82)_55%,rgba(226,232,240,0.9))] p-4 shadow-[0_26px_70px_rgba(15,23,42,0.14)] backdrop-blur-xl sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Social stage</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
-              {isOwnSocialContext ? 'Everything important stays close to the feed.' : `Explore @${resolvedProfileUsername || requestedProfileIdentifier || 'profile'} without the clutter.`}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {isOwnSocialContext
-                ? 'Post, adjust your profile, and move between core areas from one compact strip. Advanced tools stay tucked away until you need them.'
-                : 'The profile is condensed for quick scrolling, with the main feed and highlights taking priority.'}
-            </p>
-          </div>
-
-          {ownerEditingEnabled ? (
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              <button
-                type="button"
-                onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                {isGuestPreview ? 'Owner View' : 'Guest View'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setComposerVisible((prev) => !prev)}
-                className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
-              >
-                {composerVisible ? 'Hide Compose' : 'Compose'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDesignStudioOpen(true)}
-                className="rounded-full border border-slate-300 bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
-              >
-                Stage Settings
-              </button>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {quickLinks.map((link) => (
-            <Link
-              key={link.id}
-              to={link.to}
-              className="inline-flex items-center rounded-full border border-white/70 bg-white/85 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </div>
-
-        {showProfileCompletionHint && profileCompletionItems.length > 0 ? (
-          <div className="mt-4 rounded-[1.5rem] border border-amber-200/80 bg-white/88 p-4 shadow-[0_0_0_1px_rgba(253,230,138,0.72),0_18px_48px_rgba(245,158,11,0.16)]">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="max-w-2xl">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-amber-700">Gentle nudge</p>
-                <p className="mt-2 text-base font-semibold text-slate-900">A couple of small touches would make this page feel complete.</p>
-                <p className="mt-1 text-sm leading-6 text-slate-600">These are optional. You can ignore them, hide this hint for now, or stop seeing it entirely.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => dismissProfileCompletionHint(false)}
-                  className="rounded-full border border-slate-300 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"
-                >
-                  Not now
-                </button>
-                <button
-                  type="button"
-                  onClick={() => dismissProfileCompletionHint(true)}
-                  className="rounded-full border border-amber-200 px-3 py-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-50"
-                >
-                  Do not show again
-                </button>
-              </div>
-            </div>
-            <div className="mt-4 grid gap-3 lg:grid-cols-3">
-              {profileCompletionItems.slice(0, 3).map((item) => (
-                <div key={item.id} className="rounded-[1.25rem] border border-white/80 bg-white/95 p-4 shadow-sm">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">{item.eyebrow}</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">{item.title}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{item.description}</p>
-                  <button
-                    type="button"
-                    onClick={() => handleProfileCompletionAction(item.id)}
-                    className="mt-4 rounded-full border border-sky-200 px-3 py-1.5 text-[11px] font-semibold text-sky-700 transition hover:bg-sky-50"
-                  >
-                    {item.actionLabel}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </section>
-    );
-  };
-
   const renderSharedDesignCard = !isOwnSocialContext && isAuthenticated && sharedDesigns.length > 0
     ? renderGlassPanel(
       'Shared Design',
@@ -4660,7 +4548,7 @@ const Social = () => {
       default:
         return (
           <div className="space-y-6">
-            {renderStageQuickActions()}
+            {renderProfileCompletionHint()}
             {ownerEditingEnabled && !isGuestPreview && composerVisible ? (
               renderGlassPanel('Composer', renderPanelBody('composer'), {
                 subtitle: 'Share an update to the center stage',
@@ -4704,6 +4592,56 @@ const Social = () => {
     </div>
   );
 
+  const renderProfileCompletionHint = () => {
+    if (!showProfileCompletionHint || profileCompletionItems.length === 0) {
+      return null;
+    }
+
+    return (
+      <section className="rounded-[1.5rem] border border-amber-200/80 bg-white/88 p-4 shadow-[0_0_0_1px_rgba(253,230,138,0.72),0_18px_48px_rgba(245,158,11,0.16)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-amber-700">Gentle nudge</p>
+            <p className="mt-2 text-base font-semibold text-slate-900">A couple of small touches would make this page feel complete.</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">These are optional. You can ignore them, hide this hint for now, or stop seeing it entirely.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => dismissProfileCompletionHint(false)}
+              className="rounded-full border border-slate-300 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"
+            >
+              Not now
+            </button>
+            <button
+              type="button"
+              onClick={() => dismissProfileCompletionHint(true)}
+              className="rounded-full border border-amber-200 px-3 py-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-50"
+            >
+              Do not show again
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {profileCompletionItems.slice(0, 3).map((item) => (
+            <div key={item.id} className="rounded-[1.25rem] border border-white/80 bg-white/95 p-4 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">{item.eyebrow}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{item.title}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{item.description}</p>
+              <button
+                type="button"
+                onClick={() => handleProfileCompletionAction(item.id)}
+                className="mt-4 rounded-full border border-sky-200 px-3 py-1.5 text-[11px] font-semibold text-sky-700 transition hover:bg-sky-50"
+              >
+                {item.actionLabel}
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  };
+
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
   const cssCustomProperties = {
@@ -4723,31 +4661,6 @@ const Social = () => {
       className={`min-h-screen w-full ${pageThemeClass}`}
       style={cssCustomProperties}
     >
-      {/* Sticky Topbar */}
-      <div className="sticky top-0 z-50 border-b border-white/10" style={{ background: 'rgba(13,13,20,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-          <span className="text-lg font-extrabold tracking-tight" style={{ backgroundImage: `linear-gradient(135deg, ${accentColor}, ${accentColor2})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>SocialSecure</span>
-          <div className="flex items-center gap-3">
-            {isAuthenticated ? (
-              <NotificationCenter
-                unreadCount={heroOverlayActivity.unreadNotificationCount}
-                userDisplayName={currentUser?.realName || currentUser?.username || 'Account'}
-              />
-            ) : null}
-            {ownerEditingEnabled ? (
-              <button
-                type="button"
-                onClick={() => setDesignStudioOpen(true)}
-                className="rounded-xl px-3 py-1.5 text-xs font-semibold transition hover:opacity-80"
-                style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})`, color: '#fff' }}
-              >
-                ✦ Design Studio
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
       {/* Guest Preview Notice */}
       {isGuestPreview ? (
         <GuestPreviewNotice
@@ -4799,18 +4712,45 @@ const Social = () => {
 
       {/* Tab Bar (pill-style) */}
       <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
-        <div className="flex flex-wrap gap-1.5 rounded-2xl border border-white/10 p-1.5" style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}>
-          {SOCIAL_HERO_TABS.map((tab) => (
-            <button
-              key={`pill-tab-${tab.id}`}
-              type="button"
-              onClick={() => handleHeroTabChange(tab.id)}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${activeHeroTab === tab.id ? 'text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
-              style={activeHeroTab === tab.id ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 p-1.5" style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}>
+          <div className="flex flex-wrap gap-1.5">
+            {SOCIAL_HERO_TABS.map((tab) => (
+              <button
+                key={`pill-tab-${tab.id}`}
+                type="button"
+                onClick={() => handleHeroTabChange(tab.id)}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${activeHeroTab === tab.id ? 'text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
+                style={activeHeroTab === tab.id ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {ownerEditingEnabled ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                {isGuestPreview ? 'Owner View' : 'Guest View'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setComposerVisible((prev) => !prev)}
+                className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+              >
+                {composerVisible ? 'Hide Compose' : 'Compose'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDesignStudioOpen(true)}
+                className="rounded-full border border-slate-300 bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+              >
+                Stage Settings
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 
