@@ -377,29 +377,11 @@ function ChatMessageItem({
               >
                 {isOwnMessage ? 'You' : `@${author}`}
               </button>
+              <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
             </div>
           ) : null}
-          <div
-            tabIndex={0}
-            className="relative rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
-            onMouseOver={() => {
-              if (canHoverForReactions) {
-                setReactionPickerOpen(true);
-              }
-            }}
-            onMouseLeave={(event) => {
-              if (canHoverForReactions && (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget))) {
-                setReactionPickerOpen(false);
-              }
-            }}
-            onClick={(event) => {
-              if (canHoverForReactions) return;
-              if (event.target?.closest?.('a, button, [data-chat-no-user-menu="true"]')) return;
-              event.stopPropagation();
-              setReactionPickerOpen((open) => !open);
-            }}
-          >
-            <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(message.content)}</p>
+          <div tabIndex={0} className="rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1">
+            <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(displayContent)}</p>
             {reactionsMarkup}
           </div>
           {timestamp ? <span className="mt-1 block text-[10px] font-mono opacity-60">{timestamp}</span> : null}

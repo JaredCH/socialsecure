@@ -38,6 +38,8 @@ const MESSAGE_REACTIONS = [
   { key: 'excited', label: 'Excited', emoji: '🤩' }
 ];
 
+const PARTICIPANT_REFRESH_DEBOUNCE_MS = 1000;
+
 const CHAT_THEMES = [
   {
     key: 'classic',
