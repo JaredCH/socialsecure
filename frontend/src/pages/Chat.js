@@ -1768,6 +1768,7 @@ function Chat() {
             messages={renderedMessages}
             loading={messagesLoading}
             profile={profile}
+            censorSensitiveWords={profile?.enableMaturityWordCensor !== false}
             theme={activeTheme}
             onOpenUserMenu={openUserContextMenu}
             reactionsByMessageId={reactionByMessageId}

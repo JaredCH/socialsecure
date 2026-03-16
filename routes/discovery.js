@@ -4,11 +4,13 @@ const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const Post = require('../models/Post');
 const BlockList = require('../models/BlockList');
+const SiteContentFilter = require('../models/SiteContentFilter');
 const {
   normalizeRelationshipAudience,
   getViewerRelationshipContext,
   logRelationshipAudienceEvent
 } = require('../utils/relationshipAudience');
+const { censorMaturityText, normalizeFilterWords } = require('../utils/contentFilter');
 
 const router = express.Router();
 
@@ -49,6 +51,22 @@ const setCache = (cacheKey, value) => {
     createdAt: Date.now(),
     value
   });
+};
+
+const getContentFilterConfig = async () => {
+  const config = await SiteContentFilter.findOne({ key: 'global' }).lean();
+  return {
+    maturityCensoredWords: normalizeFilterWords(config?.maturityCensoredWords || [])
+  };
+};
+
+const getViewerContentFilterPreference = async (viewerId) => {
+  if (!viewerId) return true;
+  const viewerQuery = User.findById(viewerId).select('enableMaturityWordCensor');
+  const viewer = typeof viewerQuery?.lean === 'function'
+    ? await viewerQuery.lean()
+    : await viewerQuery;
+  return viewer?.enableMaturityWordCensor !== false;
 };
 
 const getBlockedOrMutedIds = async (viewerId) => {
@@ -160,9 +178,11 @@ router.get('/users', authenticateToken, discoveryLimiter, async (req, res) => {
       return res.json({ ...cached, cached: true });
     }
 
-    const [relationshipContext, blockedOrMuted] = await Promise.all([
+    const [relationshipContext, blockedOrMuted, contentFilter, censorEnabled] = await Promise.all([
       getViewerRelationshipContext(viewerId),
-      getBlockedOrMutedIds(viewerId)
+      getBlockedOrMutedIds(viewerId),
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(viewerId)
     ]);
 
     const searchFilter = {
@@ -254,9 +274,11 @@ router.get('/posts', authenticateToken, discoveryLimiter, async (req, res) => {
       return res.json({ ...cached, cached: true });
     }
 
-    const [relationshipContext, blockedOrMuted] = await Promise.all([
+    const [relationshipContext, blockedOrMuted, contentFilter, censorEnabled] = await Promise.all([
       getViewerRelationshipContext(viewerId),
-      getBlockedOrMutedIds(viewerId)
+      getBlockedOrMutedIds(viewerId),
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(viewerId)
     ]);
 
     const postFilter = {
@@ -304,7 +326,8 @@ router.get('/posts', authenticateToken, discoveryLimiter, async (req, res) => {
 
         return {
           _id: post._id,
-          content: post.content,
+          content: censorEnabled ? censorMaturityText(post.content, contentFilter.maturityCensoredWords) : post.content,
+          contentCensored: censorMaturityText(post.content, contentFilter.maturityCensoredWords),
           visibility: post.visibility,
           relationshipAudience: normalizeRelationshipAudience(post.relationshipAudience),
           authorId: post.authorId,

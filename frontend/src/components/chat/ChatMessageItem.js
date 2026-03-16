@@ -120,6 +120,7 @@ function ChatMessageItem({
   isOwnMessage,
   currentUserId,
   theme,
+  censorSensitiveWords = true,
   onOpenUserMenu,
   reactionsByType = {},
   reactionOptions = [],
@@ -151,6 +152,9 @@ function ChatMessageItem({
     username: message.userId.username,
     realName: message.userId.realName
   } : null;
+  const displayContent = censorSensitiveWords && typeof message.contentCensored === 'string'
+    ? message.contentCensored
+    : message.content;
 
   useEffect(() => () => {
     if (longPressTimerRef.current) {
@@ -220,7 +224,7 @@ function ChatMessageItem({
             </span>
             <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
           </header>
-          <p className="whitespace-pre-wrap break-words text-[13px] leading-5">{renderMessageContent(message.content)}</p>
+          <p className="whitespace-pre-wrap break-words text-[13px] leading-5">{renderMessageContent(displayContent)}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] opacity-70">
             <span className="font-mono">{fullTimestamp}</span>
           </div>

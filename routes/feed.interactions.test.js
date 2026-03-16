@@ -25,6 +25,10 @@ jest.mock('../models/BlockList', () => ({
 jest.mock('../models/MuteList', () => ({
   find: jest.fn()
 }));
+const mockSiteContentFilterFindOne = jest.fn();
+jest.mock('../models/SiteContentFilter', () => ({
+  findOne: (...args) => mockSiteContentFilterFindOne(...args)
+}));
 jest.mock('../services/notifications', () => ({
   createNotification: jest.fn().mockResolvedValue(null)
 }));
@@ -97,6 +101,12 @@ describe('Feed interaction routes', () => {
     jest.clearAllMocks();
     mockAuthenticatedUser();
     mockNoSocialBlocks();
+    mockSiteContentFilterFindOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        zeroToleranceWords: [],
+        maturityCensoredWords: []
+      })
+    });
   });
 
   it('rejects invalid poll interaction payload during post creation', async () => {
@@ -152,6 +162,7 @@ describe('Feed interaction routes', () => {
     expect(response.status).toBe(201);
     expect(Post).toHaveBeenCalledWith(
       expect.objectContaining({
+        content: 'Trivia time',
         interaction: expect.objectContaining({
           type: 'quiz',
           quiz: expect.objectContaining({
@@ -162,6 +173,28 @@ describe('Feed interaction routes', () => {
         })
       })
     );
+  });
+
+  it('rejects zero-tolerance words in post content', async () => {
+    const app = buildApp();
+    mockSiteContentFilterFindOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        zeroToleranceWords: ['banned'],
+        maturityCensoredWords: []
+      })
+    });
+
+    const response = await request(app)
+      .post('/api/feed/post')
+      .set('Authorization', 'Bearer token')
+      .send({
+        targetFeedId: AUTHOR_ID,
+        content: 'This banned word should fail'
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('banned');
+    expect(Post).not.toHaveBeenCalled();
   });
 
   it('deduplicates poll vote submissions by user', async () => {

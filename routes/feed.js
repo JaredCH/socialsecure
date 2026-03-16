@@ -8,6 +8,7 @@ const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const BlockList = require('../models/BlockList');
 const MuteList = require('../models/MuteList');
+const SiteContentFilter = require('../models/SiteContentFilter');
 const { createNotification } = require('../services/notifications');
 const { emitFeedInteraction, emitFeedPost } = require('../services/realtime');
 const {
@@ -16,11 +17,24 @@ const {
   getViewerRelationshipContext,
   logRelationshipAudienceEvent
 } = require('../utils/relationshipAudience');
+const {
+  findExactFilterWord,
+  censorMaturityText,
+  normalizeFilterWords
+} = require('../utils/contentFilter');
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
 const VALID_VISIBILITY = ['public', 'friends', 'circles', 'specific_users', 'private'];
+const VALID_INTERACTION_TYPES = ['poll', 'quiz', 'countdown'];
+const VALID_INTERACTION_STATUS = ['active', 'closed', 'expired'];
+const INTERACTION_MAX_OPTIONS = 6;
+const INTERACTION_MAX_OPTION_LENGTH = 120;
+const INTERACTION_MAX_QUESTION_LENGTH = 280;
+const INTERACTION_MAX_EXPLANATION_LENGTH = 1000;
+const INTERACTION_MAX_COUNTDOWN_LABEL_LENGTH = 180;
+const INTERACTION_MAX_TIMEZONE_LENGTH = 80;
 const interactionRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
@@ -82,6 +96,35 @@ const buildRealtimeAudience = async (...seedUserIds) => {
   }));
 
   return [...audience];
+};
+
+const getContentFilterConfig = async () => {
+  const config = await SiteContentFilter.findOne({ key: 'global' }).lean();
+  return {
+    zeroToleranceWords: normalizeFilterWords(config?.zeroToleranceWords || []),
+    maturityCensoredWords: normalizeFilterWords(config?.maturityCensoredWords || [])
+  };
+};
+
+const getViewerContentFilterPreference = async (viewerId, defaultValue = true) => {
+  if (!viewerId) return defaultValue;
+  const viewerQuery = User.findById(viewerId).select('enableMaturityWordCensor');
+  const viewer = typeof viewerQuery?.lean === 'function'
+    ? await viewerQuery.lean()
+    : await viewerQuery;
+  if (!viewer) return defaultValue;
+  return viewer.enableMaturityWordCensor !== false;
+};
+
+const decoratePostContent = (post, maturityWords = [], censorEnabled = true) => {
+  if (!post || typeof post !== 'object') return post;
+  const rawContent = typeof post.content === 'string' ? post.content : '';
+  const contentCensored = censorMaturityText(rawContent, maturityWords);
+  return {
+    ...post,
+    content: censorEnabled ? contentCensored : rawContent,
+    contentCensored
+  };
 };
 
 const canViewerSeePost = (post, viewerId, relationshipContext, viewerCoordinates = null) => {
@@ -527,7 +570,11 @@ router.get('/user/:userId', authenticateToken, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const viewerId = String(req.user.userId || '');
     const viewerCoordinates = parseViewerCoordinates(req);
-    const relationshipContext = await getViewerRelationshipContext(viewerId);
+    const [relationshipContext, contentFilter, censorEnabled] = await Promise.all([
+      getViewerRelationshipContext(viewerId),
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(viewerId, true)
+    ]);
     const blockedOrMuted = await getBlockedOrMutedIds(viewerId);
 
     const candidatePosts = await Post.find({
@@ -562,7 +609,9 @@ router.get('/user/:userId', authenticateToken, async (req, res) => {
     }
 
     const start = (page - 1) * limit;
-    const posts = visiblePosts.slice(start, start + limit);
+    const posts = visiblePosts
+      .slice(start, start + limit)
+      .map((post) => decoratePostContent(post.toObject ? post.toObject() : post, contentFilter.maturityCensoredWords, censorEnabled));
 
     res.json({
       success: true,
@@ -619,6 +668,7 @@ router.post('/post', [
     } = req.body;
     const authorId = String(req.user.userId || '');
     const normalizedTargetFeedId = String(targetFeedId || '');
+    const contentFilter = await getContentFilterConfig();
 
     const blockRelation = await BlockList.findOne({
       $or: [
@@ -636,6 +686,13 @@ router.post('/post', [
       return res.status(400).json({
         error: mediaUrlsValidation.error,
         field: 'mediaUrls'
+      });
+    }
+
+    const bannedWord = findExactFilterWord(content, contentFilter.zeroToleranceWords);
+    if (bannedWord) {
+      return res.status(400).json({
+        error: `You are attempting to use a word that is banned on this site "${bannedWord}".`
       });
     }
 
@@ -769,16 +826,21 @@ router.post('/post', [
     await post.populate('authorId', 'username realName');
     await post.populate('targetFeedId', 'username realName');
 
+    const postObject = post.toObject ? post.toObject() : post;
+    const authorCensorEnabled = await getViewerContentFilterPreference(authorId, true);
+    const responsePost = decoratePostContent(postObject, contentFilter.maturityCensoredWords, authorCensorEnabled);
+    const realtimePost = decoratePostContent(postObject, contentFilter.maturityCensoredWords, false);
+
     const audienceUserIds = await buildRealtimeAudience(authorId, normalizedTargetFeedId);
     emitFeedPost({
       userIds: audienceUserIds,
-      post
+      post: realtimePost
     });
     
     res.status(201).json({
       success: true,
       message: 'Post created successfully',
-      post
+      post: responsePost
     });
   } catch (error) {
     console.error('Error creating post:', error);
@@ -1234,7 +1296,11 @@ router.get('/timeline', authenticateToken, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const viewerCoordinates = parseViewerCoordinates(req);
-    const relationshipContext = await getViewerRelationshipContext(userId);
+    const [relationshipContext, contentFilter, censorEnabled] = await Promise.all([
+      getViewerRelationshipContext(userId),
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(userId, true)
+    ]);
     const blockedOrMuted = await getBlockedOrMutedIds(userId);
     const authorIds = [userId, ...relationshipContext.friendIds];
 
@@ -1280,7 +1346,9 @@ router.get('/timeline', authenticateToken, async (req, res) => {
     }
 
     const start = (page - 1) * limit;
-    const posts = visiblePosts.slice(start, start + limit);
+    const posts = visiblePosts
+      .slice(start, start + limit)
+      .map((post) => decoratePostContent(post.toObject ? post.toObject() : post, contentFilter.maturityCensoredWords, censorEnabled));
     
     res.json({
       success: true,
@@ -1343,9 +1411,14 @@ router.get('/post/:postId', authenticateToken, async (req, res) => {
       });
     }
     
+    const [contentFilter, censorEnabled] = await Promise.all([
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(String(userId), true)
+    ]);
+
     res.json({
       success: true,
-      post
+      post: decoratePostContent(post.toObject ? post.toObject() : post, contentFilter.maturityCensoredWords, censorEnabled)
     });
   } catch (error) {
     console.error('Error fetching post:', error);

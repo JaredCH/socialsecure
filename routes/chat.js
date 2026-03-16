@@ -18,9 +18,15 @@ const ConversationMessage = require('../models/ConversationMessage');
 const ConversationKeyPackage = require('../models/ConversationKeyPackage');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
+const SiteContentFilter = require('../models/SiteContentFilter');
 const { createNotification } = require('../services/notifications');
 const { emitChatMessage } = require('../services/realtime');
 const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
+const {
+  findExactFilterWord,
+  censorMaturityText,
+  normalizeFilterWords
+} = require('../utils/contentFilter');
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -45,6 +51,36 @@ const logSecurityEvent = async ({ userId, eventType, req, metadata = {}, severit
   } catch (error) {
     console.error('Failed to write security event:', error?.message || error);
   }
+};
+
+const getContentFilterConfig = async () => {
+  const config = await SiteContentFilter.findOne({ key: 'global' }).lean();
+  return {
+    zeroToleranceWords: normalizeFilterWords(config?.zeroToleranceWords || []),
+    maturityCensoredWords: normalizeFilterWords(config?.maturityCensoredWords || [])
+  };
+};
+
+const decorateRoomMessageContent = (message, maturityWords = [], censorEnabled = true) => {
+  if (!message || typeof message !== 'object') return message;
+  const rawContent = typeof message.content === 'string' ? message.content : message.content ?? null;
+  const contentCensored = typeof rawContent === 'string'
+    ? censorMaturityText(rawContent, maturityWords)
+    : rawContent;
+  return {
+    ...message,
+    content: censorEnabled ? contentCensored : rawContent,
+    contentCensored
+  };
+};
+
+const getViewerContentFilterPreference = async (viewerId) => {
+  if (!viewerId) return true;
+  const viewerQuery = User.findById(viewerId).select('enableMaturityWordCensor');
+  const viewer = typeof viewerQuery?.lean === 'function'
+    ? await viewerQuery.lean()
+    : await viewerQuery;
+  return viewer?.enableMaturityWordCensor !== false;
 };
 
 // Middleware to verify JWT token
@@ -957,6 +993,10 @@ router.get('/rooms/:roomId', roomReadLimiter, authenticateToken, async (req, res
     if (!room) {
       return res.status(404).json({ error: 'Chat room not found' });
     }
+    const [contentFilter, censorEnabled] = await Promise.all([
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(req.user.userId)
+    ]);
     
     let messages = [];
     let pagination = {
@@ -979,7 +1019,9 @@ router.get('/rooms/:roomId', roomReadLimiter, authenticateToken, async (req, res
         beforeId: parsedCursor.id
       });
 
-      messages = cursorResult.messages;
+      messages = cursorResult.messages.map((message) => (
+        decorateRoomMessageContent(message, contentFilter.maturityCensoredWords, censorEnabled)
+      ));
       pagination = {
         mode: 'cursor',
         limit: cursorResult.limit,
@@ -989,7 +1031,9 @@ router.get('/rooms/:roomId', roomReadLimiter, authenticateToken, async (req, res
           : null
       };
     } else {
-      messages = await ChatMessage.getRoomMessages(roomId, page, limit);
+      messages = (await ChatMessage.getRoomMessages(roomId, page, limit)).map((message) => (
+        decorateRoomMessageContent(message, contentFilter.maturityCensoredWords, censorEnabled)
+      ));
       pagination.hasMore = messages.length === limit;
       pagination.nextCursor = messages.length > 0
         ? encodeMessageCursor(messages[0].createdAt, messages[0]._id)
@@ -1106,6 +1150,14 @@ router.post('/rooms/:roomId/messages', [
         });
       }
     }
+
+    const contentFilter = await getContentFilterConfig();
+    const bannedWord = findExactFilterWord(content, contentFilter.zeroToleranceWords);
+    if (bannedWord) {
+      return res.status(400).json({
+        error: `You are attempting to use a word that is banned on this site "${bannedWord}".`
+      });
+    }
     
     // Create message
     const messageData = {
@@ -1149,16 +1201,22 @@ router.post('/rooms/:roomId/messages', [
     
     // Broadcast message via WebSocket (handled in server.js)
     const publicMessage = savedMessage.toPublicMessage();
+    const realtimeMessage = decorateRoomMessageContent(publicMessage, contentFilter.maturityCensoredWords, false);
+    const responseMessage = decorateRoomMessageContent(
+      publicMessage,
+      contentFilter.maturityCensoredWords,
+      user.enableMaturityWordCensor !== false
+    );
 
     emitChatMessage({
       userIds: room.members,
-      message: publicMessage
+      message: realtimeMessage
     });
     
     res.status(201).json({
       success: true,
       message: 'Message sent successfully',
-      message: publicMessage,
+      messageData: responseMessage,
       rateLimit: {
         allowed: true,
         retryAfter: 0
@@ -1787,6 +1845,10 @@ router.get('/rooms/:roomId/messages', authenticateToken, async (req, res) => {
     if (!room) {
       return res.status(404).json({ error: 'Chat room not found' });
     }
+    const [contentFilter, censorEnabled] = await Promise.all([
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(req.user.userId)
+    ]);
     
     let messages = [];
     let pagination = {
@@ -1809,7 +1871,9 @@ router.get('/rooms/:roomId/messages', authenticateToken, async (req, res) => {
         beforeId: parsedCursor.id
       });
 
-      messages = cursorResult.messages;
+      messages = cursorResult.messages.map((message) => (
+        decorateRoomMessageContent(message, contentFilter.maturityCensoredWords, censorEnabled)
+      ));
       pagination = {
         mode: 'cursor',
         limit: cursorResult.limit,
@@ -1819,7 +1883,9 @@ router.get('/rooms/:roomId/messages', authenticateToken, async (req, res) => {
           : null
       };
     } else {
-      messages = await ChatMessage.getRoomMessages(roomId, page, limit);
+      messages = (await ChatMessage.getRoomMessages(roomId, page, limit)).map((message) => (
+        decorateRoomMessageContent(message, contentFilter.maturityCensoredWords, censorEnabled)
+      ));
       pagination.hasMore = messages.length === limit;
       pagination.nextCursor = messages.length > 0
         ? encodeMessageCursor(messages[0].createdAt, messages[0]._id)

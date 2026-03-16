@@ -103,7 +103,8 @@ function UserSettings({
     bio: '',
     avatarUrl: '',
     bannerUrl: '',
-    linksText: ''
+    linksText: '',
+    enableMaturityWordCensor: true
   });
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -163,7 +164,8 @@ function UserSettings({
       bio: user.bio || '',
       avatarUrl: user.avatarUrl || '',
       bannerUrl: user.bannerUrl || '',
-      linksText: linksToText(user.links)
+      linksText: linksToText(user.links),
+      enableMaturityWordCensor: user.enableMaturityWordCensor !== false
     });
     setPgpPublicKey(user.pgpPublicKey || '');
     setPgpGenerationForm((prev) => ({
@@ -201,8 +203,8 @@ function UserSettings({
   }, [profileUserId]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   const handleSave = async (e) => {
@@ -834,6 +836,21 @@ function UserSettings({
                   placeholder="https://example.com\nhttps://github.com/username"
                 />
               </div>
+              <label className="flex items-start gap-3 rounded border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  name="enableMaturityWordCensor"
+                  checked={form.enableMaturityWordCensor}
+                  onChange={handleChange}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>
+                  <span className="block font-medium text-gray-900">Sensitive word censor</span>
+                  <span className="block text-xs text-gray-500">
+                    When enabled, maturity-censored site words are masked everywhere you view feed posts and chat room messages.
+                  </span>
+                </span>
+              </label>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-3 text-xs text-gray-500">
                   Location can only be changed once every 7 days.

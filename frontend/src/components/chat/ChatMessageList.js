@@ -9,6 +9,7 @@ function ChatMessageList({
   messages,
   loading,
   profile,
+  censorSensitiveWords,
   theme,
   onOpenUserMenu,
   reactionsByMessageId,
@@ -115,6 +116,7 @@ function ChatMessageList({
               message={message}
               isOwnMessage={String(message.userId?._id) === String(profile?._id)}
               currentUserId={profile?._id}
+              censorSensitiveWords={censorSensitiveWords}
               theme={theme}
               onOpenUserMenu={onOpenUserMenu}
               reactionsByType={reactionsByMessageId?.[String(message._id)] || {}}

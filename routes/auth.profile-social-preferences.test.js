@@ -24,21 +24,23 @@ const buildApp = () => {
 };
 
 const buildUserDoc = () => {
-  const user = {
-    _id: 'user-1',
-    realName: 'Test User',
-    profileTheme: 'default',
-    socialPagePreferences: {},
-    save: jest.fn().mockResolvedValue(true),
-    toPublicProfile: jest.fn(function toPublicProfile() {
-      return {
-        _id: this._id,
-        realName: this.realName,
-        profileTheme: this.profileTheme,
-        socialPagePreferences: this.socialPagePreferences
-      };
-    })
-  };
+    const user = {
+      _id: 'user-1',
+      realName: 'Test User',
+      profileTheme: 'default',
+      socialPagePreferences: {},
+      enableMaturityWordCensor: true,
+      save: jest.fn().mockResolvedValue(true),
+      toPublicProfile: jest.fn(function toPublicProfile() {
+        return {
+          _id: this._id,
+          realName: this.realName,
+          profileTheme: this.profileTheme,
+          socialPagePreferences: this.socialPagePreferences,
+          enableMaturityWordCensor: this.enableMaturityWordCensor
+        };
+      })
+    };
   return user;
 };
 
@@ -130,5 +132,23 @@ describe('Auth social page preferences profile updates', () => {
     expect(response.status).toBe(400);
     expect(response.body.errors?.[0]?.msg).toMatch(/primary section/i);
     expect(user.save).not.toHaveBeenCalled();
+  });
+
+  it('saves maturity word censor preference changes', async () => {
+    const app = buildApp();
+    const user = buildUserDoc();
+    mockUserModel.findById.mockResolvedValue(user);
+
+    const response = await request(app)
+      .put('/api/auth/profile')
+      .set('Authorization', 'Bearer token')
+      .send({
+        enableMaturityWordCensor: false
+      });
+
+    expect(response.status).toBe(200);
+    expect(user.enableMaturityWordCensor).toBe(false);
+    expect(user.save).toHaveBeenCalled();
+    expect(response.body.user.enableMaturityWordCensor).toBe(false);
   });
 });
