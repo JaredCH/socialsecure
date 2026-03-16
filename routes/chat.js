@@ -955,12 +955,42 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
       ]
     };
 
-    const rooms = await ChatRoom.find(allowedRoomFilter)
-      .select('_id name type city state country county discoverable eventRef members messageCount lastActivity')
-      .sort({ lastActivity: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const rooms = await ChatRoom.aggregate([
+      { $match: allowedRoomFilter },
+      {
+        $addFields: {
+          discoveryTypePriority: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$type', 'state'] }, then: 0 },
+                { case: { $eq: ['$type', 'county'] }, then: 1 },
+                { case: { $eq: ['$type', 'topic'] }, then: 2 }
+              ],
+              default: 3
+            }
+          }
+        }
+      },
+      { $sort: { discoveryTypePriority: 1, lastActivity: -1, createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          type: 1,
+          city: 1,
+          state: 1,
+          country: 1,
+          county: 1,
+          discoverable: 1,
+          eventRef: 1,
+          members: 1,
+          messageCount: 1,
+          lastActivity: 1
+        }
+      }
+    ]);
 
     const total = await ChatRoom.countDocuments(allowedRoomFilter);
 
@@ -2221,7 +2251,7 @@ router.post('/rooms/:roomId/leave', authenticateToken, async (req, res) => {
 });
 
 // List room members for slash /list UX
-router.get('/rooms/:roomId/users', authenticateToken, async (req, res) => {
+router.get('/rooms/:roomId/users', roomReadLimiter, authenticateToken, async (req, res) => {
   try {
     const { roomId } = req.params;
     const room = await ChatRoom.findById(roomId).select('_id name members').lean();
@@ -2232,15 +2262,16 @@ router.get('/rooms/:roomId/users', authenticateToken, async (req, res) => {
 
     const memberIds = Array.isArray(room.members) ? room.members : [];
     const users = memberIds.length > 0
-      ? await User.find({ _id: { $in: memberIds } }).select('_id username realName').lean()
+      ? await User.find({ _id: { $in: memberIds } }).select('_id username realName mutedUntil').lean()
       : [];
 
     const sortedUsers = users
-      .map((u) => ({
-        _id: u._id,
-        username: u.username || null,
-        realName: u.realName || null
-      }))
+        .map((u) => ({
+          _id: u._id,
+          username: u.username || null,
+          realName: u.realName || null,
+          mutedUntil: u.mutedUntil || null
+        }))
       .sort((a, b) => {
         const aName = (a.username || a.realName || '').toLowerCase();
         const bName = (b.username || b.realName || '').toLowerCase();
@@ -2553,14 +2584,15 @@ router.get('/conversations/:conversationId/users', unifiedChatLimiter, authentic
     }
 
     const users = await User.find({ _id: { $in: [...participantIds] } })
-      .select('_id username realName')
+      .select('_id username realName mutedUntil')
       .lean();
 
     const sortedUsers = users
       .map((u) => ({
         _id: u._id,
         username: u.username || null,
-        realName: u.realName || null
+        realName: u.realName || null,
+        mutedUntil: u.mutedUntil || null
       }))
       .sort((a, b) => {
         const aName = (a.username || a.realName || '').toLowerCase();

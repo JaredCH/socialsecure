@@ -216,6 +216,26 @@ const chatMessageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
     index: true
+  },
+  moderation: {
+    removedByAdmin: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    removedByAdminAt: {
+      type: Date,
+      default: null
+    },
+    removedByAdminBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    originalPayload: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
+    }
   }
 }, {
   timestamps: true
@@ -250,6 +270,10 @@ chatMessageSchema.statics.toPublicMessageShape = function(message) {
     commandData: message.commandData || null,
     location: message.location,
     createdAt: message.createdAt,
+    moderation: {
+      removedByAdmin: !!message?.moderation?.removedByAdmin,
+      removedByAdminAt: message?.moderation?.removedByAdminAt || null
+    },
     migrationFlag: message?.e2ee?.migrationFlag || 'legacy',
     plaintextTombstoned: !!message?.e2ee?.plaintextTombstoned,
     migratedAt: message?.e2ee?.migratedAt || null,

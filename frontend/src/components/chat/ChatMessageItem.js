@@ -148,7 +148,13 @@ function ChatMessageItem({
   reactionsByType = {},
   reactionOptions = [],
   onToggleReaction,
-  longPressDelayMs = DEFAULT_LONG_PRESS_DELAY_MS
+  longPressDelayMs = DEFAULT_LONG_PRESS_DELAY_MS,
+  showAdminActions = false,
+  adminMutedUserIds,
+  adminProcessingMessageIds,
+  adminProcessingUserIds,
+  onToggleAdminMessageRemoval,
+  onToggleAdminUserMute
 }) {
   const author = message.userId?.username || message.userId?.realName || 'user';
   const usernameForProfileLink = typeof message.userId?.username === 'string' ? message.userId.username.trim() : '';
@@ -168,6 +174,12 @@ function ChatMessageItem({
   const displayContent = censorSensitiveWords && typeof message.contentCensored === 'string'
     ? message.contentCensored
     : message.content;
+  const normalizedMessageId = String(message?._id || '');
+  const normalizedAuthorId = String(message?.userId?._id || '');
+  const messageRemovedByAdmin = !!message?.moderation?.removedByAdmin;
+  const authorMutedByAdmin = adminMutedUserIds?.has?.(normalizedAuthorId);
+  const messageActionPending = adminProcessingMessageIds?.has?.(normalizedMessageId);
+  const muteActionPending = adminProcessingUserIds?.has?.(normalizedAuthorId);
 
   useEffect(() => () => {
     if (longPressTimerRef.current) {
@@ -249,6 +261,38 @@ function ChatMessageItem({
       ) : null}
     </div>
   );
+
+  const adminActionsMarkup = showAdminActions ? (
+    <div className="ml-2 flex shrink-0 items-start gap-1" data-chat-no-user-menu="true">
+      <button
+        type="button"
+        className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${theme.subtle}`}
+        aria-label={messageRemovedByAdmin ? 'Undo remove message' : 'Remove message'}
+        title={messageRemovedByAdmin ? 'Undo remove message' : 'Remove message'}
+        disabled={messageActionPending}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleAdminMessageRemoval?.(message);
+        }}
+      >
+        {messageActionPending ? '…' : (messageRemovedByAdmin ? 'Undo' : '🗑')}
+      </button>
+      <button
+        type="button"
+        className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${theme.subtle}`}
+        aria-label={authorMutedByAdmin ? 'Undo 2 hour mute' : 'Mute user for 2 hours'}
+        title={authorMutedByAdmin ? 'Undo 2 hour mute' : 'Mute user for 2 hours'}
+        disabled={muteActionPending || !normalizedAuthorId || isOwnMessage}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!menuUser) return;
+          onToggleAdminUserMute?.(menuUser);
+        }}
+      >
+        {muteActionPending ? '…' : (authorMutedByAdmin ? 'Undo' : '🔇')}
+      </button>
+    </div>
+  ) : null;
 
   if (isDmConversation) {
     const showAvatar = !isOwnMessage && !groupedWithNext;
@@ -366,28 +410,52 @@ function ChatMessageItem({
         <div className="w-9 shrink-0">
           {groupedWithPrevious ? <span className="block h-9 w-9" /> : avatarNode}
         </div>
-        <div className="min-w-0 flex-1">
-          {!groupedWithPrevious ? (
-            <div className="mb-0.5 flex items-baseline gap-2">
-              <button
-                type="button"
-                className={`truncate text-left text-sm font-semibold ${theme.senderAccent} hover:opacity-80`}
-                onClick={(event) => triggerUserMenu(event)}
-                onContextMenu={(event) => triggerUserMenu(event)}
-              >
-                {isOwnMessage ? 'You' : `@${author}`}
-              </button>
-              <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                {!groupedWithPrevious ? (
+                  <div className="mb-0.5 flex items-baseline gap-2">
+                    <button
+                      type="button"
+                      className={`truncate text-left text-sm font-semibold ${theme.senderAccent} hover:opacity-80`}
+                      onClick={(event) => triggerUserMenu(event)}
+                      onContextMenu={(event) => triggerUserMenu(event)}
+                    >
+                      {isOwnMessage ? 'You' : `@${author}`}
+                    </button>
+                    <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
+                  </div>
+                ) : null}
+                <div
+                  tabIndex={0}
+                  className="relative rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
+                  onMouseOver={() => {
+                    if (canHoverForReactions) {
+                      setReactionPickerOpen(true);
+                    }
+                  }}
+                  onMouseLeave={(event) => {
+                    if (canHoverForReactions && (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget))) {
+                      setReactionPickerOpen(false);
+                    }
+                  }}
+                  onClick={(event) => {
+                    if (canHoverForReactions) return;
+                    if (event.target?.closest?.('a, button, [data-chat-no-user-menu="true"]')) return;
+                    event.stopPropagation();
+                    setReactionPickerOpen((open) => !open);
+                  }}
+                >
+                  <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(displayContent)}</p>
+                  {reactionsMarkup}
+                </div>
+                {timestamp ? <span className="mt-1 block text-[10px] font-mono opacity-60">{timestamp}</span> : null}
+              </div>
+              {adminActionsMarkup}
             </div>
-          ) : null}
-          <div tabIndex={0} className="rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1">
-            <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(displayContent)}</p>
-            {reactionsMarkup}
           </div>
-          {timestamp ? <span className="mt-1 block text-[10px] font-mono opacity-60">{timestamp}</span> : null}
         </div>
-      </div>
-    </article>
+      </article>
   );
 }
 

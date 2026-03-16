@@ -384,6 +384,8 @@ function Chat() {
   }, [search]);
   const [passwordInput, setPasswordInput] = useState('');
   const [reactionByMessageId, setReactionByMessageId] = useState({});
+  const [adminMessageActionIds, setAdminMessageActionIds] = useState([]);
+  const [adminMuteActionUserIds, setAdminMuteActionUserIds] = useState([]);
   const [userContextMenu, setUserContextMenu] = useState({
     open: false,
     x: 0,
@@ -1389,6 +1391,74 @@ function Chat() {
     });
   }, [profile?._id]);
 
+  const handleToggleAdminMessageRemoval = useCallback(async (message) => {
+    const messageId = String(message?._id || '').trim();
+    if (!profile?.isAdmin || !messageId || activeConversation?.type === 'dm') return;
+
+    const messageType = isRoomConversation(activeConversation) ? 'room' : 'conversation';
+    setAdminMessageActionIds((prev) => (prev.includes(messageId) ? prev : [...prev, messageId]));
+    try {
+      const response = message?.moderation?.removedByAdmin
+        ? await moderationAPI.restoreMessageByAdmin(messageId, messageType)
+        : await moderationAPI.removeMessageByAdmin(messageId, messageType);
+      setMessages((prev) => upsertConversationMessage(prev, response.data?.message || {}));
+      toast.success(message?.moderation?.removedByAdmin ? 'Message restored' : 'Message removed');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update message');
+    } finally {
+      setAdminMessageActionIds((prev) => prev.filter((entry) => entry !== messageId));
+    }
+  }, [activeConversation, profile?.isAdmin]);
+
+  const handleToggleAdminUserMute = useCallback(async (user) => {
+    const userId = String(user?._id || '').trim();
+    if (!profile?.isAdmin || !userId || userId === String(profile?._id || '')) return;
+
+    const isMuted = roomUsers.some((entry) => {
+      if (String(entry?._id || '') !== userId) return false;
+      const mutedUntilTs = new Date(entry?.mutedUntil || 0).getTime();
+      return Number.isFinite(mutedUntilTs) && mutedUntilTs > Date.now();
+    });
+    setAdminMuteActionUserIds((prev) => (prev.includes(userId) ? prev : [...prev, userId]));
+    try {
+      if (isMuted) {
+        await moderationAPI.unmuteUserByAdmin(userId);
+      } else {
+        await moderationAPI.muteUserByAdmin(userId, {
+          durationKey: '2h',
+          reason: 'Muted by site Admin from chat room'
+        });
+      }
+      setRoomUsers((prev) => {
+        const nextMutedUntil = isMuted ? null : new Date(Date.now() + (2 * 60 * 60 * 1000)).toISOString();
+        let found = false;
+        const nextUsers = prev.map((entry) => {
+          if (String(entry?._id || '') !== userId) return entry;
+          found = true;
+          return {
+            ...entry,
+            mutedUntil: nextMutedUntil
+          };
+        });
+        if (found) return nextUsers;
+        return [
+          ...nextUsers,
+          {
+            _id: userId,
+            username: user?.username || null,
+            realName: user?.realName || null,
+            mutedUntil: nextMutedUntil
+          }
+        ];
+      });
+      toast.success(isMuted ? 'User unmuted' : 'User muted for 2 hours');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update user mute');
+    } finally {
+      setAdminMuteActionUserIds((prev) => prev.filter((entry) => entry !== userId));
+    }
+  }, [profile?._id, profile?.isAdmin, roomUsers]);
+
   useEffect(() => {
     if (!userContextMenu.open) return undefined;
     const handleWindowClick = () => setUserContextMenu((prev) => ({ ...prev, open: false }));
@@ -1647,11 +1717,14 @@ function Chat() {
         ) : null}
       </header>
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[2.6fr_8fr_2.2fr]">
+      <div
+        className="grid flex-1 min-h-0 grid-cols-1 gap-1 p-1 sm:gap-2 sm:p-2 md:gap-3 md:p-3 lg:grid-cols-[2.6fr_8fr_2.2fr]"
+        data-testid="chat-layout-grid"
+      >
         <aside
           className={[
             mobileWorkspaceOpen ? 'hidden' : 'flex',
-            'min-h-0 flex-col rounded-2xl border p-2 md:p-3 lg:flex',
+            'min-h-0 flex-col rounded-2xl border p-1.5 sm:p-2 md:p-3 lg:flex',
             activeTheme.panel
           ].join(' ')}
         >
@@ -1986,7 +2059,7 @@ function Chat() {
         <section
           className={[
             mobileWorkspaceOpen ? 'flex' : 'hidden',
-            'min-h-0 flex-col rounded-2xl border px-2 pb-2 pt-1 md:p-3 lg:flex',
+            'min-h-0 flex-col rounded-2xl border px-1.5 pb-1.5 pt-1 sm:px-2 sm:pb-2 md:p-3 lg:flex',
             activeTheme.panel
           ].join(' ')}
         >
@@ -1994,7 +2067,7 @@ function Chat() {
             <div className="mb-3 rounded border border-red-400 bg-red-50 p-2 text-sm text-red-700">{messagesError}</div>
           ) : null}
 
-          <div className="relative flex-1 min-h-0">
+          <div className="relative flex-1 min-h-0 overflow-hidden" data-testid="chat-message-panel">
             <ChatMessageList
               conversationId={activeConversationId}
               conversationType={activeConversation?.type}
@@ -2010,24 +2083,30 @@ function Chat() {
               hasMoreMessages={messagesHasMore}
               onLoadOlderMessages={handleLoadOlderMessages}
               onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
+              showAdminActions={!!profile?.isAdmin && activeConversation?.type !== 'dm'}
+              adminMutedUserIds={adminMutedUserIds}
+              adminProcessingMessageIds={adminProcessingMessageIds}
+              adminProcessingUserIds={adminProcessingUserIds}
+              onToggleAdminMessageRemoval={handleToggleAdminMessageRemoval}
+              onToggleAdminUserMute={handleToggleAdminUserMute}
             />
             {activeConversation?.type === 'dm' && activeConversationId && !dmUnlockedByConversation[String(activeConversationId)] ? (
               <div
-                className="absolute inset-3 z-20 flex items-center justify-center rounded-2xl border border-red-400/80 bg-gradient-to-br from-red-950/95 via-red-900/92 to-rose-950/95 p-4 text-red-50 shadow-[0_22px_55px_rgba(127,29,29,0.45)] backdrop-blur-sm"
+                className="absolute inset-2 z-20 flex items-center justify-center rounded-2xl border border-red-400/80 bg-gradient-to-br from-red-950/95 via-red-900/92 to-rose-950/95 p-3 text-red-50 shadow-[0_22px_55px_rgba(127,29,29,0.45)] backdrop-blur-sm sm:inset-3 sm:p-4"
                 data-testid="dm-lock-overlay"
               >
                 <form
-                  className="w-full max-w-md rounded-2xl border border-red-300/35 bg-black/20 p-4 shadow-2xl backdrop-blur-md"
+                  className="w-full max-w-md rounded-2xl border border-red-300/35 bg-black/20 p-3 shadow-2xl backdrop-blur-md sm:p-4"
                   onSubmit={async (event) => {
                     event.preventDefault();
                     await handleUnlockActiveDM();
                   }}
                 >
-                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-red-200/70 bg-red-500/20 text-3xl shadow-[0_0_28px_rgba(248,113,113,0.38)]">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-red-200/70 bg-red-500/20 text-2xl shadow-[0_0_28px_rgba(248,113,113,0.38)] sm:h-14 sm:w-14 sm:text-3xl">
                     🔒
                   </div>
-                  <h3 className="text-center text-lg font-semibold">Encrypted conversation locked</h3>
-                  <p className="mt-2 text-center text-sm text-red-100/90">
+                  <h3 className="text-center text-base font-semibold sm:text-lg">Encrypted conversation locked</h3>
+                  <p className="mt-2 text-center text-xs text-red-100/90 sm:text-sm">
                     Enter your encryption password to reveal this direct message. Press Enter or use Unlock when you're ready.
                   </p>
                   <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.16em]" htmlFor="dm-unlock-password">
@@ -2079,7 +2158,7 @@ function Chat() {
               </div>
             ) : null}
 
-            <div className="sticky bottom-0 pb-[env(safe-area-inset-bottom)]">
+            <div className="shrink-0 pb-[env(safe-area-inset-bottom)]" data-testid="chat-composer-shell">
               <ChatComposerBar
                 composerValue={composerValue}
                 setComposerValue={setComposerValue}

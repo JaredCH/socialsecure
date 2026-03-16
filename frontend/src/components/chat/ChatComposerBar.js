@@ -63,7 +63,7 @@ function ChatComposerBar({
   };
 
   return (
-    <form onSubmit={onSubmit} className={`relative rounded-xl border p-1.5 ${theme.panelGlass}`}>
+    <form onSubmit={onSubmit} className={`relative rounded-xl border p-1 sm:p-1.5 ${theme.panelGlass}`}>
       <div className="flex items-end gap-2">
         <button
           type="button"
