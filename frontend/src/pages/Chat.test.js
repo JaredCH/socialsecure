@@ -26,6 +26,9 @@ jest.mock('../utils/api', () => ({
     syncLocationRooms: jest.fn(),
     getAllRooms: jest.fn(),
     joinRoom: jest.fn(),
+    getMessages: jest.fn(),
+    getRoomUsers: jest.fn(),
+    sendMessage: jest.fn(),
     startDM: jest.fn(),
     getProfileThread: jest.fn()
   },
@@ -117,6 +120,19 @@ describe('Chat zip room indicator', () => {
     chatAPI.syncLocationRooms.mockResolvedValue({ data: { success: true } });
     chatAPI.getAllRooms.mockResolvedValue({ data: { rooms: [] } });
     chatAPI.joinRoom.mockResolvedValue({ data: { success: true } });
+    chatAPI.getMessages.mockResolvedValue({ data: { messages: [], pagination: { hasMore: false } } });
+    chatAPI.getRoomUsers.mockResolvedValue({ data: { users: [] } });
+    chatAPI.sendMessage.mockResolvedValue({
+      data: {
+        message: {
+          _id: 'room-m-1',
+          content: 'room ok',
+          userId: { _id: 'u1', username: 'alpha' },
+          createdAt: new Date().toISOString(),
+          roomId: 'room-1'
+        }
+      }
+    });
     const session = {
       deviceId: 'device-1',
       getRegisterPayload: jest.fn().mockResolvedValue({
@@ -337,6 +353,135 @@ describe('Chat zip room indicator', () => {
       .map((node) => node.getAttribute('data-topic-room'));
     expect(topicRows).toEqual(['AI', 'Technology']);
     expect(container.textContent).toContain('Topics');
+  });
+
+  it('only shows room search results after a query and opens a clicked room by joining it', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'topic-ai', type: 'topic', name: 'AI', members: [] }
+        ]
+      }
+    });
+    chatAPI.getMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            _id: 'room-msg-1',
+            roomId: 'topic-ai',
+            content: 'Welcome to AI',
+            userId: { _id: 'u2', username: 'buddy' },
+            createdAt: '2024-01-01T00:00:00.000Z'
+          }
+        ],
+        pagination: { hasMore: false }
+      }
+    });
+    chatAPI.getRoomUsers.mockResolvedValue({
+      data: {
+        users: [{ _id: 'u2', username: 'buddy' }]
+      }
+    });
+
+    await renderChat();
+
+    expect(container.querySelectorAll('[data-room-search-result]')).toHaveLength(0);
+    expect(container.textContent).toContain('Search to find a room when you need one.');
+
+    const roomSearchInput = container.querySelector('input[placeholder="Search by room or location..."]');
+    await act(async () => {
+      setInputValue(roomSearchInput, 'AI');
+      await flush();
+    });
+
+    const roomResult = container.querySelector('[data-room-search-result="AI"] button');
+    expect(roomResult).not.toBeNull();
+
+    await act(async () => {
+      roomResult.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(chatAPI.joinRoom).toHaveBeenCalledWith('topic-ai');
+    expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-ai', 1, 40);
+    expect(chatAPI.getRoomUsers).toHaveBeenCalledWith('topic-ai');
+    expect(container.textContent).toContain('Welcome to AI');
+    expect(container.querySelector('[data-open-chat-tab="AI"]')).not.toBeNull();
+  });
+
+  it('limits open chat tabs to six most recent conversations', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: Array.from({ length: 7 }, (_, index) => ({
+          _id: `topic-${index + 1}`,
+          type: 'topic',
+          name: `Room ${index + 1}`,
+          members: []
+        }))
+      }
+    });
+    chatAPI.getMessages.mockImplementation((roomId) => Promise.resolve({
+      data: {
+        messages: [
+          {
+            _id: `msg-${roomId}`,
+            roomId,
+            content: `Loaded ${roomId}`,
+            userId: { _id: 'u2', username: 'buddy' },
+            createdAt: '2024-01-01T00:00:00.000Z'
+          }
+        ],
+        pagination: { hasMore: false }
+      }
+    }));
+
+    await renderChat();
+
+    const roomSearchInput = container.querySelector('input[placeholder="Search by room or location..."]');
+    await act(async () => {
+      setInputValue(roomSearchInput, 'Room');
+      await flush();
+    });
+
+    const openButtons = () => Array.from(container.querySelectorAll('[data-room-search-result] > div > button:first-child'));
+
+    for (const button of openButtons()) {
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await flush();
+      });
+    }
+
+    const openTabs = Array.from(container.querySelectorAll('[data-open-chat-tab]')).map((node) => node.getAttribute('data-open-chat-tab'));
+    expect(openTabs).toHaveLength(6);
+    expect(openTabs).not.toContain('Zip 02115');
+    expect(openTabs).not.toContain('Room 1');
+    expect(openTabs).toContain('Room 7');
+    expect(container.textContent).toContain('6/6');
   });
 
   it('filters DM conversations and starts a new DM from the plus picker', async () => {

@@ -8,8 +8,10 @@ const Post = require('../models/Post');
 const BlockList = require('../models/BlockList');
 const Resume = require('../models/Resume');
 const Friendship = require('../models/Friendship');
+const SiteContentFilter = require('../models/SiteContentFilter');
 const { toPublicSocialPagePreferences } = require('../utils/socialPagePreferences');
 const { normalizeRelationshipAudience, socialOrUnsetAudienceQuery } = require('../utils/relationshipAudience');
+const { censorMaturityText, normalizeFilterWords } = require('../utils/contentFilter');
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -189,6 +191,22 @@ const getViewerIdFromAuthHeader = (req) => {
   }
 };
 
+const getContentFilterConfig = async () => {
+  const config = await SiteContentFilter.findOne({ key: 'global' }).lean();
+  return {
+    maturityCensoredWords: normalizeFilterWords(config?.maturityCensoredWords || [])
+  };
+};
+
+const getViewerContentFilterPreference = async (viewerId) => {
+  if (!viewerId) return false;
+  const viewerQuery = User.findById(viewerId).select('enableMaturityWordCensor');
+  const viewer = typeof viewerQuery?.lean === 'function'
+    ? await viewerQuery.lean()
+    : await viewerQuery;
+  return viewer?.enableMaturityWordCensor !== false;
+};
+
 const hasBlockRelationship = async (viewerId, targetId) => {
   if (!viewerId || !targetId) return false;
   const record = await BlockList.findOne({
@@ -311,22 +329,30 @@ const normalizeMediaUrls = (mediaUrlsInput) => {
   return normalized;
 };
 
-const toPublicPost = (post) => ({
-  _id: post._id,
-  authorId: post.authorId,
-  targetFeedId: post.targetFeedId,
-  content: post.content || null,
-  mediaUrls: normalizeMediaUrls(post.mediaUrls),
-  visibility: post.visibility,
-  relationshipAudience: normalizeRelationshipAudience(post.relationshipAudience),
-  visibleToCircles: Array.isArray(post.visibleToCircles) ? post.visibleToCircles : [],
-  locationRadius: Number.isFinite(Number(post.locationRadius)) ? Number(post.locationRadius) : null,
-  expiresAt: post.expiresAt || null,
-  likesCount: Array.isArray(post.likes) ? post.likes.length : 0,
-  commentsCount: Array.isArray(post.comments) ? post.comments.length : 0,
-  createdAt: post.createdAt,
-  updatedAt: post.updatedAt
-});
+const toPublicPost = (post, options = {}) => {
+  const rawContent = post.content || null;
+  const contentCensored = typeof rawContent === 'string'
+    ? censorMaturityText(rawContent, options.maturityWords || [])
+    : rawContent;
+
+  return {
+    _id: post._id,
+    authorId: post.authorId,
+    targetFeedId: post.targetFeedId,
+    content: options.censorEnabled ? contentCensored : rawContent,
+    contentCensored,
+    mediaUrls: normalizeMediaUrls(post.mediaUrls),
+    visibility: post.visibility,
+    relationshipAudience: normalizeRelationshipAudience(post.relationshipAudience),
+    visibleToCircles: Array.isArray(post.visibleToCircles) ? post.visibleToCircles : [],
+    locationRadius: Number.isFinite(Number(post.locationRadius)) ? Number(post.locationRadius) : null,
+    expiresAt: post.expiresAt || null,
+    likesCount: Array.isArray(post.likes) ? post.likes.length : 0,
+    commentsCount: Array.isArray(post.comments) ? post.comments.length : 0,
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt
+  };
+};
 
 // GET /api/public/users/:username
 router.get('/users/:username', publicReadLimiter, async (req, res) => {
@@ -338,6 +364,10 @@ router.get('/users/:username', publicReadLimiter, async (req, res) => {
     }
 
     const viewerId = getViewerIdFromAuthHeader(req);
+    const [contentFilter, censorEnabled] = await Promise.all([
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(viewerId)
+    ]);
     const blocked = await hasBlockRelationship(viewerId, user._id);
     const isOwner = viewerId && String(viewerId) === String(user._id);
     const privateProfile = isPrivateProfile(user) && !isOwner;
@@ -532,7 +562,10 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
         ...toPublicUserProfile(user, relationshipContext),
         ...(resumeMeta || { hasPublicResume: false })
       },
-      posts: posts.map(toPublicPost),
+      posts: posts.map((post) => toPublicPost(post, {
+        maturityWords: contentFilter.maturityCensoredWords,
+        censorEnabled
+      })),
       pagination: {
         page,
         limit,
@@ -555,6 +588,10 @@ router.get('/users/:username/friends/circles', publicReadLimiter, async (req, re
     }
 
     const viewerId = getViewerIdFromAuthHeader(req);
+    const [contentFilter, censorEnabled] = await Promise.all([
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(viewerId)
+    ]);
     const blocked = await hasBlockRelationship(viewerId, user._id);
     const isOwner = viewerId && String(viewerId) === String(user._id);
     const privateProfile = isPrivateProfile(user) && !isOwner;
@@ -685,6 +722,8 @@ router.get('/users/:userId/gallery', async (req, res) => {
 
     const items = posts.map((post) => {
       const normalizedMediaUrls = normalizeMediaUrls(post.mediaUrls);
+      const contentCensored = censorMaturityText(post.content || null, contentFilter.maturityCensoredWords);
+      const displayContent = censorEnabled ? contentCensored : (post.content || null);
 
       return {
         postId: post._id,
@@ -700,7 +739,8 @@ router.get('/users/:userId/gallery', async (req, res) => {
         })),
         sourcePost: {
             _id: post._id,
-            content: post.content || null,
+            content: displayContent,
+            contentCensored,
             visibility: post.visibility,
             relationshipAudience: normalizeRelationshipAudience(post.relationshipAudience),
             createdAt: post.createdAt,
@@ -708,7 +748,8 @@ router.get('/users/:userId/gallery', async (req, res) => {
           author: post.authorId,
           targetFeed: post.targetFeedId
         },
-        content: post.content || null,
+        content: displayContent,
+        contentCensored,
         createdAt: post.createdAt,
         updatedAt: post.updatedAt
       };

@@ -109,6 +109,8 @@ const mockNewsIngestionRecordFind = jest.fn();
 const mockNewsIngestionRecordCountDocuments = jest.fn().mockResolvedValue(0);
 const mockNewsIngestionRecordFindById = jest.fn();
 const mockZipLocationIndexFind = jest.fn();
+const mockSiteContentFilterFindOne = jest.fn();
+const mockSiteContentFilterFindOneAndUpdate = jest.fn();
 jest.mock('../models/NewsIngestionRecord', () => ({
   find: (...args) => mockNewsIngestionRecordFind(...args),
   countDocuments: (...args) => mockNewsIngestionRecordCountDocuments(...args),
@@ -116,6 +118,10 @@ jest.mock('../models/NewsIngestionRecord', () => ({
 }));
 jest.mock('../models/ZipLocationIndex', () => ({
   find: (...args) => mockZipLocationIndexFind(...args)
+}));
+jest.mock('../models/SiteContentFilter', () => ({
+  findOne: (...args) => mockSiteContentFilterFindOne(...args),
+  findOneAndUpdate: (...args) => mockSiteContentFilterFindOneAndUpdate(...args)
 }));
 
 const moderationRouter = require('./moderation');
@@ -157,6 +163,8 @@ describe('Moderation control panel admin actions', () => {
     mockNewsIngestionRecordCountDocuments.mockResolvedValue(0);
     mockNewsIngestionRecordFindById.mockReturnValue(buildChain([]));
     mockZipLocationIndexFind.mockReturnValue(buildChain([]));
+    mockSiteContentFilterFindOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
+    mockSiteContentFilterFindOneAndUpdate.mockReturnValue({ lean: jest.fn().mockResolvedValue({ zeroToleranceWords: [], maturityCensoredWords: [] }) });
     mockArticleFindById.mockReturnValue(buildChain([]));
     mockReportFind.mockReturnValue(buildChain([]));
     mockReportCountDocuments.mockResolvedValue(0);
@@ -511,5 +519,53 @@ describe('Moderation control panel admin actions', () => {
     expect(response.body.rows[0].type).toBe('dm');
     expect(response.body.rows[0].title).toBe('Alice & Bob');
     expect(response.body.rows[0].messageCount).toBe(15);
+  });
+
+  it('returns stored content filter word lists', async () => {
+    const app = buildApp();
+    mockSiteContentFilterFindOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        zeroToleranceWords: ['slur'],
+        maturityCensoredWords: ['fuck']
+      })
+    });
+
+    const response = await request(app)
+      .get('/api/moderation/control-panel/content-filter')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.zeroToleranceWords).toEqual(['slur']);
+    expect(response.body.maturityCensoredWords).toEqual(['fuck']);
+  });
+
+  it('saves normalized content filter word lists', async () => {
+    const app = buildApp();
+    mockSiteContentFilterFindOneAndUpdate.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        zeroToleranceWords: ['Slur'],
+        maturityCensoredWords: ['Fuck']
+      })
+    });
+
+    const response = await request(app)
+      .put('/api/moderation/control-panel/content-filter')
+      .set('Authorization', 'Bearer token')
+      .send({
+        zeroToleranceWords: [' Slur ', 'slur'],
+        maturityCensoredWords: ['Fuck', ' fuck ']
+      });
+
+    expect(response.status).toBe(200);
+    expect(mockSiteContentFilterFindOneAndUpdate).toHaveBeenCalledWith(
+      { key: 'global' },
+      expect.objectContaining({
+        $set: {
+          zeroToleranceWords: ['Slur'],
+          maturityCensoredWords: ['Fuck']
+        }
+      }),
+      expect.objectContaining({ upsert: true, new: true, setDefaultsOnInsert: true })
+    );
   });
 });
