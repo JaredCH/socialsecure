@@ -303,11 +303,12 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    const stateSummaries = Array.from(container.querySelectorAll('[data-discovery-state-summary]'))
+    const stateSummaryButtons = Array.from(container.querySelectorAll('[data-discovery-state-summary]'));
+    const stateSummaries = stateSummaryButtons
       .map((node) => node.getAttribute('data-discovery-state-summary'));
     expect(stateSummaries).toEqual(['Alabama', 'California', 'Wyoming']);
+    expect(stateSummaryButtons.map((node) => node.textContent)).toEqual(['Alabama+', 'California+', 'Wyoming+']);
 
-    const stateSummaryButtons = Array.from(container.querySelectorAll('[data-discovery-state-summary]'));
     for (const button of stateSummaryButtons) {
       await act(async () => {
         button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
