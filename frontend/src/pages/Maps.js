@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { mapsAPI } from '../utils/api';
 
 // Category icons
@@ -20,7 +20,7 @@ const STATE_ICONS = {
 };
 const GEOLOCATION_OPTIONS_TIMEOUT_MS = 8000;
 const GEOLOCATION_OPTIONS_MAX_AGE_MS = 60000;
-const HEATMAP_CIRCLE_RADIUS_METERS = 2000;
+export const HEATMAP_CIRCLE_RADIUS_METERS = 200 * 0.3048;
 export const LOCATION_PUBLISH_INTERVAL_MS = 30 * 1000;
 export const FRIENDS_REFRESH_INTERVAL_MS = 10 * 1000;
 const MAP_REFRESH_INTERVAL_MS = 60 * 1000;
@@ -29,6 +29,8 @@ const HEATMAP_MAX_STACK_LAYERS = 6;
 const HEATMAP_BASE_FILL_OPACITY = 0.08;
 const HEATMAP_INTENSITY_OPACITY_FACTOR = 0.14;
 const HEATMAP_MAX_FILL_OPACITY = 0.34;
+const MAP_FRIEND_FOCUS_ZOOM_LEVEL = 15;
+const MAP_SELF_FOCUS_ZOOM_LEVEL = 14;
 const createFallbackResponse = (data) => ({ data });
 
 export const withDataFallback = (request, fallbackData) =>
@@ -45,6 +47,40 @@ export const resolveLeafletModule = (leafletModule) => {
 
   return resolvedModule;
 };
+
+const getFriendActivityTimestamp = (friend) => {
+  const timestamp = friend?.lastActivityAt ? new Date(friend.lastActivityAt).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+export const sortFriendsByStatusAndActivity = (friends = []) => (
+  [...friends].sort((left, right) => {
+    if (Boolean(left?.isLive) !== Boolean(right?.isLive)) {
+      return left?.isLive ? -1 : 1;
+    }
+
+    return getFriendActivityTimestamp(right) - getFriendActivityTimestamp(left);
+  })
+);
+
+const getFriendDisplayLocation = (friend) =>
+  friend?.locationName
+  || friend?.city
+  || [friend?.state, friend?.country].filter(Boolean).join(', ')
+  || 'Location unavailable';
+
+const formatFriendStatus = (friend) => {
+  if (friend?.liveAgeSeconds != null) {
+    return `${friend.isLive ? 'Live' : 'Last seen'} • ${friend.liveAgeSeconds}s ago`;
+  }
+
+  return friend?.isLive ? 'Live now' : 'Offline';
+};
+
+const getFriendMarkerLabel = (friend) =>
+  friend?.user?.username?.[0]?.toUpperCase()
+  || friend?.user?.realName?.[0]?.toUpperCase()
+  || '•';
 
 const defaultLeafletAssetLoader = () => Promise.all([
   import('leaflet/dist/images/marker-icon-2x.png'),
@@ -92,8 +128,8 @@ function Maps() {
   const [friendsLocations, setFriendsLocations] = useState([]);
   const [spotlights, setSpotlights] = useState([]);
   const [heatmapData, setHeatmapData] = useState([]);
+  const [favoriteLocations, setFavoriteLocations] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
-  const [presence, setPresence] = useState(null);
   const [privacySettings, setPrivacySettings] = useState({ shareWithFriends: true });
   
   // UI states
@@ -101,8 +137,11 @@ function Maps() {
   const [error, setError] = useState(null);
   const [showCreateSpotlight, setShowCreateSpotlight] = useState(false);
   const [creatingSpotlight, setCreatingSpotlight] = useState(false);
+  const [savingFavorite, setSavingFavorite] = useState(false);
   const [mobileLayersMenuOpen, setMobileLayersMenuOpen] = useState(false);
   const [mobilePrivacyMenuOpen, setMobilePrivacyMenuOpen] = useState(false);
+  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
+  const [favoriteError, setFavoriteError] = useState(null);
   const [lastMapRefreshAt, setLastMapRefreshAt] = useState(null);
   const [lastFriendsRefreshAt, setLastFriendsRefreshAt] = useState(null);
   const [spotlightForm, setSpotlightForm] = useState({
@@ -110,6 +149,22 @@ function Maps() {
     description: '',
     category: 'other'
   });
+  const [favoriteForm, setFavoriteForm] = useState({
+    address: ''
+  });
+
+  const sortedFriends = useMemo(
+    () => sortFriendsByStatusAndActivity(friendsLocations),
+    [friendsLocations]
+  );
+  const onlineFriends = useMemo(
+    () => sortedFriends.filter((friend) => friend.isLive),
+    [sortedFriends]
+  );
+  const offlineFriends = useMemo(
+    () => sortedFriends.filter((friend) => !friend.isLive),
+    [sortedFriends]
+  );
 
   // Initialize map
   useEffect(() => {
@@ -189,6 +244,7 @@ function Maps() {
 
     initMap();
     fetchUserPresence();
+    fetchFavoriteLocations();
     return () => {
       cancelled = true;
       if (initTimeoutId) {
@@ -290,12 +346,20 @@ function Maps() {
     }
   };
 
+  const fetchFavoriteLocations = async () => {
+    try {
+      const favoritesRes = await withDataFallback(mapsAPI.getFavoriteLocations(), { favorites: [] });
+      setFavoriteLocations(favoritesRes.data.favorites || []);
+    } catch (err) {
+      console.error('Error fetching favorite locations:', err);
+    }
+  };
+
   // Fetch user presence
   const fetchUserPresence = async () => {
     try {
       const res = await mapsAPI.getPresence();
       if (res?.data?.presence) {
-        setPresence(res.data.presence);
         setPrivacySettings({ shareWithFriends: res.data.presence.shareWithFriends });
       }
     } catch (err) {
@@ -352,7 +416,10 @@ function Maps() {
     };
   }, [userLocation]);
 
-  const updateLocation = () => {
+  const focusCurrentLocation = () => {
+    if (map && userLocation) {
+      map.setView(userLocation, MAP_SELF_FOCUS_ZOOM_LEVEL);
+    }
     publishCurrentLocation({ recenterMap: true });
   };
 
@@ -407,6 +474,72 @@ function Maps() {
     }
   };
 
+  const saveFavoriteLocation = async (payload) => {
+    setSavingFavorite(true);
+    setFavoriteError(null);
+
+    try {
+      const res = await mapsAPI.createFavoriteLocation(payload);
+      const nextFavorite = res?.data?.favorite;
+      if (nextFavorite) {
+        setFavoriteLocations((prev) => [nextFavorite, ...prev]);
+      } else {
+        fetchFavoriteLocations();
+      }
+      setFavoriteForm({ address: '' });
+      setShowFavoritesModal(false);
+    } catch (err) {
+      setFavoriteError(err.response?.data?.error || 'Failed to save favorite location');
+    } finally {
+      setSavingFavorite(false);
+    }
+  };
+
+  const handleCreateFavorite = async (event) => {
+    event.preventDefault();
+    const address = favoriteForm.address.trim();
+    if (!address) {
+      setFavoriteError('Enter an address or use your current location.');
+      return;
+    }
+
+    await saveFavoriteLocation({ address });
+  };
+
+  const handleFavoriteCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setFavoriteError('Geolocation is not available on this device.');
+      return;
+    }
+
+    setFavoriteError(null);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        await saveFavoriteLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+      },
+      () => {
+        setFavoriteError('Unable to detect your current location.');
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: GEOLOCATION_OPTIONS_TIMEOUT_MS,
+        maximumAge: GEOLOCATION_OPTIONS_MAX_AGE_MS
+      }
+    );
+  };
+
+  const handleDeleteFavorite = async (favoriteId) => {
+    try {
+      await mapsAPI.deleteFavoriteLocation(favoriteId);
+      setFavoriteLocations((prev) => prev.filter((favorite) => favorite._id !== favoriteId));
+    } catch (err) {
+      setFavoriteError(err.response?.data?.error || 'Failed to remove favorite location');
+    }
+  };
+
   // Render markers on map
   useEffect(() => {
     const L = leafletRef.current;
@@ -436,18 +569,33 @@ function Maps() {
       friendsLocations.forEach(friend => {
         if (friend.lat != null && friend.lng != null) {
           const markerColor = friend.isLive ? '#10b981' : '#9ca3af';
+          const markerLabel = getFriendMarkerLabel(friend);
           const icon = L.divIcon({
             className: 'friend-marker',
-            html: `<div style="background:${markerColor};width:24px;height:24px;border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`,
+            html: `<div style="background:${markerColor};color:white;width:24px;height:24px;border-radius:999px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;box-shadow:0 2px 8px rgba(15,23,42,0.2);">${markerLabel}</div>`,
             iconSize: [24, 24]
           });
           
-          L.marker([friend.lat, friend.lng], { icon })
-            .bindPopup(`<b>${friend.user?.username || 'Friend'}</b><br/>${friend.city || friend.locationName || 'Location shared'}<br/>${friend.isLive ? 'Live now' : 'Recently shared'}`)
+          L.marker([friend.lat, friend.lng], { icon, zIndexOffset: friend.isLive ? 800 : 600 })
+            .bindPopup(`<b>${friend.user?.username || 'Friend'}</b><br/>${getFriendDisplayLocation(friend)}<br/>${friend.isLive ? 'Live now' : 'Offline'}`)
             .addTo(map);
         }
       });
     }
+
+    favoriteLocations.forEach((favorite) => {
+      if (favorite.lat == null || favorite.lng == null) return;
+
+      const icon = L.divIcon({
+        className: 'favorite-marker',
+        html: '<div style="background:#f59e0b;color:white;width:26px;height:26px;border-radius:999px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(245,158,11,0.45);">★</div>',
+        iconSize: [26, 26]
+      });
+
+      L.marker([favorite.lat, favorite.lng], { icon, zIndexOffset: 750 })
+        .bindPopup(`<b>Favorite</b><br/>${favorite.address}`)
+        .addTo(map);
+    });
     
     // Add spotlight markers
     if (layers.spotlights && spotlights.length > 0) {
@@ -489,7 +637,7 @@ function Maps() {
             const layerWeight = 1 - (index / (stackLayers + 1));
 
             L.circle([point.lat, point.lng], {
-              radius: HEATMAP_CIRCLE_RADIUS_METERS * (1 + index * 0.45),
+              radius: HEATMAP_CIRCLE_RADIUS_METERS,
               color: 'transparent',
               fillColor: '#ef4444',
               fillOpacity: Math.min(
@@ -503,7 +651,7 @@ function Maps() {
       });
     }
     
-  }, [map, userLocation, friendsLocations, spotlights, heatmapData, layers]);
+  }, [map, userLocation, friendsLocations, favoriteLocations, spotlights, heatmapData, layers]);
 
   const retryMapInitialization = () => {
     if (mapInstanceRef.current) {
@@ -518,7 +666,12 @@ function Maps() {
 
   const flyToFriend = (friend) => {
     if (!map || friend.lat == null || friend.lng == null) return;
-    map.setView([friend.lat, friend.lng], 14);
+    map.setView([friend.lat, friend.lng], MAP_FRIEND_FOCUS_ZOOM_LEVEL);
+  };
+
+  const flyToFavorite = (favorite) => {
+    if (!map || favorite.lat == null || favorite.lng == null) return;
+    map.setView([favorite.lat, favorite.lng], MAP_FRIEND_FOCUS_ZOOM_LEVEL);
   };
 
   useEffect(() => {
@@ -569,10 +722,19 @@ function Maps() {
         <h1 className="text-xl font-bold">🗺️ Maps</h1>
         <div className="flex items-center gap-2 text-sm">
           <button
-            onClick={updateLocation}
+            onClick={focusCurrentLocation}
             className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
           >
             📍 My Location
+          </button>
+          <button
+            onClick={() => {
+              setFavoriteError(null);
+              setShowFavoritesModal(true);
+            }}
+            className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+          >
+            + Favorites
           </button>
           <button
             onClick={() => setShowCreateSpotlight(true)}
@@ -673,6 +835,52 @@ function Maps() {
             </p>
           </div>
 
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <h2 className="text-xs font-semibold uppercase text-gray-500">Favorites</h2>
+              <button
+                onClick={() => {
+                  setFavoriteError(null);
+                  setShowFavoritesModal(true);
+                }}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+              >
+                + Favorites
+              </button>
+            </div>
+            {favoriteLocations.length === 0 ? (
+              <p className="text-sm text-gray-400">Save an address or your current location for quick zoom.</p>
+            ) : (
+              <div className="space-y-2">
+                {favoriteLocations.map((favorite) => (
+                  <div
+                    key={favorite._id}
+                    className="group flex items-start justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => flyToFavorite(favorite)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate text-sm font-medium text-gray-900">{favorite.address}</p>
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        {favorite.sourceType === 'current_location' ? 'Saved from current location' : 'Saved address'}
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFavorite(favorite._id)}
+                      className="text-xs font-semibold text-gray-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500"
+                      aria-label={`Remove favorite ${favorite.address}`}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Nearby Spotlights */}
           <div className="p-4 flex-1 overflow-y-auto">
             <h2 className="text-xs font-semibold uppercase text-gray-500 mb-2">Nearby Spotlights</h2>
@@ -734,6 +942,26 @@ function Maps() {
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
             </div>
           )}
+
+          <div className="absolute right-4 top-1/2 z-[550] hidden -translate-y-1/2 lg:flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={focusCurrentLocation}
+              className="rounded-full border border-white/70 bg-white/95 px-4 py-2 text-sm font-semibold text-gray-800 shadow-lg"
+            >
+              📍 My Location
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFavoriteError(null);
+                setShowFavoritesModal(true);
+              }}
+              className="rounded-full border border-white/70 bg-white/95 px-4 py-2 text-sm font-semibold text-gray-800 shadow-lg"
+            >
+              + Favorites
+            </button>
+          </div>
 
           {/* Error Toast */}
           {error && (
@@ -887,11 +1115,21 @@ function Maps() {
 
           <div className="absolute bottom-4 right-3 z-[550] flex flex-col gap-2 lg:hidden">
             <button
-              onClick={updateLocation}
+              onClick={focusCurrentLocation}
               className="h-11 w-11 rounded-full border border-white/70 bg-white/95 text-lg shadow-lg"
               aria-label="Update map to your location"
             >
               📍
+            </button>
+            <button
+              onClick={() => {
+                setFavoriteError(null);
+                setShowFavoritesModal(true);
+              }}
+              className="h-11 w-11 rounded-full border border-white/70 bg-white/95 text-base font-bold shadow-lg"
+              aria-label="Open favorite locations"
+            >
+              ★
             </button>
             <button
               onClick={() => setShowCreateSpotlight(true)}
@@ -906,7 +1144,7 @@ function Maps() {
         {/* Right Sidebar – Friends */}
         <aside className="hidden lg:flex w-64 shrink-0 bg-white border-l border-gray-200 overflow-y-auto flex-col">
           <div className="p-4 border-b border-gray-200">
-            <h2 className="text-xs font-semibold uppercase text-gray-500">Friends Nearby</h2>
+            <h2 className="text-xs font-semibold uppercase text-gray-500">Friends</h2>
             <p className="text-[11px] text-gray-400 mt-1">
               Refreshes every 10 seconds
             </p>
@@ -914,35 +1152,52 @@ function Maps() {
           <div className="flex-1 overflow-y-auto">
             {friendsLocations.length === 0 ? (
               <div className="p-4 text-center">
-                <p className="text-sm text-gray-400">No friends sharing locations.</p>
-                <p className="text-xs text-gray-400 mt-1">Friends with location enabled will appear here.</p>
+                <p className="text-sm text-gray-400">No friends found.</p>
+                <p className="text-xs text-gray-400 mt-1">Accepted friends will appear here when available.</p>
               </div>
             ) : (
-              <ul className="divide-y divide-gray-100">
-                {friendsLocations.map((friend, idx) => (
-                  <li key={friend.user?._id || idx}>
-                    <button
-                      onClick={() => flyToFriend(friend)}
-                      className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3"
-                    >
-                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium shrink-0 ${
-                        friend.isLive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
-                      }`}>
-                        {friend.user?.username?.[0]?.toUpperCase() || '?'}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{friend.user?.username || 'Friend'}</p>
-                        <p className="text-xs text-gray-500 truncate">{friend.city || friend.locationName || 'Location shared'}</p>
-                        <p className={`text-[11px] mt-0.5 ${friend.isLive ? 'text-emerald-600' : 'text-gray-500'}`}>
-                          {friend.liveAgeSeconds != null
-                            ? `${friend.isLive ? 'Live' : 'Recent'} • ${friend.liveAgeSeconds}s ago`
-                            : friend.isLive ? 'Live' : 'Recent'}
-                        </p>
-                      </div>
-                    </button>
-                  </li>
+              <div>
+                {[
+                  { key: 'online', label: 'Online', friends: onlineFriends },
+                  { key: 'offline', label: 'Offline', friends: offlineFriends }
+                ].map((group) => (
+                  <section key={group.key} className="border-b border-gray-100 last:border-b-0">
+                    <div className="sticky top-0 z-10 flex items-center justify-between bg-white/95 px-4 py-2 backdrop-blur">
+                      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{group.label}</h3>
+                      <span className="text-[11px] text-gray-400">{group.friends.length}</span>
+                    </div>
+                    {group.friends.length === 0 ? (
+                      <p className="px-4 pb-4 text-xs text-gray-400">No {group.label.toLowerCase()} friends.</p>
+                    ) : (
+                      <ul className="divide-y divide-gray-100">
+                        {group.friends.map((friend, idx) => (
+                          <li key={friend.user?._id || `${group.key}-${idx}`}>
+                            <button
+                              onClick={() => flyToFriend(friend)}
+                              className={`w-full text-left px-4 py-3 transition-colors flex items-center gap-3 hover:bg-blue-50 ${
+                                friend.isLive ? '' : 'opacity-60'
+                              }`}
+                            >
+                              <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium shrink-0 ${
+                                friend.isLive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                              }`}>
+                                {getFriendMarkerLabel(friend)}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{friend.user?.username || 'Friend'}</p>
+                                <p className="text-xs text-gray-500 truncate">{getFriendDisplayLocation(friend)}</p>
+                                <p className={`text-[11px] mt-0.5 ${friend.isLive ? 'text-emerald-600' : 'text-gray-500'}`}>
+                                  {formatFriendStatus(friend)}
+                                </p>
+                              </div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
           <div className="p-3 border-t border-gray-200 text-[11px] text-gray-400">
@@ -1015,6 +1270,66 @@ function Maps() {
                   className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors"
                 >
                   {creatingSpotlight ? 'Creating...' : '✨ Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showFavoritesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xl font-bold text-gray-900">★ Save Favorite</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFavoritesModal(false);
+                  setFavoriteError(null);
+                }}
+                className="text-sm font-medium text-gray-400 hover:text-gray-600"
+              >
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateFavorite} className="mt-4 space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Address</label>
+                <input
+                  type="text"
+                  value={favoriteForm.address}
+                  onChange={(event) => setFavoriteForm({ address: event.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="123 Main St, Austin, TX"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  We’ll save a readable address when possible and fall back to GPS coordinates only if needed.
+                </p>
+              </div>
+
+              {favoriteError && (
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {favoriteError}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handleFavoriteCurrentLocation}
+                  disabled={savingFavorite}
+                  className="flex-1 rounded-lg bg-gray-100 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50"
+                >
+                  Use Current Location
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingFavorite}
+                  className="flex-1 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {savingFavorite ? 'Saving...' : '+ Favorites'}
                 </button>
               </div>
             </form>

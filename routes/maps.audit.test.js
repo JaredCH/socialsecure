@@ -26,12 +26,25 @@ const mockHeatmapAggregation = {
   recomputeRegion: jest.fn()
 };
 
+const mockFavoriteLocation = {
+  find: jest.fn(),
+  create: jest.fn(),
+  findOneAndDelete: jest.fn()
+};
+
+const mockGeocoder = {
+  geocode: jest.fn(),
+  reverse: jest.fn()
+};
+
 const mockUser = {};
 
 jest.mock('../models/LocationPresence', () => mockLocationPresence);
 jest.mock('../models/Spotlight', () => mockSpotlight);
 jest.mock('../models/HeatmapAggregation', () => mockHeatmapAggregation);
+jest.mock('../models/FavoriteLocation', () => mockFavoriteLocation);
 jest.mock('../models/User', () => mockUser);
+jest.mock('node-geocoder', () => jest.fn(() => mockGeocoder));
 
 const jwt = require('jsonwebtoken');
 const mapsModule = require('./maps');
@@ -52,6 +65,21 @@ describe('Maps route audit fixes', () => {
     mockSpotlight.getByLocation.mockResolvedValue([]);
     mockHeatmapAggregation.getTiles.mockResolvedValue([]);
     mockHeatmapAggregation.recomputeRegion.mockResolvedValue();
+    mockFavoriteLocation.find.mockReturnValue({ sort: jest.fn().mockResolvedValue([]) });
+    mockFavoriteLocation.create.mockResolvedValue({
+      _id: 'favorite-1',
+      address: '123 Main St, Austin, TX',
+      sourceType: 'address',
+      location: { coordinates: [-97.7431, 30.2672] },
+      city: 'Austin',
+      state: 'Texas',
+      country: 'United States',
+      createdAt: new Date('2026-03-16T19:00:00.000Z'),
+      updatedAt: new Date('2026-03-16T19:00:00.000Z')
+    });
+    mockFavoriteLocation.findOneAndDelete.mockResolvedValue({ _id: 'favorite-1' });
+    mockGeocoder.geocode.mockResolvedValue([]);
+    mockGeocoder.reverse.mockResolvedValue([]);
   });
 
   it('accepts 0 latitude/longitude and forwards normalized coordinates to presence update', async () => {
@@ -128,7 +156,7 @@ describe('Maps route audit fixes', () => {
     );
   });
 
-  it('returns live friends and recently-hidden friends for up to 60 seconds', async () => {
+  it('returns all friends while marking online/offline state from recent activity', async () => {
     const app = buildApp();
     const now = Date.now();
     mockLocationPresence.getFriendsLocations.mockResolvedValue([
@@ -148,10 +176,12 @@ describe('Maps route audit fixes', () => {
       },
       {
         user: { _id: 'friend-3', username: 'staleFriend', realName: 'Stale Friend', avatarUrl: null },
-        location: { coordinates: [-73.97, 40.73] },
+        location: null,
         shareWithFriends: false,
         lastActivityAt: new Date(now - 2 * 60 * 1000),
-        isActive: true
+        city: 'Austin',
+        state: 'Texas',
+        isActive: false
       }
     ]);
 
@@ -160,7 +190,7 @@ describe('Maps route audit fixes', () => {
       .set('Authorization', 'Bearer token');
 
     expect(response.status).toBe(200);
-    expect(response.body.friends).toHaveLength(2);
+    expect(response.body.friends).toHaveLength(3);
     expect(response.body.friends[0]).toEqual(
       expect.objectContaining({
         user: expect.objectContaining({ _id: 'friend-1', username: 'liveFriend' }),
@@ -172,11 +202,23 @@ describe('Maps route audit fixes', () => {
     expect(response.body.friends[1]).toEqual(
       expect.objectContaining({
         user: expect.objectContaining({ _id: 'friend-2', username: 'recentlyHidden' }),
-        isLive: false
+        isLive: true,
+        lat: 40.74,
+        lng: -73.98
       })
     );
     expect(response.body.friends[1].liveAgeSeconds).toBeGreaterThanOrEqual(0);
     expect(response.body.friends[1].liveAgeSeconds).toBeLessThanOrEqual(60);
+    expect(response.body.friends[2]).toEqual(
+      expect.objectContaining({
+        user: expect.objectContaining({ _id: 'friend-3', username: 'staleFriend' }),
+        isLive: false,
+        lat: null,
+        lng: null,
+        city: 'Austin',
+        state: 'Texas'
+      })
+    );
   });
 
   it('jitter heatmap coordinates and timestamps for privacy', async () => {
@@ -220,5 +262,79 @@ describe('Maps route audit fixes', () => {
     } finally {
       randomSpy.mockRestore();
     }
+  });
+
+  it('saves typed favorite addresses using geocoded plain-text locations', async () => {
+    const app = buildApp();
+    mockGeocoder.geocode.mockResolvedValue([
+      {
+        formattedAddress: '123 Main St, Austin, TX, United States',
+        latitude: 30.2672,
+        longitude: -97.7431,
+        city: 'Austin',
+        state: 'Texas',
+        country: 'United States'
+      }
+    ]);
+
+    const response = await request(app)
+      .post('/api/maps/favorites')
+      .set('Authorization', 'Bearer token')
+      .send({ address: '123 Main St, Austin, TX' });
+
+    expect(response.status).toBe(201);
+    expect(mockFavoriteLocation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: 'user-1',
+        address: '123 Main St, Austin, TX, United States',
+        sourceType: 'address',
+        location: {
+          type: 'Point',
+          coordinates: [-97.7431, 30.2672]
+        }
+      })
+    );
+    expect(response.body.favorite).toEqual(
+      expect.objectContaining({
+        address: '123 Main St, Austin, TX',
+        lat: 30.2672,
+        lng: -97.7431
+      })
+    );
+  });
+
+  it('falls back to GPS coordinates when reverse geocoding a current favorite location fails', async () => {
+    const app = buildApp();
+    mockGeocoder.reverse.mockRejectedValue(new Error('reverse failed'));
+    mockFavoriteLocation.create.mockResolvedValue({
+      _id: 'favorite-2',
+      address: '30.26720, -97.74310',
+      sourceType: 'current_location',
+      location: { coordinates: [-97.7431, 30.2672] },
+      city: null,
+      state: null,
+      country: null,
+      createdAt: new Date('2026-03-16T19:05:00.000Z'),
+      updatedAt: new Date('2026-03-16T19:05:00.000Z')
+    });
+
+    const response = await request(app)
+      .post('/api/maps/favorites')
+      .set('Authorization', 'Bearer token')
+      .send({ latitude: 30.2672, longitude: -97.7431 });
+
+    expect(response.status).toBe(201);
+    expect(mockFavoriteLocation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: '30.26720, -97.74310',
+        sourceType: 'current_location'
+      })
+    );
+    expect(response.body.favorite).toEqual(
+      expect.objectContaining({
+        address: '30.26720, -97.74310',
+        sourceType: 'current_location'
+      })
+    );
   });
 });

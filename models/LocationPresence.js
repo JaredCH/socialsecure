@@ -186,26 +186,45 @@ locationPresenceSchema.statics.updatePresence = async function(userId, locationD
 // Static method to get friends' locations
 locationPresenceSchema.statics.getFriendsLocations = async function(userId) {
   const Friendship = require('./Friendship');
-  
-  // Get accepted friend IDs
-  const friendships = await Friendship.find({
-    $or: [
-      { requester: userId, status: 'accepted' },
-      { recipient: userId, status: 'accepted' }
-    ]
-  });
-  
-  const friendIds = friendships.map(f => 
-    f.requester.toString() === userId.toString() ? f.recipient : f.requester
-  );
-  
-  // Get active friends' location records (route layer decides what is visible)
+
+  const friends = await Friendship.getFriends(userId);
+  if (friends.length === 0) {
+    return [];
+  }
+
+  const friendIds = friends.map((friend) => friend._id);
   const locations = await this.find({
-    user: { $in: friendIds },
-    isActive: true
-  }).populate('user', 'username realName avatarUrl');
-  
-  return locations;
+    user: { $in: friendIds }
+  }).sort({ lastActivityAt: -1 });
+
+  const locationByUserId = new Map(
+    locations
+      .filter((location) => location?.user)
+      .map((location) => [String(location.user), location])
+  );
+
+  return friends.map((friend) => {
+    const location = locationByUserId.get(String(friend._id));
+
+    return {
+      user: {
+        _id: friend._id,
+        username: friend.username,
+        realName: friend.realName,
+        avatarUrl: friend.avatarUrl
+      },
+      location: location?.location || null,
+      locationName: location?.locationName || null,
+      city: location?.city || friend.city || null,
+      state: location?.state || friend.state || null,
+      country: location?.country || friend.country || null,
+      precisionLevel: location?.precisionLevel || null,
+      lastActivityAt: location?.lastActivityAt || null,
+      shareWithFriends: location?.shareWithFriends ?? false,
+      isActive: location?.isActive ?? false,
+      deviceType: location?.deviceType || 'unknown'
+    };
+  });
 };
 
 // Static method to get heatmap data
