@@ -86,11 +86,11 @@ const platformCapabilities = [
 const mapDensityStats = [
   {
     title: 'User convergence',
-    description: 'Ten glowing circles spread across the city grid drift inward; when two merge the resulting glow doubles in size and brightness.'
+    description: 'Ten glowing circles spread across the city grid drift inward; each collision multiplies glow size by 1.5× the number of merging circles.'
   },
   {
     title: 'Center convergence',
-    description: 'Each new arrival doubles the cluster\u2019s glow—size and brightness cascade upward until the heat peak, then reverse as circles break off.'
+    description: 'Each new arrival scales the cluster\u2019s glow using (diameter\u00a0×\u00a01.5)\u00a0×\u00a0N—brightness cascades upward and holds until a circle breaks away.'
   },
   {
     title: 'Transparent heat overlay',
@@ -99,7 +99,7 @@ const mapDensityStats = [
 ];
 
 // Animation duration for one full convergence cycle (seconds).
-const DENSITY_DURATION = 18;
+const DENSITY_DURATION = 9;
 const DENSITY_CENTER = { x: 50, y: 50 };
 const DENSITY_MERGE_POINT = { x: 22, y: 49 };
 // Diameter in px for each circle – with the radial-gradient glow the visible
@@ -124,6 +124,18 @@ const densityCircles = [
   { id: 'glow-9', startX: 50, startY: 88, role: 'break-off', breakX: 78, breakY: 85, convergeFrac: 0.60 }
 ];
 
+// Pre-compute how many glows are at the center at each convergeFrac so we can
+// apply the collision formula: NewTotalDiameter = (currentDiameter × 1.5) × N.
+// merge-fade never reaches center (absorbed at the merge point) so it is excluded.
+const _centerConvergeFracs = densityCircles
+  .filter(c => c.role !== 'merge-fade')
+  .map(c => c.convergeFrac)
+  .sort((a, b) => a - b);
+
+function _glowsAtCenter(convergeFrac) {
+  return _centerConvergeFracs.filter(f => f <= convergeFrac).length;
+}
+
 function getDensityAnimation(circle, reducedMotion) {
   if (reducedMotion) {
     return {
@@ -138,28 +150,32 @@ function getDensityAnimation(circle, reducedMotion) {
   const mx = DENSITY_MERGE_POINT.x;
   const my = DENSITY_MERGE_POINT.y;
 
-  // Progressive factor – later arrivals encounter more already-merged glows so
-  // their visual size/brightness is higher, showing cascading density.
-  const arrivalFactor = (convergeFrac - 0.5) * 4; // ≈0 for early, ≈0.9 for late
+  // Collision formula: peakScale = (1 × 1.5) × N  where N = glows at center.
+  const N = _glowsAtCenter(convergeFrac);
+  const peakScale = 1.5 * N;
 
   switch (role) {
-    case 'merge-keep':
-      // Absorbs merge-fade → doubles in size and brightness at the merge point,
-      // stays enlarged toward center, then eases down at the tail of the cycle.
+    case 'merge-keep': {
+      // Absorbs merge-fade at the merge point (2 combining) → scale = 1.5 × 2.
+      // Then continues to center where it joins the cluster at the full formula.
+      // Maintains its peak size for the rest of the cycle (no decay).
+      const mergeScale = 1.5 * 2;
+      const centerScale = Math.max(mergeScale, peakScale);
       return {
         animate: {
-          left: [`${startX}%`, `${startX}%`, `${mx}%`, `${cx}%`, `${cx}%`, `${cx}%`],
-          top: [`${startY}%`, `${startY}%`, `${my}%`, `${cy}%`, `${cy}%`, `${cy}%`],
-          opacity: [0.5, 0.55, 1.0, 0.92, 0.5, 0.35],
-          scale: [1, 1, 2.0, 2.2, 1.1, 0.8]
+          left: [`${startX}%`, `${startX}%`, `${mx}%`, `${cx}%`, `${cx}%`],
+          top: [`${startY}%`, `${startY}%`, `${my}%`, `${cy}%`, `${cy}%`],
+          opacity: [0.5, 0.55, 1.0, 1.0, 1.0],
+          scale: [1, 1, mergeScale, centerScale, centerScale]
         },
         transition: {
           duration: DENSITY_DURATION,
-          times: [0, 0.11, 0.36, convergeFrac, 0.82, 1],
+          times: [0, 0.11, 0.36, convergeFrac, 1],
           repeat: Infinity,
           ease: 'easeInOut'
         }
       };
+    }
     case 'merge-fade':
       // Shrinks into merge-keep at the merge point and disappears.
       return {
@@ -176,38 +192,40 @@ function getDensityAnimation(circle, reducedMotion) {
           ease: 'easeInOut'
         }
       };
-    case 'break-off':
-      // At center the glow is large (part of the dense cluster); as it drifts
-      // outward both size and brightness drop – reversing the merge growth.
+    case 'break-off': {
+      // Converges to center at full formula scale, HOLDS that size, then
+      // shrinks sharply only at the instant it breaks away from the cluster.
+      const holdFrac = 0.83;   // hold peak until just before break-away
+      const breakFrac = 0.84;  // the instant the glow detaches
       return {
         animate: {
-          left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`, `${breakX}%`],
-          top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`, `${breakY}%`],
-          opacity: [0.5, 0.55, 1.0, 0.6, 0.3],
-          scale: [1, 1, 2.5, 1.4, 0.65]
+          left:    [`${startX}%`, `${startX}%`, `${cx}%`,   `${cx}%`,   `${breakX}%`, `${breakX}%`],
+          top:     [`${startY}%`, `${startY}%`, `${cy}%`,   `${cy}%`,   `${breakY}%`, `${breakY}%`],
+          opacity: [0.5,          0.55,          1.0,         1.0,         0.3,           0.3],
+          scale:   [1,            1,             peakScale,   peakScale,   0.65,          0.65]
         },
         transition: {
           duration: DENSITY_DURATION,
-          times: [0, 0.11, convergeFrac, 0.84, 1],
+          times: [0, 0.11, convergeFrac, holdFrac, breakFrac, 1],
           repeat: Infinity,
           ease: 'easeInOut'
         }
       };
+    }
     default: {
-      // Normal circles double in size/brightness when they reach the center.
-      // Later arrivals scale even larger because more glows have already merged.
-      const peakScale = 1.6 + arrivalFactor;   // ≈1.7 → ≈2.5
-      const peakOpacity = Math.min(0.82 + arrivalFactor * 0.2, 1.0); // ≈0.82 → ≈1.0
+      // Normal circles grow using the collision formula when they reach center.
+      // Size is maintained for the rest of the cycle – no shrinkage.
+      const peakOpacity = Math.min(0.82 + ((convergeFrac - 0.5) * 4) * 0.2, 1.0);
       return {
         animate: {
-          left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`, `${cx}%`],
-          top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`, `${cy}%`],
-          opacity: [0.5, 0.55, peakOpacity, 0.4, 0.3],
-          scale: [1, 1, peakScale, 0.9, 0.7]
+          left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`],
+          top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`],
+          opacity: [0.5, 0.55, peakOpacity, peakOpacity],
+          scale: [1, 1, peakScale, peakScale]
         },
         transition: {
           duration: DENSITY_DURATION,
-          times: [0, 0.11, convergeFrac, 0.82, 1],
+          times: [0, 0.11, convergeFrac, 1],
           repeat: Infinity,
           ease: 'easeInOut'
         }
@@ -400,8 +418,8 @@ function Home({ isAuthenticated = false }) {
                       prefersReducedMotion
                         ? { opacity: 0.5, scale: 1 }
                         : {
-                            opacity: [0.02, 0.06, 0.4, 0.9, 0.35],
-                            scale: [0.1, 0.2, 1.2, 2.8, 1.4]
+                            opacity: [0.02, 0.06, 0.5, 1.0, 1.0, 0.45],
+                            scale: [0.1, 0.2, 1.8, 4.2, 4.2, 2.5]
                           }
                     }
                     transition={
@@ -409,7 +427,7 @@ function Home({ isAuthenticated = false }) {
                         ? { duration: 0.01 }
                         : {
                             duration: DENSITY_DURATION,
-                            times: [0, 0.2, 0.52, 0.82, 1],
+                            times: [0, 0.2, 0.52, 0.82, 0.84, 1],
                             repeat: Infinity,
                             ease: 'easeInOut'
                           }
@@ -446,8 +464,8 @@ function Home({ isAuthenticated = false }) {
                   <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 backdrop-blur">
                     <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-200">Converging user density</p>
                     <p className="mt-2 text-sm text-blue-50">
-                      Ten user glows travel across the city grid—each merge doubles the glow in size and brightness.
-                      As circles converge the cluster grows exponentially, then shrinks as two break back outward.
+                      Ten user glows travel across the city grid—each collision scales glow size by 1.5× the merging count.
+                      As circles converge the cluster grows dramatically, holding peak size until a glow breaks away.
                     </p>
                   </div>
                 </div>
