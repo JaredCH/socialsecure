@@ -771,10 +771,19 @@ function Chat() {
   const hydrateConversationKeys = useCallback(async ({ conversationId, session }) => {
     const { data } = await chatAPI.syncConversationKeyPackages(conversationId, session.deviceId);
     const packages = Array.isArray(data?.packages) ? data.packages : [];
+    let hasNewRoomKey = false;
     for (const pkg of packages) {
-      await ingestWrappedRoomKeyPackage({ session, pkg });
+      try {
+        await ingestWrappedRoomKeyPackage({ session, pkg });
+        hasNewRoomKey = true;
+      } catch (error) {
+        // keep unlock flow resilient when legacy/corrupt packages are present
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('Skipping invalid DM key package during unlock hydration:', error);
+        }
+      }
     }
-    if (packages.length > 0) {
+    if (hasNewRoomKey) {
       await session.persist();
     }
   }, []);
