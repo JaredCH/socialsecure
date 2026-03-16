@@ -955,12 +955,42 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
       ]
     };
 
-    const rooms = await ChatRoom.find(allowedRoomFilter)
-      .select('_id name type city state country county discoverable eventRef members messageCount lastActivity')
-      .sort({ lastActivity: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const rooms = await ChatRoom.aggregate([
+      { $match: allowedRoomFilter },
+      {
+        $addFields: {
+          discoveryTypePriority: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$type', 'state'] }, then: 0 },
+                { case: { $eq: ['$type', 'county'] }, then: 1 },
+                { case: { $eq: ['$type', 'topic'] }, then: 2 }
+              ],
+              default: 3
+            }
+          }
+        }
+      },
+      { $sort: { discoveryTypePriority: 1, lastActivity: -1, createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          type: 1,
+          city: 1,
+          state: 1,
+          country: 1,
+          county: 1,
+          discoverable: 1,
+          eventRef: 1,
+          members: 1,
+          messageCount: 1,
+          lastActivity: 1
+        }
+      }
+    ]);
 
     const total = await ChatRoom.countDocuments(allowedRoomFilter);
 

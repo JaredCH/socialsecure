@@ -11,6 +11,7 @@ jest.mock('../models/User', () => ({
 
 jest.mock('../models/ChatRoom', () => ({
   find: jest.fn(),
+  aggregate: jest.fn(),
   countDocuments: jest.fn(),
   ensureDefaultStateRooms: jest.fn(),
   ensureDefaultDiscoveryRooms: jest.fn(),
@@ -170,17 +171,15 @@ describe('Chat event room discovery routes', () => {
   });
 
   it('requires explicit call for all rooms endpoint and returns paginated payload', async () => {
-    ChatRoom.find.mockReturnValue(
-      buildChain([
-        {
-          _id: 'room-any',
-          name: 'General Room',
-          type: 'city',
-          members: ['m1', 'm2', 'm3'],
-          messageCount: 10
-        }
-      ])
-    );
+    ChatRoom.aggregate.mockResolvedValue([
+      {
+        _id: 'room-any',
+        name: 'General Room',
+        type: 'city',
+        members: ['m1', 'm2', 'm3'],
+        messageCount: 10
+      }
+    ]);
     ChatRoom.countDocuments.mockResolvedValue(1);
 
     const app = buildApp();
@@ -192,18 +191,73 @@ describe('Chat event room discovery routes', () => {
     expect(response.body.success).toBe(true);
     expect(response.body.rooms).toHaveLength(1);
     expect(ChatRoom.ensureDefaultDiscoveryRooms).toHaveBeenCalledTimes(1);
-    expect(ChatRoom.find).toHaveBeenCalledWith({
-      $or: [
-        { type: 'state' },
-        { type: 'county' },
-        { type: 'topic' },
-        { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
-      ]
-    });
+    expect(ChatRoom.aggregate).toHaveBeenCalledWith([
+      {
+        $match: {
+          $or: [
+            { type: 'state' },
+            { type: 'county' },
+            { type: 'topic' },
+            { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          discoveryTypePriority: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$type', 'state'] }, then: 0 },
+                { case: { $eq: ['$type', 'county'] }, then: 1 },
+                { case: { $eq: ['$type', 'topic'] }, then: 2 }
+              ],
+              default: 3
+            }
+          }
+        }
+      },
+      { $sort: { discoveryTypePriority: 1, lastActivity: -1, createdAt: -1 } },
+      { $skip: 0 },
+      { $limit: 10 },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          type: 1,
+          city: 1,
+          state: 1,
+          country: 1,
+          county: 1,
+          discoverable: 1,
+          eventRef: 1,
+          members: 1,
+          messageCount: 1,
+          lastActivity: 1
+        }
+      }
+    ]);
     expect(response.body.rooms[0]).toMatchObject({
       _id: 'room-any',
       memberCount: 3
     });
     expect(response.body.hasMore).toBe(false);
+  });
+
+  it('returns discovery room types ahead of city rooms in the all rooms payload', async () => {
+    ChatRoom.aggregate.mockResolvedValue([
+      { _id: 'state-1', name: 'Alabama', type: 'state', members: [] },
+      { _id: 'county-1', name: 'Mobile County, Alabama', type: 'county', members: [] },
+      { _id: 'topic-1', name: 'AI', type: 'topic', members: [] },
+      { _id: 'city-1', name: 'Boston, Massachusetts', type: 'city', members: [] }
+    ]);
+    ChatRoom.countDocuments.mockResolvedValue(4);
+
+    const app = buildApp();
+    const response = await request(app)
+      .get('/api/chat/rooms/all?page=1&limit=10')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.rooms.map((room) => room.type)).toEqual(['state', 'county', 'topic', 'city']);
   });
 });
