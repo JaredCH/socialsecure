@@ -14,15 +14,35 @@ const formatDate = (value) => {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+const resolveUserId = (user) => {
+  const rawUserId = user?._id ?? user?.id ?? user?.userId ?? null;
+  if (rawUserId === null || rawUserId === undefined) return '';
+  return String(rawUserId).trim();
+};
+
+const extractApiErrorMessage = (error, fallbackMessage) => (
+  error?.response?.data?.error || fallbackMessage
+);
+
 const UserCard = ({ user, onSendRequest }) => {
   const [requestState, setRequestState] = useState('idle'); // idle | loading | sent | error
+  const [requestError, setRequestError] = useState('');
 
   const handleSendRequest = async () => {
+    const targetUserId = resolveUserId(user);
+    if (!targetUserId) {
+      setRequestError('Unable to identify this user. Please refresh and try again.');
+      setRequestState('error');
+      return;
+    }
+
+    setRequestError('');
     setRequestState('loading');
     try {
-      await onSendRequest(user._id);
+      await onSendRequest(targetUserId);
       setRequestState('sent');
-    } catch {
+    } catch (error) {
+      setRequestError(extractApiErrorMessage(error, 'Failed to send request. Please try again.'));
       setRequestState('error');
     }
   };
@@ -84,7 +104,7 @@ const UserCard = ({ user, onSendRequest }) => {
         <p className="text-xs text-blue-500 mt-1">{user.whySuggested}</p>
 
         {requestState === 'error' && (
-          <p className="text-xs text-red-500 mt-1">Failed to send request. Please try again.</p>
+          <p className="text-xs text-red-500 mt-1">{requestError || 'Failed to send request. Please try again.'}</p>
         )}
       </div>
     </div>
@@ -199,7 +219,7 @@ const Discovery = () => {
       setUsersHasMore(data.hasMore ?? false);
       setUsersPage(page);
     } catch (err) {
-      setUsersError(err?.response?.data?.error || 'Failed to load suggestions. Please try again.');
+      setUsersError(extractApiErrorMessage(err, 'Failed to load suggestions. Please try again.'));
     } finally {
       setUsersLoaded(true);
       setUsersLoading(false);
@@ -221,7 +241,7 @@ const Discovery = () => {
       setPostsHasMore(data.hasMore ?? false);
       setPostsPage(page);
     } catch (err) {
-      setPostsError(err?.response?.data?.error || 'Failed to load posts. Please try again.');
+      setPostsError(extractApiErrorMessage(err, 'Failed to load posts. Please try again.'));
     } finally {
       setPostsLoaded(true);
       setPostsLoading(false);
