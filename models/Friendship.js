@@ -114,6 +114,10 @@ friendshipSchema.statics.findFriendship = async function(userId1, userId2) {
 
 // Static method to get friends of a user
 friendshipSchema.statics.getFriends = async function(userId) {
+  if (!userId) {
+    return [];
+  }
+
   const friendships = await this.find({
     $or: [
       { requester: userId, status: 'accepted' },
@@ -121,9 +125,21 @@ friendshipSchema.statics.getFriends = async function(userId) {
     ]
   }).populate('requester recipient', 'username realName avatarUrl city state country');
 
-  return friendships.map(f => {
-    const friend = f.requester._id.toString() === userId.toString() ? f.recipient : f.requester;
-    return {
+  const viewerId = String(userId);
+  return friendships.reduce((acc, f) => {
+    const requesterId = f?.requester?._id ? String(f.requester._id) : null;
+    const recipientId = f?.recipient?._id ? String(f.recipient._id) : null;
+    if (!requesterId || !recipientId) {
+      return acc;
+    }
+
+    const isRequester = requesterId === viewerId;
+    const friend = isRequester ? f.recipient : f.requester;
+    if (!friend?._id) {
+      return acc;
+    }
+
+    acc.push({
       _id: friend._id,
       username: friend.username,
       realName: friend.realName,
@@ -133,12 +149,13 @@ friendshipSchema.statics.getFriends = async function(userId) {
       country: friend.country,
       friendshipId: f._id,
       friendsSince: f.acceptedAt,
-      category: (f.requester._id.toString() === userId.toString() ? f.requesterCategory : f.recipientCategory) || 'social',
+      category: (isRequester ? f.requesterCategory : f.recipientCategory) || 'social',
       partnerStatus: ['none', 'pending', 'accepted'].includes(f.partnerStatus) ? f.partnerStatus : 'none',
-      partnerRequestedByViewer: String(f.partnerRequestedBy || '') === String(userId || ''),
+      partnerRequestedByViewer: String(f.partnerRequestedBy || '') === viewerId,
       partnerRequestedAt: f.partnerRequestedAt || null
-    };
-  });
+    });
+    return acc;
+  }, []);
 };
 
 // Static method to get incoming friend requests
