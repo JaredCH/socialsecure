@@ -5,6 +5,7 @@ import Maps, {
   HEATMAP_CIRCLE_RADIUS_METERS,
   LOCATION_PUBLISH_INTERVAL_MS,
   configureLeafletMarkerAssets,
+  resolveMapHeatmapData,
   resolveLeafletModule,
   sortFriendsByStatusAndActivity,
   withDataFallback
@@ -110,6 +111,21 @@ describe('withDataFallback', () => {
     await expect(withDataFallback(Promise.reject(new Error('boom')), { spotlights: [] }))
       .resolves
       .toEqual({ data: { spotlights: [] } });
+  });
+});
+
+describe('resolveMapHeatmapData', () => {
+  it('prefers the selected map endpoint heatmap over the generic fallback heatmap response', () => {
+    const mapHeatmap = [{ lat: 30.2672, lng: -97.7431, intensity: 0.9, userCount: 4 }];
+    const fallbackHeatmap = [{ lat: 40.7128, lng: -74.006, intensity: 0.2, userCount: 1 }];
+
+    expect(resolveMapHeatmapData({ heatmap: mapHeatmap }, { heatmap: fallbackHeatmap })).toBe(mapHeatmap);
+  });
+
+  it('falls back to the generic heatmap response when the selected map endpoint has no heatmap', () => {
+    const fallbackHeatmap = [{ lat: 40.7128, lng: -74.006, intensity: 0.2, userCount: 1 }];
+
+    expect(resolveMapHeatmapData({ spotlights: [] }, { heatmap: fallbackHeatmap })).toBe(fallbackHeatmap);
   });
 });
 
