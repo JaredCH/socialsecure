@@ -4,6 +4,7 @@ import { friendsAPI, notificationAPI } from '../utils/api';
 import NotificationItem from './NotificationItem';
 
 const PAGE_SIZE = 20;
+const HOVER_CLOSE_DELAY_MS = 150;
 const isResolvedFriendRequestNotification = (notification) => (
   notification?.type === 'follow' && notification?.isRead
 );
@@ -11,6 +12,7 @@ const isResolvedFriendRequestNotification = (notification) => (
 const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNotification, userDisplayName = 'Account', navLinks = [] }) => {
   const navigate = useNavigate();
   const panelRef = useRef(null);
+  const closeTimerRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [page, setPage] = useState(1);
@@ -58,6 +60,15 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
     if (!incomingNotification) return;
     setNotifications((prev) => [incomingNotification, ...prev.filter((item) => String(item._id) !== String(incomingNotification._id))]);
   }, [incomingNotification]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handler = (event) => {
@@ -214,15 +225,37 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
 
   const visibleNotifications = notifications.filter((notification) => !isResolvedFriendRequestNotification(notification));
 
+  const openPanel = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setOpen(true);
+  };
+
+  const scheduleClosePanel = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = setTimeout(() => {
+      setOpen(false);
+      closeTimerRef.current = null;
+    }, HOVER_CLOSE_DELAY_MS);
+  };
+
   return (
     <div
       className="relative"
       ref={panelRef}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
+      onMouseEnter={openPanel}
+      onMouseLeave={scheduleClosePanel}
+      onFocus={openPanel}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
+          if (closeTimerRef.current) {
+            clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = null;
+          }
           setOpen(false);
         }
       }}

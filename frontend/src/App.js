@@ -36,6 +36,7 @@ const DEFAULT_SECURITY_PREFERENCES = {
 };
 const VALID_ONBOARDING_STATUSES = new Set(['pending', 'in_progress', 'completed']);
 const NEWS_PREFETCH_STATUS_KEY = 'registrationNewsPrefetchStatus';
+const LOGOUT_REDIRECT_KEY = 'logoutRedirectHome';
 
 const normalizeOnboardingStatus = (value, fallback = 'pending') => (
   VALID_ONBOARDING_STATUSES.has(value) ? value : fallback
@@ -52,7 +53,16 @@ const ProtectedRoute = ({
   children
 }) => {
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    let redirectPath = '/login';
+    try {
+      if (sessionStorage.getItem(LOGOUT_REDIRECT_KEY) === 'true') {
+        redirectPath = '/';
+        sessionStorage.removeItem(LOGOUT_REDIRECT_KEY);
+      }
+    } catch {
+      // fall back to login if session storage is unavailable
+    }
+    return <Navigate to={redirectPath} replace />;
   }
 
   if (onboardingRequired && !allowWhenOnboardingRequired) {
@@ -248,14 +258,22 @@ function App() {
 
   useEffect(() => {
     const bootstrap = async () => {
-      const token = getAuthToken();
-      if (!token) {
+      const tokenAtBootstrap = getAuthToken();
+      if (!tokenAtBootstrap) {
         setCheckingAuth(false);
         return;
       }
 
       try {
         const { data } = await authAPI.getProfile();
+        if (getAuthToken() !== tokenAtBootstrap) {
+          return;
+        }
+        try {
+          sessionStorage.removeItem(LOGOUT_REDIRECT_KEY);
+        } catch {
+          // best effort only
+        }
         setUser(data.user);
         setUnreadNotificationCount(Number(data.user?.unreadNotificationCount || 0));
         setOnboardingStatus((prev) => ({
@@ -269,8 +287,10 @@ function App() {
           hasEncryptionPassword: !!data.user?.hasEncryptionPassword
         }));
       } catch {
-        clearAuthToken();
-        setUser(null);
+        if (getAuthToken() === tokenAtBootstrap) {
+          clearAuthToken();
+          setUser(null);
+        }
       } finally {
         setCheckingAuth(false);
       }
@@ -383,6 +403,11 @@ function App() {
 
   const handleAuthSuccess = (payload) => {
     setAuthToken(payload.token);
+    try {
+      sessionStorage.removeItem(LOGOUT_REDIRECT_KEY);
+    } catch {
+      // best effort only
+    }
     if (payload?.registrationNewsPrefetch) {
       writeSessionValue(NEWS_PREFETCH_STATUS_KEY, JSON.stringify(payload.registrationNewsPrefetch));
     }
@@ -402,6 +427,11 @@ function App() {
   };
 
   const handleLogout = () => {
+    try {
+      sessionStorage.setItem(LOGOUT_REDIRECT_KEY, 'true');
+    } catch {
+      // best effort only
+    }
     clearAuthToken();
     removeSessionValue(NEWS_PREFETCH_STATUS_KEY);
     removeSessionValue(WELCOME_PENDING_KEY);

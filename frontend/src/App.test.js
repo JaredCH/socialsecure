@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { authAPI, notificationAPI, getAuthToken } from './utils/api';
+import { authAPI, notificationAPI, getAuthToken, clearAuthToken } from './utils/api';
 
 jest.mock('./pages/Home', () => () => <div>Home Page</div>);
 jest.mock('./pages/Login', () => () => <div>Login Page</div>);

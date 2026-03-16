@@ -11,7 +11,8 @@ const mockUser = {
 };
 
 const mockFriendship = {
-  getFriends: jest.fn()
+  getFriends: jest.fn(),
+  find: jest.fn()
 };
 
 const mockTopFriend = {};
@@ -57,6 +58,11 @@ describe('Friends presence response', () => {
         category: 'secure'
       }
     ]);
+    mockFriendship.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([])
+      })
+    });
     getPresenceMapForUsers.mockResolvedValue(new Map([
       ['friend-1', { status: 'online', lastSeen: null }]
     ]));
