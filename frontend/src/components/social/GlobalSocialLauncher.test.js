@@ -9,7 +9,9 @@ jest.mock('../../utils/api', () => ({
     getConversations: jest.fn()
   },
   notificationAPI: {
-    getNotifications: jest.fn()
+    getNotifications: jest.fn(),
+    markAsRead: jest.fn(),
+    markAllAsRead: jest.fn()
   }
 }));
 
@@ -51,6 +53,8 @@ describe('GlobalSocialLauncher', () => {
     notificationAPI.getNotifications.mockResolvedValue({
       data: { notifications: [] }
     });
+    notificationAPI.markAsRead.mockResolvedValue({ data: { success: true } });
+    notificationAPI.markAllAsRead.mockResolvedValue({ data: { success: true } });
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -182,5 +186,86 @@ describe('GlobalSocialLauncher', () => {
     );
     expect(olderAlertCard).toBeDefined();
     expect(olderAlertCard.className).toContain('opacity-55');
+  });
+
+  it('keeps latest updates collapsed by default when notifications are already acknowledged', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n-read', title: 'Seen follow request', isRead: true, createdAt: new Date(Date.now() - 3600000).toISOString() }
+        ]
+      }
+    });
+
+    await renderLauncher({ initialEntries: ['/discover'] });
+
+    const launcher = container.querySelector('button[aria-label="Expand social section menu"]');
+
+    await act(async () => {
+      launcher.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('Seen follow request');
+
+    const toggle = container.querySelector('button[aria-label="Expand latest updates"]');
+    expect(toggle).not.toBeNull();
+
+    await act(async () => {
+      toggle.click();
+    });
+
+    expect(container.textContent).toContain('Seen follow request');
+  });
+
+  it('shows requester name text and supports acknowledging notifications', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          {
+            _id: 'n-follow',
+            title: 'New follow request',
+            body: 'Taylor sent you a follow request',
+            isRead: false,
+            createdAt: new Date().toISOString()
+          },
+          {
+            _id: 'n-market',
+            title: 'Market update',
+            isRead: false,
+            createdAt: new Date().toISOString()
+          }
+        ]
+      }
+    });
+
+    await renderLauncher({ initialEntries: ['/news'], props: { unreadNotificationCount: 2 } });
+
+    const launcher = container.querySelector('button[aria-label="Expand social section menu"]');
+
+    await act(async () => {
+      launcher.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Taylor sent you a follow request');
+
+    const acknowledgeButtons = Array.from(container.querySelectorAll('button')).filter((button) => button.textContent === 'Acknowledge');
+    expect(acknowledgeButtons.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      acknowledgeButtons[0].click();
+    });
+
+    expect(notificationAPI.markAsRead).toHaveBeenCalledWith('n-follow');
+
+    const markAll = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Mark all as read');
+    expect(markAll).not.toBeUndefined();
+
+    await act(async () => {
+      markAll.click();
+    });
+
+    expect(notificationAPI.markAllAsRead).toHaveBeenCalled();
   });
 });
