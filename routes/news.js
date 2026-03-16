@@ -1461,7 +1461,7 @@ router.get('/search', authenticateToken, async (req, res) => {
 });
 
 const INGESTION_PIPELINES = ['local', 'categories', 'sports', 'social'];
-const INGESTION_INTERVAL_MS = 30 * 60 * 1000;
+const INGESTION_FAST_INTERVAL_MS = 30 * 60 * 1000;
 const SOURCE_ADAPTER_KEY_MAP = {
   'Google News': 'categories',
   Reuters: 'categories',
@@ -1484,25 +1484,24 @@ let _schedulerStarted = false;
 let schedulerStartedAt = null;
 let lastIngestionRunAt = null;
 
-function markIngestionRun() {
-  lastIngestionRunAt = new Date();
-}
-
 function enqueuePipeline(pipeline) {
-  markIngestionRun();
+  let task = Promise.resolve();
   if (pipeline === 'local') {
-    return ingestAllKnownLocations().catch((err) => console.error('[news] local ingest error:', err));
+    task = ingestAllKnownLocations().catch((err) => console.error('[news] local ingest error:', err));
   }
   if (pipeline === 'categories') {
-    return ingestAllCategories().catch((err) => console.error('[news] category ingest error:', err));
+    task = ingestAllCategories().catch((err) => console.error('[news] category ingest error:', err));
   }
   if (pipeline === 'sports') {
-    return ingestAllFollowedTeams().catch((err) => console.error('[news] sports ingest error:', err));
+    task = ingestAllFollowedTeams().catch((err) => console.error('[news] sports ingest error:', err));
   }
   if (pipeline === 'social') {
-    return ingestAllMonitoredSubreddits().catch((err) => console.error('[news] reddit ingest error:', err));
+    task = ingestAllMonitoredSubreddits().catch((err) => console.error('[news] reddit ingest error:', err));
   }
-  return Promise.resolve();
+
+  return task.finally(() => {
+    lastIngestionRunAt = new Date();
+  });
 }
 
 function launchIngestionPipelines(requested = INGESTION_PIPELINES) {
@@ -1547,9 +1546,9 @@ router.get('/schedule-info', authenticateToken, requireAdminUser, async (req, re
   const now = new Date();
   let nextRunAt = null;
   if (lastIngestionRunAt) {
-    nextRunAt = new Date(lastIngestionRunAt.getTime() + INGESTION_INTERVAL_MS);
+    nextRunAt = new Date(lastIngestionRunAt.getTime() + INGESTION_FAST_INTERVAL_MS);
   } else if (schedulerStartedAt && _schedulerStarted) {
-    nextRunAt = new Date(schedulerStartedAt.getTime() + INGESTION_INTERVAL_MS);
+    nextRunAt = new Date(schedulerStartedAt.getTime() + INGESTION_FAST_INTERVAL_MS);
   }
 
   return res.json({
@@ -1558,7 +1557,7 @@ router.get('/schedule-info', authenticateToken, requireAdminUser, async (req, re
     lastIngestionRunAt,
     nextRunAt,
     msUntilNextRun: nextRunAt ? Math.max(0, nextRunAt.getTime() - now.getTime()) : null,
-    intervalMs: INGESTION_INTERVAL_MS
+    intervalMs: INGESTION_FAST_INTERVAL_MS
   });
 });
 
@@ -1656,7 +1655,7 @@ function startIngestionScheduler() {
   // Pipeline 1 · Local — every 30 minutes
   setInterval(() => {
     enqueuePipeline('local');
-  }, INGESTION_INTERVAL_MS);
+  }, INGESTION_FAST_INTERVAL_MS);
 
   // Pipeline 2 · Categories — every 2 hours
   setInterval(() => {
@@ -1671,7 +1670,7 @@ function startIngestionScheduler() {
   // Pipeline 4 · Reddit — every 30 minutes
   setInterval(() => {
     enqueuePipeline('social');
-  }, INGESTION_INTERVAL_MS);
+  }, INGESTION_FAST_INTERVAL_MS);
 
   // Kick off an initial run (staggered to spread load)
   setTimeout(() => enqueuePipeline('categories'), 10 * 1000);

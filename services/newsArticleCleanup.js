@@ -16,13 +16,13 @@ const Article = require('../models/Article');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 
 const RETENTION_DAYS = parseInt(process.env.NEWS_RETENTION_DAYS || '7', 10);
-const MAX_ARTICLES = Math.max(1000, parseInt(process.env.NEWS_MAX_ARTICLES || '100000', 10));
+const MIN_ALLOWED_ARTICLES = 1000;
+const MAX_ARTICLES = Math.max(MIN_ALLOWED_ARTICLES, parseInt(process.env.NEWS_MAX_ARTICLES || '100000', 10));
 const PRUNE_BATCH_SIZE = (() => {
   const configured = parseInt(process.env.NEWS_MAX_ARTICLES_PRUNE_BATCH || '100', 10);
-  if (Number.isNaN(configured)) return 100;
-  if (configured <= 50) return 50;
-  if (configured >= 100) return 100;
-  return configured >= 75 ? 100 : 50;
+  // Guardrail policy intentionally constrains pruning cadence to 50 or 100.
+  if (configured === 50) return 50;
+  return 100;
 })();
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 h
 
@@ -59,7 +59,7 @@ async function purgeOldArticles() {
     let prunedForCap = 0;
     if (totalArticles > MAX_ARTICLES) {
       const overflow = totalArticles - MAX_ARTICLES;
-      const pruneCount = Math.ceil(overflow / PRUNE_BATCH_SIZE) * PRUNE_BATCH_SIZE;
+      const pruneCount = Math.min(overflow, PRUNE_BATCH_SIZE);
       const oldest = await Article.find({})
         .sort({ publishedAt: 1, ingestTimestamp: 1, createdAt: 1, _id: 1 })
         .limit(pruneCount)

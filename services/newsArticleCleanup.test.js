@@ -40,7 +40,7 @@ describe('newsArticleCleanup', () => {
   });
 
   it('prunes oldest articles in fixed-size batches when over hard cap', async () => {
-    Article.countDocuments.mockResolvedValue(1005);
+    Article.countDocuments.mockResolvedValue(1105);
     const oldestRows = Array.from({ length: 100 }, (_, index) => ({ _id: `article-${index}` }));
     const lean = jest.fn().mockResolvedValue(oldestRows);
     const select = jest.fn().mockReturnValue({ lean });
