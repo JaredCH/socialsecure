@@ -7,7 +7,7 @@ import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
 import NotificationCenter from '../components/NotificationCenter';
-import SecurityScore from '../components/SecurityScore';
+
 import PresenceIndicator from '../components/PresenceIndicator';
 import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
 import SocialHero from '../components/social/SocialHero';

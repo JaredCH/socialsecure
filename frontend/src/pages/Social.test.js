@@ -392,6 +392,15 @@ describe('Social page hero background rendering', () => {
   it('keeps owner chat access controls collapsed behind a compact toggle', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
 
+    const chatTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Chat'));
+    expect(chatTab).toBeDefined();
+    await act(async () => {
+      chatTab?.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     const controlsToggle = container.querySelector('button[aria-label="Toggle chat access controls"]');
     expect(controlsToggle).toBeTruthy();
     expect(controlsToggle?.getAttribute('aria-expanded')).toBe('false');
@@ -428,52 +437,20 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).toContain('Stage Settings');
   });
 
-  it('renders combined top friends and partner panel plus personal information panel', async () => {
+  it('renders top friends and partner panels as separate sidebar widgets', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
-    expect(container.textContent).toContain('Top 5 Friends + Partner / Spouse');
     expect(container.textContent).toContain('Top Friends');
     expect(container.textContent).toContain('Partner / Spouse');
-    expect(container.textContent).toContain('Personal Information');
-    expect(container.textContent).toContain('Acme Labs');
+    expect(container.textContent).not.toContain('Top 5 Friends + Partner / Spouse');
+    expect(container.textContent).not.toContain('Personal Information');
   });
 
-  it('allows owner to edit personal information from the panel modal', async () => {
+  it('does not render personal information panel or security score on the social page', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
-    const editButton = container.querySelector('button[aria-label="Edit personal information"]');
-    expect(editButton).toBeTruthy();
-
-    await act(async () => {
-      editButton?.click();
-    });
-
-    const worksAtInput = container.querySelector('input#personal-info-worksAt');
-    expect(worksAtInput).toBeTruthy();
-    await act(async () => {
-      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-      valueSetter?.call(worksAtInput, 'Blue Team');
-      worksAtInput.dispatchEvent(new Event('input', { bubbles: true }));
-      worksAtInput.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    const hobbiesInput = container.querySelector('input#personal-info-hobbies');
-    expect(hobbiesInput).toBeTruthy();
-    await act(async () => {
-      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-      valueSetter?.call(hobbiesInput, 'h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12');
-      hobbiesInput.dispatchEvent(new Event('input', { bubbles: true }));
-      hobbiesInput.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-
-    const saveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Save');
-    expect(saveButton).toBeTruthy();
-    await act(async () => {
-      saveButton?.click();
-    });
-
-    expect(authAPI.updateProfile).toHaveBeenCalled();
-    const updatePayload = authAPI.updateProfile.mock.calls[0][0];
-    expect(updatePayload.worksAt).toBe('Blue Team');
-    expect(updatePayload.profileFieldVisibility?.worksAt).toBe('social');
-    expect(updatePayload.hobbies).toEqual(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'h7', 'h8', 'h9', 'h10']);
+    expect(container.textContent).not.toContain('Personal Information');
+    expect(container.textContent).not.toContain('Security Score');
+    expect(container.textContent).not.toContain('Profile Snapshot');
+    expect(container.textContent).not.toContain('Live Activity');
   });
 
   it('shows owner-only delete action for owned timeline posts with confirmation', async () => {
@@ -580,6 +557,15 @@ describe('Social page hero background rendering', () => {
     });
 
     await expect(renderPage()).resolves.toBeUndefined();
+
+    const chatTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Chat'));
+    expect(chatTab).toBeDefined();
+    await act(async () => {
+      chatTab?.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(chatAPI.getProfileThread).toHaveBeenCalledWith('u-2');
     expect(chatAPI.getConversationMessages).toHaveBeenCalledWith('thread-guest', 1, 25);
