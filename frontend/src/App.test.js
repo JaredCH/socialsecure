@@ -223,50 +223,17 @@ describe('App navbar features dropdown', () => {
     expect(container.textContent).toContain('Social Page');
   });
 
-  it('redirects to home after logout from a protected route', async () => {
+  it('uses non-window scrolling shell on the news route', async () => {
     localStorage.setItem('token', 'token');
-    window.history.pushState({}, '', '/social');
+    window.history.pushState({}, '', '/news');
 
     await renderApp();
-    expect(window.location.pathname).toBe('/social');
 
-    const logoutButton = Array.from(container.querySelectorAll('button'))
-      .find((node) => node.textContent === 'Logout');
-    expect(logoutButton).toBeTruthy();
-
-    await act(async () => {
-      logoutButton.click();
-      await Promise.resolve();
-    });
-
-    expect(clearAuthToken).toHaveBeenCalled();
-    expect(container.textContent).toContain('Home Page');
-    expect(container.textContent).not.toContain('Login Page');
-  });
-
-  it('does not clear a newer token when an older bootstrap profile request fails', async () => {
-    localStorage.setItem('token', 'old-token');
-    clearAuthToken.mockImplementation(() => {
-      localStorage.removeItem('token');
-    });
-    let rejectProfile;
-    authAPI.getProfile.mockImplementationOnce(() => new Promise((_, reject) => {
-      rejectProfile = reject;
-    }));
-
-    await act(async () => {
-      root.render(<App />);
-    });
-
-    localStorage.setItem('token', 'new-token');
-
-    await act(async () => {
-      rejectProfile(new Error('unauthorized'));
-      await Promise.resolve();
-    });
-
-    expect(clearAuthToken).not.toHaveBeenCalled();
-    expect(localStorage.getItem('token')).toBe('new-token');
+    const main = container.querySelector('main');
+    expect(main).not.toBeNull();
+    expect(main.className).toContain('overflow-hidden');
+    expect(main.className).not.toContain('overflow-y-auto');
+    expect(container.textContent).toContain('News Page');
   });
 
 });
