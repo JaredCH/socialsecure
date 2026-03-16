@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import Chat from './Chat';
-import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
+import { authAPI, chatAPI, friendsAPI, moderationAPI } from '../utils/api';
 import { createWrappedRoomKeyPackage, decryptEnvelope, encryptEnvelope, unlockOrCreateVault } from '../utils/e2ee';
 import { onChatMessage } from '../utils/realtime';
 
@@ -23,6 +23,9 @@ jest.mock('../utils/api', () => ({
     publishConversationKeyPackages: jest.fn(),
     syncConversationKeyPackages: jest.fn(),
     registerDeviceKeys: jest.fn(),
+    syncLocationRooms: jest.fn(),
+    getAllRooms: jest.fn(),
+    joinRoom: jest.fn(),
     startDM: jest.fn(),
     getProfileThread: jest.fn()
   },
@@ -33,9 +36,7 @@ jest.mock('../utils/api', () => ({
   moderationAPI: {
     blockUser: jest.fn()
   },
-  userAPI: {
-    search: jest.fn()
-  }
+  userAPI: {}
 }));
 
 jest.mock('../utils/e2ee', () => ({
@@ -113,6 +114,9 @@ describe('Chat zip room indicator', () => {
         }
       }
     });
+    chatAPI.syncLocationRooms.mockResolvedValue({ data: { success: true } });
+    chatAPI.getAllRooms.mockResolvedValue({ data: { rooms: [] } });
+    chatAPI.joinRoom.mockResolvedValue({ data: { success: true } });
     const session = {
       deviceId: 'device-1',
       getRegisterPayload: jest.fn().mockResolvedValue({
@@ -255,7 +259,7 @@ describe('Chat zip room indicator', () => {
     ]);
   });
 
-  it('provides room and user autocomplete suggestions', async () => {
+  it('filters DM conversations and starts a new DM from the plus picker', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -271,40 +275,46 @@ describe('Chat zip room indicator', () => {
         }
       }
     });
-    userAPI.search.mockResolvedValue({
-      data: { users: [{ _id: 'u2', username: 'buddy' }] }
+    friendsAPI.getFriends.mockResolvedValue({
+      data: { friends: [{ _id: 'u2', username: 'buddy' }, { _id: 'u3', username: 'charlie' }] }
+    });
+    chatAPI.startDM.mockResolvedValue({
+      data: {
+        conversation: { _id: 'dm1' }
+      }
     });
 
     await renderChat();
 
-    const searchTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Search');
+    const searchTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
     await act(async () => {
       searchTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 
-    const roomInput = container.querySelector('input[placeholder="Type to filter rooms..."]');
-    const userInput = container.querySelector('input[placeholder="Type username or name..."]');
-    expect(roomInput).not.toBeNull();
-    expect(userInput).not.toBeNull();
+    const conversationInput = container.querySelector('input[placeholder="Search conversations..."]');
+    expect(conversationInput).not.toBeNull();
 
     await act(async () => {
-      setInputValue(roomInput, '02116');
+      setInputValue(conversationInput, 'bud');
       await flush();
     });
-    expect(container.textContent).toContain('Zip 02116');
-
-    await act(async () => {
-      setInputValue(userInput, 'bu');
-      await flush();
-    });
-    expect(userAPI.search).not.toHaveBeenCalled();
-
-    await act(async () => {
-      await wait(350);
-    });
-    expect(userAPI.search).toHaveBeenCalledWith('bu');
     expect(container.textContent).toContain('@buddy');
+
+    const newDmButton = container.querySelector('button[aria-label="Start a new direct message"]');
+    await act(async () => {
+      newDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    expect(container.textContent).toContain('@charlie');
+
+    const startButtons = Array.from(container.querySelectorAll('button')).filter((button) => button.textContent === 'Start');
+    expect(startButtons.length).toBeGreaterThan(0);
+    await act(async () => {
+      startButtons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    expect(chatAPI.startDM).toHaveBeenCalled();
   });
 
   it('uses full-height shell and flexible message viewport layout', async () => {
@@ -333,7 +343,7 @@ describe('Chat zip room indicator', () => {
 
     const desktopGrid = container.querySelector('div.grid.flex-1.min-h-0');
     expect(desktopGrid).not.toBeNull();
-    expect(desktopGrid.className).toContain('lg:grid-cols-[56px_1.8fr_8fr_2.2fr]');
+    expect(desktopGrid.className).toContain('lg:grid-cols-[2.6fr_8fr_2.2fr]');
 
     const emptyMessages = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'No messages yet.');
     expect(emptyMessages).not.toBeUndefined();
@@ -640,20 +650,20 @@ describe('Chat zip room indicator', () => {
     );
     expect(profileLinks.length).toBeGreaterThan(0);
     expect(profileLinks.some((link) => link.getAttribute('href') === '/social?user=buddy')).toBe(true);
-    expect(profileLinks[0].className).toContain('h-5');
-    expect(profileLinks[0].className).toContain('w-5');
+    expect(profileLinks[0].className).toContain('h-6');
+    expect(profileLinks[0].className).toContain('w-6');
 
     const messageText = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'hello');
     expect(messageText).not.toBeUndefined();
-    expect(messageText.className).toContain('leading-4');
+    expect(messageText.className).toContain('leading-5');
     const messageBubble = messageText.closest('div[class*="rounded"]');
     expect(messageBubble).not.toBeNull();
-    expect(messageBubble.className).toContain('px-1.5');
-    expect(messageBubble.className).toContain('py-0.5');
+    expect(messageBubble.className).toContain('px-2.5');
+    expect(messageBubble.className).toContain('py-1.5');
 
     const messageViewport = messageText.closest('div.overflow-y-auto');
     expect(messageViewport).not.toBeNull();
-    expect(messageViewport.className).toContain('space-y-1');
+    expect(messageViewport.className).toContain('space-y-2');
   });
 
   it('formats named links and opens user actions from message click', async () => {
@@ -811,9 +821,14 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
+    const newDmButton = container.querySelector('button[aria-label="Start a new direct message"]');
+    await act(async () => {
+      newDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
     expect(container.textContent).toContain('@buddy');
     expect(container.textContent).toContain('@pal');
-    const friendMessageButtons = Array.from(container.querySelectorAll('button')).filter((button) => button.textContent === 'Message');
+    const friendMessageButtons = Array.from(container.querySelectorAll('button')).filter((button) => button.textContent === 'Start');
     expect(friendMessageButtons.length).toBeGreaterThan(0);
     await act(async () => {
       friendMessageButtons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
