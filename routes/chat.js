@@ -166,6 +166,7 @@ const E2EE_LIMITS = {
 };
 const NEARBY_ZIP_THRESHOLD = 25;
 const MAX_NEARBY_ZIP_ROOMS = 100;
+const METERS_PER_MILE = 1609.34;
 const PROFILE_THREAD_ROLE_VALUES = ['friends', 'circles', 'guests'];
 const DEFAULT_PROFILE_THREAD_ACCESS = Object.freeze({
   readRoles: ['friends', 'circles'],
@@ -281,6 +282,7 @@ const formatDiscoveryRoomSummary = (room, userId = null) => ({
     ? Array.isArray(room?.members) && room.members.some((memberId) => String(memberId) === String(userId))
     : undefined
 });
+const toPlainDoc = (doc) => (doc?.toObject ? doc.toObject() : doc);
 const hasValidCoordinates = (location) => (
   Array.isArray(location?.coordinates)
   && location.coordinates.length === 2
@@ -1010,18 +1012,13 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
     const limit = parseDiscoveryLimit(req.query.limit);
     const skip = (page - 1) * limit;
     const pipeline = buildAllRoomsAggregationPipeline(skip, limit);
-    let [rooms, total] = await Promise.all([
-      ChatRoom.aggregate(pipeline),
-      ChatRoom.countDocuments(DISCOVERY_ROOM_FILTER)
-    ]);
+    let total = await ChatRoom.countDocuments(DISCOVERY_ROOM_FILTER);
 
     if (total === 0) {
       await ChatRoom.ensureDefaultDiscoveryRooms({ force: true });
-      [rooms, total] = await Promise.all([
-        ChatRoom.aggregate(pipeline),
-        ChatRoom.countDocuments(DISCOVERY_ROOM_FILTER)
-      ]);
+      total = await ChatRoom.countDocuments(DISCOVERY_ROOM_FILTER);
     }
+    const rooms = total > 0 ? await ChatRoom.aggregate(pipeline) : [];
 
     return res.json({
       success: true,
@@ -1085,7 +1082,7 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
             near: { type: 'Point', coordinates: [longitude, latitude] },
             distanceField: 'distanceMeters',
             spherical: true,
-            maxDistance: 100 * 1609.34,
+            maxDistance: 100 * METERS_PER_MILE,
             query: {
               type: 'city',
               zipCode: {
@@ -1120,12 +1117,12 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
     return res.json({
       success: true,
       rooms: {
-        state: stateResult?.room ? formatDiscoveryRoomSummary(stateResult.room.toObject ? stateResult.room.toObject() : stateResult.room, user._id) : null,
-        county: countyResult?.room ? formatDiscoveryRoomSummary(countyResult.room.toObject ? countyResult.room.toObject() : countyResult.room, user._id) : null,
+        state: stateResult?.room ? formatDiscoveryRoomSummary(toPlainDoc(stateResult.room), user._id) : null,
+        county: countyResult?.room ? formatDiscoveryRoomSummary(toPlainDoc(countyResult.room), user._id) : null,
         zip: zipConversation ? formatConversationSummary(zipConversation, new Map(), user._id, new Map()) : null,
         cities: nearbyCities.map((room) => ({
           ...formatDiscoveryRoomSummary(room, user._id),
-          distanceMiles: Number((Number(room.distanceMeters || 0) / 1609.34).toFixed(1))
+          distanceMiles: Number((Number(room.distanceMeters || 0) / METERS_PER_MILE).toFixed(1))
         }))
       }
     });

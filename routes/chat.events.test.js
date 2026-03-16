@@ -278,7 +278,6 @@ describe('Chat event room discovery routes', () => {
 
   it('re-seeds discovery rooms when the first all-rooms query is empty', async () => {
     ChatRoom.aggregate
-      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ _id: 'state-1', name: 'Alabama', type: 'state', members: [] }]);
     ChatRoom.countDocuments
       .mockResolvedValueOnce(0)
