@@ -1912,7 +1912,12 @@ function Chat() {
         </div>
 
         {activeConversation?.type === 'dm' ? (
-          <div className="mt-0.5 truncate text-[9px] leading-tight opacity-50">
+          <div
+            className="mt-0.5 truncate text-[10px] leading-tight opacity-60"
+            title={profile?.hasPGP
+              ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
+              : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
+          >
             {profile?.hasPGP
               ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
               : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
