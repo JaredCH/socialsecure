@@ -15,7 +15,15 @@ const mongoose = require('mongoose');
 const Article = require('../models/Article');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 
-const RETENTION_DAYS = parseInt(process.env.NEWS_RETENTION_DAYS || '8', 10);
+const RETENTION_DAYS = parseInt(process.env.NEWS_RETENTION_DAYS || '7', 10);
+const MIN_ALLOWED_ARTICLES = 1000;
+const MAX_ARTICLES = Math.max(MIN_ALLOWED_ARTICLES, parseInt(process.env.NEWS_MAX_ARTICLES || '100000', 10));
+const PRUNE_BATCH_SIZE = (() => {
+  const configured = parseInt(process.env.NEWS_MAX_ARTICLES_PRUNE_BATCH || '100', 10);
+  // Guardrail policy intentionally constrains pruning cadence to 50 or 100.
+  if (configured === 50) return 50;
+  return 100;
+})();
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 h
 
 /**
@@ -47,16 +55,37 @@ async function purgeOldArticles() {
       ],
     });
 
+    const totalArticles = await Article.countDocuments({});
+    let prunedForCap = 0;
+    if (totalArticles > MAX_ARTICLES) {
+      const overflow = totalArticles - MAX_ARTICLES;
+      const pruneCount = Math.min(overflow, PRUNE_BATCH_SIZE);
+      const oldest = await Article.find({})
+        .sort({ publishedAt: 1, ingestTimestamp: 1, createdAt: 1, _id: 1 })
+        .limit(pruneCount)
+        .select('_id')
+        .lean();
+
+      if (oldest.length > 0) {
+        const idsToDelete = oldest.map((doc) => doc._id);
+        const pruneResult = await Article.deleteMany({ _id: { $in: idsToDelete } });
+        prunedForCap = pruneResult.deletedCount || 0;
+      }
+    }
+
     const summary = {
       retentionDays: RETENTION_DAYS,
       cutoff: cutoff.toISOString(),
+      maxArticles: MAX_ARTICLES,
+      pruneBatchSize: PRUNE_BATCH_SIZE,
       articlesDeleted: articleResult.deletedCount || 0,
+      articlesPrunedForCap: prunedForCap,
       ingestionRecordsDeleted: recordResult.deletedCount || 0,
       ranAt: new Date().toISOString(),
     };
 
     console.log(
-      `[newsCleanup] Purged ${summary.articlesDeleted} articles and ` +
+      `[newsCleanup] Purged ${summary.articlesDeleted} articles, pruned ${summary.articlesPrunedForCap} for cap, and ` +
         `${summary.ingestionRecordsDeleted} ingestion records ` +
         `(cutoff: ${summary.cutoff})`
     );
