@@ -82,10 +82,13 @@ describe('Home landing page', () => {
     expect(container.textContent).toContain('Transparent heat overlay');
     expect(container.querySelector('[data-testid="encrypted-dm-showcase"]')).not.toBeNull();
     expect(container.querySelectorAll('[data-testid="dm-flow-stage"]')).toHaveLength(2);
-    expect(container.querySelectorAll('[data-testid="dm-cipher-row"]')).toHaveLength(6);
+    expect(container.querySelectorAll('[data-testid="dm-flow-step"]')).toHaveLength(4);
     expect(container.textContent).toContain('Encrypted direct messaging, presented as a living conversation');
     expect(container.textContent).toContain('End-to-end encrypted');
-    expect(container.textContent).toContain('Matrix-style ciphering');
+    expect(container.textContent).toContain('Sender perspective');
+    expect(container.textContent).toContain('Receiver perspective');
+    expect(container.textContent).toContain('Encrypt locally');
+    expect(container.textContent).toContain('Transmit cipher payload');
     expect(container.textContent).toContain('New message');
     expect(container.textContent).toContain('Encryption password required');
     expect(container.textContent).toContain('Plain readable text');
