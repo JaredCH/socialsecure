@@ -386,6 +386,23 @@ function Chat() {
   const [reactionByMessageId, setReactionByMessageId] = useState({});
   const [adminMessageActionIds, setAdminMessageActionIds] = useState([]);
   const [adminMuteActionUserIds, setAdminMuteActionUserIds] = useState([]);
+  const adminMutedUserIds = useMemo(() => new Set(
+    roomUsers
+      .filter((entry) => {
+        const mutedUntilTs = new Date(entry?.mutedUntil || 0).getTime();
+        return Number.isFinite(mutedUntilTs) && mutedUntilTs > Date.now();
+      })
+      .map((entry) => String(entry?._id || '').trim())
+      .filter(Boolean)
+  ), [roomUsers]);
+  const adminProcessingMessageIds = useMemo(
+    () => new Set(adminMessageActionIds.map((entry) => String(entry || '').trim()).filter(Boolean)),
+    [adminMessageActionIds]
+  );
+  const adminProcessingUserIds = useMemo(
+    () => new Set(adminMuteActionUserIds.map((entry) => String(entry || '').trim()).filter(Boolean)),
+    [adminMuteActionUserIds]
+  );
   const [userContextMenu, setUserContextMenu] = useState({
     open: false,
     x: 0,
