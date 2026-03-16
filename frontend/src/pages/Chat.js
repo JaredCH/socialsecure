@@ -1207,7 +1207,7 @@ function Chat() {
   const handleViewUserSocial = (user) => {
     const identifier = user?.username || user?._id;
     if (!identifier) return;
-    window.location.assign(`/social?user=${encodeURIComponent(identifier)}`);
+    window.open(`/social?user=${encodeURIComponent(identifier)}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleRequestFriendship = async (user) => {

@@ -192,12 +192,8 @@ function ChatMessageItem({
     </span>
   );
 
-  const hasVisibleReactions = reactionOptions.some((reaction) => (
-    Array.isArray(reactionsByType?.[reaction.key]) && reactionsByType[reaction.key].length > 0
-  ));
-
   const reactionsMarkup = (
-    <div className={`${hasVisibleReactions || reactionPickerOpen ? 'mt-1' : ''} flex flex-wrap items-center gap-1`}>
+    <div className="mt-1 flex flex-wrap items-center gap-1">
       {reactionOptions.map((reaction) => {
         const actors = Array.isArray(reactionsByType?.[reaction.key]) ? reactionsByType[reaction.key] : [];
         if (actors.length === 0) return null;
@@ -310,18 +306,13 @@ function ChatMessageItem({
                   ].join(' '),
                 isOwnMessage ? theme.messageOwn : theme.messageOther
               ].join(' ')}
-              onMouseEnter={() => {
-                if (canHoverForReactions) {
-                  setReactionPickerOpen(true);
-                }
-              }}
               onMouseOver={() => {
                 if (canHoverForReactions) {
                   setReactionPickerOpen(true);
                 }
               }}
               onMouseLeave={(event) => {
-                if (canHoverForReactions && !event.currentTarget.contains(event.relatedTarget)) {
+                if (canHoverForReactions && (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget))) {
                   setReactionPickerOpen(false);
                 }
               }}
@@ -387,18 +378,13 @@ function ChatMessageItem({
           <div
             tabIndex={0}
             className="relative rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
-            onMouseEnter={() => {
-              if (canHoverForReactions) {
-                setReactionPickerOpen(true);
-              }
-            }}
             onMouseOver={() => {
               if (canHoverForReactions) {
                 setReactionPickerOpen(true);
               }
             }}
             onMouseLeave={(event) => {
-              if (canHoverForReactions && !event.currentTarget.contains(event.relatedTarget)) {
+              if (canHoverForReactions && (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget))) {
                 setReactionPickerOpen(false);
               }
             }}
