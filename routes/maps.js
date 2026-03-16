@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const NodeGeocoder = require('node-geocoder');
+const rateLimit = require('express-rate-limit');
 
 // Import models
 const LocationPresence = require('../models/LocationPresence');
@@ -25,6 +26,13 @@ const FEET_TO_METERS = 0.3048;
 const HEATMAP_LOCATION_JITTER_RADIUS_METERS = 200 * FEET_TO_METERS;
 const HEATMAP_TIME_JITTER_MAX_MS = 30 * 60 * 1000;
 const EARTH_RADIUS_METERS = 6378137;
+const favoriteLocationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many favorite location requests. Please try again shortly.' }
+});
 const geocoder = NodeGeocoder({
   provider: 'openstreetmap',
   httpAdapter: 'https',
@@ -50,14 +58,12 @@ const getPlainTextAddress = (result = {}) => {
     .join(' ')
     .trim();
   const parts = [
-    result.formattedAddress,
-    streetAddress || null,
     result.city || result.town || result.village || null,
     result.state || result.region || null,
     result.country || null
   ].filter(Boolean);
 
-  return parts[0] || Array.from(new Set(parts)).join(', ') || null;
+  return result.formattedAddress || Array.from(new Set([streetAddress || null, ...parts].filter(Boolean))).join(', ') || null;
 };
 
 const getCoordinateFallbackLabel = (latitude, longitude) =>
@@ -253,7 +259,7 @@ router.get('/friends', authenticateToken, async (req, res) => {
     const sanitized = locations.map((loc) => {
       const lastActivityTime = loc.lastActivityAt ? new Date(loc.lastActivityAt).getTime() : 0;
       const hasRecentActivity = Boolean(lastActivityTime) && (now - lastActivityTime <= FRIENDS_LIVE_WINDOW_MS);
-      const hasShareableLocation = Boolean(loc.location?.coordinates?.length >= 2) && (loc.shareWithFriends || hasRecentActivity);
+      const hasShareableLocation = Boolean(loc.location?.coordinates?.length >= 2) && Boolean(loc.shareWithFriends);
       const [rawLng = null, rawLat = null] = loc.location?.coordinates || [];
 
       return {
@@ -298,7 +304,7 @@ router.get('/favorites', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/favorites', authenticateToken, async (req, res) => {
+router.post('/favorites', favoriteLocationLimiter, authenticateToken, async (req, res) => {
   try {
     const rawAddress = typeof req.body.address === 'string' ? req.body.address.trim() : '';
     const parsedLatitude = parseCoordinate(req.body.latitude);

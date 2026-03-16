@@ -78,9 +78,9 @@ const formatFriendStatus = (friend) => {
 };
 
 const getFriendMarkerLabel = (friend) =>
-  friend?.user?.username?.[0]?.toUpperCase()
-  || friend?.user?.realName?.[0]?.toUpperCase()
-  || '•';
+  (friend?.user?.username?.[0] || friend?.user?.realName?.[0] || '•')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '•');
 
 const defaultLeafletAssetLoader = () => Promise.all([
   import('leaflet/dist/images/marker-icon-2x.png'),
@@ -1329,7 +1329,7 @@ function Maps() {
                   disabled={savingFavorite}
                   className="flex-1 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {savingFavorite ? 'Saving...' : '+ Favorites'}
+                  {savingFavorite ? 'Saving...' : 'Save Favorite'}
                 </button>
               </div>
             </form>

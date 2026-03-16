@@ -203,8 +203,8 @@ describe('Maps route audit fixes', () => {
       expect.objectContaining({
         user: expect.objectContaining({ _id: 'friend-2', username: 'recentlyHidden' }),
         isLive: true,
-        lat: 40.74,
-        lng: -73.98
+        lat: null,
+        lng: null
       })
     );
     expect(response.body.friends[1].liveAgeSeconds).toBeGreaterThanOrEqual(0);
