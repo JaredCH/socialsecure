@@ -1616,6 +1616,7 @@ router.get('/ingestion-stats', authenticateToken, requireAdminUser, async (req, 
       failed: row?.failed || 0
     }));
 
+    // Only include adapter keys for sources present in the latest 24h stats.
     const nameToAdapterKey = bySource.reduce((acc, row) => {
       if (SOURCE_ADAPTER_KEY_MAP[row.source]) {
         acc[row.source] = SOURCE_ADAPTER_KEY_MAP[row.source];
