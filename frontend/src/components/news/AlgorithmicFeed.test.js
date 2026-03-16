@@ -73,7 +73,10 @@ describe('AlgorithmicFeed', () => {
     await act(async () => {
       root.render(
         <AlgorithmicFeed
-          categories={[{ key: 'general', label: 'General' }]}
+          categories={[
+            { key: 'technology', label: 'Technology' },
+            { key: 'politics', label: 'Politics' },
+          ]}
           activeCategory={null}
           activeRegion={null}
           activeDate="all"
@@ -95,6 +98,11 @@ describe('AlgorithmicFeed', () => {
   });
 
   it('filters the currently loaded articles using searchQuery without calling remote search', async () => {
+    const categories = [
+      { key: 'technology', label: 'Technology' },
+      { key: 'politics', label: 'Politics' },
+    ];
+
     newsAPI.getFeed.mockResolvedValue({
       data: {
         sections: { keyword: [], local: [], state: [], national: [], trending: [] },
@@ -122,7 +130,7 @@ describe('AlgorithmicFeed', () => {
     await act(async () => {
       root.render(
         <AlgorithmicFeed
-          categories={[{ key: 'general', label: 'General' }]}
+          categories={categories}
           activeCategory={null}
           activeRegion={null}
           activeDate="all"
@@ -138,7 +146,7 @@ describe('AlgorithmicFeed', () => {
     await act(async () => {
       root.render(
         <AlgorithmicFeed
-          categories={[{ key: 'general', label: 'General' }]}
+          categories={categories}
           activeCategory={null}
           activeRegion={null}
           activeDate="all"

@@ -223,4 +223,17 @@ describe('App navbar features dropdown', () => {
     expect(container.textContent).toContain('Social Page');
   });
 
+  it('uses non-window scrolling shell on the news route', async () => {
+    localStorage.setItem('token', 'token');
+    window.history.pushState({}, '', '/news');
+
+    await renderApp();
+
+    const main = container.querySelector('main');
+    expect(main).not.toBeNull();
+    expect(main.className).toContain('overflow-hidden');
+    expect(main.className).not.toContain('overflow-y-auto');
+    expect(container.textContent).toContain('News Page');
+  });
+
 });
