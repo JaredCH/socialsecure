@@ -19,6 +19,7 @@ const Article = require('../models/Article');
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
 const { calculateViralScore, createMomentumMap } = require('./newsViralScore');
 const { extractRssImageUrl } = require('./newsRssImage');
+const { extractLocationContext } = require('../utils/newsLocationExtractor');
 
 const parser = new Parser({ timeout: 14000, headers: { 'User-Agent': 'SocialSecure-NewsBot/1.0' } });
 
@@ -140,6 +141,18 @@ async function persistItem(item, category, feedSource) {
     scopeConfidence: 0.1,
     topics: deriveTopics(item, category),
   };
+
+  // --- Location context extraction ---
+  // Scan the title and description for US state/city mentions so that
+  // state-specific articles (e.g. "Florida Man …", "Austin, TX …") receive
+  // proper locationTags instead of being treated as global/national content.
+  const locationCtx = extractLocationContext(articleData.title, articleData.description);
+  if (locationCtx) {
+    articleData.locationTags = locationCtx.locationTags;
+    articleData.localityLevel = locationCtx.localityLevel;
+    articleData.scopeReason = locationCtx.scopeReason;
+    articleData.scopeConfidence = locationCtx.scopeConfidence;
+  }
 
   const scored = calculateViralScore(articleData, {});
   articleData.viralScore = scored.score;

@@ -211,15 +211,30 @@ async function fetchNationalTier(country, categoryFilter, excludeIds) {
 
 /**
  * Fetch trending tier — articles above promoted threshold, sorted by viralScore.
+ *
+ * Local-pipeline articles from a different state are excluded so that a user in
+ * Texas does not see hyper-local Florida stories in their trending section just
+ * because those articles happen to have a high viralScore.
  */
-async function fetchTrendingTier(categoryFilter, excludeIds, limit = TRENDING_LIMIT) {
-  const query = {
+async function fetchTrendingTier(categoryFilter, excludeIds, limit = TRENDING_LIMIT, userStateCode = null) {
+  const baseConditions = {
     viralScore: { $gte: PROMOTED_THRESHOLD },
     _id: { $nin: excludeIds },
     isActive: { $ne: false },
   };
 
-  return Article.find(applyCategoryFilter(query, categoryFilter))
+  // If we know the user's state, exclude local-pipeline articles from OTHER states.
+  if (userStateCode) {
+    const stateLower = userStateCode.toLowerCase();
+    baseConditions.$or = [
+      { pipeline: { $ne: 'local' } },                        // non-local articles always allowed
+      { 'locationTags.states': stateLower },                  // local articles matching user state
+      { 'locationTags.states': { $exists: false } },          // articles with no locationTags.states field
+      { 'locationTags.states': { $size: 0 } },               // articles with empty states array
+    ];
+  }
+
+  return Article.find(applyCategoryFilter(baseConditions, categoryFilter))
     .sort({ viralScore: -1, publishedAt: -1 })
     .limit(limit)
     .lean();
@@ -317,7 +332,7 @@ async function buildFeed(userId, options = {}) {
   let stateArticles = await fetchStateTier(location.stateCode, categoryFilter, usedIds);
   // Fallback: if no state article, grab trending
   if (!stateArticles.length) {
-    stateArticles = await fetchTrendingTier(categoryFilter, usedIds, 1);
+    stateArticles = await fetchTrendingTier(categoryFilter, usedIds, 1, location.stateCode);
   }
   trackUsed(stateArticles);
   stateArticles = tagTier(stateArticles, 'state');
@@ -325,13 +340,13 @@ async function buildFeed(userId, options = {}) {
   // — Tier 3: National ————————————————————————————————————————————————
   let nationalArticles = await fetchNationalTier(location.country, categoryFilter, usedIds);
   if (!nationalArticles.length) {
-    nationalArticles = await fetchTrendingTier(categoryFilter, usedIds, 1);
+    nationalArticles = await fetchTrendingTier(categoryFilter, usedIds, 1, location.stateCode);
   }
   trackUsed(nationalArticles);
   nationalArticles = tagTier(nationalArticles, 'national');
 
   // — Tier 4: Trending —————————————————————————————————————————————————
-  let trendingArticles = await fetchTrendingTier(categoryFilter, usedIds, TRENDING_LIMIT);
+  let trendingArticles = await fetchTrendingTier(categoryFilter, usedIds, TRENDING_LIMIT, location.stateCode);
   trackUsed(trendingArticles);
   trendingArticles = tagTier(trendingArticles, 'trending');
 
