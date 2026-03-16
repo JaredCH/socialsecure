@@ -20,6 +20,12 @@ const conversationKeyPackageSchema = new mongoose.Schema({
     maxlength: 128,
     index: true
   },
+  senderPublicKey: {
+    type: String,
+    trim: true,
+    maxlength: 4096,
+    default: ''
+  },
   recipientUserId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

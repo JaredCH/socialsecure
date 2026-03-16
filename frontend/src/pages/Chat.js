@@ -999,7 +999,8 @@ function Chat() {
             keyVersion,
             roomKey,
             recipientUserId: String(device.userId),
-            recipientDeviceId: String(device.deviceId)
+            recipientDeviceId: String(device.deviceId),
+            recipientPublicKey: device.publicEncryptionKey
           })));
           await chatAPI.publishConversationKeyPackages(activeConversationId, packages);
         }

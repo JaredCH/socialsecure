@@ -135,6 +135,32 @@ const decryptAesGcm = async ({ key, nonceB64, ciphertextB64, aad }) => {
   return new Uint8Array(plaintext);
 };
 
+const deriveEcdhAesKey = async (privateKey, publicKey, usages = ['encrypt', 'decrypt']) => {
+  const sharedBits = await window.crypto.subtle.deriveBits(
+    { name: 'ECDH', public: publicKey },
+    privateKey,
+    256
+  );
+  return window.crypto.subtle.importKey(
+    'raw',
+    sharedBits,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    usages
+  );
+};
+
+const importEcdhPublicKey = async (jwk) => {
+  const parsed = typeof jwk === 'string' ? JSON.parse(jwk) : jwk;
+  return window.crypto.subtle.importKey(
+    'jwk',
+    parsed,
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    []
+  );
+};
+
 const serializeRoomKeys = (roomKeysMap) => {
   const out = {};
   for (const [roomId, versions] of roomKeysMap.entries()) {
@@ -309,6 +335,9 @@ const createSession = ({ userId, vaultRecord, vaultKey, sessionPayload, keyPairs
       );
     },
     getVaultKey: () => state.vaultKey,
+    getEncryptionPrivateKey: () => state.encryptionKeyPair.privateKey,
+    getPublicEncryptionKeyJwk: async () =>
+      window.crypto.subtle.exportKey('jwk', state.encryptionKeyPair.publicKey),
     persist: async () => {
       const payload = await exportSessionPayload({
         deviceId: state.sessionPayload.deviceId,
@@ -569,8 +598,14 @@ export const createWrappedRoomKeyPackage = async ({
   keyVersion,
   roomKey,
   recipientUserId,
-  recipientDeviceId
+  recipientDeviceId,
+  recipientPublicKey
 }) => {
+  const recipientCryptoKey = await importEcdhPublicKey(recipientPublicKey);
+  // Sender derives shared key for encryption; recipient derives the same key for decryption
+  const sharedKey = await deriveEcdhAesKey(session.getEncryptionPrivateKey(), recipientCryptoKey, ['encrypt']);
+  const senderPublicKeyJwk = await session.getPublicEncryptionKeyJwk();
+
   const wrapAad = JSON.stringify({
     roomId,
     keyVersion,
@@ -586,7 +621,7 @@ export const createWrappedRoomKeyPackage = async ({
   });
 
   const { nonce, ciphertext } = await encryptAesGcm({
-    key: session.getVaultKey(),
+    key: sharedKey,
     plaintextBytes: encoder.encode(payload),
     aad: wrapAad
   });
@@ -598,6 +633,7 @@ export const createWrappedRoomKeyPackage = async ({
 
   return {
     senderDeviceId: session.deviceId,
+    senderPublicKey: JSON.stringify(senderPublicKeyJwk),
     recipientDeviceId,
     recipientUserId,
     keyVersion,
@@ -608,7 +644,7 @@ export const createWrappedRoomKeyPackage = async ({
     wrappedKeyHash,
     algorithms: {
       encryption: 'AES-256-GCM',
-      wrapping: 'PBKDF2-SHA-256-KEK',
+      wrapping: 'ECDH-P256-AES-256-GCM',
       signing: 'ECDSA-P256-SHA256',
       hash: 'SHA-256'
     }
@@ -621,8 +657,16 @@ export const ingestWrappedRoomKeyPackage = async ({ session, pkg }) => {
     throw new Error('Wrapped key hash mismatch.');
   }
 
+  if (!pkg.senderPublicKey) {
+    throw new Error('Package is missing senderPublicKey for ECDH key agreement.');
+  }
+
+  const senderCryptoKey = await importEcdhPublicKey(pkg.senderPublicKey);
+  // Recipient derives same shared key for decryption (sender derived it for encryption)
+  const sharedKey = await deriveEcdhAesKey(session.getEncryptionPrivateKey(), senderCryptoKey, ['decrypt']);
+
   const plaintextBytes = await decryptAesGcm({
-    key: session.getVaultKey(),
+    key: sharedKey,
     nonceB64: pkg.nonce,
     ciphertextB64: pkg.wrappedRoomKey,
     aad: pkg.aad || ''

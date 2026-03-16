@@ -150,6 +150,7 @@ describe('Chat zip room indicator', () => {
     decryptEnvelope.mockResolvedValue('decrypted dm');
     createWrappedRoomKeyPackage.mockResolvedValue({
       senderDeviceId: 'device-1',
+      senderPublicKey: '{"kty":"EC"}',
       recipientDeviceId: 'device-2',
       recipientUserId: 'u2',
       keyVersion: 1,
@@ -158,7 +159,7 @@ describe('Chat zip room indicator', () => {
       aad: '',
       signature: 'sig',
       wrappedKeyHash: 'hash',
-      algorithms: { encryption: 'AES-256-GCM', wrapping: 'PBKDF2', signing: 'ECDSA', hash: 'SHA-256' }
+      algorithms: { encryption: 'AES-256-GCM', wrapping: 'ECDH-P256-AES-256-GCM', signing: 'ECDSA', hash: 'SHA-256' }
     });
     friendsAPI.sendRequest.mockResolvedValue({ data: { success: true } });
     friendsAPI.getFriends.mockResolvedValue({ data: { friends: [] } });
@@ -987,8 +988,8 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversationDevices.mockResolvedValue({
       data: {
         devices: [
-          { userId: 'u1', deviceId: 'device-1' },
-          { userId: 'u2', deviceId: 'device-2' }
+          { userId: 'u1', deviceId: 'device-1', publicEncryptionKey: '{"kty":"EC"}' },
+          { userId: 'u2', deviceId: 'device-2', publicEncryptionKey: '{"kty":"EC"}' }
         ]
       }
     });
