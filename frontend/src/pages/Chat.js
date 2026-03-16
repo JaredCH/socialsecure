@@ -150,7 +150,7 @@ const getConversationLabel = (conversation) => {
       : (conversation.title || 'Profile thread');
   }
 
-  return conversation.title || 'Conversation';
+  return conversation.title || conversation.name || 'Conversation';
 };
 
 const getPresenceState = (lastActiveAt) => {
@@ -178,10 +178,29 @@ const MAX_CHAT_ROOM_FETCH = 500;
 const MAX_CHAT_ROOM_RESULTS = 20;
 const MAX_FAVORITE_ROOMS = 8;
 const MAX_DM_FRIEND_PICKER_RESULTS = 12;
-const PARTICIPANT_REFRESH_INTERVAL_MS = 15000;
-const PARTICIPANT_REFRESH_DEBOUNCE_MS = 3000;
+const MAX_OPEN_CHAT_TABS = 6;
+const ROOM_CHAT_TYPES = ['state', 'county', 'topic', 'city'];
 const normalizeId = (value) => String(value || '').trim();
 const sortRoomsByName = (left, right) => String(left?.name || '').localeCompare(String(right?.name || ''));
+const isRoomConversation = (conversation) => ROOM_CHAT_TYPES.includes(String(conversation?.type || ''));
+const getConversationActivityAt = (conversation) => conversation?.lastMessageAt || conversation?.lastActivity || null;
+const getChatTabTypeLabel = (conversation) => {
+  if (conversation?.type === 'dm') return 'DM';
+  if (isRoomConversation(conversation)) return 'Room';
+  return 'Zip';
+};
+const addCurrentUserToRoomEntry = (entry, profileId) => {
+  const normalizedProfileId = normalizeId(profileId);
+  if (String(entry?._id || '') === '') return entry;
+  const nextMembers = Array.isArray(entry?.members)
+    ? Array.from(new Set([...entry.members.map((memberId) => String(memberId)), normalizedProfileId].filter(Boolean)))
+    : [normalizedProfileId].filter(Boolean);
+  return {
+    ...entry,
+    memberCount: Math.max(Number(entry?.memberCount || 0), nextMembers.length),
+    members: nextMembers
+  };
+};
 
 const upsertConversationMessage = (messages, incomingMessage) => {
   const normalizedId = String(incomingMessage?._id || '').trim();
@@ -335,7 +354,9 @@ function Chat() {
   const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(DEFAULT_UNLOCK_DURATION_MINUTES);
   const [dmFriends, setDmFriends] = useState([]);
   const [dmFriendsLoading, setDmFriendsLoading] = useState(false);
+  const [openChatTabIds, setOpenChatTabIds] = useState([]);
   const search = window.location.search;
+  const previousActiveChannelRef = useRef('zip');
 
   useEffect(() => {
     const requestedChannel = new URLSearchParams(search).get('tab');
@@ -431,9 +452,24 @@ function Chat() {
     ));
   }, [activeChannel, conversationList, dmQuery]);
 
+  const workspaceEntries = useMemo(() => {
+    const entries = new Map();
+    [hubData?.zip?.current, ...(hubData?.zip?.nearby || []), ...(hubData?.dm || []), ...allChatRooms].forEach((entry) => {
+      const entryId = normalizeId(entry?._id);
+      if (!entryId) return;
+      entries.set(entryId, entry);
+    });
+    return entries;
+  }, [allChatRooms, hubData]);
+
+  const openChatTabs = useMemo(
+    () => openChatTabIds.map((tabId) => workspaceEntries.get(String(tabId))).filter(Boolean),
+    [openChatTabIds, workspaceEntries]
+  );
+
   const activeConversation = useMemo(
-    () => conversationList.find((conversation) => String(conversation._id) === String(activeConversationId)) || null,
-    [conversationList, activeConversationId]
+    () => workspaceEntries.get(String(activeConversationId)) || null,
+    [workspaceEntries, activeConversationId]
   );
 
   useEffect(() => {
@@ -556,7 +592,7 @@ function Chat() {
 
   const chatRoomsByQuery = useMemo(() => {
     const query = roomQuery.trim().toLowerCase();
-    if (!query) return allChatRooms.slice(0, MAX_CHAT_ROOM_RESULTS);
+    if (!query) return [];
     return allChatRooms
       .filter((room) => {
         const label = String(room.name || '').toLowerCase();
@@ -628,6 +664,25 @@ function Chat() {
     });
   }, [activeConversation?.type, activeConversationId, decryptedDmContentById, dmUnlockedByConversation, messages]);
 
+  const openConversationById = useCallback((conversationId, { openWorkspace = true } = {}) => {
+    const normalizedConversationId = normalizeId(conversationId);
+    if (!normalizedConversationId) return;
+    let removedOverflowTab = false;
+    setOpenChatTabIds((prev) => {
+      const next = [...prev.filter((tabId) => tabId !== normalizedConversationId), normalizedConversationId];
+      if (next.length <= MAX_OPEN_CHAT_TABS) return next;
+      removedOverflowTab = true;
+      return next.slice(next.length - MAX_OPEN_CHAT_TABS);
+    });
+    setActiveConversationId(normalizedConversationId);
+    if (openWorkspace) {
+      setMobileWorkspaceOpen(true);
+    }
+    if (removedOverflowTab) {
+      toast('Only 6 chat tabs can stay open at once.');
+    }
+  }, []);
+
   const sharedMediaSnippets = useMemo(
     () => renderedMessages.filter((message) => /\[[^\]]+\]|https?:\/\//i.test(message.content || '')).slice(-6),
     [renderedMessages]
@@ -639,21 +694,29 @@ function Chat() {
     [activeConversation?.type, messages]
   );
 
-  const applyDefaultConversationSelection = (channelKey, data) => {
+  const applyDefaultConversationSelection = useCallback((channelKey, data) => {
     if (channelKey === 'zip') {
       const next = data?.zip?.current || (data?.zip?.nearby || [])[0] || null;
-      setActiveConversationId(next ? String(next._id) : '');
+      if (next) {
+        openConversationById(next._id, { openWorkspace: false });
+      } else {
+        setActiveConversationId('');
+      }
       return;
     }
 
     if (channelKey === 'dm') {
       const next = (data?.dm || [])[0] || null;
-      setActiveConversationId(next ? String(next._id) : '');
+      if (next) {
+        openConversationById(next._id, { openWorkspace: false });
+      } else {
+        setActiveConversationId('');
+      }
       return;
     }
 
     setActiveConversationId('');
-  };
+  }, [openConversationById]);
 
   const refreshHub = async (channelToKeep = activeChannel) => {
     const [{ data: me }, { data: conversationsData }] = await Promise.all([
@@ -667,20 +730,21 @@ function Chat() {
 
     const stillExists = (() => {
       if (!activeConversationId) return false;
+      if (isRoomConversation(activeConversation)) return true;
 
-      if (channelToKeep === 'zip') {
+      if (activeConversation?.type === 'zip-room') {
         const candidates = [nextData?.zip?.current, ...(nextData?.zip?.nearby || [])].filter(Boolean);
         return candidates.some((conversation) => String(conversation._id) === String(activeConversationId));
       }
 
-      if (channelToKeep === 'dm') {
+      if (activeConversation?.type === 'dm') {
         return (nextData?.dm || []).some((conversation) => String(conversation._id) === String(activeConversationId));
       }
 
       return false;
     })();
 
-    if (!stillExists) {
+    if (!stillExists && activeConversationId) {
       applyDefaultConversationSelection(channelToKeep, nextData);
     }
   };
@@ -701,17 +765,24 @@ function Chat() {
   }, []);
 
   useEffect(() => {
-    applyDefaultConversationSelection(activeChannel, hubData);
-  }, [activeChannel, hubData]);
+    const channelChanged = previousActiveChannelRef.current !== activeChannel;
+    previousActiveChannelRef.current = activeChannel;
+    if (!activeConversationId || channelChanged) {
+      applyDefaultConversationSelection(activeChannel, hubData);
+    }
+  }, [activeChannel, activeConversationId, applyDefaultConversationSelection, hubData]);
 
   const loadLatestConversationMessages = useCallback(async (conversationId) => {
-    const { data } = await chatAPI.getConversationMessages(conversationId, 1, INITIAL_MESSAGES_PAGE_SIZE);
+    const request = isRoomConversation(activeConversation)
+      ? chatAPI.getMessages(conversationId, 1, INITIAL_MESSAGES_PAGE_SIZE)
+      : chatAPI.getConversationMessages(conversationId, 1, INITIAL_MESSAGES_PAGE_SIZE);
+    const { data } = await request;
     const latestMessages = Array.isArray(data?.messages) ? data.messages : [];
     setMessages(latestMessages);
     setMessagesPage(1);
-    setMessagesHasMore(Boolean(data?.hasMore));
+    setMessagesHasMore(Boolean(data?.pagination?.hasMore ?? data?.hasMore));
     return latestMessages;
-  }, []);
+  }, [activeConversation]);
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -745,7 +816,10 @@ function Chat() {
     const nextPage = messagesPage + 1;
     setMessagesLoadingOlder(true);
     try {
-      const { data } = await chatAPI.getConversationMessages(activeConversationId, nextPage, OLDER_MESSAGES_PAGE_SIZE);
+      const request = isRoomConversation(activeConversation)
+        ? chatAPI.getMessages(activeConversationId, nextPage, OLDER_MESSAGES_PAGE_SIZE)
+        : chatAPI.getConversationMessages(activeConversationId, nextPage, OLDER_MESSAGES_PAGE_SIZE);
+      const { data } = await request;
       const olderMessages = Array.isArray(data?.messages) ? data.messages : [];
       if (olderMessages.length > 0) {
         setMessages((prev) => {
@@ -756,14 +830,14 @@ function Chat() {
         });
       }
       setMessagesPage(nextPage);
-      setMessagesHasMore(Boolean(data?.hasMore));
+      setMessagesHasMore(Boolean(data?.pagination?.hasMore ?? data?.hasMore));
       return olderMessages.length;
     } catch {
       return 0;
     } finally {
       setMessagesLoadingOlder(false);
     }
-  }, [activeConversationId, messagesHasMore, messagesLoadingOlder, messagesPage]);
+  }, [activeConversation, activeConversationId, messagesHasMore, messagesLoadingOlder, messagesPage]);
 
   const loadConversationUsers = useCallback(async ({ silent = false } = {}) => {
     if (!activeConversationId) {
@@ -828,9 +902,9 @@ function Chat() {
     const unsubscribe = onChatMessage((payload) => {
       const incomingMessage = payload?.message;
       if (!incomingMessage) return;
-      const incomingConversationId = String(incomingMessage.conversationId || '');
-      if (!incomingConversationId) return;
-      if (incomingConversationId !== String(activeConversationId || '')) return;
+      const incomingTargetId = String(incomingMessage.conversationId || incomingMessage.roomId || '');
+      if (!incomingTargetId) return;
+      if (incomingTargetId !== String(activeConversationId || '')) return;
       setMessages((prev) => upsertConversationMessage(prev, incomingMessage));
       scheduleConversationUsersRefresh();
     });
@@ -842,15 +916,29 @@ function Chat() {
   }, [activeConversationId, scheduleConversationUsersRefresh]);
 
   useEffect(() => {
-    loadConversationUsers();
-    if (!activeConversationId) return undefined;
-    const intervalId = window.setInterval(() => {
-      loadConversationUsers({ silent: true });
-    }, PARTICIPANT_REFRESH_INTERVAL_MS);
-    return () => {
-      window.clearInterval(intervalId);
+    const loadRoomUsers = async () => {
+      if (!activeConversationId) {
+        setRoomUsers([]);
+        return;
+      }
+
+      setRoomUsersLoading(true);
+      try {
+        const request = isRoomConversation(activeConversation)
+          ? chatAPI.getRoomUsers(activeConversationId)
+          : chatAPI.getConversationUsers(activeConversationId);
+        const { data } = await request;
+        setRoomUsers(Array.isArray(data?.users) ? data.users : []);
+      } catch (error) {
+        setRoomUsers([]);
+        toast.error(error.response?.data?.error || 'Failed to load room users');
+      } finally {
+        setRoomUsersLoading(false);
+      }
     };
-  }, [activeConversationId, loadConversationUsers]);
+
+    loadRoomUsers();
+  }, [activeConversation, activeConversationId]);
 
   useEffect(() => {
     if (!composerValue.trim()) {
@@ -1068,6 +1156,13 @@ function Chat() {
         });
         data = response.data;
         await session.persist();
+      } else if (isRoomConversation(activeConversation)) {
+        const response = await chatAPI.sendMessage(activeConversationId, {
+          content: contentToSend,
+          senderNameColor: nameColor,
+          messageType: 'text'
+        });
+        data = response.data;
       } else {
         const response = await chatAPI.sendConversationMessage(activeConversationId, {
           content: contentToSend
@@ -1078,8 +1173,9 @@ function Chat() {
       setMessages((prev) => upsertConversationMessage(prev, data.message));
       setComposerValue('');
       setLocalTyping(false);
-      scheduleConversationUsersRefresh();
-      await refreshHub(activeChannel);
+      if (!isRoomConversation(activeConversation)) {
+        await refreshHub(activeConversation?.type === 'dm' ? 'dm' : 'zip');
+      }
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to send message');
     } finally {
@@ -1092,29 +1188,49 @@ function Chat() {
       const { data } = await chatAPI.startDM(targetUserId);
       await refreshHub('dm');
       setActiveChannel('dm');
-      setActiveConversationId(String(data.conversation._id));
+      openConversationById(String(data.conversation._id));
       setNewDmPickerOpen(false);
       setNewDmQuery('');
       setMobileWorkspaceOpen(true);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to start DM');
     }
-  }, [refreshHub]);
+  }, [openConversationById, refreshHub]);
 
-  const handleJoinRoom = useCallback(async (roomId) => {
-    const normalizedRoomId = normalizeId(roomId);
-    if (!normalizedRoomId || typeof chatAPI.joinRoom !== 'function') return;
+  const handleOpenRoom = useCallback(async (room) => {
+    const normalizedRoomId = normalizeId(room?._id || room);
+    if (!normalizedRoomId) return;
     try {
-      await chatAPI.joinRoom(normalizedRoomId);
-      setJoinedRoomIds((prev) => ({
-        ...prev,
-        [normalizedRoomId]: true
-      }));
-      toast.success('Joined room');
+      if (!joinedRoomIds[normalizedRoomId] && typeof chatAPI.joinRoom === 'function') {
+        await chatAPI.joinRoom(normalizedRoomId);
+        setJoinedRoomIds((prev) => ({
+          ...prev,
+          [normalizedRoomId]: true
+        }));
+        setAllChatRooms((prev) => prev.map((entry) => (
+          String(entry?._id) === normalizedRoomId
+            ? addCurrentUserToRoomEntry(entry, profile?._id)
+            : entry
+        )));
+        toast.success('Joined room');
+      }
+      openConversationById(normalizedRoomId);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to join room');
     }
-  }, []);
+  }, [joinedRoomIds, openConversationById, profile?._id]);
+
+  const handleCloseOpenTab = useCallback((conversationId) => {
+    const normalizedConversationId = normalizeId(conversationId);
+    if (!normalizedConversationId) return;
+    let remainingTabIds = [];
+    setOpenChatTabIds((prev) => {
+      remainingTabIds = prev.filter((tabId) => tabId !== normalizedConversationId);
+      return remainingTabIds;
+    });
+    if (normalizedConversationId !== String(activeConversationId)) return;
+    setActiveConversationId(remainingTabIds[remainingTabIds.length - 1] || '');
+  }, [activeConversationId]);
 
   const handleToggleFavoriteRoom = useCallback((roomId) => {
     const normalizedRoomId = normalizeId(roomId);
@@ -1317,7 +1433,17 @@ function Chat() {
     }
   }, []);
 
-  const conversationPresence = getPresenceState(activeConversation?.lastMessageAt);
+  useEffect(() => {
+    setOpenChatTabIds((prev) => prev.filter((tabId) => workspaceEntries.has(String(tabId))));
+  }, [workspaceEntries]);
+
+  useEffect(() => {
+    if (activeConversationId && !workspaceEntries.has(String(activeConversationId))) {
+      setActiveConversationId('');
+    }
+  }, [activeConversationId, workspaceEntries]);
+
+  const conversationPresence = getPresenceState(getConversationActivityAt(activeConversation));
   const activeConversationUser = useMemo(() => {
     if (!activeConversation) return null;
     if (activeConversation.type === 'dm') return activeConversation.peer || null;
@@ -1441,8 +1567,7 @@ function Chat() {
                             <button
                               type="button"
                               onClick={() => {
-                                setActiveConversationId(String(conversation._id));
-                                setMobileWorkspaceOpen(true);
+                                openConversationById(String(conversation._id));
                               }}
                               className={`w-full rounded-xl border px-2.5 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
                             >
@@ -1471,8 +1596,7 @@ function Chat() {
                       <button
                         type="button"
                         onClick={() => {
-                          setActiveConversationId(String(hubData.zip.current._id));
-                          setMobileWorkspaceOpen(true);
+                          openConversationById(String(hubData.zip.current._id));
                         }}
                         className={`w-full rounded border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
                       >
@@ -1495,16 +1619,23 @@ function Chat() {
                                 >
                                   {room.name}
                                 </summary>
-                                <div className="mt-2 space-y-2">
-                                  <div className="flex items-center justify-between gap-2 rounded border px-2 py-1">
-                                    <span>State room</span>
-                                    {!joinedState ? (
+                                  <div className="mt-2 space-y-2">
+                                    <div className="flex items-center justify-between gap-2 rounded border px-2 py-1">
                                       <button
                                         type="button"
-                                        onClick={() => handleJoinRoom(room._id)}
-                                        className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
+                                        onClick={() => handleOpenRoom(room)}
+                                        aria-label={`Open ${room.name} state room`}
+                                        className="truncate text-left font-medium hover:underline"
                                       >
-                                        Join
+                                        State room
+                                      </button>
+                                      {!joinedState ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenRoom(room)}
+                                          className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
+                                        >
+                                          Join
                                       </button>
                                     ) : (
                                       <span className="opacity-70">Joined</span>
@@ -1523,11 +1654,18 @@ function Chat() {
                                             className="flex items-center justify-between gap-2 rounded border px-2 py-1"
                                             data-discovery-county={countyRoom.name}
                                           >
-                                            <span>{countyRoom.name}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenRoom(countyRoom)}
+                                              aria-label={`Open ${countyRoom.name} room`}
+                                              className="truncate text-left hover:underline"
+                                            >
+                                              {countyRoom.name}
+                                            </button>
                                             {!joinedCounty ? (
                                               <button
                                                 type="button"
-                                                onClick={() => handleJoinRoom(countyRoom._id)}
+                                                onClick={() => handleOpenRoom(countyRoom)}
                                                 className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
                                               >
                                                 Join
@@ -1560,11 +1698,18 @@ function Chat() {
                               className="flex items-center justify-between gap-2 rounded border px-2 py-1"
                               data-topic-room={room.name}
                             >
-                              <span>{room.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRoom(room)}
+                                aria-label={`Open ${room.name} topic room`}
+                                className="truncate text-left hover:underline"
+                              >
+                                {room.name}
+                              </button>
                               {!joined ? (
                                 <button
                                   type="button"
-                                  onClick={() => handleJoinRoom(room._id)}
+                                  onClick={() => handleOpenRoom(room)}
                                   className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
                                 >
                                   Join
@@ -1594,46 +1739,56 @@ function Chat() {
                       <ul className="mt-1 space-y-1 text-xs">
                         {favoriteRooms.slice(0, MAX_FAVORITE_ROOMS).map((room) => (
                           <li key={`favorite-${String(room._id)}`} className="flex items-center justify-between gap-2 rounded border p-1.5">
-                            <span>{room.name}</span>
+                            <button type="button" onClick={() => handleOpenRoom(room)} className="truncate text-left hover:underline">{room.name}</button>
                             <button type="button" onClick={() => handleToggleFavoriteRoom(room._id)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Remove</button>
                           </li>
                         ))}
                       </ul>
                     </div>
                   ) : null}
-                  <ul className="mt-2 space-y-1 text-xs">
-                    {chatRoomsByQuery.map((room) => {
-                      const roomId = String(room._id);
-                      const joined = Boolean(joinedRoomIds[roomId]);
-                      const favorited = Boolean(favoriteRoomIds[roomId]);
-                      return (
-                        <li key={roomId} className="rounded border p-1.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold">{room.name}</p>
-                              <p className="truncate opacity-75">{[room.city, room.state, room.country].filter(Boolean).join(', ') || room.type}</p>
+                  {!roomQuery.trim() ? (
+                    <p className="mt-2 text-xs opacity-80">Search to find a room when you need one.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1 text-xs">
+                      {chatRoomsByQuery.length === 0 ? <li className="rounded border p-1.5 opacity-80">No matching rooms found.</li> : null}
+                      {chatRoomsByQuery.map((room) => {
+                        const roomId = String(room._id);
+                        const joined = Boolean(joinedRoomIds[roomId]);
+                        const favorited = Boolean(favoriteRoomIds[roomId]);
+                        return (
+                          <li key={roomId} className="rounded border p-1.5" data-room-search-result={room.name}>
+                            <div className="flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRoom(room)}
+                                aria-label={`Open ${room.name} room`}
+                                className="min-w-0 flex-1 text-left"
+                              >
+                                <p className="truncate font-semibold">{room.name}</p>
+                                <p className="truncate opacity-75">{[room.city, room.state, room.country].filter(Boolean).join(', ') || room.type}</p>
+                              </button>
+                              <div className="flex items-center gap-1">
+                                {!joined ? (
+                                  <button type="button" onClick={() => handleOpenRoom(room)} className={`rounded border px-2 py-1 ${activeTheme.subtle}`}>Join</button>
+                                ) : (
+                                  <span className="text-[10px] font-semibold opacity-80">Joined</span>
+                                )}
+                                {joined ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleFavoriteRoom(roomId)}
+                                    className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
+                                  >
+                                    {favorited ? '★' : '☆'}
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                              {!joined ? (
-                                <button type="button" onClick={() => handleJoinRoom(roomId)} className={`rounded border px-2 py-1 ${activeTheme.subtle}`}>Join</button>
-                              ) : (
-                                <span className="text-[10px] font-semibold opacity-80">Joined</span>
-                              )}
-                              {joined ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleFavoriteRoom(roomId)}
-                                  className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
-                                >
-                                  {favorited ? '★' : '☆'}
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </section>
                 <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Zip Rooms</p>
@@ -1648,8 +1803,7 @@ function Chat() {
                             <button
                               type="button"
                               onClick={() => {
-                                setActiveConversationId(String(conversation._id));
-                                setMobileWorkspaceOpen(true);
+                                openConversationById(String(conversation._id));
                               }}
                               className={`w-full rounded-xl border px-2.5 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
                             >
@@ -1784,6 +1938,45 @@ function Chat() {
               </div>
             ) : null}
           </header>
+
+          {openChatTabs.length > 0 ? (
+            <div className="mb-2 overflow-x-auto" data-open-chat-tabs>
+              <div className="flex min-w-max items-center gap-1">
+                {openChatTabs.map((conversation) => {
+                  const conversationId = String(conversation._id);
+                  const selected = conversationId === String(activeConversationId);
+                  const label = getConversationLabel(conversation);
+                  return (
+                    <div
+                      key={`open-chat-tab-${conversationId}`}
+                      className={`flex items-stretch rounded-xl border ${selected ? activeTheme.subtle : activeTheme.panelGlass}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => openConversationById(conversationId)}
+                        className="min-w-[8rem] max-w-[12rem] px-3 py-1.5 text-left"
+                        data-open-chat-tab={label}
+                      >
+                        <p className="truncate text-xs font-semibold">{label}</p>
+                        <p className="text-[10px] uppercase opacity-70">{getChatTabTypeLabel(conversation)}</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCloseOpenTab(conversationId)}
+                        className="border-l px-2 text-xs opacity-80 hover:opacity-100"
+                        aria-label={`Close ${label} tab`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+                <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${activeTheme.panelGlass}`}>
+                  {openChatTabs.length}/{MAX_OPEN_CHAT_TABS}
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           {messagesError ? (
             <div className="mb-3 rounded border border-red-400 bg-red-50 p-2 text-sm text-red-700">{messagesError}</div>
