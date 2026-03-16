@@ -154,7 +154,8 @@ function ChatMessageItem({
   adminProcessingMessageIds,
   adminProcessingUserIds,
   onToggleAdminMessageRemoval,
-  onToggleAdminUserMute
+  onToggleAdminUserMute,
+  onAdminDeleteMessage
 }) {
   const author = message.userId?.username || message.userId?.realName || 'user';
   const usernameForProfileLink = typeof message.userId?.username === 'string' ? message.userId.username.trim() : '';
@@ -290,6 +291,19 @@ function ChatMessageItem({
         }}
       >
         {muteActionPending ? '…' : (authorMutedByAdmin ? 'Undo' : '🔇')}
+      </button>
+      <button
+        type="button"
+        className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold text-red-600 ${theme.subtle}`}
+        aria-label="Delete message"
+        title="Delete message permanently"
+        disabled={messageActionPending}
+        onClick={(event) => {
+          event.stopPropagation();
+          onAdminDeleteMessage?.(message);
+        }}
+      >
+        {messageActionPending ? '…' : '✕'}
       </button>
     </div>
   ) : null;
