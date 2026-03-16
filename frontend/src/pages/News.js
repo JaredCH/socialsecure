@@ -333,6 +333,7 @@ function News() {
               activeCategory={feedCategory}
               onCategoryChange={handleToggleCategory}
               onSearch={setSearchQuery}
+              searchValue={searchQuery}
               onRegionChange={setActiveRegion}
               onDateChange={setActiveDate}
               activeRegion={activeRegion}
