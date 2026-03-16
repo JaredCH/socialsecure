@@ -227,6 +227,7 @@ function News() {
             activeCategory={feedCategory}
             onCategoryChange={handleToggleCategory}
             onSearch={setSearchQuery}
+            searchValue={searchQuery}
             onRegionChange={setActiveRegion}
             onDateChange={setActiveDate}
             activeRegion={activeRegion}
@@ -267,6 +268,7 @@ function News() {
           onAddKeyword={handleAddKeyword}
           onRemoveKeyword={handleRemoveKeyword}
           onSearch={setSearchQuery}
+          searchValue={searchQuery}
           onOpenSettings={() => setSettingsOpen(true)}
         />
         <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

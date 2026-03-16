@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { newsAPI } from '../../utils/api';
 import { buildAlgorithmicSequence, buildInfiniteScrollBatch } from '../../utils/newsAlgorithmHelper';
 import ArticleRow from './ArticleRow';
@@ -62,7 +62,6 @@ export default function AlgorithmicFeed({
   const [page, setPage]                     = useState(1);
   const [hasMore, setHasMore]               = useState(true);
   const [showIngestBanner, setShowIngestBanner] = useState(false);
-  const [searchResults, setSearchResults]   = useState(null); // null = not in search mode
 
   // Impression buffer: { articleId, type: 'scroll'|'click' }
   const impressionBuffer = useRef([]);
@@ -133,27 +132,10 @@ export default function AlgorithmicFeed({
     const load = async (attempt = 0) => {
       setLoading(true);
       setError(null);
-      setSearchResults(null);
       setHasMore(true);
       setPage(1);
 
       try {
-        // If search query present, use search endpoint instead
-        if (searchQuery && searchQuery.trim()) {
-          const params = { q: searchQuery.trim() };
-          if (activeCategory) params.category = activeCategory;
-          if (activeRegion?.country) params.country = activeRegion.country;
-          if (activeRegion?.state)   params.state   = activeRegion.state;
-          if (activeRegion?.city)    params.city     = activeRegion.city;
-          const res = await newsAPI.searchArticles(params);
-          if (!cancelled) {
-            setSearchResults(res.data?.articles || []);
-            setArticles(res.data?.articles || []);
-            setHasMore(false);
-          }
-          return;
-        }
-
         const res = await newsAPI.getFeed(buildFeedParams(1));
         if (cancelled) return;
 
@@ -196,13 +178,13 @@ export default function AlgorithmicFeed({
       cancelled = true;
       clearTimeout(retryTimerRef.current);
     };
-}, [activeCategory, activeRegion, activeDate, searchQuery, buildFeedParams, categories, clearRegistrationPrefetchSeed, hasRegistrationPrefetchSeed]);
+}, [activeCategory, activeRegion, activeDate, buildFeedParams, categories, clearRegistrationPrefetchSeed, hasRegistrationPrefetchSeed]);
 
   // ── Infinite scroll sentinel ─────────────────────────────────────────────────
   const sentinelRef = useRef(null);
 
   useEffect(() => {
-    if (!sentinelRef.current || !hasMore || loading || searchResults !== null) return;
+    if (!sentinelRef.current || !hasMore || loading || String(searchQuery || '').trim()) return;
 
     const observer = new IntersectionObserver(
       async ([entry]) => {
@@ -233,7 +215,26 @@ export default function AlgorithmicFeed({
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-}, [hasMore, loading, loadingMore, page, articles, searchResults, buildFeedParams]);
+}, [hasMore, loading, loadingMore, page, articles, buildFeedParams, searchQuery]);
+
+  const normalizedSearch = useMemo(() => String(searchQuery || '').trim().toLowerCase(), [searchQuery]);
+  const isSearchActive = normalizedSearch.length > 0;
+  const filteredArticles = useMemo(() => {
+    if (!isSearchActive) return articles;
+    return articles.filter((article) => {
+      const haystack = [
+        article?.title,
+        article?.description,
+        article?.summary,
+        article?.source,
+        article?.category,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(normalizedSearch);
+    });
+  }, [articles, isSearchActive, normalizedSearch]);
 
   // ── Render ───────────────────────────────────────────────────────────────────
   if (loading) {
@@ -256,11 +257,11 @@ export default function AlgorithmicFeed({
     );
   }
 
-  if (articles.length === 0) {
+  if (filteredArticles.length === 0) {
     return (
       <div className="py-16 flex flex-col items-center gap-2 text-gray-400">
         <span className="material-symbols-outlined text-4xl">newspaper</span>
-        <p className="text-sm">No articles found</p>
+        <p className="text-sm">{isSearchActive ? 'No matching articles found' : 'No articles found'}</p>
       </div>
     );
   }
@@ -269,13 +270,13 @@ export default function AlgorithmicFeed({
     <div>
       {showIngestBanner && <IngestBanner />}
 
-      {searchResults !== null && (
+      {isSearchActive && (
         <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
-          {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "<strong>{searchQuery}</strong>"
+          {filteredArticles.length} result{filteredArticles.length !== 1 ? 's' : ''} for "<strong>{searchQuery}</strong>"
         </div>
       )}
 
-      {articles.map((article) => (
+      {filteredArticles.map((article) => (
         <ArticleRow
           key={article._id}
           article={article}
@@ -286,7 +287,7 @@ export default function AlgorithmicFeed({
       ))}
 
       {/* Infinite scroll sentinel */}
-      {hasMore && searchResults === null && (
+      {hasMore && !isSearchActive && (
         <div ref={sentinelRef}>
           {loadingMore && (
             <div>
