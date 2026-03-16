@@ -1074,7 +1074,25 @@ function Chat() {
       await hydrateConversationKeys({ conversationId: activeConversationId, session });
       setDecryptedDmContentById({});
       decryptingMessageIdsRef.current = new Set();
-      await loadLatestConversationMessages(activeConversationId);
+      const latestMessages = await loadLatestConversationMessages(activeConversationId);
+      const encrypted = (Array.isArray(latestMessages) ? latestMessages : [])
+        .filter((message) => message?.e2ee?.ciphertext);
+      const decryptedEntries = {};
+      for (const message of encrypted) {
+        const messageId = String(message._id);
+        try {
+          decryptedEntries[messageId] = await decryptEnvelope({
+            session,
+            roomId: activeConversationId,
+            envelope: message.e2ee
+          });
+        } catch {
+          // keep encrypted placeholder when room key is unavailable
+        }
+      }
+      if (Object.keys(decryptedEntries).length > 0) {
+        setDecryptedDmContentById(decryptedEntries);
+      }
       setDmUnlockedByConversation((prev) => ({
         ...prev,
         [String(activeConversationId)]: true
