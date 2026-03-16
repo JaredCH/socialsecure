@@ -138,6 +138,104 @@ function buildWeatherCacheKey(lat, lon) {
   return `weather:${Number(lat).toFixed(2)}:${Number(lon).toFixed(2)}`;
 }
 
+function parseLocalDateTimeParts(value) {
+  const match = String(value || '').trim().match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
+  );
+  if (!match) return null;
+
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+    second: Number(match[6] || 0)
+  };
+}
+
+function buildLocalDateTimeKey(parts) {
+  if (!parts) return null;
+
+  const year = String(parts.year).padStart(4, '0');
+  const month = String(parts.month).padStart(2, '0');
+  const day = String(parts.day).padStart(2, '0');
+  const hour = String(parts.hour).padStart(2, '0');
+  const minute = String(parts.minute).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function getTimeZoneLocalDateTimeParts(date, timeZone) {
+  if (!timeZone) return null;
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  });
+
+  const formattedParts = formatter.formatToParts(date).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+
+  return {
+    year: Number(formattedParts.year),
+    month: Number(formattedParts.month),
+    day: Number(formattedParts.day),
+    hour: Number(formattedParts.hour),
+    minute: Number(formattedParts.minute),
+    second: Number(formattedParts.second)
+  };
+}
+
+function getNextTopOfHourKey(parts) {
+  if (!parts) return null;
+
+  const nextHourUtc = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, 0, 0));
+  if (parts.minute > 0 || parts.second > 0) {
+    nextHourUtc.setUTCHours(nextHourUtc.getUTCHours() + 1);
+  }
+
+  return buildLocalDateTimeKey({
+    year: nextHourUtc.getUTCFullYear(),
+    month: nextHourUtc.getUTCMonth() + 1,
+    day: nextHourUtc.getUTCDate(),
+    hour: nextHourUtc.getUTCHours(),
+    minute: 0
+  });
+}
+
+function getUpcomingHourlyForecastWindow(hourlyTime, { currentTime = null, timeZone = null, now = new Date(), limit = 24 } = {}) {
+  if (!Array.isArray(hourlyTime) || hourlyTime.length === 0) return [];
+
+  const normalizedHourly = hourlyTime
+    .map((time, index) => {
+      const parts = parseLocalDateTimeParts(time);
+      if (!parts) return null;
+      return { time, index, key: buildLocalDateTimeKey(parts) };
+    })
+    .filter(Boolean);
+
+  if (normalizedHourly.length === 0) return [];
+
+  const referenceParts =
+    parseLocalDateTimeParts(currentTime) ||
+    getTimeZoneLocalDateTimeParts(now, timeZone);
+  const startKey = getNextTopOfHourKey(referenceParts);
+
+  const upcoming = startKey
+    ? normalizedHourly.filter(({ key }) => key >= startKey)
+    : normalizedHourly;
+
+  return (upcoming.length > 0 ? upcoming : normalizedHourly).slice(0, limit);
+}
+
 const parseCoordinateQuery = (value = '') => {
   const match = String(value || '').trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
   if (!match) return null;
@@ -355,15 +453,22 @@ async function fetchWeatherForLocation(locObj) {
 
     const currentDescriptor = getOpenMeteoWeatherDescriptor(current.weather_code);
 
-    const hourly = hourlyTime.slice(0, 12).map((time, idx) => {
-      const descriptor = getOpenMeteoWeatherDescriptor(fc?.hourly?.weather_code?.[idx]);
+    const hourlyWindow = getUpcomingHourlyForecastWindow(hourlyTime, {
+      currentTime: current.time,
+      timeZone: fc?.timezone || resolved?.timezone || null,
+      now: new Date(),
+      limit: 24
+    });
+
+    const hourly = hourlyWindow.map(({ time, index }) => {
+      const descriptor = getOpenMeteoWeatherDescriptor(fc?.hourly?.weather_code?.[index]);
       return {
         time,
-        temperature: fc?.hourly?.temperature_2m?.[idx] ?? null,
-        humidity: fc?.hourly?.relative_humidity_2m?.[idx] ?? null,
-        windSpeed: fc?.hourly?.wind_speed_10m?.[idx] ?? null,
-        windGust: fc?.hourly?.wind_gusts_10m?.[idx] ?? null,
-        precipitationProbability: fc?.hourly?.precipitation_probability?.[idx] ?? null,
+        temperature: fc?.hourly?.temperature_2m?.[index] ?? null,
+        humidity: fc?.hourly?.relative_humidity_2m?.[index] ?? null,
+        windSpeed: fc?.hourly?.wind_speed_10m?.[index] ?? null,
+        windGust: fc?.hourly?.wind_gusts_10m?.[index] ?? null,
+        precipitationProbability: fc?.hourly?.precipitation_probability?.[index] ?? null,
         shortForecast: descriptor.description,
         icon: descriptor.icon
       };
@@ -1690,6 +1795,7 @@ module.exports = {
   startIngestionScheduler,
   internals: {
     US_ZIP_REGEX,
+    getUpcomingHourlyForecastWindow,
     classifySourceHealth,
     normalizeUSState,
     fetchWeatherForLocation,
