@@ -28,7 +28,7 @@ function Login({ onSuccess }) {
         throw new Error('Login succeeded but browser storage is blocked. Enable site data/cookies and try again.');
       }
       toast.success('Logged in successfully');
-      navigate('/');
+      navigate('/news');
     } catch (error) {
       const validationErrors = error.response?.data?.errors;
       const validationMessage = Array.isArray(validationErrors)
