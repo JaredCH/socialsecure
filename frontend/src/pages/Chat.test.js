@@ -902,6 +902,75 @@ describe('Chat zip room indicator', () => {
     expect(container.querySelector('textarea').disabled).toBe(false);
   });
 
+  it('continues DM unlock when one synced key package is invalid', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    chatAPI.syncConversationKeyPackages.mockResolvedValue({
+      data: {
+        packages: [{ _id: 'pkg-invalid' }, { _id: 'pkg-valid' }]
+      }
+    });
+    ingestWrappedRoomKeyPackage
+      .mockRejectedValueOnce(new Error('Wrapped key hash mismatch.'))
+      .mockResolvedValueOnce(undefined);
+    const session = {
+      deviceId: 'device-1',
+      getRegisterPayload: jest.fn().mockResolvedValue({
+        deviceId: 'device-1',
+        keyVersion: 1,
+        publicEncryptionKey: '{}',
+        publicSigningKey: '{}',
+        algorithms: { encryption: 'ECDH-P256', signing: 'ECDSA-P256-SHA256' }
+      }),
+      getLatestRoomKey: jest.fn().mockReturnValue({
+        keyVersion: 1,
+        keyBytes: new Uint8Array([1, 2, 3, 4])
+      }),
+      createRoomKey: jest.fn().mockReturnValue(new Uint8Array([1, 2, 3, 4])),
+      setRoomKey: jest.fn(),
+      persist: jest.fn().mockResolvedValue(undefined)
+    };
+    unlockOrCreateVault.mockResolvedValue({ session, created: false });
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const unlockDmButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock DM');
+    await act(async () => {
+      unlockDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
+    await act(async () => {
+      setInputValue(passwordInput, 'secret-password');
+      await flush();
+    });
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock secure messages');
+    await act(async () => {
+      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(ingestWrappedRoomKeyPackage).toHaveBeenCalledTimes(2);
+    expect(session.persist).toHaveBeenCalledTimes(1);
+    expect(Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Lock DM')).not.toBeUndefined();
+  });
+
   it('uses DM E2EE endpoint for direct message sends', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
