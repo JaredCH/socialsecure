@@ -141,6 +141,28 @@ describe('Auth encryption-password endpoints', () => {
     expect(user.encryptionPasswordVersion).toBe(3);
   });
 
+  it('returns bad request when verify endpoint gets incorrect encryption password', async () => {
+    const app = buildApp();
+    const user = {
+      registrationStatus: 'active',
+      encryptionPasswordHash: 'existing-hash',
+      encryptionPasswordVersion: 1,
+      compareEncryptionPassword: jest.fn().mockResolvedValue(false)
+    };
+
+    mockUser.findById.mockResolvedValue(user);
+
+    const response = await request(app)
+      .post('/api/auth/encryption-password/verify')
+      .set('Authorization', 'Bearer token')
+      .send({
+        encryptionPassword: 'WrongPass1'
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/incorrect/i);
+  });
+
   it('saves a valid armored public PGP key', async () => {
     const app = buildApp();
     const user = {
@@ -184,4 +206,3 @@ describe('Auth encryption-password endpoints', () => {
     expect(user.save).not.toHaveBeenCalled();
   });
 });
-
