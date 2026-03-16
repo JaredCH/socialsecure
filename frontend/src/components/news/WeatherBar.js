@@ -345,7 +345,7 @@ export default function WeatherBar({ variant = 'sticky' }) {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="text-sm font-semibold">{day.high != null ? `${day.high}°` : '--'}</span>
-                        <span className="text-sm" style={{ color: '#555555' }}>{day.low != null ? `${day.low}°` : '--'}</span>
+                        <span className="text-sm text-white/50">{day.low != null ? `${day.low}°` : '--'}</span>
                       </div>
                     </div>
                   ))}
