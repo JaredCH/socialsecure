@@ -33,9 +33,9 @@ export const SOCIAL_PANEL_IDS = [
 
 // Hero sub-page tabs
 export const SOCIAL_HERO_TABS = [
-  { id: 'main', label: 'Main', icon: 'home' },
-  { id: 'friends', label: 'Friends', icon: 'users' },
+  { id: 'main', label: 'Feed', icon: 'home' },
   { id: 'gallery', label: 'Gallery', icon: 'photo' },
+  { id: 'friends', label: 'Friends', icon: 'users' },
   { id: 'chat', label: 'Chat', icon: 'chat' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar' }
 ];
