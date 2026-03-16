@@ -629,7 +629,7 @@ describe('Chat zip room indicator', () => {
     expect(themeSelect.value).toBe('midnight');
   });
 
-  it('sends transformed slash command content with selected name color', async () => {
+  it('uses theme-driven sender accents and sends transformed slash command content', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -645,15 +645,8 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const colorInput = container.querySelector('input[type="color"]');
-    expect(colorInput).not.toBeNull();
-    await act(async () => {
-      const colorSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      colorSetter.call(colorInput, '#ff0000');
-      colorInput.dispatchEvent(new Event('input', { bubbles: true }));
-      colorInput.dispatchEvent(new Event('change', { bubbles: true }));
-      await flush();
-    });
+    expect(container.querySelector('input[type="color"]')).toBeNull();
+    expect(container.textContent).toContain('Theme-tuned accents');
 
     const composer = container.querySelector('textarea[placeholder="Type your message"]');
     expect(composer).not.toBeNull();
@@ -672,8 +665,7 @@ describe('Chat zip room indicator', () => {
     });
 
     expect(chatAPI.sendConversationMessage).toHaveBeenCalledWith('zip1', {
-      content: 'alpha cries',
-      senderNameColor: '#ff0000'
+      content: 'alpha cries'
     });
   });
 
@@ -844,20 +836,20 @@ describe('Chat zip room indicator', () => {
     );
     expect(profileLinks.length).toBeGreaterThan(0);
     expect(profileLinks.some((link) => link.getAttribute('href') === '/social?user=buddy')).toBe(true);
-    expect(profileLinks[0].className).toContain('h-6');
-    expect(profileLinks[0].className).toContain('w-6');
+    expect(profileLinks[0].className).toContain('h-9');
+    expect(profileLinks[0].className).toContain('w-9');
 
     const messageText = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'hello');
     expect(messageText).not.toBeUndefined();
-    expect(messageText.className).toContain('leading-5');
+    expect(messageText.className).toContain('leading-6');
     const messageBubble = messageText.closest('div[class*="rounded"]');
     expect(messageBubble).not.toBeNull();
-    expect(messageBubble.className).toContain('px-2.5');
-    expect(messageBubble.className).toContain('py-1.5');
+    expect(messageBubble.className).toContain('px-0.5');
+    expect(messageBubble.className).toContain('py-0.5');
 
     const messageViewport = messageText.closest('div.overflow-y-auto');
     expect(messageViewport).not.toBeNull();
-    expect(messageViewport.className).toContain('space-y-2');
+    expect(messageViewport.className).toContain('py-3');
   });
 
   it('formats named links and opens user actions from message click', async () => {
@@ -903,7 +895,8 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).toContain('View user social');
   });
 
-  it('renders sender names with enhanced legibility styling across themes', async () => {
+  it('renders sender names with theme-selected accent styling', async () => {
+    localStorage.setItem('chatTheme', 'ocean');
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -923,7 +916,6 @@ describe('Chat zip room indicator', () => {
             _id: 'm-legibility',
             content: 'readable name',
             userId: { _id: 'u2', username: 'buddy' },
-            senderNameColor: '#ff0000',
             createdAt: '2024-01-01T00:00:00.000Z'
           }
         ]
@@ -934,14 +926,56 @@ describe('Chat zip room indicator', () => {
 
     const authorAction = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === '@buddy');
     expect(authorAction).not.toBeUndefined();
-    expect(authorAction.className).toContain('text-[11px]');
-    expect(authorAction.className).toContain('font-bold');
-    expect(authorAction.className).toContain('normal-case');
+    expect(authorAction.className).toContain('text-sm');
+    expect(authorAction.className).toContain('font-semibold');
+    expect(authorAction.className).toContain('text-cyan-200');
+  });
 
-    const senderWrapper = authorAction.closest('span');
-    expect(senderWrapper).not.toBeNull();
-    expect(senderWrapper.style.textShadow).toContain('rgba');
-    expect(senderWrapper.style.color).toBe('rgb(255, 0, 0)');
+  it('groups consecutive room messages into a Discord-like stack', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            _id: 'm-group-1',
+            content: 'first',
+            userId: { _id: 'u2', username: 'buddy' },
+            createdAt: '2024-01-01T00:00:00.000Z'
+          },
+          {
+            _id: 'm-group-2',
+            content: 'second',
+            userId: { _id: 'u2', username: 'buddy' },
+            createdAt: '2024-01-01T00:02:00.000Z'
+          },
+          {
+            _id: 'm-group-3',
+            content: 'third',
+            userId: { _id: 'u3', username: 'charlie' },
+            createdAt: '2024-01-01T00:03:00.000Z'
+          }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    const roomMessages = Array.from(container.querySelectorAll('[data-chat-message-layout="room"]'));
+    expect(roomMessages).toHaveLength(3);
+    expect(roomMessages[0].getAttribute('data-chat-grouped')).toBe('false');
+    expect(roomMessages[1].getAttribute('data-chat-grouped')).toBe('true');
+    expect(Array.from(container.querySelectorAll('button')).filter((node) => node.textContent === '@buddy')).toHaveLength(1);
   });
 
   it('opens a direct message when loaded with a social deep link target', async () => {
@@ -1397,6 +1431,77 @@ describe('Chat zip room indicator', () => {
 
     expect(container.textContent).toContain('incoming live message');
     expect(chatAPI.getConversationMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a live participant list across the DM side panel', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    let usersCallCount = 0;
+    chatAPI.getConversationUsers.mockImplementation((conversationId) => {
+      if (conversationId === 'zip1') {
+        return Promise.resolve({ data: { users: [] } });
+      }
+      usersCallCount += 1;
+      return Promise.resolve({
+        data: {
+          users: usersCallCount > 1
+            ? [
+              { _id: 'u1', username: 'alpha' },
+              { _id: 'u2', username: 'buddy' },
+              { _id: 'u3', username: 'charlie' }
+            ]
+            : [
+              { _id: 'u1', username: 'alpha' },
+              { _id: 'u2', username: 'buddy' }
+            ]
+        }
+      });
+    });
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+    });
+
+    expect(container.textContent).toContain('Participants');
+    expect(container.textContent).toContain('People in this DM');
+    expect(container.textContent).toContain('@buddy');
+    expect(container.textContent).not.toContain('Shared Media / Links');
+
+    const realtimeHandler = onChatMessage.mock.calls.at(-1)?.[0];
+    expect(realtimeHandler).toEqual(expect.any(Function));
+
+    await act(async () => {
+      realtimeHandler?.({
+        message: {
+          _id: 'live-dm-1',
+          conversationId: 'dm1',
+          content: '[Encrypted message]',
+          userId: { _id: 'u3', username: 'charlie' },
+          createdAt: new Date().toISOString(),
+          e2ee: { ciphertext: 'cipher' }
+        }
+      });
+      await flush();
+      await flush();
+    });
+
+    expect(chatAPI.getConversationUsers).toHaveBeenCalledWith('dm1');
+    expect(container.textContent).toContain('@charlie');
   });
 
   it('decrypts the latest DM batch first and decrypts older messages when loading earlier history', async () => {

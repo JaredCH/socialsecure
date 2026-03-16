@@ -2783,12 +2783,6 @@ router.post(
   }),
   body('messageType').optional().isIn(MESSAGE_TYPES).withMessage('Invalid messageType'),
   body('commandData').optional().isObject().withMessage('commandData must be an object'),
-  body('senderNameColor')
-    .optional({ nullable: true })
-    .isString()
-    .bail()
-    .custom((value) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value).trim()))
-    .withMessage('senderNameColor must be a valid hex color'),
   body('attachments').not().exists().withMessage('Attachments are not supported in chat messages'),
   async (req, res) => {
   const errors = validationResult(req);
@@ -2805,10 +2799,6 @@ router.post(
     const hasE2EEEnvelope = Boolean(req.body.e2ee);
     const messageType = normalizeMessageType(req.body.messageType);
     const commandData = sanitizeCommandData(req.body.commandData);
-    const senderNameColor = typeof req.body.senderNameColor === 'string'
-      ? req.body.senderNameColor.trim()
-      : null;
-
     if (contentProvided && (!hasContent || content.length > 2000)) {
       return res.status(400).json({ error: 'Message content must be between 1 and 2000 chars when provided' });
     }
@@ -2918,7 +2908,7 @@ router.post(
       };
     } else {
       createPayload.content = content;
-      createPayload.senderNameColor = senderNameColor || null;
+      createPayload.senderNameColor = null;
       createPayload.e2ee = { enabled: false };
     }
 
