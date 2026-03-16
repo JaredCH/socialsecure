@@ -31,6 +31,7 @@ describe('WeatherBar', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     act(() => {
       root.unmount();
     });
@@ -255,5 +256,73 @@ describe('WeatherBar', () => {
     expect(container.textContent).toContain('Breezy with a light shower chance later in the evening');
     expect(container.textContent).toContain('Sunrise');
     expect(container.textContent).toContain('Sunset');
+  });
+
+  it('starts the card hourly forecast at the next local hour and limits it to 8 panels', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 2, 15, 13, 31, 0));
+
+    const localHour = (hour) => new Date(2026, 2, 15, hour, 0, 0).toISOString();
+
+    newsAPI.getWeather.mockResolvedValue({
+      data: {
+        locations: [
+          {
+            _id: 'hourly-window',
+            city: 'Austin',
+            state: 'TX',
+            isPrimary: true,
+            weather: {
+              current: {
+                temperature: 72,
+                shortForecast: 'Breezy',
+                humidity: 41,
+                icon: 'cloud-sun',
+                windSpeed: 14,
+              },
+              high: 78,
+              low: 59,
+              hourly: [
+                { time: localHour(12), temperature: 70, icon: 'sun', windGust: 18 },
+                { time: localHour(13), temperature: 71, icon: 'sun', windGust: 19 },
+                { time: localHour(14), temperature: 72, icon: 'cloud-sun', windGust: 20 },
+                { time: localHour(15), temperature: 73, icon: 'cloud-sun', windGust: 21 },
+                { time: localHour(16), temperature: 74, icon: 'cloud', windGust: 22 },
+                { time: localHour(17), temperature: 75, icon: 'cloud', windGust: 23 },
+                { time: localHour(18), temperature: 76, icon: 'cloud-rain', windGust: 24 },
+                { time: localHour(19), temperature: 77, icon: 'cloud-rain', windGust: 25 },
+                { time: localHour(20), temperature: 78, icon: 'cloud-rain', windGust: 26 },
+                { time: localHour(21), temperature: 79, icon: 'cloud-lightning', windGust: 27 },
+              ],
+              weekly: [],
+            },
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      root.render(<WeatherBar variant="card" />);
+    });
+    await flush();
+
+    const expandButton = container.querySelector('button[aria-label="Expand weather details"]');
+    expect(expandButton).toBeTruthy();
+
+    await act(async () => {
+      expandButton.click();
+    });
+
+    const hourlyLabels = Array.from(
+      container.querySelectorAll('[data-testid="weather-card-expanded"] .grid.grid-cols-4 > div > p:first-child')
+    ).map((node) => node.textContent);
+
+    const expectedLabels = [14, 15, 16, 17, 18, 19, 20, 21]
+      .map((hour) => new Date(2026, 2, 15, hour, 0, 0).toLocaleTimeString([], { hour: 'numeric' }));
+
+    expect(hourlyLabels).toHaveLength(8);
+    expect(hourlyLabels).toEqual(expectedLabels);
+    expect(hourlyLabels).not.toContain(new Date(2026, 2, 15, 12, 0, 0).toLocaleTimeString([], { hour: 'numeric' }));
+    expect(hourlyLabels).not.toContain(new Date(2026, 2, 15, 13, 0, 0).toLocaleTimeString([], { hour: 'numeric' }));
   });
 });
