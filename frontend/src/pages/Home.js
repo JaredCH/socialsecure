@@ -144,8 +144,8 @@ function getDensityAnimation(circle, reducedMotion) {
         animate: {
           left: [`${startX}%`, `${startX}%`, `${mx}%`, `${cx}%`, `${cx}%`, `${cx}%`],
           top: [`${startY}%`, `${startY}%`, `${my}%`, `${cy}%`, `${cy}%`, `${cy}%`],
-          opacity: [0.45, 0.5, 0.8, 0.65, 0.3, 0.3],
-          scale: [1, 1, 1.4, 0.85, 0.4, 0.4]
+          opacity: [0.45, 0.5, 0.84, 0.72, 0.42, 0.32],
+          scale: [1, 1, 1.36, 1.22, 0.92, 0.75]
         },
         transition: {
           duration: DENSITY_DURATION,
@@ -174,8 +174,8 @@ function getDensityAnimation(circle, reducedMotion) {
         animate: {
           left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`, `${breakX}%`],
           top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`, `${breakY}%`],
-          opacity: [0.45, 0.5, 0.65, 0.5, 0.4],
-          scale: [1, 1, 0.85, 0.6, 1]
+          opacity: [0.45, 0.5, 0.72, 0.56, 0.42],
+          scale: [1, 1, 1.2, 1.12, 0.82]
         },
         transition: {
           duration: DENSITY_DURATION,
@@ -189,8 +189,8 @@ function getDensityAnimation(circle, reducedMotion) {
         animate: {
           left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`, `${cx}%`],
           top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`, `${cy}%`],
-          opacity: [0.45, 0.5, 0.65, 0.3, 0.3],
-          scale: [1, 1, 0.85, 0.4, 0.4]
+          opacity: [0.45, 0.5, 0.72, 0.38, 0.3],
+          scale: [1, 1, 1.16, 0.9, 0.72]
         },
         transition: {
           duration: DENSITY_DURATION,
@@ -208,6 +208,8 @@ const messagePreview = {
   sendCipherRows: ['8X4A 1F77 23CC 9D0E', 'L0CK 77AA 91C2 E4F8', '2C91 A7FF 0E1D 6B20'],
   unlockCipherRows: ['94AF 00C1 7E22 D4B8', 'KEY? 19AD 44C0 7F10', 'D3CR 7A91 55EF 0AA2']
 };
+
+const dmFlowSteps = ['Type private text', 'Encrypt locally', 'Transmit cipher payload', 'Enter password to decrypt'];
 
 function Home({ isAuthenticated = false }) {
   const prefersReducedMotion = useReducedMotion();
@@ -384,8 +386,8 @@ function Home({ isAuthenticated = false }) {
                       prefersReducedMotion
                         ? { opacity: 0.4, scale: 1 }
                         : {
-                            opacity: [0.04, 0.04, 0.18, 0.5, 0.38],
-                            scale: [0.15, 0.15, 0.45, 1.08, 0.88]
+                            opacity: [0.04, 0.08, 0.24, 0.56, 0.34],
+                            scale: [0.15, 0.3, 0.68, 1.3, 0.78]
                           }
                     }
                     transition={
@@ -393,7 +395,7 @@ function Home({ isAuthenticated = false }) {
                         ? { duration: 0.01 }
                         : {
                             duration: DENSITY_DURATION,
-                            times: [0, 0.11, 0.5, 0.82, 1],
+                            times: [0, 0.2, 0.52, 0.82, 1],
                             repeat: Infinity,
                             ease: 'easeInOut'
                           }
@@ -496,7 +498,20 @@ function Home({ isAuthenticated = false }) {
               </div>
             </div>
 
-            <div className="relative mt-5 grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+            <div className="relative mt-5 space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {dmFlowSteps.map((step, index) => (
+                  <div
+                    key={step}
+                    data-testid="dm-flow-step"
+                    className="rounded-2xl border border-white/10 bg-slate-950/65 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200"
+                  >
+                    {index + 1}. {step}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
               <motion.div
                 data-testid="dm-flow-stage"
                 className="rounded-3xl border border-white/10 bg-slate-900/80 p-4 shadow-lg"
@@ -504,18 +519,26 @@ function Home({ isAuthenticated = false }) {
                 animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
                 transition={{ duration: prefersReducedMotion ? 0.01 : 0.6 }}
               >
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">You type</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">Sender perspective</p>
+                <p className="mt-2 text-sm text-white">Computer A</p>
                 <div className="mt-3 rounded-2xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm text-sky-50">
                   {messagePreview.plainText}
                 </div>
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <span className="text-xs text-slate-400">Submit securely</span>
-                  <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                    Sending…
-                  </span>
-                </div>
+                <motion.div
+                  className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100"
+                  initial={prefersReducedMotion ? false : { opacity: 0.3 }}
+                  animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.25, 0.25, 1, 1, 0.45] }}
+                  transition={{
+                    duration: prefersReducedMotion ? 0.01 : 7,
+                    times: [0, 0.2, 0.36, 0.62, 1],
+                    repeat: prefersReducedMotion ? 0 : Infinity,
+                    ease: 'easeInOut'
+                  }}
+                >
+                  Encrypting before send...
+                </motion.div>
                 <div className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-rose-200">During submission</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-rose-200">Encrypted payload</p>
                   <div className="mt-3 space-y-2 font-mono text-xs text-rose-100/90">
                     {messagePreview.sendCipherRows.map((row, index) => (
                       <motion.p
@@ -540,6 +563,29 @@ function Home({ isAuthenticated = false }) {
                 </div>
               </motion.div>
 
+              <div className="relative hidden h-full items-center justify-center lg:flex">
+                <motion.div
+                  className="h-0.5 w-24 rounded-full bg-white/20"
+                  initial={prefersReducedMotion ? false : { opacity: 0.4 }}
+                  animate={prefersReducedMotion ? { opacity: 0.7 } : { opacity: [0.3, 0.9, 0.3] }}
+                  transition={{ duration: prefersReducedMotion ? 0.01 : 3.2, repeat: prefersReducedMotion ? 0 : Infinity }}
+                />
+                <motion.div
+                  aria-hidden="true"
+                  className="absolute rounded-full border border-rose-300/30 bg-rose-400/20 px-3 py-1 font-mono text-[10px] text-rose-100"
+                  initial={prefersReducedMotion ? false : { x: -40, opacity: 0 }}
+                  animate={prefersReducedMotion ? { opacity: 1 } : { x: [-40, -40, 40, 40], opacity: [0, 0, 1, 0] }}
+                  transition={{
+                    duration: prefersReducedMotion ? 0.01 : 7.6,
+                    times: [0, 0.35, 0.72, 1],
+                    repeat: prefersReducedMotion ? 0 : Infinity,
+                    ease: 'easeInOut'
+                  }}
+                >
+                  {messagePreview.encryptedText}
+                </motion.div>
+              </div>
+
               <motion.div
                 data-testid="dm-flow-stage"
                 className="rounded-3xl border border-white/10 bg-slate-900/80 p-4 shadow-lg"
@@ -549,12 +595,16 @@ function Home({ isAuthenticated = false }) {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">Other user</p>
-                    <p className="mt-1 text-sm text-white">New message</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">Receiver perspective</p>
+                    <p className="mt-1 text-sm text-white">Computer B</p>
                   </div>
                   <span className="rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-100">
-                    Incoming secure payload
+                    Incoming encrypted message
                   </span>
+                </div>
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">New message</p>
+                  <p className="mt-2 font-mono text-xs text-rose-100">{messagePreview.encryptedText}</p>
                 </div>
                 <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">Encryption password required</p>
@@ -567,38 +617,44 @@ function Home({ isAuthenticated = false }) {
                     </button>
                   </div>
                 </div>
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Encrypted text</p>
-                    <p className="mt-2 font-mono text-xs text-rose-100">{messagePreview.encryptedText}</p>
+                <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Decrypting after password entry</p>
+                  <div className="mt-2 space-y-2 font-mono text-xs text-emerald-200/90">
+                    {messagePreview.unlockCipherRows.map((row, index) => (
+                      <motion.p
+                        key={row}
+                        initial={prefersReducedMotion ? false : { opacity: 0.25, x: 10 }}
+                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.3, 1, 0.6], x: [0, -4, 0] }}
+                        transition={{
+                          duration: prefersReducedMotion ? 0.01 : 1.9,
+                          delay: prefersReducedMotion ? 0 : 0.25 + index * 0.2,
+                          repeat: prefersReducedMotion ? 0 : Infinity,
+                          ease: 'easeInOut'
+                        }}
+                      >
+                        {row}
+                      </motion.p>
+                    ))}
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Matrix cipher</p>
-                    <div className="mt-2 space-y-2 font-mono text-xs text-emerald-200/90">
-                      {messagePreview.unlockCipherRows.map((row, index) => (
-                        <motion.p
-                          key={row}
-                          data-testid="dm-cipher-row"
-                          initial={prefersReducedMotion ? false : { opacity: 0.25, x: 10 }}
-                          animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.3, 1, 0.6], x: [0, -4, 0] }}
-                          transition={{
-                            duration: prefersReducedMotion ? 0.01 : 1.9,
-                            delay: prefersReducedMotion ? 0 : 0.25 + index * 0.2,
-                            repeat: prefersReducedMotion ? 0 : Infinity,
-                            ease: 'easeInOut'
-                          }}
-                        >
-                          {row}
-                        </motion.p>
-                      ))}
-                    </div>
-                  </div>
+                </div>
+                <motion.div
+                  className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3"
+                  initial={prefersReducedMotion ? false : { opacity: 0.35 }}
+                  animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.35, 0.35, 0.5, 1, 0.85] }}
+                  transition={{
+                    duration: prefersReducedMotion ? 0.01 : 7.6,
+                    times: [0, 0.58, 0.72, 0.88, 1],
+                    repeat: prefersReducedMotion ? 0 : Infinity,
+                    ease: 'easeInOut'
+                  }}
+                >
                   <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Plain readable text</p>
                     <p className="mt-2 text-sm text-emerald-50">{messagePreview.plainText}</p>
                   </div>
-                </div>
+                </motion.div>
               </motion.div>
+            </div>
             </div>
 
             <div className="mt-5 flex flex-wrap gap-3 text-xs text-slate-300">
