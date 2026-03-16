@@ -78,4 +78,21 @@ describe('News mobile persistent header layout', () => {
     expect(mobileFeed).not.toBeNull();
     expect(mobileFeed.className).toContain('overflow-y-auto');
   });
+
+  it('uses the updated floating settings launcher style and right alignment on mobile', async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <News />
+        </MemoryRouter>
+      );
+    });
+    await act(async () => Promise.resolve());
+
+    const openSettingsButton = container.querySelector('button[aria-label="Open news settings"]');
+    expect(openSettingsButton).not.toBeNull();
+    expect(openSettingsButton.className).toContain('right-2');
+    expect(openSettingsButton.className).toContain('bg-slate-950/75');
+    expect(openSettingsButton.className).toContain('backdrop-blur-xl');
+  });
 });

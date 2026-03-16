@@ -224,22 +224,22 @@ export default function WeatherBar({ variant = 'sticky' }) {
   if (isCard) {
     return (
       <section className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 rounded-2xl shadow-lg overflow-hidden">
-        <div className="px-4 pt-4 pb-3 border-b border-white/10">
+        <div className="px-4 pt-3 pb-2.5 border-b border-white/10">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">Weather</div>
-              <div className="mt-1 text-lg font-semibold text-white leading-tight">{displayCity}</div>
+              <div className="mt-1 text-base font-semibold text-white leading-tight">{displayCity}</div>
               <div className="mt-1 text-sm text-white/70">{current?.shortForecast || weather.forecastSummary || 'Current conditions unavailable'}</div>
             </div>
             <div className="text-right shrink-0">
               <div className="text-3xl leading-none" aria-hidden="true">{currentIcon}</div>
-              <div className="mt-2 text-4xl font-bold text-white leading-none">
+              <div className="mt-1.5 text-4xl font-bold text-white leading-none">
                 {current?.temperature != null ? `${current.temperature}°` : '--'}
               </div>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-white/80">
+          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-white/80">
             {high != null && <span className="rounded-full bg-white/10 px-2.5 py-1">High {high}°</span>}
             {low != null && <span className="rounded-full bg-white/10 px-2.5 py-1">Low {low}°</span>}
             {current?.humidity != null && <span className="rounded-full bg-white/10 px-2.5 py-1">Humidity {current.humidity}%</span>}
@@ -247,7 +247,7 @@ export default function WeatherBar({ variant = 'sticky' }) {
           </div>
         </div>
 
-        <div className="px-4 py-3 space-y-3">
+        <div className="px-4 py-2.5 space-y-2.5">
           {(uvIndex != null || airQuality != null || pollen != null) && (
             <div className="grid grid-cols-1 gap-2">
               <WeatherMetric label="UV Index" value={uvIndex} badgeColor={UV_COLOR(uvIndex)} />
@@ -310,7 +310,7 @@ export default function WeatherBar({ variant = 'sticky' }) {
               {activeTab === 'weekly' && wk.length > 0 && (
                 <div className="space-y-2">
                   {wk.map((day, index) => (
-                    <div key={index} className="flex items-center gap-3 rounded-xl bg-white/8 px-3 py-2 text-sm text-white/85">
+                    <div key={index} className="flex items-center gap-3 rounded-xl bg-white/8 px-3 py-1.5 text-sm text-white/85">
                       <div className="w-10 font-medium">{getDayAbbr(day.date)}</div>
                       <div className="text-lg">{ICON_MAP[day.icon] || '🌤️'}</div>
                       <div className="w-20 font-semibold text-white">{day.high}° / {day.low}°</div>
