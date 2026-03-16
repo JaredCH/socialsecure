@@ -43,7 +43,8 @@ jest.mock('../utils/api', () => ({
     muteUserByAdmin: jest.fn(),
     unmuteUserByAdmin: jest.fn(),
     removeMessageByAdmin: jest.fn(),
-    restoreMessageByAdmin: jest.fn()
+    restoreMessageByAdmin: jest.fn(),
+    deleteMessageByAdmin: jest.fn()
   },
   userAPI: {}
 }));
@@ -253,6 +254,7 @@ describe('Chat zip room indicator', () => {
         }
       }
     });
+    moderationAPI.deleteMessageByAdmin.mockResolvedValue({ data: { success: true } });
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       writable: true,
@@ -2013,6 +2015,56 @@ describe('Chat zip room indicator', () => {
     expect(moderationAPI.unmuteUserByAdmin).toHaveBeenCalledWith('u2');
     expect(container.querySelector('button[aria-label="Remove message"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="Mute user for 2 hours"]')).not.toBeNull();
+  });
+
+  it('admin can permanently delete a message via the delete button', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115', isAdmin: true } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({
+      data: {
+        messages: [{
+          _id: 'del-m-1',
+          content: 'delete me',
+          moderation: { removedByAdmin: false, removedByAdminAt: null },
+          userId: { _id: 'u2', username: 'buddy' },
+          createdAt: '2024-01-01T13:41:25'
+        }]
+      }
+    });
+    chatAPI.getConversationUsers.mockResolvedValue({
+      data: {
+        users: [
+          { _id: 'u1', username: 'alpha', mutedUntil: null },
+          { _id: 'u2', username: 'buddy', mutedUntil: null }
+        ]
+      }
+    });
+    moderationAPI.deleteMessageByAdmin.mockResolvedValue({ data: { success: true } });
+
+    await renderChat();
+    await act(async () => { await flush(); });
+
+    expect(container.textContent).toContain('delete me');
+    const deleteButton = container.querySelector('button[aria-label="Delete message"]');
+    expect(deleteButton).not.toBeNull();
+
+    await act(async () => {
+      deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(moderationAPI.deleteMessageByAdmin).toHaveBeenCalledWith('del-m-1', 'conversation');
+    expect(container.textContent).not.toContain('delete me');
   });
 
   it('renders compact timestamps for chat messages', async () => {

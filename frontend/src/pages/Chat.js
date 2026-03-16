@@ -1584,6 +1584,23 @@ function Chat() {
     }
   }, [activeConversation, profile?.isAdmin]);
 
+  const handleAdminDeleteMessage = useCallback(async (message) => {
+    const messageId = String(message?._id || '').trim();
+    if (!profile?.isAdmin || !messageId || activeConversation?.type === 'dm') return;
+
+    const messageType = isRoomConversation(activeConversation) ? 'room' : 'conversation';
+    setAdminMessageActionIds((prev) => (prev.includes(messageId) ? prev : [...prev, messageId]));
+    try {
+      await moderationAPI.deleteMessageByAdmin(messageId, messageType);
+      setMessages((prev) => prev.filter((m) => String(m._id) !== messageId));
+      toast.success('Message deleted');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to delete message');
+    } finally {
+      setAdminMessageActionIds((prev) => prev.filter((entry) => entry !== messageId));
+    }
+  }, [activeConversation, profile?.isAdmin]);
+
   const handleToggleAdminUserMute = useCallback(async (user) => {
     const userId = String(user?._id || '').trim();
     if (!profile?.isAdmin || !userId || userId === String(profile?._id || '')) return;
@@ -2348,6 +2365,7 @@ function Chat() {
               adminProcessingUserIds={adminProcessingUserIds}
               onToggleAdminMessageRemoval={handleToggleAdminMessageRemoval}
               onToggleAdminUserMute={handleToggleAdminUserMute}
+              onAdminDeleteMessage={handleAdminDeleteMessage}
             />
             {activeConversation?.type === 'dm' && activeConversationId && !dmUnlockedByConversation[String(activeConversationId)] ? (
               <div
