@@ -88,8 +88,8 @@ function Home({ isAuthenticated = false }) {
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 text-white shadow-xl">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(96,165,250,0.35)_0%,_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(129,140,248,0.35)_0%,_transparent_46%)]" />
         <div className="relative px-6 py-10 md:px-10 md:py-14 lg:px-16 lg:py-16">
-          <p className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.2em] text-blue-100">
-            SocialSecure landing page • Social v Secure made simple
+            <p className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.2em] text-blue-100">
+              One platform • Social v Secure made simple
           </p>
 
           <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-center">
