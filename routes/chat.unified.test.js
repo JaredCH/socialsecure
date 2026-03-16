@@ -45,8 +45,10 @@ jest.mock('../models/ChatConversation', () => mockChatConversation);
 jest.mock('../models/ConversationMessage', () => mockConversationMessage);
 jest.mock('../models/ConversationKeyPackage', () => mockConversationKeyPackage);
 jest.mock('../services/notifications', () => ({ createNotification: jest.fn() }));
+jest.mock('../services/realtime', () => ({ emitChatMessage: jest.fn() }));
 
 const jwt = require('jsonwebtoken');
+const { emitChatMessage } = require('../services/realtime');
 const chatRouter = require('./chat');
 
 const buildApp = () => {
@@ -448,6 +450,10 @@ describe('Unified chat hub routes', () => {
       e2ee: { enabled: false }
     });
     expect(populate).toHaveBeenCalledWith('userId', '_id username realName');
+    expect(emitChatMessage).toHaveBeenCalledWith({
+      userIds: ['507f1f77bcf86cd799439011'],
+      message: { _id: 'msg-1', content: 'hello', senderNameColor: '#ff0000' }
+    });
   });
 
   it('rejects plaintext DM message payloads', async () => {
@@ -503,6 +509,15 @@ describe('Unified chat hub routes', () => {
       content: null,
       messageType: 'meetup-invite'
     }));
+    expect(emitChatMessage).toHaveBeenCalledWith({
+      userIds: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439022'],
+      message: {
+        _id: 'dm-msg-1',
+        isE2EE: true,
+        content: '[Encrypted message]',
+        e2ee: { senderDeviceId: 'device-1' }
+      }
+    });
   });
 
   it('syncs DM key packages only for authenticated active device', async () => {

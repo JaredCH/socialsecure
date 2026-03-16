@@ -3,8 +3,10 @@ import { createRoot } from 'react-dom/client';
 import Chat from './Chat';
 import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
 import { createWrappedRoomKeyPackage, decryptEnvelope, encryptEnvelope, unlockOrCreateVault } from '../utils/e2ee';
+import { onChatMessage } from '../utils/realtime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+let mockRealtimeChatHandler = null;
 
 jest.mock('../utils/api', () => ({
   authAPI: {
@@ -44,6 +46,19 @@ jest.mock('../utils/e2ee', () => ({
   ingestWrappedRoomKeyPackage: jest.fn()
 }));
 
+jest.mock('../utils/realtime', () => ({
+  joinRealtimeRoom: jest.fn(),
+  leaveRealtimeRoom: jest.fn(),
+  onChatMessage: jest.fn((handler) => {
+    mockRealtimeChatHandler = handler;
+    return () => {
+      if (mockRealtimeChatHandler === handler) {
+        mockRealtimeChatHandler = null;
+      }
+    };
+  })
+}));
+
 describe('Chat zip room indicator', () => {
   let container;
   let root;
@@ -67,6 +82,7 @@ describe('Chat zip room indicator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRealtimeChatHandler = null;
     localStorage.clear();
     document.cookie = 'socialsecure_dm_unlock_v1=; Max-Age=0; Path=/';
     chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
@@ -1061,5 +1077,165 @@ describe('Chat zip room indicator', () => {
 
     expect(chatAPI.sendConversationE2EEMessage).not.toHaveBeenCalled();
     expect(container.querySelector('textarea').disabled).toBe(false);
+  });
+
+  it('applies incoming realtime messages to the active conversation without refresh', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
+
+    await renderChat();
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+
+    expect(container.textContent).toContain('No messages yet.');
+    const realtimeHandler = onChatMessage.mock.calls.at(-1)?.[0];
+    expect(realtimeHandler).toEqual(expect.any(Function));
+
+    await act(async () => {
+      realtimeHandler?.({
+        message: {
+          _id: 'live-1',
+          conversationId: 'zip1',
+          content: 'incoming live message',
+          userId: { _id: 'u2', username: 'buddy' },
+          createdAt: new Date().toISOString()
+        }
+      });
+      await flush();
+    });
+
+    expect(container.textContent).toContain('incoming live message');
+    expect(chatAPI.getConversationMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('decrypts the latest DM batch first and decrypts older messages when loading earlier history', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    const encryptedMessages = Array.from({ length: 12 }).map((_, index) => ({
+      _id: `dm-message-${index + 1}`,
+      content: '[Encrypted message]',
+      userId: { _id: 'u2', username: 'buddy' },
+      createdAt: new Date(Date.now() - ((12 - index) * 1000)).toISOString(),
+      e2ee: {
+        ciphertext: `cipher-${index + 1}`,
+        nonce: `nonce-${index + 1}`,
+        aad: '',
+        keyVersion: 1,
+        senderDeviceId: 'device-2',
+        clientMessageId: `client-${index + 1}`,
+        signature: 'sig',
+        ciphertextHash: 'h'.repeat(64)
+      }
+    }));
+    chatAPI.getConversationMessages.mockImplementation((conversationId, page) => {
+      if (conversationId === 'dm1' && page === 1) {
+        return Promise.resolve({ data: { messages: encryptedMessages, hasMore: false } });
+      }
+      return Promise.resolve({ data: { messages: [], hasMore: false } });
+    });
+
+    await renderChat();
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const unlockDmButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock DM');
+    await act(async () => {
+      unlockDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
+    await act(async () => {
+      setInputValue(passwordInput, 'secret-password');
+      await flush();
+    });
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock secure messages');
+    await act(async () => {
+      unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+      await wait(20);
+    });
+
+    expect(decryptEnvelope).toHaveBeenCalledTimes(5);
+
+    const loadEarlierButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Load earlier messages');
+    expect(loadEarlierButton).not.toBeUndefined();
+    await act(async () => {
+      loadEarlierButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+      await wait(20);
+    });
+
+    expect(decryptEnvelope).toHaveBeenCalledTimes(10);
+  });
+
+  it('shows reaction picker only after opening it', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockResolvedValue({
+      data: {
+        messages: [{
+          _id: 'm-react-1',
+          content: 'hello',
+          userId: { _id: 'u2', username: 'buddy' },
+          createdAt: new Date().toISOString()
+        }]
+      }
+    });
+
+    await renderChat();
+
+    expect(container.querySelector('button[aria-label="Add Like reaction"]')).toBeNull();
+
+    const openReactionPickerButton = container.querySelector('button[aria-label="Open reaction picker"]');
+    expect(openReactionPickerButton).not.toBeNull();
+    await act(async () => {
+      openReactionPickerButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(container.querySelector('button[aria-label="Add Like reaction"]')).not.toBeNull();
   });
 });
