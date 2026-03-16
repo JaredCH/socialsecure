@@ -276,32 +276,11 @@ describe('Social page hero background rendering', () => {
     await expect(renderPage()).resolves.toBeUndefined();
 
     expect(container.textContent).not.toContain('Navigation & Discovery');
-    expect(container.textContent).toContain('Everything important stays close to the feed.');
+    expect(container.textContent).not.toContain('Social stage');
+    expect(container.textContent).not.toContain('SocialSecure');
   });
 
-  it('keeps feed/gallery/friends/chat/calendar stage panels unfilled while preserving borders', async () => {
-    await expect(renderPage()).resolves.toBeUndefined();
-
-    const expectActivePanelToBeTransparent = (headingLabel) => {
-      const panelHeading = Array.from(container.querySelectorAll('h2')).find((heading) => heading.textContent === headingLabel);
-      const panel = panelHeading?.closest('section');
-      expect(panel).toBeTruthy();
-      expect(panel?.style.backgroundColor).toBe('transparent');
-      expect(panel?.className).toContain('border');
-    };
-
-    expectActivePanelToBeTransparent('Feed');
-    await switchToTab('Gallery');
-    expectActivePanelToBeTransparent('Gallery');
-    await switchToTab('Friends');
-    expectActivePanelToBeTransparent('Circles');
-    await switchToTab('Chat');
-    expectActivePanelToBeTransparent('Chat');
-    await switchToTab('Calendar');
-    expectActivePanelToBeTransparent('Calendar');
-  });
-
-  it('builds social chat and calendar links for friend profile context', async () => {
+  it('shows social chat and calendar tabs for friend profile context', async () => {
     window.history.replaceState({}, '', '/social?user=buddy');
     feedAPI.getPublicUserFeed.mockResolvedValue({
       data: {
@@ -312,9 +291,9 @@ describe('Social page hero background rendering', () => {
 
     await expect(renderPage()).resolves.toBeUndefined();
 
-    const links = Array.from(container.querySelectorAll('a'));
-    expect(links.some((link) => link.getAttribute('href') === '/calendar?user=buddy')).toBe(true);
-    expect(links.some((link) => link.getAttribute('href') === '/chat?profile=u-2')).toBe(true);
+    const tabButtons = Array.from(container.querySelectorAll('button'));
+    expect(tabButtons.some((button) => button.textContent?.includes('Calendar'))).toBe(true);
+    expect(tabButtons.some((button) => button.textContent?.includes('Chat'))).toBe(true);
     expect(container.textContent).not.toContain('Request, accept, or deny relationship listing');
     expect(container.textContent).not.toContain('Signals from your network');
     expect(container.textContent).not.toContain('Stay responsive without leaving the hub');
@@ -455,12 +434,13 @@ describe('Social page hero background rendering', () => {
     expect(saveAccessButton?.textContent).toContain('Save');
   });
 
-  it('surfaces owner controls inside the compact action strip', async () => {
+  it('surfaces owner controls inline with the social tab strip', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
     const guestViewButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Guest View');
     expect(guestViewButton).toBeTruthy();
-    expect(container.textContent).toContain('Everything important stays close to the feed.');
+    expect(container.textContent).not.toContain('Social stage');
     expect(container.textContent).toContain('Stage Settings');
+    expect(container.textContent).not.toContain('✦ Design Studio');
   });
 
   it('renders top friends and partner panels as separate sidebar widgets', async () => {
