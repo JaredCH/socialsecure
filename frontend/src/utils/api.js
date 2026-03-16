@@ -651,6 +651,11 @@ export const mapsAPI = {
   
   // Friend locations
   getFriendsLocations: () => api.get('/maps/friends'),
+
+  // Favorite locations
+  getFavoriteLocations: () => api.get('/maps/favorites'),
+  createFavoriteLocation: (data) => api.post('/maps/favorites', data),
+  deleteFavoriteLocation: (favoriteId) => api.delete(`/maps/favorites/${encodeURIComponent(favoriteId)}`),
   
   // Spotlights
   createSpotlight: (data) => api.post('/maps/spotlight', data),
