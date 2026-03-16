@@ -31,12 +31,10 @@ describe('ChatRoom.syncUserLocationRooms zip-first behavior', () => {
     expect(result.created).toBe(1);
   });
 
-  it('falls back to city/state/country behavior for legacy users without zipCode', async () => {
-    const cityRoom = { members: [], save: jest.fn().mockResolvedValue(true) };
+  it('only creates state room when zipCode is missing', async () => {
     const stateRoom = { members: [], save: jest.fn().mockResolvedValue(true) };
 
     const findOrCreateSpy = jest.spyOn(ChatRoom, 'findOrCreateByLocation')
-      .mockResolvedValueOnce({ room: cityRoom, created: false })
       .mockResolvedValueOnce({ room: stateRoom, created: false });
 
     await ChatRoom.syncUserLocationRooms({
@@ -47,12 +45,11 @@ describe('ChatRoom.syncUserLocationRooms zip-first behavior', () => {
       country: 'US'
     });
 
-    expect(findOrCreateSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      type: 'city',
-      city: 'Austin',
+    expect(findOrCreateSpy).toHaveBeenCalledTimes(1);
+    expect(findOrCreateSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'state',
       state: 'TX',
       country: 'US'
     }));
-    expect(findOrCreateSpy.mock.calls[0][0].zipCode).toBeUndefined();
   });
 });
