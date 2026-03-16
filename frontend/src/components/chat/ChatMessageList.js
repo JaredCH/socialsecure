@@ -3,9 +3,11 @@ import ChatMessageItem from './ChatMessageItem';
 
 const INITIAL_RENDER_COUNT = 10;
 const LOAD_MORE_STEP = 10;
+const SCROLL_NEAR_BOTTOM_THRESHOLD_PX = 96;
 
 function ChatMessageList({
   conversationId,
+  conversationType,
   messages,
   loading,
   profile,
@@ -23,8 +25,14 @@ function ChatMessageList({
   const scrollRef = useRef(null);
   const previousConversationIdRef = useRef(String(conversationId || ''));
   const previousMessageCountRef = useRef(messages.length);
+  const stickToBottomRef = useRef(true);
   const [renderCount, setRenderCount] = useState(INITIAL_RENDER_COUNT);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+
+  const isNearBottom = (container) => {
+    if (!container) return true;
+    return (container.scrollHeight - container.scrollTop - container.clientHeight) <= SCROLL_NEAR_BOTTOM_THRESHOLD_PX;
+  };
 
   useEffect(() => {
     setRenderCount(INITIAL_RENDER_COUNT);
@@ -49,15 +57,52 @@ function ChatMessageList({
     const currentConversationId = String(conversationId || '');
     const conversationChanged = previousConversationIdRef.current !== currentConversationId;
     const grew = messages.length > previousMessageCountRef.current;
-    const nearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) <= 80;
 
-    if (conversationChanged || (grew && nearBottom)) {
+    if (conversationChanged) {
+      container.scrollTop = container.scrollHeight;
+      stickToBottomRef.current = true;
+    } else if (grew && stickToBottomRef.current) {
       container.scrollTop = container.scrollHeight;
     }
 
     previousConversationIdRef.current = currentConversationId;
     previousMessageCountRef.current = messages.length;
   }, [conversationId, messages.length]);
+
+  const visibleMessagesWithGrouping = useMemo(() => (
+    visibleMessages.map((message, index) => {
+      const previousMessage = visibleMessages[index - 1];
+      const nextMessage = visibleMessages[index + 1];
+      const currentAuthorId = String(message?.userId?._id || '');
+      const previousAuthorId = String(previousMessage?.userId?._id || '');
+      const nextAuthorId = String(nextMessage?.userId?._id || '');
+      const createdAtTs = new Date(message?.createdAt || 0).getTime();
+      const previousTs = new Date(previousMessage?.createdAt || 0).getTime();
+      const nextTs = new Date(nextMessage?.createdAt || 0).getTime();
+      const groupedWithPrevious = Boolean(
+        previousMessage
+        && currentAuthorId
+        && currentAuthorId === previousAuthorId
+        && Number.isFinite(createdAtTs)
+        && Number.isFinite(previousTs)
+        && (createdAtTs - previousTs) <= (5 * 60 * 1000)
+      );
+      const groupedWithNext = Boolean(
+        nextMessage
+        && currentAuthorId
+        && currentAuthorId === nextAuthorId
+        && Number.isFinite(createdAtTs)
+        && Number.isFinite(nextTs)
+        && (nextTs - createdAtTs) <= (5 * 60 * 1000)
+      );
+
+      return {
+        message,
+        groupedWithPrevious,
+        groupedWithNext
+      };
+    })
+  ), [visibleMessages]);
 
   return (
     <div className={`relative flex-1 min-h-0 overflow-hidden rounded-2xl ${theme.messagesShell}`}>
@@ -66,6 +111,7 @@ function ChatMessageList({
         onScroll={async (event) => {
           const target = event.currentTarget;
           if (loading) return;
+          stickToBottomRef.current = isNearBottom(target);
           if (target.scrollTop <= 48) {
             if (hasOlderMessages) {
               setRenderCount((count) => count + LOAD_MORE_STEP);
@@ -84,7 +130,7 @@ function ChatMessageList({
             }
           }
         }}
-        className="h-full overflow-y-auto px-3 py-2.5 space-y-2 [scrollbar-gutter:stable]"
+        className="h-full overflow-y-auto px-3 py-3 [scrollbar-gutter:stable]"
       >
         {hasOlderMessages ? (
           <div className="sticky top-0 z-10 flex justify-center pb-2">

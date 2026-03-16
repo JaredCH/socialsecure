@@ -482,7 +482,7 @@ describe('Unified chat hub routes', () => {
     ]);
   });
 
-  it('stores sender name color when posting conversation messages', async () => {
+  it('ignores sender name color when posting conversation messages', async () => {
     const app = buildApp();
     const conversationDoc = {
       _id: 'conv-zip',
@@ -495,13 +495,13 @@ describe('Unified chat hub routes', () => {
     const createdMessage = {
       _id: 'msg-1',
       content: 'hello',
-      senderNameColor: '#ff0000',
+      senderNameColor: null,
       userId: { _id: '507f1f77bcf86cd799439011', username: 'alpha' },
       populate,
       toPublicMessage: jest.fn().mockReturnValue({
         _id: 'msg-1',
         content: 'hello',
-        senderNameColor: '#ff0000'
+        senderNameColor: null
       })
     };
 
@@ -521,13 +521,13 @@ describe('Unified chat hub routes', () => {
       content: 'hello',
       messageType: 'text',
       commandData: null,
-      senderNameColor: '#ff0000',
+      senderNameColor: null,
       e2ee: { enabled: false }
     });
     expect(populate).toHaveBeenCalledWith('userId', '_id username realName');
     expect(emitChatMessage).toHaveBeenCalledWith({
       userIds: ['507f1f77bcf86cd799439011'],
-      message: { _id: 'msg-1', content: 'hello', senderNameColor: '#ff0000' }
+      message: { _id: 'msg-1', content: 'hello', senderNameColor: null }
     });
   });
 

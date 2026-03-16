@@ -13,6 +13,7 @@ jest.mock('../models/ChatRoom', () => ({
   find: jest.fn(),
   countDocuments: jest.fn(),
   ensureDefaultStateRooms: jest.fn(),
+  ensureDefaultDiscoveryRooms: jest.fn(),
   findOne: jest.fn(),
   findById: jest.fn(),
   findOneAndUpdate: jest.fn(),
@@ -68,6 +69,7 @@ describe('Chat event room discovery routes', () => {
     jest.clearAllMocks();
     jwt.verify.mockImplementation((token, secret, cb) => cb(null, { userId: 'user-1' }));
     ChatRoom.ensureDefaultStateRooms.mockResolvedValue(undefined);
+    ChatRoom.ensureDefaultDiscoveryRooms.mockResolvedValue(undefined);
     User.findById.mockReturnValue({
       select: jest.fn().mockResolvedValue({ _id: 'user-1', onboardingStatus: 'completed' })
     });
@@ -189,10 +191,12 @@ describe('Chat event room discovery routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body.rooms).toHaveLength(1);
-    expect(ChatRoom.ensureDefaultStateRooms).toHaveBeenCalledTimes(1);
+    expect(ChatRoom.ensureDefaultDiscoveryRooms).toHaveBeenCalledTimes(1);
     expect(ChatRoom.find).toHaveBeenCalledWith({
       $or: [
         { type: 'state' },
+        { type: 'county' },
+        { type: 'topic' },
         { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
       ]
     });
