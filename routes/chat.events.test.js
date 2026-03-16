@@ -170,17 +170,16 @@ describe('Chat event room discovery routes', () => {
   });
 
   it('requires explicit call for all rooms endpoint and returns paginated payload', async () => {
-    ChatRoom.find.mockReturnValue(
-      buildChain([
-        {
-          _id: 'room-any',
-          name: 'General Room',
-          type: 'city',
-          members: ['m1', 'm2', 'm3'],
-          messageCount: 10
-        }
-      ])
-    );
+    const roomQueryChain = buildChain([
+      {
+        _id: 'room-any',
+        name: 'General Room',
+        type: 'city',
+        members: ['m1', 'm2', 'm3'],
+        messageCount: 10
+      }
+    ]);
+    ChatRoom.find.mockReturnValue(roomQueryChain);
     ChatRoom.countDocuments.mockResolvedValue(1);
 
     const app = buildApp();
@@ -200,6 +199,7 @@ describe('Chat event room discovery routes', () => {
         { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
       ]
     });
+    expect(roomQueryChain.sort).toHaveBeenCalledWith({ type: -1, lastActivity: -1, createdAt: -1 });
     expect(response.body.rooms[0]).toMatchObject({
       _id: 'room-any',
       memberCount: 3

@@ -957,7 +957,7 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
 
     const rooms = await ChatRoom.find(allowedRoomFilter)
       .select('_id name type city state country county discoverable eventRef members messageCount lastActivity')
-      .sort({ lastActivity: -1, createdAt: -1 })
+      .sort({ type: -1, lastActivity: -1, createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
