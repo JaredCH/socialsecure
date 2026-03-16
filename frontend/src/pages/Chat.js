@@ -2112,7 +2112,7 @@ function Chat() {
                                       {!joinedState ? (
                                         <button
                                           type="button"
-                                          onClick={() => handleJoinRoom(room._id)}
+                                          onClick={() => handleOpenRoom(room._id)}
                                           className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
                                         >
                                           Join
@@ -2138,7 +2138,7 @@ function Chat() {
                                               {!joinedCounty ? (
                                                 <button
                                                   type="button"
-                                                  onClick={() => handleJoinRoom(countyRoom._id)}
+                                                  onClick={() => handleOpenRoom(countyRoom._id)}
                                                   className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
                                                 >
                                                   Join
@@ -2186,7 +2186,7 @@ function Chat() {
                                 {!joined ? (
                                   <button
                                     type="button"
-                                    onClick={() => handleJoinRoom(room._id)}
+                                    onClick={() => handleOpenRoom(room._id)}
                                     className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
                                   >
                                     Join

@@ -521,6 +521,83 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).toContain('Topics');
   });
 
+  it('joins a state room and a topic room from the discovery sections', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'state-ca', type: 'state', name: 'California', state: 'CA', members: [] },
+          { _id: 'topic-ai', type: 'topic', name: 'AI', members: [] }
+        ]
+      }
+    });
+    chatAPI.getMessages.mockResolvedValue({
+      data: { messages: [], pagination: { hasMore: false } }
+    });
+
+    await renderChat();
+
+    // Expand state chats
+    const stateChatsToggle = Array.from(container.querySelectorAll('button'))
+      .find((btn) => btn.textContent.includes('State Chats'));
+    await act(async () => {
+      stateChatsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    // Expand California
+    const caSummary = container.querySelector('[data-discovery-state-summary="California"]');
+    await act(async () => {
+      caSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    // Click Join on the state room
+    const stateJoinButton = Array.from(
+      container.querySelector('[data-discovery-state="California"]').querySelectorAll('button')
+    ).find((btn) => btn.textContent === 'Join');
+    expect(stateJoinButton).not.toBeUndefined();
+
+    await act(async () => {
+      stateJoinButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(chatAPI.joinRoom).toHaveBeenCalledWith('state-ca');
+
+    // Expand topics
+    const topicsToggle = Array.from(container.querySelectorAll('button'))
+      .find((btn) => btn.textContent.includes('Topics'));
+    await act(async () => {
+      topicsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    // Click Join on the topic room
+    const topicJoinButton = Array.from(
+      container.querySelector('[data-topic-room="AI"]').querySelectorAll('button')
+    ).find((btn) => btn.textContent === 'Join');
+    expect(topicJoinButton).not.toBeUndefined();
+
+    await act(async () => {
+      topicJoinButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(chatAPI.joinRoom).toHaveBeenCalledWith('topic-ai');
+  });
+
   it('only shows room search results after a query and opens a clicked room by joining it', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
