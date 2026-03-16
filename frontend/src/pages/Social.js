@@ -4145,7 +4145,7 @@ const Social = () => {
     }
   };
 
-   const accentColor = socialPreferences.hero?.menuActiveColor || socialPreferences.globalStyles?.headerColor || '#3b82f6';
+  const accentColor = socialPreferences.hero?.menuActiveColor || socialPreferences.globalStyles?.headerColor || '#3b82f6';
   const accentColor2 = socialPreferences.globalStyles?.headerColor || accentColor;
   const hubFontFamily = socialPreferences.globalStyles?.fontFamily || socialPreferences.hero?.fontFamily || 'Inter';
   const hubSurfaceStyle = {
@@ -5084,7 +5084,7 @@ const Social = () => {
                         </div>
                       ))}
                       {ownerEditingEnabled ? (
-                        <button type="button" onClick={() => {}} className="mt-2 text-xs font-semibold" style={{ color: accentColor }}>Manage Circles</button>
+                        <button type="button" onClick={() => handleHeroTabChange('friends')} className="mt-2 text-xs font-semibold" style={{ color: accentColor }}>Manage Circles</button>
                       ) : null}
                     </div>
                   ) : (
