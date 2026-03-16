@@ -1,14 +1,8 @@
 const mongoose = require('mongoose');
+const { STATE_DISCOVERY_ROOMS, TOPIC_DISCOVERY_ROOMS } = require('../config/chatDiscoveryRooms');
 
-const US_STATE_CODES = Object.freeze([
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
-]);
-const DEFAULT_STATE_ROOM_ENSURE_INTERVAL_MS = 5 * 60 * 1000;
-let lastDefaultStateRoomEnsureAt = 0;
+const DEFAULT_DISCOVERY_ROOM_ENSURE_INTERVAL_MS = 5 * 60 * 1000;
+let lastDefaultDiscoveryRoomEnsureAt = 0;
 
 const chatRoomSchema = new mongoose.Schema({
   name: {
@@ -18,7 +12,7 @@ const chatRoomSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['city', 'state', 'county', 'event'],
+    enum: ['city', 'state', 'county', 'event', 'topic'],
     required: true
   },
   location: {
@@ -122,40 +116,105 @@ chatRoomSchema.index({ eventRef: 1, type: 1 });
 chatRoomSchema.index({ autoLifecycle: 1, 'visibilityWindow.endAt': 1 });
 chatRoomSchema.index({ stableKey: 1 }, { unique: true, sparse: true });
 
-chatRoomSchema.statics.ensureDefaultStateRooms = async function(options = {}) {
+const buildDefaultDiscoveryRoomOperations = (now) => {
+  const operations = [];
+
+  STATE_DISCOVERY_ROOMS.forEach((stateEntry) => {
+    operations.push({
+      updateOne: {
+        filter: { stableKey: `state:${stateEntry.code}` },
+        update: {
+          $setOnInsert: {
+            name: stateEntry.name,
+            type: 'state',
+            state: stateEntry.code,
+            country: 'US',
+            location: { type: 'Point', coordinates: [0, 0] },
+            radius: 100,
+            members: [],
+            messageCount: 0,
+            discoverable: true,
+            autoLifecycle: false,
+            stableKey: `state:${stateEntry.code}`,
+            lastActivity: now
+          }
+        },
+        upsert: true
+      }
+    });
+
+    stateEntry.counties.forEach((countyName) => {
+      operations.push({
+        updateOne: {
+          filter: { stableKey: `county:${stateEntry.code}:${countyName.toLowerCase()}` },
+          update: {
+            $setOnInsert: {
+              name: `${countyName}, ${stateEntry.name}`,
+              type: 'county',
+              state: stateEntry.code,
+              country: 'US',
+              county: countyName,
+              location: { type: 'Point', coordinates: [0, 0] },
+              radius: 75,
+              members: [],
+              messageCount: 0,
+              discoverable: true,
+              autoLifecycle: false,
+              stableKey: `county:${stateEntry.code}:${countyName.toLowerCase()}`,
+              lastActivity: now
+            }
+          },
+          upsert: true
+        }
+      });
+    });
+  });
+
+  TOPIC_DISCOVERY_ROOMS.forEach((topicEntry) => {
+    operations.push({
+      updateOne: {
+        filter: { stableKey: `topic:${topicEntry.key}` },
+        update: {
+          $setOnInsert: {
+            name: topicEntry.name,
+            type: 'topic',
+            country: 'US',
+            location: { type: 'Point', coordinates: [0, 0] },
+            radius: 100,
+            members: [],
+            messageCount: 0,
+            discoverable: true,
+            autoLifecycle: false,
+            stableKey: `topic:${topicEntry.key}`,
+            lastActivity: now
+          }
+        },
+        upsert: true
+      }
+    });
+  });
+
+  return operations;
+};
+
+chatRoomSchema.statics.ensureDefaultDiscoveryRooms = async function(options = {}) {
   const { force = false } = options;
   const nowTs = Date.now();
-  if (!force && (nowTs - lastDefaultStateRoomEnsureAt) < DEFAULT_STATE_ROOM_ENSURE_INTERVAL_MS) {
+  if (!force && (nowTs - lastDefaultDiscoveryRoomEnsureAt) < DEFAULT_DISCOVERY_ROOM_ENSURE_INTERVAL_MS) {
     return;
   }
 
   const now = new Date(nowTs);
-  const operations = US_STATE_CODES.map((stateCode) => ({
-    updateOne: {
-      filter: { type: 'state', state: stateCode },
-      update: {
-        $setOnInsert: {
-          name: stateCode,
-          type: 'state',
-          state: stateCode,
-          country: 'US',
-          location: { type: 'Point', coordinates: [0, 0] },
-          radius: 100,
-          members: [],
-          messageCount: 0,
-          discoverable: true,
-          autoLifecycle: false,
-          lastActivity: now
-        }
-      },
-      upsert: true
-    }
-  }));
+  const operations = buildDefaultDiscoveryRoomOperations(now);
 
   if (operations.length > 0) {
     await this.bulkWrite(operations, { ordered: false });
   }
-  lastDefaultStateRoomEnsureAt = nowTs;
+  lastDefaultDiscoveryRoomEnsureAt = nowTs;
+};
+
+chatRoomSchema.statics.ensureDefaultStateRooms = async function(options = {}) {
+  return this.ensureDefaultDiscoveryRooms(options);
 };
 
 // Static method to find rooms near a location

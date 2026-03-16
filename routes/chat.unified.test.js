@@ -6,7 +6,7 @@ jest.mock('jsonwebtoken', () => ({
 }));
 
 const mockChatRoom = {};
-const mockChatMessage = {};
+const mockChatMessage = { findOne: jest.fn() };
 const mockDeviceKey = { findOne: jest.fn(), find: jest.fn() };
 const mockSecurityEvent = {};
 const mockBlockList = { findOne: jest.fn() };
@@ -68,6 +68,15 @@ const createSelectLean = (value) => ({
   })
 });
 
+const createSelectLeanOrSort = (value) => ({
+  select: jest.fn().mockReturnValue({
+    lean: jest.fn().mockResolvedValue(value),
+    sort: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue(value)
+    })
+  })
+});
+
 const validDmEnvelope = {
   version: 1,
   senderDeviceId: 'device-1',
@@ -117,6 +126,8 @@ describe('Unified chat hub routes', () => {
         lean: jest.fn().mockResolvedValue({ _id: 'friendship-1' })
       })
     });
+    mockChatMessage.findOne.mockReturnValue(createSelectLeanOrSort(null));
+    mockConversationMessage.findOne.mockReturnValue(createSelectLeanOrSort(null));
   });
 
   it('defaults to user zip room and nearby active zip rooms', async () => {
@@ -202,6 +213,69 @@ describe('Unified chat hub routes', () => {
 
     expect(response.status).toBe(403);
     expect(response.body.error).toMatch(/Access denied/);
+  });
+
+  it('applies a 20 second global cooldown to non-DM conversation messages', async () => {
+    const app = buildApp();
+    const saveConversation = jest.fn().mockResolvedValue(undefined);
+
+    mockUser.findById
+      .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
+      .mockImplementationOnce(() => createSelectResolved({ isAdmin: false }));
+    mockChatConversation.findById.mockResolvedValue({
+      _id: 'conv-zip',
+      type: 'zip-room',
+      participants: ['507f1f77bcf86cd799439011'],
+      save: saveConversation
+    });
+    mockChatMessage.findOne.mockReturnValue(createSelectLeanOrSort({
+      _id: 'room-message-1',
+      createdAt: new Date()
+    }));
+
+    const response = await request(app)
+      .post('/api/chat/conversations/conv-zip/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'hello world' });
+
+    expect(response.status).toBe(429);
+    expect(response.body.error).toBe('Chat cooldown active');
+    expect(mockConversationMessage.create).not.toHaveBeenCalled();
+    expect(saveConversation).not.toHaveBeenCalled();
+  });
+
+  it('exempts direct messages from the shared chat cooldown', async () => {
+    const app = buildApp();
+    const savedConversation = {
+      _id: 'conv-dm',
+      type: 'dm',
+      participants: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439099'],
+      messageCount: 0,
+      save: jest.fn().mockResolvedValue(undefined)
+    };
+    const createdMessage = {
+      _id: 'dm-message-1',
+      populate: jest.fn().mockResolvedValue(undefined),
+      toPublicMessage: jest.fn().mockReturnValue({
+        _id: 'dm-message-1',
+        content: '[Encrypted message]'
+      })
+    };
+
+    mockChatConversation.findById.mockResolvedValue(savedConversation);
+    mockConversationMessage.findOne.mockReturnValueOnce(createSelectLeanOrSort(null));
+    mockConversationMessage.create.mockResolvedValue(createdMessage);
+
+    const response = await request(app)
+      .post('/api/chat/conversations/conv-dm/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ e2ee: validDmEnvelope });
+
+    expect(response.status).toBe(201);
+    expect(mockChatMessage.findOne).not.toHaveBeenCalled();
+    expect(mockConversationMessage.create).toHaveBeenCalledWith(expect.objectContaining({
+      chatScope: 'dm'
+    }));
   });
 
   it('creates profile thread and returns shared conversation id', async () => {
@@ -443,6 +517,7 @@ describe('Unified chat hub routes', () => {
     expect(mockConversationMessage.create).toHaveBeenCalledWith({
       conversationId: 'conv-zip',
       userId: '507f1f77bcf86cd799439011',
+      chatScope: 'chat',
       content: 'hello',
       messageType: 'text',
       commandData: null,
