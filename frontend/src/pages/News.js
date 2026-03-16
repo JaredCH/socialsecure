@@ -215,9 +215,9 @@ function News() {
   return (
     <>
       {/* ─── Mobile layout (< lg) ──────────────────────────────────────────── */}
-      <div className="lg:hidden flex flex-col min-h-screen bg-gray-50">
+      <div data-testid="news-mobile-layout" className="lg:hidden flex h-full flex-col overflow-hidden bg-gray-50">
         <WeatherBar variant="sticky" />
-        <div className="sticky top-[108px] z-20">
+        <div>
           <FilterBar
             categories={CATEGORIES}
             activeCategory={feedCategory}
@@ -229,7 +229,7 @@ function News() {
             activeDate={activeDate}
           />
         </div>
-        <div className="flex-1">
+        <div data-testid="news-mobile-feed" className="flex-1 overflow-y-auto">
           <AlgorithmicFeed
             categories={CATEGORIES}
             activeCategory={feedCategory}
