@@ -1248,7 +1248,7 @@ router.post('/encryption-password/verify', [
 
     const isPasswordValid = await user.compareEncryptionPassword(encryptionPassword);
     if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Incorrect encryption password' });
+      return res.status(400).json({ error: 'Incorrect encryption password' });
     }
 
     const requestedDurationMinutes = Number(req.body.unlockDurationMinutes);
