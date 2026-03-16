@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast';
 import ChatComposerBar from '../components/chat/ChatComposerBar';
 import ChatMessageList from '../components/chat/ChatMessageList';
-import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
+import { authAPI, chatAPI, friendsAPI, moderationAPI } from '../utils/api';
 import { parseSlashCommand, runSlashCommand } from '../utils/chatCommands';
 import { joinRealtimeRoom, leaveRealtimeRoom, onChatMessage } from '../utils/realtime';
 import {
@@ -14,7 +14,7 @@ import {
 } from '../utils/e2ee';
 
 const CHANNELS = [
-  { key: 'zip', label: 'Rooms' },
+  { key: 'zip', label: 'Chat' },
   { key: 'dm', label: 'Direct Messages' }
 ];
 
@@ -48,9 +48,9 @@ const CHAT_THEMES = [
     accent: 'border border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
     subtle: 'border-slate-300 bg-slate-100/95 text-slate-700 hover:bg-slate-200',
     input: 'border-slate-300 bg-white/95 text-slate-900',
-    messagesShell: 'border-slate-300 bg-gradient-to-b from-white via-slate-50 to-slate-100',
-    messageOwn: 'border-blue-700 bg-blue-100',
-    messageOther: 'border-slate-400 bg-white'
+    messagesShell: 'bg-slate-50/90',
+    messageOwn: 'bg-blue-600 text-white',
+    messageOther: 'bg-white text-slate-900'
   },
   {
     key: 'midnight',
@@ -61,9 +61,9 @@ const CHAT_THEMES = [
     accent: 'border border-cyan-400 bg-cyan-400 text-slate-950 hover:bg-cyan-300',
     subtle: 'border-cyan-800 bg-slate-800/90 text-cyan-100 hover:bg-slate-700',
     input: 'border-cyan-700 bg-slate-950/95 text-cyan-100',
-    messagesShell: 'border-cyan-700 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950',
-    messageOwn: 'border-cyan-400 bg-cyan-400/20',
-    messageOther: 'border-slate-600 bg-slate-800'
+    messagesShell: 'bg-slate-950/35',
+    messageOwn: 'bg-cyan-400/25 text-cyan-50',
+    messageOther: 'bg-slate-800/95 text-slate-100'
   },
   {
     key: 'ocean',
@@ -74,9 +74,9 @@ const CHAT_THEMES = [
     accent: 'border border-cyan-300 bg-cyan-300 text-cyan-950 hover:bg-cyan-200',
     subtle: 'border-cyan-700 bg-cyan-800/95 text-cyan-50 hover:bg-cyan-700',
     input: 'border-cyan-600 bg-cyan-950/95 text-cyan-50',
-    messagesShell: 'border-cyan-700 bg-gradient-to-b from-cyan-900 via-cyan-900 to-cyan-950',
-    messageOwn: 'border-cyan-300 bg-cyan-300/20',
-    messageOther: 'border-cyan-700 bg-cyan-900'
+    messagesShell: 'bg-cyan-950/35',
+    messageOwn: 'bg-cyan-300/25 text-cyan-50',
+    messageOther: 'bg-cyan-900/95 text-cyan-50'
   },
   {
     key: 'terminal',
@@ -87,9 +87,9 @@ const CHAT_THEMES = [
     accent: 'border border-lime-500 bg-lime-500 text-zinc-950 hover:bg-lime-400',
     subtle: 'border-lime-800 bg-zinc-800/95 text-lime-200 hover:bg-zinc-700',
     input: 'border-lime-700 bg-zinc-950/95 text-lime-200',
-    messagesShell: 'border-lime-700 bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950',
-    messageOwn: 'border-lime-500 bg-lime-500/20',
-    messageOther: 'border-lime-800 bg-zinc-900'
+    messagesShell: 'bg-zinc-950/45',
+    messageOwn: 'bg-lime-500/25 text-lime-100',
+    messageOther: 'bg-zinc-900/95 text-lime-100'
   },
   {
     key: 'sunset',
@@ -100,9 +100,9 @@ const CHAT_THEMES = [
     accent: 'border border-orange-600 bg-orange-600 text-white hover:bg-orange-700',
     subtle: 'border-orange-300 bg-orange-100/95 text-orange-900 hover:bg-orange-200',
     input: 'border-orange-300 bg-white/95 text-orange-950',
-    messagesShell: 'border-orange-300 bg-gradient-to-b from-white via-orange-50 to-orange-100',
-    messageOwn: 'border-orange-600 bg-orange-200',
-    messageOther: 'border-orange-300 bg-white'
+    messagesShell: 'bg-orange-50/85',
+    messageOwn: 'bg-orange-500 text-white',
+    messageOther: 'bg-white text-orange-950'
   },
   {
     key: 'lavender',
@@ -113,9 +113,9 @@ const CHAT_THEMES = [
     accent: 'border border-violet-600 bg-violet-600 text-white hover:bg-violet-700',
     subtle: 'border-violet-300 bg-violet-100/95 text-violet-900 hover:bg-violet-200',
     input: 'border-violet-300 bg-white/95 text-violet-950',
-    messagesShell: 'border-violet-300 bg-gradient-to-b from-white via-violet-50 to-violet-100',
-    messageOwn: 'border-violet-600 bg-violet-200',
-    messageOther: 'border-violet-300 bg-white'
+    messagesShell: 'bg-violet-50/85',
+    messageOwn: 'bg-violet-500 text-white',
+    messageOther: 'bg-white text-violet-950'
   }
 ];
 
@@ -157,11 +157,19 @@ const LONG_PRESS_DELAY_MS = 550;
 const USER_MENU_WIDTH_PX = 240;
 const USER_MENU_HEIGHT_PX = 220;
 const DM_UNLOCK_COOKIE_NAME = 'socialsecure_dm_unlock_v1';
+const DM_READ_CACHE_KEY = 'socialsecure_dm_read_v1';
+const FAVORITE_ROOM_IDS_KEY = 'socialsecure_favorite_room_ids_v1';
 const DEFAULT_UNLOCK_DURATION_MINUTES = 30;
 const LOCKED_DM_PLACEHOLDER = '🔒 Conversation locked. Unlock to view encrypted messages.';
 const INITIAL_MESSAGES_PAGE_SIZE = 40;
 const OLDER_MESSAGES_PAGE_SIZE = 10;
 const DM_DECRYPT_BATCH_SIZE = 5;
+const MAX_CHAT_ROOM_FETCH = 120;
+const MAX_CHAT_ROOM_RESULTS = 20;
+const MAX_STATE_ROOM_RESULTS = 8;
+const MAX_FAVORITE_ROOMS = 8;
+const MAX_DM_FRIEND_PICKER_RESULTS = 12;
+const normalizeId = (value) => String(value || '').trim();
 
 const upsertConversationMessage = (messages, incomingMessage) => {
   const normalizedId = String(incomingMessage?._id || '').trim();
@@ -263,10 +271,41 @@ function Chat() {
   const [localTyping, setLocalTyping] = useState(false);
 
   const [dmQuery, setDmQuery] = useState('');
-  const [dmSuggestions, setDmSuggestions] = useState([]);
-  const [dmSearchLoading, setDmSearchLoading] = useState(false);
-
+  const [newDmPickerOpen, setNewDmPickerOpen] = useState(false);
+  const [newDmQuery, setNewDmQuery] = useState('');
   const [roomQuery, setRoomQuery] = useState('');
+  const [allChatRooms, setAllChatRooms] = useState([]);
+  const [allChatRoomsLoading, setAllChatRoomsLoading] = useState(false);
+  const [joinedRoomIds, setJoinedRoomIds] = useState({});
+  const [favoriteRoomIds, setFavoriteRoomIds] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(FAVORITE_ROOM_IDS_KEY) || '[]');
+      if (!Array.isArray(parsed)) return {};
+      return parsed.reduce((acc, roomId) => {
+        const normalizedId = normalizeId(roomId);
+        if (normalizedId) acc[normalizedId] = true;
+        return acc;
+      }, {});
+    } catch {
+      return {};
+    }
+  });
+  const [dmReadByConversation, setDmReadByConversation] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(DM_READ_CACHE_KEY) || '{}');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      return Object.entries(parsed).reduce((acc, [conversationId, readAt]) => {
+        const normalizedId = normalizeId(conversationId);
+        const parsedReadAt = Number(readAt);
+        if (normalizedId && Number.isFinite(parsedReadAt) && parsedReadAt > 0) {
+          acc[normalizedId] = parsedReadAt;
+        }
+        return acc;
+      }, {});
+    } catch {
+      return {};
+    }
+  });
   const [theme, setTheme] = useState(() => {
     try {
       const saved = localStorage.getItem('chatTheme');
@@ -310,7 +349,6 @@ function Chat() {
   }, [search]);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const [conversationPanelTab, setConversationPanelTab] = useState('list');
   const [reactionByMessageId, setReactionByMessageId] = useState({});
   const [userContextMenu, setUserContextMenu] = useState({
     open: false,
@@ -366,15 +404,56 @@ function Chat() {
     }
 
     if (activeChannel === 'dm') {
-      return Array.isArray(hubData.dm) ? hubData.dm : [];
+      const dmEntries = Array.isArray(hubData.dm) ? [...hubData.dm] : [];
+      return dmEntries
+        .map((conversation) => {
+          const lastMessageAtTs = new Date(conversation?.lastMessageAt || 0).getTime();
+          const readAtTs = Number(dmReadByConversation[String(conversation?._id)] || 0);
+          const hasUnread = Number.isFinite(lastMessageAtTs) && lastMessageAtTs > readAtTs;
+          return {
+            ...conversation,
+            __hasUnread: hasUnread
+          };
+        })
+        .sort((left, right) => {
+          if (Boolean(left.__hasUnread) !== Boolean(right.__hasUnread)) {
+            return left.__hasUnread ? -1 : 1;
+          }
+          const leftTs = new Date(left?.lastMessageAt || 0).getTime();
+          const rightTs = new Date(right?.lastMessageAt || 0).getTime();
+          return rightTs - leftTs;
+        });
     }
     return [];
-  }, [activeChannel, hubData]);
+  }, [activeChannel, dmReadByConversation, hubData]);
+
+  const filteredDmConversations = useMemo(() => {
+    if (activeChannel !== 'dm') return [];
+    const query = dmQuery.trim().toLowerCase();
+    if (!query) return conversationList;
+    return conversationList.filter((conversation) => (
+      getConversationLabel(conversation).toLowerCase().includes(query)
+    ));
+  }, [activeChannel, conversationList, dmQuery]);
 
   const activeConversation = useMemo(
     () => conversationList.find((conversation) => String(conversation._id) === String(activeConversationId)) || null,
     [conversationList, activeConversationId]
   );
+
+  useEffect(() => {
+    if (activeConversation?.type !== 'dm' || !activeConversationId) return;
+    const conversationId = String(activeConversationId);
+    const lastMessageTs = new Date(activeConversation?.lastMessageAt || Date.now()).getTime();
+    if (!Number.isFinite(lastMessageTs) || lastMessageTs <= 0) return;
+    setDmReadByConversation((prev) => {
+      if (Number(prev[conversationId] || 0) >= lastMessageTs) return prev;
+      return {
+        ...prev,
+        [conversationId]: lastMessageTs
+      };
+    });
+  }, [activeConversation?.lastMessageAt, activeConversation?.type, activeConversationId]);
 
   useEffect(() => {
     setDecryptedDmContentById({});
@@ -404,6 +483,62 @@ function Chat() {
   }, [profile?._id]);
 
   useEffect(() => {
+    if (!profile?._id || typeof chatAPI.getAllRooms !== 'function') return;
+    let cancelled = false;
+    setAllChatRoomsLoading(true);
+    Promise.resolve()
+      .then(() => chatAPI.syncLocationRooms?.())
+      .catch(() => null)
+      .then(() => chatAPI.getAllRooms(1, MAX_CHAT_ROOM_FETCH))
+      .then(({ data }) => {
+        if (cancelled) return;
+        const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
+        setAllChatRooms(rooms);
+        const nextJoinedIds = rooms.reduce((acc, room) => {
+          const roomId = normalizeId(room?._id);
+          if (!roomId) return acc;
+          const members = Array.isArray(room?.members) ? room.members.map((memberId) => String(memberId)) : [];
+          if (members.includes(String(profile?._id))) {
+            acc[roomId] = true;
+          }
+          return acc;
+        }, {});
+        setJoinedRoomIds(nextJoinedIds);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAllChatRooms([]);
+          setJoinedRoomIds({});
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAllChatRoomsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?._id]);
+
+  useEffect(() => {
+    try {
+      const serialized = Object.entries(favoriteRoomIds)
+        .filter(([, favorited]) => Boolean(favorited))
+        .map(([roomId]) => roomId);
+      localStorage.setItem(FAVORITE_ROOM_IDS_KEY, JSON.stringify(serialized));
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [favoriteRoomIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DM_READ_CACHE_KEY, JSON.stringify(dmReadByConversation));
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [dmReadByConversation]);
+
+  useEffect(() => {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
     const conversationId = String(activeConversationId);
     const cache = readDmUnlockCache();
@@ -414,23 +549,37 @@ function Chat() {
     }));
   }, [activeConversation?.type, activeConversationId]);
 
-  const allRooms = useMemo(() => {
-    const withSearchLabel = (room, channel) => {
-      const label = getConversationLabel(room);
-      return {
-        ...room,
-        __channel: channel,
-        __label: label,
-        __labelLower: label.toLowerCase()
-      };
-    };
-    const zipRooms = [
-      ...(hubData?.zip?.current ? [withSearchLabel(hubData.zip.current, 'zip')] : []),
-      ...((hubData?.zip?.nearby || []).map((room) => withSearchLabel(room, 'zip')))
-    ];
-    const dmRooms = (hubData?.dm || []).map((room) => withSearchLabel(room, 'dm'));
-    return [...zipRooms, ...dmRooms];
-  }, [hubData]);
+  const filteredFriendCandidates = useMemo(() => {
+    const query = newDmQuery.trim().toLowerCase();
+    if (!query) return dmFriends;
+    return dmFriends.filter((friend) => {
+      const username = String(friend?.username || '').toLowerCase();
+      const realName = String(friend?.realName || '').toLowerCase();
+      return username.includes(query) || realName.includes(query);
+    });
+  }, [dmFriends, newDmQuery]);
+
+  const chatRoomsByQuery = useMemo(() => {
+    const query = roomQuery.trim().toLowerCase();
+    if (!query) return allChatRooms.slice(0, MAX_CHAT_ROOM_RESULTS);
+    return allChatRooms
+      .filter((room) => {
+        const label = String(room.name || '').toLowerCase();
+        const location = [room.city, room.state, room.country, room.county].filter(Boolean).join(' ').toLowerCase();
+        return label.includes(query) || location.includes(query);
+      })
+      .slice(0, MAX_CHAT_ROOM_RESULTS);
+  }, [allChatRooms, roomQuery]);
+
+  const favoriteRooms = useMemo(
+    () => allChatRooms.filter((room) => favoriteRoomIds[String(room._id)]),
+    [allChatRooms, favoriteRoomIds]
+  );
+
+  const stateRooms = useMemo(
+    () => allChatRooms.filter((room) => room.type === 'state').slice(0, MAX_STATE_ROOM_RESULTS),
+    [allChatRooms]
+  );
 
   const activeTheme = useMemo(
     () => CHAT_THEMES.find((themeOption) => themeOption.key === theme) || CHAT_THEMES[0],
@@ -878,13 +1027,37 @@ function Chat() {
       await refreshHub('dm');
       setActiveChannel('dm');
       setActiveConversationId(String(data.conversation._id));
-      setDmSuggestions([]);
-      setDmQuery('');
+      setNewDmPickerOpen(false);
+      setNewDmQuery('');
       setMobileWorkspaceOpen(true);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to start DM');
     }
   }, [refreshHub]);
+
+  const handleJoinRoom = useCallback(async (roomId) => {
+    const normalizedRoomId = normalizeId(roomId);
+    if (!normalizedRoomId || typeof chatAPI.joinRoom !== 'function') return;
+    try {
+      await chatAPI.joinRoom(normalizedRoomId);
+      setJoinedRoomIds((prev) => ({
+        ...prev,
+        [normalizedRoomId]: true
+      }));
+      toast.success('Joined room');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to join room');
+    }
+  }, []);
+
+  const handleToggleFavoriteRoom = useCallback((roomId) => {
+    const normalizedRoomId = normalizeId(roomId);
+    if (!normalizedRoomId) return;
+    setFavoriteRoomIds((prev) => ({
+      ...prev,
+      [normalizedRoomId]: !prev[normalizedRoomId]
+    }));
+  }, []);
 
   const handleUnlockActiveDM = useCallback(async () => {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
@@ -1020,39 +1193,6 @@ function Chat() {
   }, [profile?._id]);
 
   useEffect(() => {
-    const query = dmQuery.trim();
-    if (!query) {
-      setDmSuggestions([]);
-      setDmSearchLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    const handle = setTimeout(() => {
-      setDmSearchLoading(true);
-      userAPI.search(query)
-        .then(({ data }) => {
-          if (cancelled) return;
-          const users = Array.isArray(data?.users) ? data.users : [];
-          setDmSuggestions(users.filter((user) => String(user._id) !== String(profile?._id)));
-        })
-        .catch((error) => {
-          if (cancelled) return;
-          setDmSuggestions([]);
-          toast.error(error.response?.data?.error || 'Failed to search users');
-        })
-        .finally(() => {
-          if (!cancelled) setDmSearchLoading(false);
-        });
-    }, 180);
-
-    return () => {
-      clearTimeout(handle);
-      cancelled = true;
-    };
-  }, [dmQuery, profile]);
-
-  useEffect(() => {
     if (!userContextMenu.open) return undefined;
     const handleWindowClick = () => setUserContextMenu((prev) => ({ ...prev, open: false }));
     const handleEscape = (event) => {
@@ -1093,21 +1233,6 @@ function Chat() {
     }
   }, []);
 
-  const roomSuggestions = useMemo(() => {
-    const query = roomQuery.trim().toLowerCase();
-    if (!query) return [];
-    return allRooms
-      .filter((room) => room.__labelLower.includes(query))
-      .slice(0, 8);
-  }, [roomQuery, allRooms]);
-
-  const selectRoomSuggestion = (room) => {
-    setActiveChannel(room.__channel || 'zip');
-    setActiveConversationId(String(room._id));
-    setRoomQuery(room.__label || getConversationLabel(room));
-    setMobileWorkspaceOpen(true);
-  };
-
   const conversationPresence = getPresenceState(activeConversation?.lastMessageAt);
   const activeConversationUser = useMemo(() => {
     if (!activeConversation) return null;
@@ -1134,57 +1259,29 @@ function Chat() {
             </p>
           </div>
         </div>
+        <div className="mt-2">
+          <div className={`grid grid-cols-2 gap-1.5 rounded-xl border p-1 ${activeTheme.panel}`}>
+            {CHANNELS.map((channel) => (
+              <button
+                key={channel.key}
+                type="button"
+                onClick={() => {
+                  setActiveChannel(channel.key);
+                  setMobileWorkspaceOpen(false);
+                }}
+                className={[
+                  'rounded-lg px-3 py-2 text-xs font-semibold transition',
+                  activeChannel === channel.key ? activeTheme.subtle : 'opacity-80 hover:opacity-100'
+                ].join(' ')}
+              >
+                {channel.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[56px_1.8fr_8fr_2.2fr]">
-        <nav className={`hidden min-h-0 flex-col items-center gap-3 rounded-2xl border py-3 lg:flex ${activeTheme.panel}`} aria-label="Workspace rail">
-          <button
-            type="button"
-            onClick={() => {
-              setConversationPanelTab('list');
-              setMobileWorkspaceOpen(false);
-            }}
-            className={`h-9 w-9 rounded-xl border text-sm ${activeTheme.subtle}`}
-          >
-            💬
-            <span className="sr-only">Open chat hub</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveChannel('zip');
-              setConversationPanelTab('list');
-              setMobileWorkspaceOpen(false);
-            }}
-            className={`h-9 w-9 rounded-xl border text-sm ${activeTheme.subtle}`}
-          >
-            🗂️
-            <span className="sr-only">View rooms</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveChannel('dm');
-              setConversationPanelTab('list');
-              setMobileWorkspaceOpen(false);
-            }}
-            className={`h-9 w-9 rounded-xl border text-sm ${activeTheme.subtle}`}
-          >
-            👤
-            <span className="sr-only">View direct messages</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setConversationPanelTab('search');
-              setMobileWorkspaceOpen(false);
-            }}
-            className={`mt-auto h-9 w-9 rounded-xl border text-sm ${activeTheme.subtle}`}
-          >
-            ⚙️
-            <span className="sr-only">Open search</span>
-          </button>
-        </nav>
+      <div className="grid flex-1 min-h-0 grid-cols-1 gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[2.6fr_8fr_2.2fr]">
         <aside
           className={[
             mobileWorkspaceOpen ? 'hidden' : 'flex',
@@ -1194,134 +1291,65 @@ function Chat() {
         >
           <div className="sticky top-0 z-10 space-y-2 pb-2">
             <h3 className="font-semibold">Conversations</h3>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-75">Channels</p>
-            <div className={`grid grid-cols-2 gap-1.5 rounded border p-1 ${activeTheme.panelGlass}`}>
-              {CHANNELS.map((channel) => (
-                <button
-                  key={channel.key}
-                  type="button"
-                  onClick={() => setActiveChannel(channel.key)}
-                  className={[
-                    'rounded px-2 py-1.5 text-xs font-semibold transition',
-                    activeChannel === channel.key ? activeTheme.subtle : 'opacity-80 hover:opacity-100'
-                  ].join(' ')}
-                >
-                  {channel.label}
-                </button>
-              ))}
-            </div>
-            <div className={`grid grid-cols-2 gap-1 rounded border p-1 ${activeTheme.panelGlass}`}>
-              <button
-                type="button"
-                onClick={() => setConversationPanelTab('list')}
-                className={`rounded px-2 py-1 text-[11px] font-semibold ${conversationPanelTab === 'list' ? activeTheme.subtle : 'opacity-75 hover:opacity-100'}`}
-              >
-                List
-              </button>
-              <button
-                type="button"
-                onClick={() => setConversationPanelTab('search')}
-                className={`rounded px-2 py-1 text-[11px] font-semibold ${conversationPanelTab === 'search' ? activeTheme.subtle : 'opacity-75 hover:opacity-100'}`}
-              >
-                Search
-              </button>
-            </div>
           </div>
 
           <div className="mt-2 space-y-3 overflow-y-auto pr-1">
-            {conversationPanelTab === 'search' ? (
+            {activeChannel === 'dm' ? (
               <>
                 <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                  <label className="text-xs font-semibold block">Search rooms</label>
-                  <input
-                    value={roomQuery}
-                    onChange={(event) => setRoomQuery(event.target.value)}
-                    className={`mt-1 w-full rounded border p-2 text-sm ${activeTheme.input}`}
-                    placeholder="Type to filter rooms..."
-                  />
-                  {!roomQuery.trim() ? <p className="mt-2 text-xs opacity-75">Start typing to see room results.</p> : null}
-                  {roomQuery.trim() && roomSuggestions.length === 0 ? <p className="mt-2 text-xs opacity-75">No rooms match your search.</p> : null}
-                  {roomSuggestions.length > 0 ? (
-                    <ul className="mt-2 space-y-1 text-xs">
-                      {roomSuggestions.map((room) => (
-                        <li key={String(room._id)}>
-                          <button
-                            type="button"
-                            onClick={() => selectRoomSuggestion(room)}
-                            className={`w-full rounded border px-2 py-1.5 text-left transition ${activeTheme.subtle}`}
-                          >
-                            {room.__label || getConversationLabel(room)}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={dmQuery}
+                      onChange={(event) => setDmQuery(event.target.value)}
+                      className={`w-full rounded-lg border px-3 py-2 text-sm ${activeTheme.input}`}
+                      placeholder="Search conversations..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewDmPickerOpen((open) => !open)}
+                      className={`h-9 w-9 rounded-lg border text-lg leading-none ${activeTheme.subtle}`}
+                      aria-label="Start a new direct message"
+                    >
+                      +
+                    </button>
+                  </div>
+                  {newDmPickerOpen ? (
+                    <div className={`mt-2 rounded-lg border p-2 ${activeTheme.panel}`}>
+                      <label className="text-xs font-semibold block">New conversation</label>
+                      <input
+                        value={newDmQuery}
+                        onChange={(event) => setNewDmQuery(event.target.value)}
+                        className={`mt-1 w-full rounded border p-2 text-sm ${activeTheme.input}`}
+                        placeholder="Filter friends..."
+                      />
+                      {dmFriendsLoading ? <p className="mt-2 text-xs opacity-80">Loading friends...</p> : null}
+                      {!dmFriendsLoading && filteredFriendCandidates.length === 0 ? <p className="mt-2 text-xs opacity-80">No matching friends.</p> : null}
+                      {filteredFriendCandidates.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-xs">
+                        {filteredFriendCandidates.slice(0, MAX_DM_FRIEND_PICKER_RESULTS).map((friend) => (
+                            <li key={String(friend._id)} className="flex items-center justify-between gap-2 rounded border p-1.5">
+                              <span>@{friend.username || friend.realName || 'friend'}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleStartDM(friend._id)}
+                                className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
+                              >
+                                Start
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                   ) : null}
                 </section>
                 <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                  <label className="text-xs font-semibold block">Search users for DM</label>
-                  <input
-                    value={dmQuery}
-                    onChange={(event) => setDmQuery(event.target.value)}
-                    className={`mt-1 w-full rounded border p-2 text-sm ${activeTheme.input}`}
-                    placeholder="Type username or name..."
-                  />
-                  {dmSearchLoading ? <p className="mt-2 text-xs opacity-75">Searching users...</p> : null}
-                  {!dmQuery.trim() ? <p className="mt-2 text-xs opacity-75">Start typing to see people.</p> : null}
-                  {dmQuery.trim() && !dmSearchLoading && dmSuggestions.length === 0 ? <p className="mt-2 text-xs opacity-75">No users found.</p> : null}
-                  {dmSuggestions.length > 0 ? (
-                    <ul className="mt-2 space-y-1 text-xs">
-                      {dmSuggestions.map((user) => (
-                        <li key={String(user._id)} className="flex items-center justify-between gap-2 rounded border p-1.5">
-                          <span>@{user.username || user.realName || 'user'}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleStartDM(user._id)}
-                            className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
-                          >
-                            Start DM
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </section>
-              </>
-            ) : (
-              <>
-                {activeChannel === 'dm' ? (
-                  <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                    <p className="text-xs font-semibold">Friends ({dmFriends.length})</p>
-                    {dmFriendsLoading ? (
-                      <p className="mt-1 text-xs opacity-80">Loading friends...</p>
-                    ) : dmFriends.length === 0 ? (
-                      <p className="mt-1 text-xs opacity-80">No friends found yet.</p>
-                    ) : (
-                      <ul className="mt-2 space-y-1 text-xs">
-                        {dmFriends.map((friend) => (
-                          <li key={String(friend._id)} className="flex items-center justify-between gap-2 rounded border p-1.5">
-                            <span>@{friend.username || friend.realName || 'friend'}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleStartDM(friend._id)}
-                              className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
-                            >
-                              Message
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </section>
-                ) : null}
-                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">
-                    {activeChannel === 'dm' ? 'Direct Messages' : 'Zip Rooms'}
-                  </p>
-                  {conversationList.length === 0 ? (
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Direct Messages</p>
+                  {filteredDmConversations.length === 0 ? (
                     <p className="mt-2 text-xs opacity-80">No conversations available here yet.</p>
                   ) : (
                     <ul className="mt-2 space-y-1">
-                      {conversationList.map((conversation) => {
+                      {filteredDmConversations.map((conversation) => {
                         const selected = String(conversation._id) === String(activeConversationId);
                         const status = getPresenceState(conversation.lastMessageAt);
                         return (
@@ -1332,15 +1360,134 @@ function Chat() {
                                 setActiveConversationId(String(conversation._id));
                                 setMobileWorkspaceOpen(true);
                               }}
-                              className={`w-full rounded border px-2.5 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
+                              className={`w-full rounded-xl border px-2.5 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="font-medium">{getConversationLabel(conversation)}</span>
                                 <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
+                                  {conversation.__hasUnread ? <span className="h-2 w-2 rounded-full bg-sky-500" /> : null}
                                   <span className={`h-2 w-2 rounded-full ${status.tone}`} />
-                                  {status.label}
+                                  <span>{status.label}</span>
                                 </span>
                               </div>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+              </>
+            ) : (
+              <>
+                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Quick links</p>
+                  <div className="mt-2 space-y-1">
+                    {hubData?.zip?.current ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveConversationId(String(hubData.zip.current._id));
+                          setMobileWorkspaceOpen(true);
+                        }}
+                        className={`w-full rounded border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
+                      >
+                        There Zip
+                      </button>
+                    ) : null}
+                    <details className={`rounded border p-1.5 ${activeTheme.panel}`}>
+                      <summary className="cursor-pointer text-xs font-semibold">State Chats</summary>
+                      <ul className="mt-2 space-y-1 text-xs">
+                        {stateRooms.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
+                        {stateRooms.map((room) => (
+                          <li key={String(room._id)} className="rounded border px-2 py-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>{room.name}</span>
+                              {!joinedRoomIds[String(room._id)] ? (
+                                <button type="button" onClick={() => handleJoinRoom(room._id)} className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}>Join</button>
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  </div>
+                </section>
+                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                  <label className="text-xs font-semibold block">Search all chat rooms</label>
+                  <input
+                    value={roomQuery}
+                    onChange={(event) => setRoomQuery(event.target.value)}
+                    className={`mt-1 w-full rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                    placeholder="Search by room or location..."
+                  />
+                  {allChatRoomsLoading ? <p className="mt-2 text-xs opacity-80">Loading rooms...</p> : null}
+                  {favoriteRooms.length > 0 ? (
+                    <div className="mt-2">
+                      <p className="text-[10px] font-semibold uppercase opacity-80">Favorites</p>
+                      <ul className="mt-1 space-y-1 text-xs">
+                        {favoriteRooms.slice(0, MAX_FAVORITE_ROOMS).map((room) => (
+                          <li key={`favorite-${String(room._id)}`} className="flex items-center justify-between gap-2 rounded border p-1.5">
+                            <span>{room.name}</span>
+                            <button type="button" onClick={() => handleToggleFavoriteRoom(room._id)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Remove</button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {chatRoomsByQuery.map((room) => {
+                      const roomId = String(room._id);
+                      const joined = Boolean(joinedRoomIds[roomId]);
+                      const favorited = Boolean(favoriteRoomIds[roomId]);
+                      return (
+                        <li key={roomId} className="rounded border p-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold">{room.name}</p>
+                              <p className="truncate opacity-75">{[room.city, room.state, room.country].filter(Boolean).join(', ') || room.type}</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {!joined ? (
+                                <button type="button" onClick={() => handleJoinRoom(roomId)} className={`rounded border px-2 py-1 ${activeTheme.subtle}`}>Join</button>
+                              ) : (
+                                <span className="text-[10px] font-semibold opacity-80">Joined</span>
+                              )}
+                              {joined ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFavoriteRoom(roomId)}
+                                  className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
+                                >
+                                  {favorited ? '★' : '☆'}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Zip Rooms</p>
+                  {conversationList.length === 0 ? (
+                    <p className="mt-2 text-xs opacity-80">No conversations available here yet.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1">
+                      {conversationList.map((conversation) => {
+                        const selected = String(conversation._id) === String(activeConversationId);
+                        return (
+                          <li key={String(conversation._id)}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveConversationId(String(conversation._id));
+                                setMobileWorkspaceOpen(true);
+                              }}
+                              className={`w-full rounded-xl border px-2.5 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
+                            >
+                              <span className="font-medium">{getConversationLabel(conversation)}</span>
                             </button>
                           </li>
                         );
@@ -1376,7 +1523,7 @@ function Chat() {
                   <p className="text-xs font-mono opacity-75">Live conversation</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <div className="relative">
                   <button
                     type="button"
@@ -1384,16 +1531,16 @@ function Chat() {
                       event.stopPropagation();
                       setThemeMenuOpen((open) => !open);
                     }}
-                    className={`rounded border px-2 py-1 text-sm ${activeTheme.subtle}`}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${activeTheme.subtle}`}
                     aria-label="Open chat theme menu"
                     aria-expanded={themeMenuOpen}
                   >
-                    🎨
-                    <span className="sr-only">Theme menu</span>
+                    <span aria-hidden="true">🎨</span>
+                    <span>Theme</span>
                   </button>
                   {themeMenuOpen ? (
                     <div
-                      className={`absolute right-0 top-9 z-50 min-w-40 rounded border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}
+                      className={`absolute right-0 top-11 z-50 min-w-44 rounded-xl border p-1.5 text-xs shadow-xl ${activeTheme.panelGlass}`}
                       onClick={(event) => event.stopPropagation()}
                     >
                       {CHAT_THEMES.map((themeOption) => (
@@ -1426,12 +1573,13 @@ function Chat() {
                     </option>
                   ))}
                 </select>
-                <label className="text-xs font-medium flex items-center">
+                <label className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold ${activeTheme.panel}`}>
+                  <span>Name</span>
                   <input
                     type="color"
                     value={nameColor}
                     onChange={(event) => handleNameColorChange(event.target.value)}
-                    className="h-7 w-8 rounded border border-slate-300 bg-transparent p-0.5"
+                    className="h-7 w-7 cursor-pointer rounded-full border border-slate-300 bg-transparent p-0.5 shadow-inner"
                     aria-label="Set your chat name color"
                   />
                 </label>

@@ -186,28 +186,28 @@ function ChatMessageItem({
         }
       }}
     >
-      <div className={`flex max-w-[94%] items-end gap-0.5 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex max-w-[94%] items-end gap-1.5 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
         {profileLink ? (
           <a
             href={profileLink}
-            className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 ${theme.subtle}`}
+            className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 ${theme.subtle}`}
             aria-label={isOwnMessage ? 'View your social profile' : `View @${author} social profile`}
           >
             {(isOwnMessage ? 'Y' : author).slice(0, 1).toUpperCase()}
           </a>
         ) : (
-          <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${theme.subtle}`}>
+          <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${theme.subtle}`}>
             {(isOwnMessage ? 'Y' : author).slice(0, 1).toUpperCase()}
           </span>
         )}
         <div
           tabIndex={0}
           className={[
-            'relative rounded-xl border px-1.5 py-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1',
+            'relative rounded-2xl px-2.5 py-1.5 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1',
             isOwnMessage ? theme.messageOwn : theme.messageOther
           ].join(' ')}
         >
-          <header className="mb-0 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-normal">
+          <header className="mb-0.5 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-normal">
             <span className="truncate" style={senderNameStyle}>
               <button
                 type="button"
@@ -220,8 +220,8 @@ function ChatMessageItem({
             </span>
             <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
           </header>
-          <p className="whitespace-pre-wrap break-words text-[13px] leading-4">{renderMessageContent(message.content)}</p>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] opacity-80">
+          <p className="whitespace-pre-wrap break-words text-[13px] leading-5">{renderMessageContent(message.content)}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] opacity-70">
             <span className="font-mono">{fullTimestamp}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">

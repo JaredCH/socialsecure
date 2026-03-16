@@ -332,6 +332,8 @@ export const chatAPI = {
   },
   joinRoom: (roomId) => api.post(`/chat/rooms/${roomId}/join`),
   leaveRoom: (roomId) => api.post(`/chat/rooms/${roomId}/leave`),
+  getAllRooms: (page = 1, limit = 100) =>
+    api.get(`/chat/rooms/all?page=${page}&limit=${limit}`),
   getRoomUsers: (roomId) => api.get(`/chat/rooms/${roomId}/users`),
   syncLocationRooms: () => api.post('/chat/rooms/sync-location'),
   getNearbyZipRooms: (zipCode) => api.get(`/chat/zip/nearby?zipCode=${encodeURIComponent(zipCode)}`),
