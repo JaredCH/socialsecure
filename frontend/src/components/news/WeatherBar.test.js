@@ -206,12 +206,13 @@ describe('WeatherBar', () => {
     });
     await flush();
 
-    expect(container.textContent).toContain('Pressure 1014 hPa');
-    expect(container.textContent).toContain('Air 14 mph');
-    expect(container.textContent).toContain('Gust 24 mph');
-    expect(container.textContent).toContain('Sunrise');
-    expect(container.textContent).toContain('Sunset');
-    expect(container.textContent).not.toContain('Hourly');
+    // Collapsed view shows temp, city, stats row (humidity, wind, precip)
+    expect(container.textContent).toContain('72°');
+    expect(container.textContent).toContain('Austin, TX');
+    expect(container.textContent).toContain('41%');
+    expect(container.textContent).toContain('14 mph');
+    // Extended details should NOT be visible before expand
+    expect(container.querySelector('[data-testid="weather-card-expanded"]')).toBeFalsy();
 
     const expandButton = container.querySelector('button[aria-label="Expand weather details"]');
     expect(expandButton).toBeTruthy();
@@ -219,10 +220,15 @@ describe('WeatherBar', () => {
       expandButton.click();
     });
 
-    expect(container.textContent).toContain('Hourly');
     const expandedPanel = container.querySelector('[data-testid="weather-card-expanded"]');
     expect(expandedPanel).toBeTruthy();
     expect(expandedPanel.className).toContain('max-h-[24rem]');
     expect(expandedPanel.className).toContain('overflow-y-auto');
+    // After expand, metric badges and forecasts are visible
+    expect(container.textContent).toContain('Pressure 1014 hPa');
+    expect(container.textContent).toContain('Air 14 mph');
+    expect(container.textContent).toContain('Gust 24 mph');
+    expect(container.textContent).toContain('Sunrise');
+    expect(container.textContent).toContain('Sunset');
   });
 });

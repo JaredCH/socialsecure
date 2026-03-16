@@ -99,10 +99,11 @@ function WeatherUnavailableState({ variant, message }) {
   return (
     <div
       className={isCard
-        ? 'bg-gradient-to-br from-blue-700 to-indigo-800 rounded-2xl shadow-lg overflow-hidden'
+        ? 'rounded-3xl shadow-lg overflow-hidden'
         : 'sticky top-0 z-30 bg-gradient-to-r from-blue-700 to-indigo-800 shadow-md'}
+      style={isCard ? { background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #312e81 100%)' } : undefined}
     >
-      <div className="px-3 py-2.5 flex items-center gap-3 text-white">
+      <div className="px-5 py-4 flex items-center gap-3 text-white" style={isCard ? { background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(12px)' } : undefined}>
         <span className="text-2xl shrink-0" aria-hidden="true">🌤️</span>
         <div className="min-w-0">
           <div className="text-sm font-semibold leading-tight">Weather unavailable</div>
@@ -160,6 +161,7 @@ export default function WeatherBar({ variant = 'sticky' }) {
   const [activeTab, setActiveTab] = useState('hourly');
   const [carouselGroup, setCarouselGroup] = useState(0); // 0=d1-3, 1=d4-6, 2=d7
   const [fade, setFade] = useState(true);
+  const [selectedLocationIndex, setSelectedLocationIndex] = useState(0);
   const intervalRef = useRef(null);
 
   useEffect(() => {
@@ -176,12 +178,17 @@ export default function WeatherBar({ variant = 'sticky' }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const primary =
-    locations.find((location) => location.isPrimary && hasUsableWeather(location)) ||
-    locations.find(hasUsableWeather) ||
-    locations.find((location) => location.isPrimary) ||
-    locations[0] ||
-    null;
+  // Determine the usable locations (up to 3)
+  const usableLocations = locations.filter(hasUsableWeather).slice(0, 3);
+
+  // For the card variant, use the selectedLocationIndex; for sticky, keep the old primary logic
+  const primary = variant === 'card'
+    ? (usableLocations[selectedLocationIndex] || usableLocations[0] || locations.find((location) => location.isPrimary) || locations[0] || null)
+    : (locations.find((location) => location.isPrimary && hasUsableWeather(location)) ||
+       locations.find(hasUsableWeather) ||
+       locations.find((location) => location.isPrimary) ||
+       locations[0] ||
+       null);
   const weekly = primary?.weather?.weekly || [];
   const totalGroups = weekly.length > 0 ? Math.ceil(weekly.length / 3) : 0;
 
@@ -208,7 +215,7 @@ export default function WeatherBar({ variant = 'sticky' }) {
     return (
       <div className={variant === 'sticky'
         ? 'sticky top-0 z-30 bg-gradient-to-r from-blue-700 to-indigo-700 h-14 flex items-center justify-center'
-        : 'bg-gradient-to-br from-blue-700 to-indigo-700 rounded-2xl h-14 flex items-center justify-center'}>
+        : 'bg-gradient-to-br from-slate-900 to-indigo-950 rounded-3xl h-14 flex items-center justify-center'}>
         <div className="w-5 h-5 border-2 border-white/60 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -234,149 +241,171 @@ export default function WeatherBar({ variant = 'sticky' }) {
 
   if (isCard) {
     return (
-      <section className="bg-gradient-to-br from-slate-500 via-blue-700 to-indigo-900 rounded-2xl shadow-lg overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setCardExpanded((value) => !value)}
-          aria-expanded={cardExpanded}
-          aria-label={cardExpanded ? 'Collapse weather details' : 'Expand weather details'}
-          className="w-full px-4 pt-4 pb-3 border-b border-white/15 text-left transition-colors hover:bg-white/5"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-white/90">
-                <span className="material-symbols-outlined text-sm leading-none" aria-hidden="true">location_on</span>
-                <h2 className="text-base font-semibold leading-tight truncate">{displayCity}</h2>
+      <section
+        className="rounded-3xl shadow-lg overflow-hidden text-white"
+        style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #312e81 100%)' }}
+      >
+        <div className="p-5 space-y-2" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(12px)' }}>
+          {/* ── Header: city name + location selector ──────────────────── */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold leading-tight truncate">{displayCity}</h2>
+            {usableLocations.length > 1 && (
+              <select
+                data-testid="weather-location-selector"
+                value={selectedLocationIndex}
+                onChange={(e) => setSelectedLocationIndex(Number(e.target.value))}
+                className="text-xs bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-white/90 outline-none cursor-pointer hover:bg-white/15 transition-colors"
+                style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
+                aria-label="Select weather location"
+              >
+                {usableLocations.map((loc, i) => (
+                  <option key={loc._id || i} value={i} className="bg-slate-800 text-white">
+                    {formatLocationLine(loc) || loc.label || loc.city || `Location ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* ── Main temperature display ───────────────────────────────── */}
+          <div className="flex items-end justify-between">
+            <div>
+              <div className="text-7xl font-light tracking-tight leading-none">
+                {current?.temperature != null ? `${current.temperature}°` : '--°'}
               </div>
-              <div className="mt-2 flex items-end gap-2">
-                <div className="text-6xl font-light text-white leading-none">
-                  {current?.temperature != null ? `${current.temperature}°` : '--'}
-                </div>
-                <span className="text-3xl leading-none pb-1" aria-hidden="true">{currentIcon}</span>
-              </div>
-              <div className="mt-1 text-lg leading-tight text-white/95 truncate">
-                {current?.shortForecast || weather.forecastSummary || 'Current conditions unavailable'}
-              </div>
-              <div className="text-sm text-white/80 mt-0.5">
-                Wind: {current?.windSpeed != null ? `${current.windSpeed} mph` : '--'}
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-sm" style={{ color: '#888888' }}>
+                  {current?.shortForecast || weather.forecastSummary || 'Loading...'}
+                </span>
+                <span className="text-sm" style={{ color: '#888888' }}>
+                  Feels {current?.temperature != null ? `${current.temperature}°` : '--°'}
+                </span>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span
-                className={`material-symbols-outlined text-white/80 text-base shrink-0 transition-transform duration-200 ${cardExpanded ? 'rotate-180' : ''}`}
-                aria-hidden="true"
-              >
-                expand_more
-              </span>
+            <span className="text-5xl leading-none" aria-hidden="true">{currentIcon}</span>
+          </div>
+
+          {/* ── Stats row: humidity, wind, precipitation ────────────────── */}
+          <div className="grid grid-cols-3 mt-4 py-3 border-y border-white/5 text-center items-center">
+            <div className="border-r border-white/5 flex flex-col items-center">
+              <svg className="mb-1 opacity-40" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.7L12 2 8 9.3C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />
+              </svg>
+              <p className="text-[11px] font-bold">{current?.humidity != null ? `${current.humidity}%` : '--%'}</p>
+            </div>
+            <div className="border-r border-white/5 flex flex-col items-center">
+              <svg className="mb-1 opacity-40" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
+              </svg>
+              <p className="text-[11px] font-bold">{current?.windSpeed != null ? `${current.windSpeed} mph` : '-- mph'}</p>
+            </div>
+            <div className="flex flex-col items-center">
+              <svg className="mb-1 opacity-40" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7" />
+              </svg>
+              <p className="text-[11px] font-bold">{current?.precipitationProbability != null ? `${current.precipitationProbability}%` : '--%'}</p>
             </div>
           </div>
 
-          {wk.length > 0 && (
-            <div className="mt-3 grid grid-cols-4 gap-2">
-              {wk.slice(0, 4).map((day, index) => (
-                <div
-                  key={`${day.date || index}`}
-                  className="rounded-xl border border-white/20 bg-white/10 px-2 py-2 text-center text-white/90"
-                >
-                  <div className="text-sm leading-none">{getDayAbbr(day.date)}</div>
-                  <div className="mt-1 text-2xl leading-none">{ICON_MAP[day.icon] || '🌤️'}</div>
-                  <div aria-label={`High ${day.high != null ? `${day.high} degrees` : 'unavailable'}`} className="mt-1 text-sm font-semibold">{day.high != null ? `${day.high}°` : '--'}</div>
-                  <div aria-label={`Low ${day.low != null ? `${day.low} degrees` : 'unavailable'}`} className="text-xs text-white/75">{day.low != null ? `${day.low}°` : '--'}</div>
+          {/* ── Expanded section ────────────────────────────────────────── */}
+          {cardExpanded && (
+            <div data-testid="weather-card-expanded" className="max-h-[24rem] overflow-y-auto space-y-4 pt-2">
+              {/* Hourly horizontal scroll */}
+              {hourly.length > 0 && (
+                <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                  {hourly.slice(0, 7).map((h, i) => (
+                    <div
+                      key={i}
+                      className="flex-shrink-0 text-center p-3 rounded-2xl min-w-[60px]"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    >
+                      <p className="text-xs" style={{ color: '#888888' }}>
+                        {new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}
+                      </p>
+                      <div className="text-lg mt-1">{ICON_MAP[h.icon] || '🌤️'}</div>
+                      <p className="text-sm font-semibold mt-1">{h.temperature}°</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {/* Daily forecast list */}
+              {wk.length > 0 && (
+                <div className="space-y-2.5">
+                  {wk.map((day, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-3 p-3 rounded-2xl overflow-hidden"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    >
+                      <p className="text-sm font-medium w-16 shrink-0">{day.name || getDayAbbr(day.date)}</p>
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <span className="text-base shrink-0">{ICON_MAP[day.icon] || '🌤️'}</span>
+                        <p className="text-xs truncate" style={{ color: '#888888' }}>{day.shortForecast}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-sm font-semibold">{day.high != null ? `${day.high}°` : '--'}</span>
+                        <span className="text-sm text-white/50">{day.low != null ? `${day.low}°` : '--'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Extra metrics */}
+              {(uvIndex != null || airQuality != null || pollen != null) && (
+                <div className="grid grid-cols-1 gap-2">
+                  <WeatherMetric label="UV Index" value={uvIndex} badgeColor={UV_COLOR(uvIndex)} />
+                  <WeatherMetric label="Air Quality" value={airQuality?.index} badgeColor={AQI_COLOR(airQuality?.index)} detail={airQuality?.label || null} />
+                  <WeatherMetric
+                    label="Pollen"
+                    value={pollen ? [
+                      pollen.grass != null ? `Grass ${Math.round(pollen.grass)}` : null,
+                      pollen.birch != null ? `Birch ${Math.round(pollen.birch)}` : null,
+                      pollen.ragweed != null ? `Ragweed ${Math.round(pollen.ragweed)}` : null,
+                    ].filter(Boolean).join(' · ') : null}
+                  />
+                </div>
+              )}
+
+              {/* Metric badges */}
+              <div className="flex flex-wrap gap-1.5 text-[10px] text-white/85">
+                {high != null && <span className="rounded-full bg-white/10 px-2 py-0.5">High {high}°</span>}
+                {low != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Low {low}°</span>}
+                {current?.humidity != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Humidity {current.humidity}%</span>}
+                {current?.windSpeed != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Air {current.windSpeed} mph</span>}
+                {current?.windGust != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Gust {current.windGust} mph</span>}
+                {pressure != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Pressure {Math.round(pressure)} hPa</span>}
+                {airQuality?.index != null && <span className="rounded-full bg-white/10 px-2 py-0.5">AQI {airQuality.index}</span>}
+                {sunriseLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">Sunrise {sunriseLabel}</span>}
+                {sunsetLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">Sunset {sunsetLabel}</span>}
+              </div>
             </div>
           )}
 
-          <div className="mt-2.5 flex flex-wrap gap-1.5 text-[10px] text-white/85">
-            {high != null && <span className="rounded-full bg-white/10 px-2 py-0.5">High {high}°</span>}
-            {low != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Low {low}°</span>}
-            {current?.humidity != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Humidity {current.humidity}%</span>}
-            {current?.windSpeed != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Air {current.windSpeed} mph</span>}
-            {current?.windGust != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Gust {current.windGust} mph</span>}
-            {pressure != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Pressure {Math.round(pressure)} hPa</span>}
-            {airQuality?.index != null && <span className="rounded-full bg-white/10 px-2 py-0.5">AQI {airQuality.index}</span>}
-            {sunriseLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">Sunrise {sunriseLabel}</span>}
-            {sunsetLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">Sunset {sunsetLabel}</span>}
-          </div>
-        </button>
-
-        {cardExpanded && (
-          <div data-testid="weather-card-expanded" className="max-h-[24rem] overflow-y-auto px-4 py-2.5 space-y-2.5">
-            {(uvIndex != null || airQuality != null || pollen != null) && (
-              <div className="grid grid-cols-1 gap-2">
-                <WeatherMetric label="UV Index" value={uvIndex} badgeColor={UV_COLOR(uvIndex)} />
-                <WeatherMetric label="Air Quality" value={airQuality?.index} badgeColor={AQI_COLOR(airQuality?.index)} detail={airQuality?.label || null} />
-                <WeatherMetric
-                  label="Pollen"
-                  value={pollen ? [
-                    pollen.grass != null ? `Grass ${Math.round(pollen.grass)}` : null,
-                    pollen.birch != null ? `Birch ${Math.round(pollen.birch)}` : null,
-                    pollen.ragweed != null ? `Ragweed ${Math.round(pollen.ragweed)}` : null,
-                  ].filter(Boolean).join(' · ') : null}
-                />
-              </div>
-            )}
-
-            {(hourly.length > 0 || wk.length > 0) && (
-              <>
-                <div className="flex gap-2">
-                  {hourly.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('hourly')}
-                      className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
-                        activeTab === 'hourly'
-                          ? 'bg-white text-blue-700'
-                          : 'bg-white/10 text-white hover:bg-white/20'
-                      }`}
-                    >
-                      Hourly
-                    </button>
-                  )}
-                  {wk.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('weekly')}
-                      className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
-                        activeTab === 'weekly'
-                          ? 'bg-white text-blue-700'
-                          : 'bg-white/10 text-white hover:bg-white/20'
-                      }`}
-                    >
-                      5-Day
-                    </button>
-                  )}
-                </div>
-
-                {activeTab === 'hourly' && hourly.length > 0 && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {hourly.slice(0, 8).map((h, i) => (
-                      <div key={i} className="rounded-xl bg-white/8 px-2 py-2 text-center text-white/80">
-                        <div className="text-[10px]">{new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}</div>
-                        <div className="mt-1 text-base">{ICON_MAP[h.icon] || '🌤️'}</div>
-                        <div className="mt-1 text-sm font-semibold text-white">{h.temperature}°</div>
-                        <div className="text-[10px]">{h.precipitationProbability ?? '--'}%</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {activeTab === 'weekly' && wk.length > 0 && (
-                  <div className="space-y-2">
-                    {wk.map((day, index) => (
-                      <div key={index} className="flex items-center gap-3 rounded-xl bg-white/8 px-3 py-1.5 text-sm text-white/85">
-                        <div className="w-10 font-medium">{getDayAbbr(day.date)}</div>
-                        <div className="text-lg">{ICON_MAP[day.icon] || '🌤️'}</div>
-                        <div className="w-20 font-semibold text-white">{day.high}° / {day.low}°</div>
-                        <div className="min-w-0 flex-1 truncate text-white/70">{day.shortForecast}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
+          {/* ── Toggle chevron ─────────────────────────────────────────── */}
+          <button
+            type="button"
+            onClick={() => setCardExpanded((value) => !value)}
+            aria-expanded={cardExpanded}
+            aria-label={cardExpanded ? 'Collapse weather details' : 'Expand weather details'}
+            className="w-full mt-2 flex justify-center opacity-20 hover:opacity-100 transition-all focus:outline-none"
+          >
+            <svg
+              className={`transition-transform duration-300 ${cardExpanded ? 'rotate-180' : ''}`}
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </div>
       </section>
     );
   }
