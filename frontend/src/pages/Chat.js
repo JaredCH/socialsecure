@@ -333,6 +333,7 @@ function Chat() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [dmUnlockedByConversation, setDmUnlockedByConversation] = useState({});
   const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(DEFAULT_UNLOCK_DURATION_MINUTES);
+  const [unlockingDm, setUnlockingDm] = useState(false);
   const [dmFriends, setDmFriends] = useState([]);
   const [dmFriendsLoading, setDmFriendsLoading] = useState(false);
   const search = window.location.search;
@@ -350,7 +351,6 @@ function Chat() {
       setActiveChannel('zip');
     }
   }, [search]);
-  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [reactionByMessageId, setReactionByMessageId] = useState({});
   const [userContextMenu, setUserContextMenu] = useState({
@@ -361,7 +361,6 @@ function Chat() {
   });
   const userLongPressTimerRef = useRef(null);
   const e2eeSessionRef = useRef(null);
-  const passwordResolverRef = useRef(null);
   const decryptingMessageIdsRef = useRef(new Set());
   const participantRefreshTimerRef = useRef(null);
   const lastParticipantRefreshAtRef = useRef(0);
@@ -863,19 +862,16 @@ function Chat() {
     return () => clearTimeout(timer);
   }, [composerValue]);
 
-  const ensureE2EESession = useCallback(async () => {
+  const ensureE2EESession = useCallback(async (encryptionPassword) => {
     if (e2eeSessionRef.current) {
       return e2eeSessionRef.current;
     }
     if (!profile?._id) {
       throw new Error('Profile is required to unlock encryption vault');
     }
-
-    const encryptionPassword = await new Promise((resolve, reject) => {
-      passwordResolverRef.current = { resolve, reject };
-      setPasswordInput('');
-      setPasswordModalOpen(true);
-    });
+    if (!String(encryptionPassword || '').trim()) {
+      throw new Error('Encryption password is required');
+    }
 
     const { session } = await unlockOrCreateVault({
       userId: profile._id,
@@ -943,31 +939,6 @@ function Chat() {
     encryptedDmMessages,
     ensureE2EESession
   ]);
-
-  const handlePasswordUnlock = useCallback(async () => {
-    const resolver = passwordResolverRef.current;
-    if (!resolver) return;
-    if (!passwordInput) {
-      toast.error('Encryption password is required');
-      return;
-    }
-    try {
-      await authAPI.verifyEncryptionPassword(passwordInput, unlockDurationMinutes);
-      passwordResolverRef.current = null;
-      setPasswordModalOpen(false);
-      resolver.resolve(passwordInput);
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Incorrect encryption password');
-    }
-  }, [passwordInput, unlockDurationMinutes]);
-
-  const handlePasswordCancel = useCallback(() => {
-    const resolver = passwordResolverRef.current;
-    if (!resolver) return;
-    passwordResolverRef.current = null;
-    setPasswordModalOpen(false);
-    resolver.reject(new Error('Encryption password is required'));
-  }, []);
 
   const persistDmUnlockCache = useCallback((conversationId, shouldCache, durationMinutes = DEFAULT_UNLOCK_DURATION_MINUTES) => {
     const normalizedId = String(conversationId || '').trim();
@@ -1127,8 +1098,14 @@ function Chat() {
 
   const handleUnlockActiveDM = useCallback(async () => {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
+    if (!String(passwordInput || '').trim()) {
+      toast.error('Encryption password is required');
+      return;
+    }
+    setUnlockingDm(true);
     try {
-      const session = await ensureE2EESession();
+      await authAPI.verifyEncryptionPassword(passwordInput, unlockDurationMinutes);
+      const session = await ensureE2EESession(passwordInput);
       await hydrateConversationKeys({ conversationId: activeConversationId, session });
       setDecryptedDmContentById({});
       decryptingMessageIdsRef.current = new Set();
@@ -1156,9 +1133,12 @@ function Chat() {
         [String(activeConversationId)]: true
       }));
       persistDmUnlockCache(activeConversationId, true, unlockDurationMinutes);
+      setPasswordInput('');
       toast.success('Direct message unlocked.');
     } catch (error) {
       toast.error(error.response?.data?.error || error.message || 'Failed to unlock direct message');
+    } finally {
+      setUnlockingDm(false);
     }
   }, [
     activeConversation?.type,
@@ -1166,6 +1146,7 @@ function Chat() {
     ensureE2EESession,
     hydrateConversationKeys,
     loadLatestConversationMessages,
+    passwordInput,
     persistDmUnlockCache,
     unlockDurationMinutes
   ]);
@@ -1177,6 +1158,7 @@ function Chat() {
       [String(activeConversationId)]: false
     }));
     setDecryptedDmContentById({});
+    setPasswordInput('');
     persistDmUnlockCache(activeConversationId, false);
     e2eeSessionRef.current = null;
     toast.success('Direct message locked.');
@@ -1225,7 +1207,7 @@ function Chat() {
   const handleViewUserSocial = (user) => {
     const identifier = user?.username || user?._id;
     if (!identifier) return;
-    window.open(`/social?user=${encodeURIComponent(identifier)}`, '_blank', 'noopener,noreferrer');
+    window.location.assign(`/social?user=${encodeURIComponent(identifier)}`);
   };
 
   const handleRequestFriendship = async (user) => {
@@ -1310,10 +1292,6 @@ function Chat() {
     if (userLongPressTimerRef.current) {
       clearTimeout(userLongPressTimerRef.current);
       userLongPressTimerRef.current = null;
-    }
-    if (passwordResolverRef.current) {
-      passwordResolverRef.current.reject(new Error('Encryption password prompt cancelled'));
-      passwordResolverRef.current = null;
     }
   }, []);
 
@@ -1685,7 +1663,17 @@ function Chat() {
                   ← Back
                 </button>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
+                  {activeConversation?.type === 'dm' && activeConversationUser?.username ? (
+                    <a
+                      href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
+                      className={`inline-flex max-w-full items-center gap-1 truncate text-sm font-semibold ${activeTheme.senderAccent} hover:opacity-80`}
+                      aria-label={`Open @${activeConversationUser.username} social page`}
+                    >
+                      <span className="truncate">@{activeConversationUser.username}</span>
+                    </a>
+                  ) : (
+                    <h3 className="text-sm font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
+                  )}
                   <p className="text-xs font-mono opacity-75">Live conversation</p>
                 </div>
               </div>
@@ -1758,22 +1746,6 @@ function Chat() {
                     {conversationPresence.label}
                   </span>
                 ) : null}
-                {activeConversation?.type === 'dm' ? (
-                  <div className="inline-flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={dmUnlockedByConversation[String(activeConversationId)] ? handleLockActiveDM : handleUnlockActiveDM}
-                      className={[
-                        'rounded border px-2.5 py-1 text-[10px] font-semibold transition',
-                        dmUnlockedByConversation[String(activeConversationId)]
-                          ? activeTheme.subtle
-                          : `${activeTheme.accent} shadow-[0_0_18px_rgba(56,189,248,0.35)]`
-                      ].join(' ')}
-                    >
-                      {dmUnlockedByConversation[String(activeConversationId)] ? 'Lock DM' : 'Unlock DM'}
-                    </button>
-                  </div>
-                ) : null}
               </div>
             </div>
             {activeConversation?.type === 'dm' ? (
@@ -1789,22 +1761,80 @@ function Chat() {
             <div className="mb-3 rounded border border-red-400 bg-red-50 p-2 text-sm text-red-700">{messagesError}</div>
           ) : null}
 
-          <ChatMessageList
-            conversationId={activeConversationId}
-            conversationType={activeConversation?.type}
-            messages={renderedMessages}
-            loading={messagesLoading}
-            profile={profile}
-            theme={activeTheme}
-            onOpenUserMenu={openUserContextMenu}
-            reactionsByMessageId={reactionByMessageId}
-            reactionOptions={MESSAGE_REACTIONS}
-            onToggleReaction={handleToggleMessageReaction}
-            longPressDelayMs={LONG_PRESS_DELAY_MS}
-            hasMoreMessages={messagesHasMore}
-            onLoadOlderMessages={handleLoadOlderMessages}
-            onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
-          />
+          <div className="relative flex-1 min-h-0">
+            <ChatMessageList
+              conversationId={activeConversationId}
+              conversationType={activeConversation?.type}
+              messages={renderedMessages}
+              loading={messagesLoading}
+              profile={profile}
+              theme={activeTheme}
+              onOpenUserMenu={openUserContextMenu}
+              reactionsByMessageId={reactionByMessageId}
+              reactionOptions={MESSAGE_REACTIONS}
+              onToggleReaction={handleToggleMessageReaction}
+              longPressDelayMs={LONG_PRESS_DELAY_MS}
+              hasMoreMessages={messagesHasMore}
+              onLoadOlderMessages={handleLoadOlderMessages}
+              onVisibleMessageIdsChange={handleVisibleMessageIdsChange}
+            />
+            {activeConversation?.type === 'dm' && activeConversationId && !dmUnlockedByConversation[String(activeConversationId)] ? (
+              <div
+                className="absolute inset-3 z-20 flex items-center justify-center rounded-2xl border border-red-400/80 bg-gradient-to-br from-red-950/95 via-red-900/92 to-rose-950/95 p-4 text-red-50 shadow-[0_22px_55px_rgba(127,29,29,0.45)] backdrop-blur-sm"
+                data-testid="dm-lock-overlay"
+              >
+                <form
+                  className="w-full max-w-md rounded-2xl border border-red-300/35 bg-black/20 p-4 shadow-2xl backdrop-blur-md"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    await handleUnlockActiveDM();
+                  }}
+                >
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-red-200/70 bg-red-500/20 text-3xl shadow-[0_0_28px_rgba(248,113,113,0.38)]">
+                    🔒
+                  </div>
+                  <h3 className="text-center text-lg font-semibold">Encrypted conversation locked</h3>
+                  <p className="mt-2 text-center text-sm text-red-100/90">
+                    Enter your encryption password to reveal this direct message. Press Enter or use Unlock when you're ready.
+                  </p>
+                  <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.16em]" htmlFor="dm-unlock-password">
+                    Encryption password
+                  </label>
+                  <input
+                    id="dm-unlock-password"
+                    type="password"
+                    value={passwordInput}
+                    onChange={(event) => setPasswordInput(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-red-200/45 bg-red-950/40 px-3 py-2 text-sm text-red-50 placeholder:text-red-200/60"
+                    placeholder="Enter password to unlock"
+                    aria-label="Encryption password"
+                    disabled={unlockingDm}
+                  />
+                  <label className="mt-3 block text-xs font-semibold uppercase tracking-[0.16em]" htmlFor="password-modal-unlock-duration">
+                    Unlock duration
+                  </label>
+                  <select
+                    id="password-modal-unlock-duration"
+                    value={String(unlockDurationMinutes)}
+                    onChange={(event) => setUnlockDurationMinutes(Number(event.target.value) || DEFAULT_UNLOCK_DURATION_MINUTES)}
+                    className="mt-2 w-full rounded-xl border border-red-200/45 bg-red-950/40 px-3 py-2 text-sm text-red-50"
+                    disabled={unlockingDm}
+                  >
+                    {UNLOCK_DURATION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    className="mt-4 w-full rounded-xl border border-red-100/70 bg-red-500 px-3 py-2 text-sm font-semibold text-white shadow-[0_0_24px_rgba(248,113,113,0.45)] transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-70"
+                    disabled={unlockingDm}
+                  >
+                    {unlockingDm ? 'Unlocking…' : 'Unlock'}
+                  </button>
+                </form>
+              </div>
+            ) : null}
+          </div>
 
           <div className="mt-1 space-y-1">
             {localTyping ? (
@@ -1830,6 +1860,9 @@ function Chat() {
                 sending={sending}
                 theme={activeTheme}
                 onComposerError={(message) => toast.error(message)}
+                secondaryActionLabel={activeConversation?.type === 'dm' ? 'Lock' : ''}
+                onSecondaryAction={activeConversation?.type === 'dm' ? handleLockActiveDM : undefined}
+                secondaryActionDisabled={activeConversation?.type === 'dm' && !dmUnlockedByConversation[String(activeConversationId)]}
               />
             </div>
           </div>
@@ -1928,51 +1961,6 @@ function Chat() {
           </div>
         </aside>
       </div>
-      {passwordModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
-          <div className={`w-full max-w-sm rounded border p-3 ${activeTheme.panelGlass}`}>
-            <h3 className="text-sm font-semibold">Unlock secure direct messages</h3>
-            <p className="mt-1 text-xs opacity-80">
-              Step 1 of 2: enter your encryption password, then continue to unlock and decrypt protected messages.
-            </p>
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(event) => setPasswordInput(event.target.value)}
-              className={`mt-3 w-full rounded border px-2 py-1.5 text-sm ${activeTheme.input}`}
-              placeholder="Encryption password"
-              aria-label="Encryption password"
-            />
-            <label className="mt-2 block text-xs font-semibold" htmlFor="password-modal-unlock-duration">Unlock duration</label>
-            <select
-              id="password-modal-unlock-duration"
-              value={String(unlockDurationMinutes)}
-              onChange={(event) => setUnlockDurationMinutes(Number(event.target.value) || DEFAULT_UNLOCK_DURATION_MINUTES)}
-              className={`mt-1 w-full rounded border px-2 py-1.5 text-sm ${activeTheme.input}`}
-            >
-              {UNLOCK_DURATION_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={handlePasswordCancel}
-                className={`rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handlePasswordUnlock}
-                className={`rounded border px-3 py-1.5 text-xs font-semibold ${activeTheme.accent} shadow-[0_0_18px_rgba(56,189,248,0.45)]`}
-              >
-                Unlock secure messages
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
       {userContextMenu.open && userContextMenu.user ? (
         <div
           className={`fixed z-50 w-56 rounded border p-1 shadow-xl ${activeTheme.panelGlass}`}
