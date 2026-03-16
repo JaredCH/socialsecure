@@ -1118,7 +1118,7 @@ function Chat() {
       <header className={`border-b px-3 py-2 md:px-4 md:py-2.5 ${activeTheme.panelGlass}`}>
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold tracking-wide uppercase">Chat Workspace</h2>
+            <h2 className="truncate text-sm font-semibold">Chat workspace</h2>
             <p className="truncate text-[10px] opacity-80 md:text-xs">
               @{profile?.username || 'you'}{resolvedZipCode ? ` • Zip ${resolvedZipCode}` : ''}
             </p>
@@ -1312,7 +1312,7 @@ function Chat() {
                 </button>
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold">{activeConversation ? getConversationLabel(activeConversation) : 'Select a room'}</h3>
-                  <p className="text-[10px] font-mono opacity-75 md:text-[11px]">Live conversation</p>
+                  <p className="text-xs font-mono opacity-75">Live conversation</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
