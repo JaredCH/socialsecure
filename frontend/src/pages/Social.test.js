@@ -279,6 +279,28 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).toContain('Everything important stays close to the feed.');
   });
 
+  it('keeps feed/gallery/friends/chat/calendar stage panels unfilled while preserving borders', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const expectActivePanelToBeTransparent = (headingLabel) => {
+      const panelHeading = Array.from(container.querySelectorAll('h2')).find((heading) => heading.textContent === headingLabel);
+      const panel = panelHeading?.closest('section');
+      expect(panel).toBeTruthy();
+      expect(panel?.style.backgroundColor).toBe('transparent');
+      expect(panel?.className).toContain('border');
+    };
+
+    expectActivePanelToBeTransparent('Feed');
+    await switchToTab('Gallery');
+    expectActivePanelToBeTransparent('Gallery');
+    await switchToTab('Friends');
+    expectActivePanelToBeTransparent('Circles');
+    await switchToTab('Chat');
+    expectActivePanelToBeTransparent('Chat');
+    await switchToTab('Calendar');
+    expectActivePanelToBeTransparent('Calendar');
+  });
+
   it('builds social chat and calendar links for friend profile context', async () => {
     window.history.replaceState({}, '', '/social?user=buddy');
     feedAPI.getPublicUserFeed.mockResolvedValue({

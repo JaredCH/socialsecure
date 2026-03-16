@@ -4148,7 +4148,7 @@ const Social = () => {
   const accentColor2 = socialPreferences.globalStyles?.headerColor || accentColor;
   const hubFontFamily = socialPreferences.globalStyles?.fontFamily || socialPreferences.hero?.fontFamily || 'Inter';
   const hubSurfaceStyle = {
-    backgroundColor: 'rgba(255, 255, 255, 0.64)',
+    backgroundColor: 'transparent',
     borderColor: 'rgba(255, 255, 255, 0.45)',
     fontFamily: `"${hubFontFamily}", sans-serif`
   };
