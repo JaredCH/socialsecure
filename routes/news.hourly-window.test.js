@@ -9,6 +9,10 @@ describe('getUpcomingHourlyForecastWindow', () => {
   const buildHourly = () =>
     Array.from({ length: 24 }, (_, hour) => `2026-03-15T${String(hour).padStart(2, '0')}:00`);
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('starts the hourly window on the next top of hour for the location local time', () => {
     const hourlyWindow = internals.getUpcomingHourlyForecastWindow(buildHourly(), {
       currentTime: '2026-03-15T13:45',

@@ -58,6 +58,7 @@ const { resolveZipLocation, resolveZipLocationByCityState } = require('../servic
 // ---------------------------------------------------------------------------
 const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000;   // 10 minutes
 const WEATHER_WIDGET_REFRESH_SECONDS = 600;
+const WEATHER_HOURLY_WINDOW_LIMIT = 24;
 const OPEN_METEO_FORECAST_BASE = 'https://api.open-meteo.com/v1/forecast';
 const OPEN_METEO_GEOCODING_BASE = 'https://geocoding-api.open-meteo.com/v1/search';
 const OPEN_METEO_AIR_QUALITY_BASE = 'https://air-quality-api.open-meteo.com/v1/air-quality';
@@ -197,21 +198,22 @@ function getTimeZoneLocalDateTimeParts(date, timeZone) {
 function getNextTopOfHourKey(parts) {
   if (!parts) return null;
 
-  const nextHourUtc = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, 0, 0));
-  if (parts.minute > 0 || parts.second > 0) {
-    nextHourUtc.setUTCHours(nextHourUtc.getUTCHours() + 1);
-  }
+  const roundedHour = (parts.minute > 0 || parts.second > 0)
+    ? parts.hour + 1
+    : parts.hour;
+  const dayCursor = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  dayCursor.setUTCDate(dayCursor.getUTCDate() + Math.floor(roundedHour / 24));
 
   return buildLocalDateTimeKey({
-    year: nextHourUtc.getUTCFullYear(),
-    month: nextHourUtc.getUTCMonth() + 1,
-    day: nextHourUtc.getUTCDate(),
-    hour: nextHourUtc.getUTCHours(),
+    year: dayCursor.getUTCFullYear(),
+    month: dayCursor.getUTCMonth() + 1,
+    day: dayCursor.getUTCDate(),
+    hour: roundedHour % 24,
     minute: 0
   });
 }
 
-function getUpcomingHourlyForecastWindow(hourlyTime, { currentTime = null, timeZone = null, now = new Date(), limit = 24 } = {}) {
+function getUpcomingHourlyForecastWindow(hourlyTime, { currentTime = null, timeZone = null, now = null, limit = WEATHER_HOURLY_WINDOW_LIMIT } = {}) {
   if (!Array.isArray(hourlyTime) || hourlyTime.length === 0) return [];
 
   const normalizedHourly = hourlyTime
@@ -224,9 +226,10 @@ function getUpcomingHourlyForecastWindow(hourlyTime, { currentTime = null, timeZ
 
   if (normalizedHourly.length === 0) return [];
 
+  const effectiveNow = now || new Date();
   const referenceParts =
     parseLocalDateTimeParts(currentTime) ||
-    getTimeZoneLocalDateTimeParts(now, timeZone);
+    getTimeZoneLocalDateTimeParts(effectiveNow, timeZone);
   const startKey = getNextTopOfHourKey(referenceParts);
 
   const upcoming = startKey
@@ -457,7 +460,7 @@ async function fetchWeatherForLocation(locObj) {
       currentTime: current.time,
       timeZone: fc?.timezone || resolved?.timezone || null,
       now: new Date(),
-      limit: 24
+      limit: WEATHER_HOURLY_WINDOW_LIMIT
     });
 
     const hourly = hourlyWindow.map(({ time, index }) => {
