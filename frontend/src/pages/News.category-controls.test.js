@@ -183,7 +183,16 @@ describe('News category controls', () => {
     expect(categoryLabel.className).toContain('text-[10px]');
     expect(categoryLabel.className).toContain('leading-[1.2]');
     expect(categoryIcon).toBeTruthy();
-    expect(categorySwitch.className).toContain('h-4');
-    expect(categorySwitch.className).toContain('w-8');
+    expect(categorySwitch.className).toContain('h-[0.95rem]');
+    expect(categorySwitch.className).toContain('w-7');
+    expect(categorySwitch.className).toContain('shrink-0');
+
+    const categorySwitchThumb = categorySwitch.querySelector('span');
+    expect(categorySwitchThumb).toBeTruthy();
+    expect(categorySwitchThumb.className).toContain('top-1/2');
+    expect(categorySwitchThumb.className).toContain('-translate-y-1/2');
+    expect(categorySwitchThumb.className).toContain('h-2.5');
+    expect(categorySwitchThumb.className).toContain('w-2.5');
+    expect(categorySwitchThumb.className).toContain('translate-x-3.5');
   });
 });

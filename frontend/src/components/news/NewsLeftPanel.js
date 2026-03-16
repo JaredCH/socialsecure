@@ -187,13 +187,13 @@ export default function NewsLeftPanel({
                 aria-label={isDisabled ? `Enable category ${cat.label}` : `Disable category ${cat.label}`}
                 role="switch"
                 aria-checked={!isDisabled}
-                className={`relative h-4 w-8 rounded-full border transition-colors ${
+                className={`relative inline-flex h-[0.95rem] w-7 shrink-0 rounded-full border transition-colors ${
                   isDisabled ? 'border-gray-300 bg-gray-200' : 'border-blue-500 bg-blue-500'
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${
-                    isDisabled ? 'left-0.5' : 'left-[1.25rem]'
+                  className={`absolute left-0.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-white shadow transition-transform ${
+                    isDisabled ? 'translate-x-0' : 'translate-x-3.5'
                   }`}
                 />
               </button>
