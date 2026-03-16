@@ -71,13 +71,18 @@ describe('Home landing page', () => {
     expect(container.querySelector('a[href="#platform-overview"]')).not.toBeNull();
   });
 
-  it('renders the animated hero connection map and encryption callouts', async () => {
+  it('renders the animated hero map system and encrypted direct messaging showcase', async () => {
     await renderHome({ isAuthenticated: false });
 
-    expect(container.querySelector('[data-testid="hero-network-map"]')).not.toBeNull();
-    expect(container.querySelectorAll('[data-testid="floating-encryption-icon"]')).toHaveLength(4);
-    expect(container.textContent).toContain('Parallax connection map');
-    expect(container.textContent).toContain('1 → 2 → 8 secure hops');
-    expect(container.textContent).toContain('Encryption in motion');
+    expect(container.querySelector('[data-testid="hero-map-system"]')).not.toBeNull();
+    expect(container.querySelectorAll('[data-testid="floating-map-badge"]')).toHaveLength(4);
+    expect(container.textContent).toContain('Parallax community map');
+    expect(container.textContent).toContain('Live pins • Heat overlays');
+    expect(container.textContent).toContain('Map layers in motion');
+    expect(container.textContent).toContain('Heatmap overlays');
+    expect(container.querySelector('[data-testid="encrypted-dm-showcase"]')).not.toBeNull();
+    expect(container.querySelectorAll('[data-testid="animated-dm-bubble"]')).toHaveLength(4);
+    expect(container.textContent).toContain('Encrypted direct messaging, presented as a living conversation');
+    expect(container.textContent).toContain('End-to-end encrypted');
   });
 });
