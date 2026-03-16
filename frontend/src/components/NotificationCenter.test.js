@@ -78,6 +78,38 @@ describe('NotificationCenter corner behavior', () => {
     expect(container.textContent).toContain('Notifications');
   });
 
+  it('keeps the dropdown open while moving pointer from pill to menu', async () => {
+    jest.useFakeTimers();
+    await renderCenter();
+
+    const rootPanel = container.querySelector('.relative');
+    expect(rootPanel).not.toBeNull();
+
+    await act(async () => {
+      rootPanel.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Notifications');
+
+    await act(async () => {
+      rootPanel.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Notifications');
+
+    await act(async () => {
+      jest.advanceTimersByTime(100);
+      rootPanel.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      jest.advanceTimersByTime(75);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Notifications');
+    jest.useRealTimers();
+  });
+
   it('accepts friend request notifications with selected circle', async () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
     const onUnreadCountChange = jest.fn();
