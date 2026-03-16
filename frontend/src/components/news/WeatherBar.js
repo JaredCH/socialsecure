@@ -118,17 +118,17 @@ function WeatherMetric({ label, value, badgeColor = null, detail = null }) {
   if (value == null || value === '') return null;
 
   return (
-    <div className="rounded-xl bg-white/10 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-white/60">{label}</div>
-      <div className="mt-1 flex items-center gap-2 text-sm text-white">
+    <div className="rounded-lg bg-white/10 px-2.5 py-1.5">
+      <div className="text-[9px] uppercase tracking-wide text-white/60">{label}</div>
+      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-white">
         {badgeColor ? (
-          <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: badgeColor }}>
+          <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ backgroundColor: badgeColor }}>
             {value}
           </span>
         ) : (
           <span className="font-semibold">{value}</span>
         )}
-        {detail ? <span className="text-xs text-white/70">{detail}</span> : null}
+        {detail ? <span className="text-[11px] text-white/70">{detail}</span> : null}
       </div>
     </div>
   );
@@ -245,16 +245,16 @@ export default function WeatherBar({ variant = 'sticky' }) {
         className="rounded-3xl shadow-lg overflow-hidden text-white"
         style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #312e81 100%)' }}
       >
-        <div className="p-5 space-y-2" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(12px)' }}>
+        <div className="p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(12px)' }}>
           {/* ── Header: city name + location selector ──────────────────── */}
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold leading-tight truncate">{displayCity}</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold leading-tight truncate">{displayCity}</h2>
             {usableLocations.length > 1 && (
               <select
                 data-testid="weather-location-selector"
                 value={selectedLocationIndex}
                 onChange={(e) => setSelectedLocationIndex(Number(e.target.value))}
-                className="text-xs bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-white/90 outline-none cursor-pointer hover:bg-white/15 transition-colors"
+                className="max-w-[9.5rem] text-[11px] bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-white/90 outline-none cursor-pointer hover:bg-white/15 transition-colors"
                 style={{ WebkitAppearance: 'none', MozAppearance: 'none' }}
                 aria-label="Select weather location"
               >
@@ -268,62 +268,98 @@ export default function WeatherBar({ variant = 'sticky' }) {
           </div>
 
           {/* ── Main temperature display ───────────────────────────────── */}
-          <div className="flex items-end justify-between">
-            <div>
-              <div className="text-7xl font-light tracking-tight leading-none">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-5xl font-light tracking-tight leading-none">
                 {current?.temperature != null ? `${current.temperature}°` : '--°'}
               </div>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-sm" style={{ color: '#888888' }}>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]" style={{ color: '#9ca3af' }}>
+                <span className="truncate max-w-[11rem]">
                   {current?.shortForecast || weather.forecastSummary || 'Loading...'}
                 </span>
-                <span className="text-sm" style={{ color: '#888888' }}>
-                  Feels {current?.temperature != null ? `${current.temperature}°` : '--°'}
-                </span>
+                {high != null && low != null ? (
+                  <span>
+                    <span aria-hidden="true">↑</span>
+                    <span className="sr-only">High </span>
+                    {high}°
+                    <span className="ml-1" aria-hidden="true">↓</span>
+                    <span className="sr-only">Low </span>
+                    {low}°
+                  </span>
+                ) : null}
+                {current?.humidity != null ? (
+                  <span>
+                    <span aria-hidden="true">💧</span>
+                    <span className="sr-only">Humidity </span>
+                    {current.humidity}%
+                  </span>
+                ) : null}
               </div>
             </div>
-            <span className="text-5xl leading-none" aria-hidden="true">{currentIcon}</span>
+            <span className="text-4xl leading-none shrink-0" aria-hidden="true">{currentIcon}</span>
           </div>
 
           {/* ── Stats row: humidity, wind, precipitation ────────────────── */}
-          <div className="grid grid-cols-3 mt-4 py-3 border-y border-white/5 text-center items-center">
+          <div className="grid grid-cols-3 mt-1 py-2.5 border-y border-white/5 text-center items-center">
             <div className="border-r border-white/5 flex flex-col items-center">
-              <svg className="mb-1 opacity-40" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="mb-1 opacity-40" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.7L12 2 8 9.3C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />
               </svg>
-              <p className="text-[11px] font-bold">{current?.humidity != null ? `${current.humidity}%` : '--%'}</p>
+              <p className="text-[10px] font-bold">{current?.humidity != null ? `${current.humidity}%` : '--%'}</p>
             </div>
             <div className="border-r border-white/5 flex flex-col items-center">
-              <svg className="mb-1 opacity-40" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="mb-1 opacity-40" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
               </svg>
-              <p className="text-[11px] font-bold">{current?.windSpeed != null ? `${current.windSpeed} mph` : '-- mph'}</p>
+              <p className="text-[10px] font-bold">{current?.windSpeed != null ? `${current.windSpeed} mph` : '-- mph'}</p>
             </div>
             <div className="flex flex-col items-center">
-              <svg className="mb-1 opacity-40" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="mb-1 opacity-40" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7" />
               </svg>
-              <p className="text-[11px] font-bold">{current?.precipitationProbability != null ? `${current.precipitationProbability}%` : '--%'}</p>
+              <p className="text-[10px] font-bold">{current?.precipitationProbability != null ? `${current.precipitationProbability}%` : '--%'}</p>
             </div>
           </div>
 
           {/* ── Expanded section ────────────────────────────────────────── */}
           {cardExpanded && (
-            <div data-testid="weather-card-expanded" className="max-h-[24rem] overflow-y-auto space-y-4 pt-2">
-              {/* Hourly horizontal scroll */}
+            <div data-testid="weather-card-expanded" className="space-y-3 pt-2">
+              {/* Hourly grid */}
               {hourly.length > 0 && (
-                <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                  {hourly.slice(0, 7).map((h, i) => (
+                <div className="grid grid-cols-4 gap-2">
+                  {hourly.slice(0, 8).map((h, i) => (
                     <div
                       key={i}
-                      className="flex-shrink-0 text-center p-3 rounded-2xl min-w-[60px]"
+                      className="min-w-0 rounded-xl px-2 py-1.5 text-center"
                       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
                     >
-                      <p className="text-xs" style={{ color: '#888888' }}>
+                      <p className="text-[10px]" style={{ color: '#9ca3af' }}>
                         {new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}
                       </p>
-                      <div className="text-lg mt-1">{ICON_MAP[h.icon] || '🌤️'}</div>
-                      <p className="text-sm font-semibold mt-1">{h.temperature}°</p>
+                      <div className="text-sm mt-0.5">{ICON_MAP[h.icon] || '🌤️'}</div>
+                      <p className="text-xs font-semibold mt-0.5">{h.temperature}°</p>
+                      <div className="mt-1 space-y-0.5 text-[9px] text-white/70">
+                        {h.precipitationProbability != null && (
+                          <p className="flex items-center justify-center gap-1">
+                            <span aria-hidden="true">💧</span>
+                            <span>{h.precipitationProbability}%</span>
+                          </p>
+                        )}
+                        {h.windSpeed != null && (
+                          <p className="flex items-center justify-center gap-1">
+                            <span aria-hidden="true">🌬️</span>
+                            <span className="sr-only">Wind </span>
+                            <span>{h.windSpeed} mph</span>
+                          </p>
+                        )}
+                        {h.windGust != null && (
+                          <p className="flex items-center justify-center gap-1">
+                            <span aria-hidden="true">🌀</span>
+                            <span className="sr-only">Gust </span>
+                            <span>{h.windGust} mph</span>
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -331,21 +367,21 @@ export default function WeatherBar({ variant = 'sticky' }) {
 
               {/* Daily forecast list */}
               {wk.length > 0 && (
-                <div className="space-y-2.5">
+                <div className="space-y-1.5">
                   {wk.map((day, index) => (
                     <div
                       key={index}
-                      className="flex items-center gap-3 p-3 rounded-2xl overflow-hidden"
+                      className="grid grid-cols-[2.5rem_1.25rem_minmax(0,1fr)_auto] items-start gap-2 p-2 rounded-xl"
                       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
                     >
-                      <p className="text-sm font-medium w-16 shrink-0">{day.name || getDayAbbr(day.date)}</p>
-                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                        <span className="text-base shrink-0">{ICON_MAP[day.icon] || '🌤️'}</span>
-                        <p className="text-xs truncate" style={{ color: '#888888' }}>{day.shortForecast}</p>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <span className="text-sm font-semibold">{day.high != null ? `${day.high}°` : '--'}</span>
-                        <span className="text-sm text-white/50">{day.low != null ? `${day.low}°` : '--'}</span>
+                      <p className="text-[11px] font-medium pt-0.5">{day.name || getDayAbbr(day.date)}</p>
+                      <span className="text-sm leading-none pt-0.5" aria-hidden="true">{ICON_MAP[day.icon] || '🌤️'}</span>
+                      <p className="min-w-0 text-[10px] leading-tight text-white/70 whitespace-normal break-words">
+                        {day.shortForecast}
+                      </p>
+                      <div className="flex items-center gap-1 shrink-0 pt-0.5 text-[11px]">
+                        <span className="font-semibold">{day.high != null ? `${day.high}°` : '--'}</span>
+                        <span className="text-white/50">{day.low != null ? `${day.low}°` : '--'}</span>
                       </div>
                     </div>
                   ))}
@@ -369,16 +405,42 @@ export default function WeatherBar({ variant = 'sticky' }) {
               )}
 
               {/* Metric badges */}
-              <div className="flex flex-wrap gap-1.5 text-[10px] text-white/85">
-                {high != null && <span className="rounded-full bg-white/10 px-2 py-0.5">High {high}°</span>}
-                {low != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Low {low}°</span>}
-                {current?.humidity != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Humidity {current.humidity}%</span>}
-                {current?.windSpeed != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Air {current.windSpeed} mph</span>}
-                {current?.windGust != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Gust {current.windGust} mph</span>}
+              <div className="flex flex-wrap gap-1.5 text-[9px] text-white/85">
+                {high != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">↑</span>
+                    <span className="sr-only">High </span>
+                    {' '}{high}°
+                  </span>
+                )}
+                {low != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">↓</span>
+                    <span className="sr-only">Low </span>
+                    {' '}{low}°
+                  </span>
+                )}
+                {current?.humidity != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">💧</span>
+                    <span className="sr-only">Humidity </span>
+                    {' '}{current.humidity}%
+                  </span>
+                )}
+                {current?.windSpeed != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">🌬️</span> Air {current.windSpeed} mph
+                  </span>
+                )}
+                {current?.windGust != null && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    <span aria-hidden="true">🌀</span> Gust {current.windGust} mph
+                  </span>
+                )}
                 {pressure != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Pressure {Math.round(pressure)} hPa</span>}
                 {airQuality?.index != null && <span className="rounded-full bg-white/10 px-2 py-0.5">AQI {airQuality.index}</span>}
-                {sunriseLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">Sunrise {sunriseLabel}</span>}
-                {sunsetLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">Sunset {sunsetLabel}</span>}
+                {sunriseLabel && <span className="rounded-full bg-white/10 px-2 py-0.5"><span aria-hidden="true">🌅</span> Sunrise {sunriseLabel}</span>}
+                {sunsetLabel && <span className="rounded-full bg-white/10 px-2 py-0.5"><span aria-hidden="true">🌇</span> Sunset {sunsetLabel}</span>}
               </div>
             </div>
           )}

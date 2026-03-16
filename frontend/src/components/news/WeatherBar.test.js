@@ -179,6 +179,16 @@ describe('WeatherBar', () => {
                   temperature: 71,
                   icon: 'cloud-sun',
                   precipitationProbability: 10,
+                  windSpeed: 15,
+                  windGust: 26,
+                },
+                {
+                  time: '2026-03-15T19:00:00.000Z',
+                  temperature: 70,
+                  icon: 'cloud',
+                  precipitationProbability: 20,
+                  windSpeed: 12,
+                  windGust: 18,
                 }
               ],
               weekly: [
@@ -187,9 +197,16 @@ describe('WeatherBar', () => {
                   high: 78,
                   low: 59,
                   icon: 'cloud-sun',
-                  shortForecast: 'Breezy',
+                  shortForecast: 'Breezy with a light shower chance later in the evening',
                   sunrise: '2026-03-15T12:34:00.000Z',
                   sunset: '2026-03-15T23:45:00.000Z',
+                },
+                {
+                  date: '2026-03-16',
+                  high: 75,
+                  low: 57,
+                  icon: 'cloud',
+                  shortForecast: 'Cloudy and cool through the afternoon',
                 }
               ],
               airQuality: { index: 42, label: 'Good' },
@@ -222,12 +239,15 @@ describe('WeatherBar', () => {
 
     const expandedPanel = container.querySelector('[data-testid="weather-card-expanded"]');
     expect(expandedPanel).toBeTruthy();
-    expect(expandedPanel.className).toContain('max-h-[24rem]');
-    expect(expandedPanel.className).toContain('overflow-y-auto');
+    expect(expandedPanel.className).not.toContain('max-h-[24rem]');
+    expect(expandedPanel.className).not.toContain('overflow-y-auto');
+    expect(expandedPanel.querySelector('.overflow-x-auto')).toBeFalsy();
     // After expand, metric badges and forecasts are visible
     expect(container.textContent).toContain('Pressure 1014 hPa');
     expect(container.textContent).toContain('Air 14 mph');
     expect(container.textContent).toContain('Gust 24 mph');
+    expect(container.textContent).toContain('Gust 26 mph');
+    expect(container.textContent).toContain('Breezy with a light shower chance later in the evening');
     expect(container.textContent).toContain('Sunrise');
     expect(container.textContent).toContain('Sunset');
   });
