@@ -324,6 +324,12 @@ function Chat() {
   const [roomQuery, setRoomQuery] = useState('');
   const [allChatRooms, setAllChatRooms] = useState([]);
   const [allChatRoomsLoading, setAllChatRoomsLoading] = useState(false);
+  const [quickAccessRooms, setQuickAccessRooms] = useState({
+    state: null,
+    county: null,
+    zip: null,
+    cities: []
+  });
   const [joinedRoomIds, setJoinedRoomIds] = useState({});
   const [favoriteRoomIds, setFavoriteRoomIds] = useState(() => {
     try {
@@ -642,6 +648,27 @@ function Chat() {
     }
   }, [profile?._id]);
 
+  const loadQuickAccessRooms = useCallback(async () => {
+    if (!profile?._id || typeof chatAPI.getQuickAccessRooms !== 'function') return;
+
+    try {
+      const { data } = await chatAPI.getQuickAccessRooms();
+      setQuickAccessRooms({
+        state: data?.rooms?.state || null,
+        county: data?.rooms?.county || null,
+        zip: data?.rooms?.zip || null,
+        cities: Array.isArray(data?.rooms?.cities) ? data.rooms.cities : []
+      });
+    } catch {
+      setQuickAccessRooms({
+        state: null,
+        county: null,
+        zip: null,
+        cities: []
+      });
+    }
+  }, [profile?._id]);
+
   useEffect(() => {
     if (!profile?._id || typeof chatAPI.getAllRooms !== 'function') return;
     let cancelled = false;
@@ -654,6 +681,11 @@ function Chat() {
       cancelled = true;
     };
   }, [loadAllChatRooms, profile?._id]);
+
+  useEffect(() => {
+    if (!profile?._id || typeof chatAPI.getQuickAccessRooms !== 'function') return;
+    loadQuickAccessRooms().catch(() => null);
+  }, [loadQuickAccessRooms, profile?._id]);
 
   useEffect(() => {
     try {
@@ -736,6 +768,14 @@ function Chat() {
   const topicRooms = useMemo(
     () => allChatRooms.filter((room) => room.type === 'topic').sort(sortRoomsByName),
     [allChatRooms]
+  );
+  const relationalQuickRooms = useMemo(
+    () => [quickAccessRooms.state, quickAccessRooms.county].filter(Boolean),
+    [quickAccessRooms]
+  );
+  const nearbyCityQuickRooms = useMemo(
+    () => (Array.isArray(quickAccessRooms.cities) ? quickAccessRooms.cities : []),
+    [quickAccessRooms]
   );
 
   const activeTheme = useMemo(
@@ -1975,9 +2015,43 @@ function Chat() {
                           openConversationById(String(hubData.zip.current._id));
                         }}
                         className={`w-full rounded border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
+                        data-quick-access-room={getConversationLabel(hubData.zip.current)}
                       >
-                        There Zip
+                        {getConversationLabel(hubData.zip.current)}
                       </button>
+                    ) : null}
+                    {relationalQuickRooms.map((room) => (
+                      <button
+                        key={String(room._id)}
+                        type="button"
+                        onClick={() => handleOpenRoom(room)}
+                        className={`w-full rounded border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
+                        data-quick-access-room={room.name}
+                      >
+                        <span className="block font-medium">{room.name}</span>
+                        <span className="block text-[10px] uppercase tracking-[0.12em] opacity-70">{room.type}</span>
+                      </button>
+                    ))}
+                    {nearbyCityQuickRooms.length > 0 ? (
+                      <div className={`rounded border p-1.5 ${activeTheme.panel}`}>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Nearby cities</p>
+                        <div className="mt-2 space-y-1">
+                          {nearbyCityQuickRooms.map((room) => (
+                            <button
+                              key={String(room._id)}
+                              type="button"
+                              onClick={() => handleOpenRoom(room)}
+                              className={`w-full rounded border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
+                              data-quick-access-city={room.name}
+                            >
+                              <span className="block font-medium">{room.name}</span>
+                              <span className="block text-[10px] opacity-70">
+                                {room.distanceMiles ? `${room.distanceMiles} mi away` : 'Nearby city room'}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ) : null}
                     <section className={`rounded border p-1.5 ${activeTheme.panel}`}>
                       <button

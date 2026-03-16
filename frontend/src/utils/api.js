@@ -335,6 +335,7 @@ export const chatAPI = {
   deleteRoom: (roomId) => api.delete(`/chat/rooms/${roomId}`),
   getAllRooms: (page = 1, limit = 100) =>
     api.get(`/chat/rooms/all?page=${page}&limit=${limit}`),
+  getQuickAccessRooms: () => api.get('/chat/rooms/quick-access'),
   getRoomUsers: (roomId) => api.get(`/chat/rooms/${roomId}/users`),
   syncLocationRooms: () => api.post('/chat/rooms/sync-location'),
   getNearbyZipRooms: (zipCode) => api.get(`/chat/zip/nearby?zipCode=${encodeURIComponent(zipCode)}`),

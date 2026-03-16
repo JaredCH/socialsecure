@@ -15,10 +15,19 @@ jest.mock('../models/ChatRoom', () => ({
   countDocuments: jest.fn(),
   ensureDefaultStateRooms: jest.fn(),
   ensureDefaultDiscoveryRooms: jest.fn(),
+  syncUserLocationRooms: jest.fn(),
+  findOrCreateByLocation: jest.fn(),
   findOne: jest.fn(),
   findById: jest.fn(),
   findOneAndUpdate: jest.fn(),
   updateMany: jest.fn()
+}));
+
+jest.mock('../models/ChatConversation', () => ({
+  findOne: jest.fn(),
+  find: jest.fn(),
+  findOneAndUpdate: jest.fn(),
+  findById: jest.fn()
 }));
 
 jest.mock('../models/EventSchedule', () => ({
@@ -44,6 +53,7 @@ jest.mock('../services/eventRoomLifecycle', () => ({ reconcileEventRooms: jest.f
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const ChatRoom = require('../models/ChatRoom');
+const ChatConversation = require('../models/ChatConversation');
 const EventSchedule = require('../models/EventSchedule');
 const router = require('./chat');
 
@@ -71,6 +81,7 @@ describe('Chat event room discovery routes', () => {
     jwt.verify.mockImplementation((token, secret, cb) => cb(null, { userId: 'user-1' }));
     ChatRoom.ensureDefaultStateRooms.mockResolvedValue(undefined);
     ChatRoom.ensureDefaultDiscoveryRooms.mockResolvedValue(undefined);
+    ChatRoom.syncUserLocationRooms.mockResolvedValue({ rooms: [], created: 0 });
     User.findById.mockReturnValue({
       select: jest.fn().mockResolvedValue({ _id: 'user-1', onboardingStatus: 'completed' })
     });
@@ -224,12 +235,16 @@ describe('Chat event room discovery routes', () => {
           _id: 1,
           name: 1,
           type: 1,
+          createdBy: 1,
           city: 1,
           state: 1,
           country: 1,
           county: 1,
+          zipCode: 1,
           discoverable: 1,
           eventRef: 1,
+          stableKey: 1,
+          autoLifecycle: 1,
           members: 1,
           messageCount: 1,
           lastActivity: 1
@@ -259,5 +274,122 @@ describe('Chat event room discovery routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.rooms.map((room) => room.type)).toEqual(['state', 'county', 'topic', 'city']);
+  });
+
+  it('re-seeds discovery rooms when the first all-rooms query is empty', async () => {
+    ChatRoom.aggregate
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ _id: 'state-1', name: 'Alabama', type: 'state', members: [] }]);
+    ChatRoom.countDocuments
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(1);
+
+    const app = buildApp();
+    const response = await request(app)
+      .get('/api/chat/rooms/all?page=1&limit=10')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(ChatRoom.ensureDefaultDiscoveryRooms).toHaveBeenNthCalledWith(1);
+    expect(ChatRoom.ensureDefaultDiscoveryRooms).toHaveBeenNthCalledWith(2, { force: true });
+    expect(response.body.rooms).toHaveLength(1);
+  });
+
+  it('returns relational quick-access rooms for the authenticated user', async () => {
+    const onboardingSelect = jest.fn().mockResolvedValue({ _id: 'user-1', onboardingStatus: 'completed' });
+    const locationSelect = jest.fn().mockResolvedValue({
+      _id: 'user-1',
+      city: 'Boston',
+      state: 'MA',
+      country: 'US',
+      county: 'Suffolk County',
+      zipCode: '02115',
+      location: { type: 'Point', coordinates: [-71.0921, 42.3389] }
+    });
+    User.findById
+      .mockReturnValueOnce({ select: onboardingSelect })
+      .mockReturnValueOnce({ select: locationSelect });
+    ChatRoom.findOrCreateByLocation
+      .mockResolvedValueOnce({
+        room: {
+          _id: 'state-ma',
+          name: 'Massachusetts',
+          type: 'state',
+          state: 'MA',
+          country: 'US',
+          members: ['user-1'],
+          messageCount: 3,
+          lastActivity: new Date('2026-03-01T00:00:00.000Z')
+        }
+      })
+      .mockResolvedValueOnce({
+        room: {
+          _id: 'county-suffolk',
+          name: 'Suffolk County, Massachusetts',
+          type: 'county',
+          state: 'MA',
+          country: 'US',
+          county: 'Suffolk County',
+          members: ['user-1'],
+          messageCount: 2,
+          lastActivity: new Date('2026-03-01T00:00:00.000Z')
+        }
+      });
+    ChatConversation.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        _id: 'zip-02115',
+        type: 'zip-room',
+        zipCode: '02115',
+        title: 'Zip 02115',
+        participants: []
+      })
+    });
+    ChatRoom.aggregate.mockResolvedValueOnce([
+      {
+        _id: 'city-1',
+        name: 'Cambridge (ZIP 02139)',
+        type: 'city',
+        city: 'Cambridge',
+        state: 'MA',
+        zipCode: '02139',
+        members: [],
+        messageCount: 7,
+        lastActivity: new Date('2026-03-01T00:00:00.000Z'),
+        distanceMeters: 4023.35
+      }
+    ]);
+
+    const app = buildApp();
+    const response = await request(app)
+      .get('/api/chat/rooms/quick-access')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(ChatRoom.syncUserLocationRooms).toHaveBeenCalledWith(expect.objectContaining({
+      _id: 'user-1',
+      zipCode: '02115',
+      county: 'Suffolk County'
+    }));
+    expect(response.body.rooms.state).toMatchObject({
+      _id: 'state-ma',
+      name: 'Massachusetts',
+      isMember: true
+    });
+    expect(response.body.rooms.county).toMatchObject({
+      _id: 'county-suffolk',
+      name: 'Suffolk County, Massachusetts',
+      isMember: true
+    });
+    expect(response.body.rooms.zip).toMatchObject({
+      _id: 'zip-02115',
+      title: 'Zip 02115'
+    });
+    expect(response.body.rooms.cities).toEqual([
+      expect.objectContaining({
+        _id: 'city-1',
+        name: 'Cambridge (ZIP 02139)',
+        distanceMiles: 2.5
+      })
+    ]);
   });
 });

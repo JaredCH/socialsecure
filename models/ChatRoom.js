@@ -603,6 +603,13 @@ chatRoomSchema.statics.syncUserLocationRooms = async function(user) {
   }
   
   const createdRooms = [];
+  const ensureMembership = async (room) => {
+    if (!room) return;
+    const isMember = Array.isArray(room.members) && room.members.some((memberId) => String(memberId) === String(user._id));
+    if (isMember) return;
+    room.members.push(user._id);
+    await room.save();
+  };
   
   // Create/find zip-level room
   if (zipCode) {
@@ -617,12 +624,23 @@ chatRoomSchema.statics.syncUserLocationRooms = async function(user) {
       radius: 25
     });
     
-    // Add user as member if not already
-    if (!room.members.includes(user._id)) {
-      room.members.push(user._id);
-      await room.save();
-    }
+    await ensureMembership(room);
     
+    if (created) createdRooms.push(room);
+  }
+
+  if (county && state) {
+    const { room, created } = await this.findOrCreateByLocation({
+      type: 'county',
+      county,
+      state,
+      country,
+      coordinates: [longitude, latitude],
+      radius: 75
+    });
+
+    await ensureMembership(room);
+
     if (created) createdRooms.push(room);
   }
   
@@ -636,11 +654,7 @@ chatRoomSchema.statics.syncUserLocationRooms = async function(user) {
       radius: 100
     });
     
-    // Add user as member if not already
-    if (!room.members.includes(user._id)) {
-      room.members.push(user._id);
-      await room.save();
-    }
+    await ensureMembership(room);
     
     if (created) createdRooms.push(room);
   }

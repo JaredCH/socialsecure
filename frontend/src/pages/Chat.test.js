@@ -25,6 +25,7 @@ jest.mock('../utils/api', () => ({
     registerDeviceKeys: jest.fn(),
     syncLocationRooms: jest.fn(),
     getAllRooms: jest.fn(),
+    getQuickAccessRooms: jest.fn(),
     joinRoom: jest.fn(),
     getMessages: jest.fn(),
     getRoomUsers: jest.fn(),
@@ -58,6 +59,8 @@ jest.mock('../utils/e2ee', () => ({
 jest.mock('../utils/realtime', () => ({
   joinRealtimeRoom: jest.fn(),
   leaveRealtimeRoom: jest.fn(),
+  onFriendPresence: jest.fn(() => jest.fn()),
+  onPresenceUpdate: jest.fn(() => jest.fn()),
   onChatMessage: jest.fn((handler) => {
     mockRealtimeChatHandler = handler;
     return () => {
@@ -152,6 +155,16 @@ describe('Chat zip room indicator', () => {
     });
     chatAPI.syncLocationRooms.mockResolvedValue({ data: { success: true } });
     chatAPI.getAllRooms.mockResolvedValue({ data: { rooms: [] } });
+    chatAPI.getQuickAccessRooms.mockResolvedValue({
+      data: {
+        rooms: {
+          state: null,
+          county: null,
+          zip: null,
+          cities: []
+        }
+      }
+    });
     chatAPI.joinRoom.mockResolvedValue({ data: { success: true } });
     chatAPI.deleteRoom.mockResolvedValue({ data: { success: true } });
     chatAPI.getMessages.mockResolvedValue({ data: { messages: [], pagination: { hasMore: false } } });
@@ -429,8 +442,30 @@ describe('Chat zip room indicator', () => {
         ]
       }
     });
+    chatAPI.getQuickAccessRooms.mockResolvedValue({
+      data: {
+        rooms: {
+          state: { _id: 'state-ma', type: 'state', name: 'Massachusetts' },
+          county: { _id: 'county-suffolk', type: 'county', name: 'Suffolk County, Massachusetts' },
+          zip: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' },
+          cities: [
+            { _id: 'city-boston', type: 'city', name: 'Boston (ZIP 02116)', distanceMiles: 2.5 },
+            { _id: 'city-cambridge', type: 'city', name: 'Cambridge (ZIP 02139)', distanceMiles: 4.1 }
+          ]
+        }
+      }
+    });
 
     await renderChat();
+
+    const quickAccessRooms = Array.from(container.querySelectorAll('[data-quick-access-room]'))
+      .map((node) => node.getAttribute('data-quick-access-room'));
+    expect(quickAccessRooms).toEqual(['Zip 02115', 'Massachusetts', 'Suffolk County, Massachusetts']);
+    expect(Array.from(container.querySelectorAll('[data-quick-access-city]'))
+      .map((node) => node.getAttribute('data-quick-access-city'))).toEqual([
+      'Boston (ZIP 02116)',
+      'Cambridge (ZIP 02139)'
+    ]);
 
     expect(container.querySelectorAll('[data-discovery-state-summary]')).toHaveLength(0);
     expect(container.querySelectorAll('[data-discovery-county]')).toHaveLength(0);
