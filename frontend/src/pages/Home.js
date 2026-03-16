@@ -132,7 +132,7 @@ function getDensityAnimation(circle, reducedMotion) {
     };
   }
 
-  const { startX, startY, role, convergeFrac, breakX, breakY } = circle;
+  const { startX, startY, role, convergeFrac, breakX = 0, breakY = 0 } = circle;
   const cx = DENSITY_CENTER.x;
   const cy = DENSITY_CENTER.y;
   const mx = DENSITY_MERGE_POINT.x;
@@ -351,7 +351,7 @@ function Home({ isAuthenticated = false }) {
                     className="absolute inset-0 h-full w-full"
                     preserveAspectRatio="none"
                     role="img"
-                    aria-label="New York City block grid with ten user density glows converging into a red heat cluster"
+                    aria-label="New York City block grid with ten user density points converging into a red heat cluster"
                   >
                     <rect x="1" y="0" width="1" height="1" fill="rgba(40,48,62,0.45)" />
                     <rect x="3" y="2" width="1" height="1" fill="rgba(45,53,67,0.35)" />
