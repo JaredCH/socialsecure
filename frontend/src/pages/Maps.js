@@ -36,6 +36,9 @@ const createFallbackResponse = (data) => ({ data });
 export const withDataFallback = (request, fallbackData) =>
   request.catch(() => createFallbackResponse(fallbackData));
 
+export const resolveMapHeatmapData = (mapData, heatmapData) =>
+  mapData?.heatmap || heatmapData?.heatmap || [];
+
 export const resolveLeafletModule = (leafletModule) => {
   const resolvedModule = leafletModule?.default && typeof leafletModule.default.map === 'function'
     ? leafletModule.default
@@ -305,7 +308,7 @@ function Maps() {
       const [mapRes, heatmapRes] = await Promise.all([
         withDataFallback(
           mapsAPI[mapEndpoint]({ lat, lng, radius: viewMode === 'local' ? 50000 : 200000 }),
-          { spotlights: [] }
+          { spotlights: [], heatmap: [] }
         ),
         layers.heatmap
           ? withDataFallback(
@@ -318,7 +321,7 @@ function Maps() {
       ]);
       
       setSpotlights(mapRes.data.spotlights || []);
-      setHeatmapData(heatmapRes.data.heatmap || []);
+      setHeatmapData(resolveMapHeatmapData(mapRes.data, heatmapRes.data));
       setLastMapRefreshAt(new Date());
       setError(null);
     } catch (err) {
