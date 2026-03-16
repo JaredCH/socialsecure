@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, notificationAPI, resumeAPI, socialPageAPI } from '../utils/api';
-import { onFeedInteraction, onFeedPost, onTyping } from '../utils/realtime';
+import { onFeedInteraction, onFeedPost, onFriendPresence, onTyping } from '../utils/realtime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -73,6 +73,7 @@ jest.mock('../utils/realtime', () => ({
   getRealtimeSocket: jest.fn(() => null),
   onFeedInteraction: jest.fn(() => () => {}),
   onFeedPost: jest.fn(() => () => {}),
+  onFriendPresence: jest.fn(() => () => {}),
   onTyping: jest.fn(() => () => {}),
   subscribeToPost: jest.fn(),
   unsubscribeFromPost: jest.fn()
@@ -202,6 +203,7 @@ describe('Social page hero background rendering', () => {
     chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
     onFeedPost.mockImplementation(() => () => {});
     onFeedInteraction.mockImplementation(() => () => {});
+    onFriendPresence.mockImplementation(() => () => {});
     onTyping.mockImplementation(() => () => {});
 
     container = document.createElement('div');
@@ -518,6 +520,13 @@ describe('Social page hero background rendering', () => {
       galleryTab?.click();
     });
 
+    const advancedButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Advanced'));
+    if (advancedButton) {
+      await act(async () => {
+        advancedButton.click();
+      });
+    }
+
     const toggleLabel = Array.from(container.querySelectorAll('label')).find((label) =>
       label.textContent?.includes('Strip image metadata on upload')
     );
@@ -534,6 +543,7 @@ describe('Social page hero background rendering', () => {
 
   it('loads profile chat thread/messages for guest viewers when read access allows guests', async () => {
     localStorage.clear();
+    require('../utils/api').getAuthToken.mockReturnValue(null);
     window.history.replaceState({}, '', '/social?user=buddy');
     feedAPI.getPublicUserFeed.mockResolvedValue({
       data: {
