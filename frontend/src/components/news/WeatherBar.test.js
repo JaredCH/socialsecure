@@ -99,7 +99,7 @@ describe('WeatherBar', () => {
     expect(container.textContent).toContain('Add a weather or news location in preferences to load forecasts here.');
   });
 
-  it('shows wind gusts in the expanded hourly forecast', async () => {
+  it('shows wind gusts in the compact card hourly forecast without hourly wind speed', async () => {
     newsAPI.getWeather.mockResolvedValue({
       data: {
         locations: [
@@ -137,19 +137,20 @@ describe('WeatherBar', () => {
     });
 
     await act(async () => {
-      root.render(<WeatherBar />);
+      root.render(<WeatherBar variant="card" />);
     });
     await flush();
 
-    const expandButton = container.querySelector('button[aria-label="Expand weather"]');
+    const expandButton = container.querySelector('button[aria-label="Expand weather details"]');
     expect(expandButton).toBeTruthy();
 
     await act(async () => {
       expandButton.click();
     });
 
-    expect(container.textContent).toContain('Gusts 24 mph');
+    expect(container.textContent).toContain('Gust 24 mph');
     expect(container.textContent).toContain('Gust 26 mph');
+    expect(container.textContent).not.toContain('15 mph');
   });
 
   it('keeps card variant compact by default and reveals extended details on expand', async () => {
@@ -237,7 +238,9 @@ describe('WeatherBar', () => {
       expandButton.click();
     });
 
+    const weatherCard = container.querySelector('section');
     const expandedPanel = container.querySelector('[data-testid="weather-card-expanded"]');
+    expect(weatherCard.className).toContain('shrink-0');
     expect(expandedPanel).toBeTruthy();
     expect(expandedPanel.className).not.toContain('max-h-[24rem]');
     expect(expandedPanel.className).not.toContain('overflow-y-auto');
@@ -247,6 +250,8 @@ describe('WeatherBar', () => {
     expect(container.textContent).toContain('Air 14 mph');
     expect(container.textContent).toContain('Gust 24 mph');
     expect(container.textContent).toContain('Gust 26 mph');
+    expect(container.textContent).not.toContain('15 mph');
+    expect(container.textContent).not.toContain('12 mph');
     expect(container.textContent).toContain('Breezy with a light shower chance later in the evening');
     expect(container.textContent).toContain('Sunrise');
     expect(container.textContent).toContain('Sunset');
