@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import Chat from './Chat';
 import { authAPI, chatAPI, friendsAPI, moderationAPI } from '../utils/api';
-import { createWrappedRoomKeyPackage, decryptEnvelope, encryptEnvelope, unlockOrCreateVault } from '../utils/e2ee';
+import { createWrappedRoomKeyPackage, decryptEnvelope, encryptEnvelope, ingestWrappedRoomKeyPackage, unlockOrCreateVault } from '../utils/e2ee';
 import { onChatMessage } from '../utils/realtime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -1271,7 +1271,7 @@ describe('Chat zip room indicator', () => {
       await wait(20);
     });
 
-    expect(decryptEnvelope).toHaveBeenCalledTimes(10);
+    expect(decryptEnvelope).toHaveBeenCalledTimes(12);
 
     const loadEarlierButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Load earlier messages');
     expect(loadEarlierButton).not.toBeUndefined();

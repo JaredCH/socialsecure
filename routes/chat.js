@@ -20,6 +20,7 @@ const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const { createNotification } = require('../services/notifications');
 const { emitChatMessage } = require('../services/realtime');
+const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -850,18 +851,26 @@ router.get('/rooms/events/upcoming', discoveryLimiter, authenticateToken, async 
 // All chat rooms endpoint must be explicitly requested by the user.
 router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) => {
   try {
+    await ChatRoom.ensureDefaultStateRooms();
+
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = parseDiscoveryLimit(req.query.limit);
     const skip = (page - 1) * limit;
+    const allowedRoomFilter = {
+      $or: [
+        { type: 'state' },
+        { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
+      ]
+    };
 
-    const rooms = await ChatRoom.find({})
+    const rooms = await ChatRoom.find(allowedRoomFilter)
       .select('_id name type city state country county discoverable eventRef members messageCount lastActivity')
       .sort({ lastActivity: -1, createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
 
-    const total = await ChatRoom.countDocuments({});
+    const total = await ChatRoom.countDocuments(allowedRoomFilter);
 
     return res.json({
       success: true,
@@ -2146,6 +2155,8 @@ router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'User location not set. Please update your location first.' });
     }
     
+    await ChatRoom.ensureDefaultStateRooms();
+
     // Sync location rooms
     const result = await ChatRoom.syncUserLocationRooms(user);
     
@@ -2206,12 +2217,15 @@ router.get('/rooms/nearby', authenticateToken, async (req, res) => {
     
     // Find nearby rooms using geospatial query
     const nearbyRooms = await ChatRoom.findNearby(lon, lat, maxRadius);
+    const allowedRooms = nearbyRooms.filter((room) => (
+      room.type === 'state' || (room.type === 'city' && room.zipCode)
+    ));
     
     return res.json({
       success: true,
       location: { latitude: lat, longitude: lon },
       radius: maxRadius,
-      rooms: nearbyRooms.map(room => ({
+      rooms: allowedRooms.map(room => ({
         _id: room._id,
         name: room.name,
         type: room.type,

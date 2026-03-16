@@ -616,6 +616,12 @@ function Chat() {
     () => renderedMessages.filter((message) => /\[[^\]]+\]|https?:\/\//i.test(message.content || '')).slice(-6),
     [renderedMessages]
   );
+  const encryptedDmMessages = useMemo(
+    () => (activeConversation?.type === 'dm'
+      ? messages.filter((message) => message?.e2ee?.ciphertext)
+      : []),
+    [activeConversation?.type, messages]
+  );
 
   const applyDefaultConversationSelection = (channelKey, data) => {
     if (channelKey === 'zip') {
@@ -682,6 +688,15 @@ function Chat() {
     applyDefaultConversationSelection(activeChannel, hubData);
   }, [activeChannel, hubData]);
 
+  const loadLatestConversationMessages = useCallback(async (conversationId) => {
+    const { data } = await chatAPI.getConversationMessages(conversationId, 1, INITIAL_MESSAGES_PAGE_SIZE);
+    const latestMessages = Array.isArray(data?.messages) ? data.messages : [];
+    setMessages(latestMessages);
+    setMessagesPage(1);
+    setMessagesHasMore(Boolean(data?.hasMore));
+    return latestMessages;
+  }, []);
+
   useEffect(() => {
     const loadMessages = async () => {
       if (!activeConversationId) {
@@ -695,10 +710,7 @@ function Chat() {
       setMessagesLoading(true);
       setMessagesError('');
       try {
-        const { data } = await chatAPI.getConversationMessages(activeConversationId, 1, INITIAL_MESSAGES_PAGE_SIZE);
-        setMessages(Array.isArray(data.messages) ? data.messages : []);
-        setMessagesPage(1);
-        setMessagesHasMore(Boolean(data?.hasMore));
+        await loadLatestConversationMessages(activeConversationId);
       } catch (error) {
         setMessages([]);
         setMessagesPage(1);
@@ -710,7 +722,7 @@ function Chat() {
     };
 
     loadMessages();
-  }, [activeConversationId]);
+  }, [activeConversationId, loadLatestConversationMessages]);
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!activeConversationId || messagesLoadingOlder || !messagesHasMore) return 0;
@@ -821,13 +833,8 @@ function Chat() {
   useEffect(() => {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
     if (!dmUnlockedByConversation[String(activeConversationId)]) return;
-    const visibleIdSet = new Set(visibleMessageIds);
-    const hasVisibleSelection = visibleIdSet.size > 0;
-    const encryptedMessages = messages.filter((message) => (
-      message?.e2ee?.ciphertext && (hasVisibleSelection ? visibleIdSet.has(String(message._id)) : true)
-    ));
-    if (encryptedMessages.length === 0) return;
-    const pendingMessages = [...encryptedMessages]
+    if (encryptedDmMessages.length === 0) return;
+    const pendingMessages = [...encryptedDmMessages]
       .reverse()
       .filter((message) => (
         !Object.prototype.hasOwnProperty.call(decryptedDmContentById, String(message._id))
@@ -876,9 +883,8 @@ function Chat() {
     activeConversationId,
     decryptedDmContentById,
     dmUnlockedByConversation,
-    ensureE2EESession,
-    messages,
-    visibleMessageIds
+    encryptedDmMessages,
+    ensureE2EESession
   ]);
 
   const handlePasswordUnlock = useCallback(async () => {
@@ -1066,6 +1072,9 @@ function Chat() {
     try {
       const session = await ensureE2EESession();
       await hydrateConversationKeys({ conversationId: activeConversationId, session });
+      setDecryptedDmContentById({});
+      decryptingMessageIdsRef.current = new Set();
+      await loadLatestConversationMessages(activeConversationId);
       setDmUnlockedByConversation((prev) => ({
         ...prev,
         [String(activeConversationId)]: true
@@ -1080,6 +1089,7 @@ function Chat() {
     activeConversationId,
     ensureE2EESession,
     hydrateConversationKeys,
+    loadLatestConversationMessages,
     persistDmUnlockCache,
     unlockDurationMinutes
   ]);

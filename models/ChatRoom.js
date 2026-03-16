@@ -1,5 +1,15 @@
 const mongoose = require('mongoose');
 
+const US_STATE_CODES = Object.freeze([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+]);
+const DEFAULT_STATE_ROOM_ENSURE_INTERVAL_MS = 5 * 60 * 1000;
+let lastDefaultStateRoomEnsureAt = 0;
+
 const chatRoomSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -112,6 +122,42 @@ chatRoomSchema.index({ eventRef: 1, type: 1 });
 chatRoomSchema.index({ autoLifecycle: 1, 'visibilityWindow.endAt': 1 });
 chatRoomSchema.index({ stableKey: 1 }, { unique: true, sparse: true });
 
+chatRoomSchema.statics.ensureDefaultStateRooms = async function(options = {}) {
+  const { force = false } = options;
+  const nowTs = Date.now();
+  if (!force && (nowTs - lastDefaultStateRoomEnsureAt) < DEFAULT_STATE_ROOM_ENSURE_INTERVAL_MS) {
+    return;
+  }
+
+  const now = new Date(nowTs);
+  const operations = US_STATE_CODES.map((stateCode) => ({
+    updateOne: {
+      filter: { type: 'state', state: stateCode },
+      update: {
+        $setOnInsert: {
+          name: stateCode,
+          type: 'state',
+          state: stateCode,
+          country: 'US',
+          location: { type: 'Point', coordinates: [0, 0] },
+          radius: 100,
+          members: [],
+          messageCount: 0,
+          discoverable: true,
+          autoLifecycle: false,
+          lastActivity: now
+        }
+      },
+      upsert: true
+    }
+  }));
+
+  if (operations.length > 0) {
+    await this.bulkWrite(operations, { ordered: false });
+  }
+  lastDefaultStateRoomEnsureAt = nowTs;
+};
+
 // Static method to find rooms near a location
 chatRoomSchema.statics.findNearby = function(longitude, latitude, maxDistanceMiles = 50) {
   // Convert miles to radians (approx 1 mile = 1/3959 radians)
@@ -209,14 +255,14 @@ chatRoomSchema.statics.syncUserLocationRooms = async function(user) {
   const [longitude, latitude] = user.location.coordinates;
   const { city, state, country, county, zipCode } = user;
   
-  if (!zipCode && !city && !state && !country) {
+  if (!zipCode && !state) {
     return { rooms: [], created: 0 };
   }
   
   const createdRooms = [];
   
-  // Create/find city-level room
-  if (zipCode || city) {
+  // Create/find zip-level room
+  if (zipCode) {
     const { room, created } = await this.findOrCreateByLocation({
       type: 'city',
       city,
