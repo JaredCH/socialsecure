@@ -1324,7 +1324,8 @@ function Chat() {
   }, [openConversationById, refreshHub]);
 
   const handleDeleteConversation = useCallback(async (conversationId) => {
-    if (!conversationId || !window.confirm('Are you sure you want to delete this conversation? This will permanently remove it for both you and the other participant.')) return;
+    if (!conversationId) return;
+    if (!window.confirm('Are you sure you want to delete this conversation? This will permanently remove it for both you and the other participant.')) return;
     try {
       await chatAPI.deleteConversation(conversationId);
       if (String(activeConversationId) === String(conversationId)) {
@@ -2028,7 +2029,7 @@ function Chat() {
                                 className="min-w-0 flex-1 px-2.5 py-2 text-left"
                               >
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="font-medium truncate">{getConversationLabel(conversation)}</span>
+                                  <span className="truncate font-medium">{getConversationLabel(conversation)}</span>
                                   <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
                                     {conversation.__hasUnread ? <span className="h-2 w-2 rounded-full bg-sky-500" /> : null}
                                     <span className={`h-2 w-2 rounded-full ${status.tone}`} />
