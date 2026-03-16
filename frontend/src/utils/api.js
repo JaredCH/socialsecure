@@ -184,8 +184,10 @@ export const authAPI = {
   setEncryptionPassword: (data) => api.post('/auth/encryption-password/set', data),
   changeEncryptionPassword: (data) => api.post('/auth/encryption-password/change', data),
   changePassword: (data) => api.post('/auth/password/change', data),
-  // 12-hour unlock session
-  verifyEncryptionPassword: (password) => api.post('/auth/encryption-password/verify', { encryptionPassword: password }),
+  verifyEncryptionPassword: (password, unlockDurationMinutes = 30) => api.post('/auth/encryption-password/verify', {
+    encryptionPassword: password,
+    unlockDurationMinutes
+  }),
   getEncryptionUnlockStatus: () => api.get('/auth/encryption-password/status/unlock'),
   lockEncryption: () => api.post('/auth/encryption-password/lock'),
   getDeviceKeys: () => api.get('/chat/devices'),

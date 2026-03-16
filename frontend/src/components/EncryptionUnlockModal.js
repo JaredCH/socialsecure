@@ -3,13 +3,24 @@ import { authAPI } from '../utils/api';
 import toast from 'react-hot-toast';
 
 function EncryptionUnlockModal({ isOpen, onUnlock, onClose, showCloseButton = true }) {
+  const durationOptions = [
+    { value: 2, label: '2 minutes' },
+    { value: 10, label: '10 minutes' },
+    { value: 30, label: '30 minutes' },
+    { value: 60, label: '60 minutes' },
+    { value: 720, label: '12 hours' },
+    { value: 1440, label: '24 hours' },
+    { value: 10080, label: '7 days' }
+  ];
   const [password, setPassword] = useState('');
+  const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(30);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setPassword('');
+      setUnlockDurationMinutes(30);
       setError('');
     }
   }, [isOpen]);
@@ -25,8 +36,8 @@ function EncryptionUnlockModal({ isOpen, onUnlock, onClose, showCloseButton = tr
     setError('');
 
     try {
-      await authAPI.verifyEncryptionPassword(password);
-      toast.success('Encryption unlocked for 12 hours');
+      await authAPI.verifyEncryptionPassword(password, unlockDurationMinutes);
+      toast.success('Encryption unlocked');
       // Pass the password back to the parent so it can unlock local vault
       onUnlock(password);
       setPassword('');
@@ -85,6 +96,19 @@ function EncryptionUnlockModal({ isOpen, onUnlock, onClose, showCloseButton = tr
             {error && (
               <p className="text-sm text-red-600 mt-2">{error}</p>
             )}
+            <label className="mt-3 mb-1 block text-xs font-semibold text-left" htmlFor="unlock-duration-select">
+              Unlock duration
+            </label>
+            <select
+              id="unlock-duration-select"
+              value={String(unlockDurationMinutes)}
+              onChange={(e) => setUnlockDurationMinutes(Number(e.target.value) || 30)}
+              className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {durationOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </div>
 
           <div className="flex gap-3">
@@ -108,7 +132,7 @@ function EncryptionUnlockModal({ isOpen, onUnlock, onClose, showCloseButton = tr
         </form>
 
         <p className="text-xs text-gray-500 text-center mt-4">
-          Unlocking persists for 12 hours. You can manually lock from the chat header.
+          Unlock duration is configurable per session. You can manually lock from the chat header.
         </p>
       </div>
     </div>

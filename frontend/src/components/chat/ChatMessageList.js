@@ -11,6 +11,9 @@ function ChatMessageList({
   profile,
   theme,
   onOpenUserMenu,
+  reactionsByMessageId,
+  reactionOptions,
+  onToggleReaction,
   longPressDelayMs
 }) {
   const scrollRef = useRef(null);
@@ -57,8 +60,12 @@ function ChatMessageList({
               key={String(message._id)}
               message={message}
               isOwnMessage={String(message.userId?._id) === String(profile?._id)}
+              currentUserId={profile?._id}
               theme={theme}
               onOpenUserMenu={onOpenUserMenu}
+              reactionsByType={reactionsByMessageId?.[String(message._id)] || {}}
+              reactionOptions={reactionOptions}
+              onToggleReaction={onToggleReaction}
               longPressDelayMs={longPressDelayMs}
             />
           ))

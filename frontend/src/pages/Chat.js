@@ -13,9 +13,28 @@ import {
 } from '../utils/e2ee';
 
 const CHANNELS = [
-  { key: 'zip', label: 'Zip Rooms' },
-  { key: 'dm', label: 'Direct Messages' },
-  { key: 'profile', label: 'Profile Threads' }
+  { key: 'zip', label: 'Rooms' },
+  { key: 'dm', label: 'Direct Messages' }
+];
+
+const UNLOCK_DURATION_OPTIONS = [
+  { value: 2, label: '2 minutes' },
+  { value: 10, label: '10 minutes' },
+  { value: 30, label: '30 minutes' },
+  { value: 60, label: '60 minutes' },
+  { value: 720, label: '12 hours' },
+  { value: 1440, label: '24 hours' },
+  { value: 10080, label: '7 days' }
+];
+
+const MESSAGE_REACTIONS = [
+  { key: 'like', label: 'Like', emoji: '👍' },
+  { key: 'hate', label: 'Hate', emoji: '💢' },
+  { key: 'thumbs_up', label: 'Thumbs up', emoji: '👍🏻' },
+  { key: 'thumbs_down', label: 'Thumbs down', emoji: '👎' },
+  { key: 'love', label: 'Love', emoji: '❤️' },
+  { key: 'shocked', label: 'Shocked', emoji: '😲' },
+  { key: 'excited', label: 'Excited', emoji: '🤩' }
 ];
 
 const CHAT_THEMES = [
@@ -136,9 +155,8 @@ const LONG_PRESS_DELAY_MS = 550;
 const USER_MENU_WIDTH_PX = 240;
 const USER_MENU_HEIGHT_PX = 220;
 const DM_UNLOCK_COOKIE_NAME = 'socialsecure_dm_unlock_v1';
-const DM_UNLOCK_CACHE_SECONDS = 30 * 60;
+const DEFAULT_UNLOCK_DURATION_MINUTES = 30;
 const LOCKED_DM_PLACEHOLDER = '🔒 Conversation locked. Unlock to view encrypted messages.';
-const DM_OFFLINE_SELECTION_ERROR = 'dm_offline_mode_selected';
 
 const readCookie = (name) => {
   const source = typeof document?.cookie === 'string' ? document.cookie : '';
@@ -177,7 +195,7 @@ const readDmUnlockCache = () => {
   }
 };
 
-const writeDmUnlockCache = (conversationIds) => {
+const writeDmUnlockCache = (conversationIds, unlockDurationMinutes = DEFAULT_UNLOCK_DURATION_MINUTES) => {
   const uniqueIds = Array.from(new Set(
     (Array.isArray(conversationIds) ? conversationIds : [])
       .map((id) => String(id || '').trim())
@@ -187,11 +205,16 @@ const writeDmUnlockCache = (conversationIds) => {
     clearCookie(DM_UNLOCK_COOKIE_NAME);
     return;
   }
-  const expiresAt = Date.now() + (DM_UNLOCK_CACHE_SECONDS * 1000);
+  const parsedDuration = Number(unlockDurationMinutes);
+  const effectiveMinutes = UNLOCK_DURATION_OPTIONS.some((option) => option.value === parsedDuration)
+    ? parsedDuration
+    : DEFAULT_UNLOCK_DURATION_MINUTES;
+  const maxAgeSeconds = effectiveMinutes * 60;
+  const expiresAt = Date.now() + (maxAgeSeconds * 1000);
   writeCookie(
     DM_UNLOCK_COOKIE_NAME,
     JSON.stringify({ expiresAt, conversationIds: uniqueIds }),
-    DM_UNLOCK_CACHE_SECONDS
+    maxAgeSeconds
   );
 };
 
@@ -241,27 +264,14 @@ function Chat() {
   const [roomUsersLoading, setRoomUsersLoading] = useState(false);
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
-  const [dmOfflineState, setDmOfflineState] = useState('online');
   const [dmUnlockedByConversation, setDmUnlockedByConversation] = useState({});
-  const [rememberDmUnlock, setRememberDmUnlock] = useState(() => {
-    try {
-      return localStorage.getItem('chatRememberDmUnlock') !== 'false';
-    } catch {
-      return true;
-    }
-  });
-  const [strictDmLockMode, setStrictDmLockMode] = useState(() => {
-    try {
-      return localStorage.getItem('chatStrictDmLockMode') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(DEFAULT_UNLOCK_DURATION_MINUTES);
   const [dmFriends, setDmFriends] = useState([]);
   const [dmFriendsLoading, setDmFriendsLoading] = useState(false);
-  const [isOnline, setIsOnline] = useState(() => navigator.onLine !== false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+  const [conversationPanelTab, setConversationPanelTab] = useState('list');
+  const [reactionByMessageId, setReactionByMessageId] = useState({});
   const [userContextMenu, setUserContextMenu] = useState({
     open: false,
     x: 0,
@@ -305,8 +315,7 @@ function Chat() {
     if (activeChannel === 'dm') {
       return Array.isArray(hubData.dm) ? hubData.dm : [];
     }
-
-    return Array.isArray(hubData.profile) ? hubData.profile : [];
+    return [];
   }, [activeChannel, hubData]);
 
   const activeConversation = useMemo(
@@ -315,23 +324,8 @@ function Chat() {
   );
 
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      setDmOfflineState('online');
-      setDecryptedDmContentById({});
-    };
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  useEffect(() => {
     setDecryptedDmContentById({});
-    setDmOfflineState('online');
+    setReactionByMessageId({});
   }, [activeConversationId, activeConversation?.type]);
 
   useEffect(() => {
@@ -355,25 +349,6 @@ function Chat() {
   }, [profile?._id]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('chatRememberDmUnlock', rememberDmUnlock ? 'true' : 'false');
-    } catch {
-      // ignore localStorage errors
-    }
-    if (!rememberDmUnlock) {
-      clearCookie(DM_UNLOCK_COOKIE_NAME);
-    }
-  }, [rememberDmUnlock]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('chatStrictDmLockMode', strictDmLockMode ? 'true' : 'false');
-    } catch {
-      // ignore localStorage errors
-    }
-  }, [strictDmLockMode]);
-
-  useEffect(() => {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
     const conversationId = String(activeConversationId);
     const cache = readDmUnlockCache();
@@ -383,14 +358,6 @@ function Chat() {
       [conversationId]: true
     }));
   }, [activeConversation?.type, activeConversationId]);
-
-  useEffect(() => {
-    if (!strictDmLockMode) return;
-    clearCookie(DM_UNLOCK_COOKIE_NAME);
-    setDmUnlockedByConversation({});
-    setDecryptedDmContentById({});
-    e2eeSessionRef.current = null;
-  }, [strictDmLockMode]);
 
   const allRooms = useMemo(() => {
     const withSearchLabel = (room, channel) => {
@@ -407,8 +374,7 @@ function Chat() {
       ...((hubData?.zip?.nearby || []).map((room) => withSearchLabel(room, 'zip')))
     ];
     const dmRooms = (hubData?.dm || []).map((room) => withSearchLabel(room, 'dm'));
-    const profileRooms = (hubData?.profile || []).map((room) => withSearchLabel(room, 'profile'));
-    return [...zipRooms, ...dmRooms, ...profileRooms];
+    return [...zipRooms, ...dmRooms];
   }, [hubData]);
 
   const activeTheme = useMemo(
@@ -425,13 +391,6 @@ function Chat() {
     if (activeConversation?.type !== 'dm') return messages;
     if (!dmUnlockedByConversation[String(activeConversationId || '')]) {
       return messages.map((message) => {
-        const decrypted = decryptedDmContentById[String(message._id)];
-        if (dmOfflineState === 'decrypted_offline' && decrypted) {
-          return {
-            ...message,
-            content: decrypted
-          };
-        }
         return {
           ...message,
           content: LOCKED_DM_PLACEHOLDER
@@ -446,7 +405,7 @@ function Chat() {
         content: decrypted
       };
     });
-  }, [activeConversation?.type, activeConversationId, decryptedDmContentById, dmOfflineState, dmUnlockedByConversation, messages]);
+  }, [activeConversation?.type, activeConversationId, decryptedDmContentById, dmUnlockedByConversation, messages]);
 
   const sharedMediaSnippets = useMemo(
     () => renderedMessages.filter((message) => /\[[^\]]+\]|https?:\/\//i.test(message.content || '')).slice(-6),
@@ -466,8 +425,7 @@ function Chat() {
       return;
     }
 
-    const next = (data?.profile || [])[0] || null;
-    setActiveConversationId(next ? String(next._id) : '');
+    setActiveConversationId('');
   };
 
   const refreshHub = async (channelToKeep = activeChannel) => {
@@ -492,7 +450,7 @@ function Chat() {
         return (nextData?.dm || []).some((conversation) => String(conversation._id) === String(activeConversationId));
       }
 
-      return (nextData?.profile || []).some((conversation) => String(conversation._id) === String(activeConversationId));
+      return false;
     })();
 
     if (!stillExists) {
@@ -631,7 +589,7 @@ function Chat() {
           }));
         }
       } catch {
-        // user can choose offline mode from unlock prompt and decrypt later
+        // decryption waits until credentials/session are available
       }
     };
 
@@ -648,17 +606,22 @@ function Chat() {
     messages
   ]);
 
-  const handlePasswordUnlock = useCallback(() => {
+  const handlePasswordUnlock = useCallback(async () => {
     const resolver = passwordResolverRef.current;
     if (!resolver) return;
     if (!passwordInput) {
       toast.error('Encryption password is required');
       return;
     }
-    passwordResolverRef.current = null;
-    setPasswordModalOpen(false);
-    resolver.resolve(passwordInput);
-  }, [passwordInput]);
+    try {
+      await authAPI.verifyEncryptionPassword(passwordInput, unlockDurationMinutes);
+      passwordResolverRef.current = null;
+      setPasswordModalOpen(false);
+      resolver.resolve(passwordInput);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Incorrect encryption password');
+    }
+  }, [passwordInput, unlockDurationMinutes]);
 
   const handlePasswordCancel = useCallback(() => {
     const resolver = passwordResolverRef.current;
@@ -668,15 +631,7 @@ function Chat() {
     resolver.reject(new Error('Encryption password is required'));
   }, []);
 
-  const handleUseOfflineMode = useCallback(() => {
-    const resolver = passwordResolverRef.current;
-    if (!resolver) return;
-    passwordResolverRef.current = null;
-    setPasswordModalOpen(false);
-    resolver.reject(new Error(DM_OFFLINE_SELECTION_ERROR));
-  }, []);
-
-  const persistDmUnlockCache = useCallback((conversationId, shouldCache) => {
+  const persistDmUnlockCache = useCallback((conversationId, shouldCache, durationMinutes = DEFAULT_UNLOCK_DURATION_MINUTES) => {
     const normalizedId = String(conversationId || '').trim();
     if (!normalizedId) return;
     const existing = readDmUnlockCache();
@@ -686,7 +641,7 @@ function Chat() {
     } else {
       nextSet.delete(normalizedId);
     }
-    writeDmUnlockCache([...nextSet]);
+    writeDmUnlockCache([...nextSet], durationMinutes);
   }, []);
 
   const hydrateConversationKeys = useCallback(async ({ conversationId, session }) => {
@@ -699,24 +654,6 @@ function Chat() {
       await session.persist();
     }
   }, []);
-
-  const prepareOfflineDmData = useCallback(async () => {
-    if (!activeConversationId || activeConversation?.type !== 'dm') {
-      return;
-    }
-    setDmOfflineState('downloading_encrypted');
-    try {
-      await chatAPI.getConversationMessages(activeConversationId, 1, 100);
-      if (isOnline && e2eeSessionRef.current) {
-        await hydrateConversationKeys({ conversationId: activeConversationId, session: e2eeSessionRef.current });
-      }
-      setDmOfflineState('ready_offline');
-      toast.success('Encrypted DM data is cached. Disconnect from the internet before decrypting.');
-    } catch (error) {
-      setDmOfflineState('online');
-      toast.error(error.response?.data?.error || error.message || 'Failed to prepare offline DM data');
-    }
-  }, [activeConversation?.type, activeConversationId, hydrateConversationKeys, isOnline]);
 
   const handleSend = async (event) => {
     event.preventDefault();
@@ -825,15 +762,9 @@ function Chat() {
         ...prev,
         [String(activeConversationId)]: true
       }));
-      if (rememberDmUnlock && !strictDmLockMode) {
-        persistDmUnlockCache(activeConversationId, true);
-      }
+      persistDmUnlockCache(activeConversationId, true, unlockDurationMinutes);
       toast.success('Direct message unlocked.');
     } catch (error) {
-      if (error?.message === DM_OFFLINE_SELECTION_ERROR) {
-        await prepareOfflineDmData();
-        return;
-      }
       toast.error(error.response?.data?.error || error.message || 'Failed to unlock direct message');
     }
   }, [
@@ -841,10 +772,8 @@ function Chat() {
     activeConversationId,
     ensureE2EESession,
     hydrateConversationKeys,
-    prepareOfflineDmData,
     persistDmUnlockCache,
-    rememberDmUnlock,
-    strictDmLockMode
+    unlockDurationMinutes
   ]);
 
   const handleLockActiveDM = useCallback(() => {
@@ -854,7 +783,6 @@ function Chat() {
       [String(activeConversationId)]: false
     }));
     setDecryptedDmContentById({});
-    setDmOfflineState('online');
     persistDmUnlockCache(activeConversationId, false);
     e2eeSessionRef.current = null;
     toast.success('Direct message locked.');
@@ -868,78 +796,11 @@ function Chat() {
     toast.success('Saved DM unlock access reset.');
   }, []);
 
-  const handleGoOffline = useCallback(async () => {
-    await prepareOfflineDmData();
-  }, [prepareOfflineDmData]);
-
-  const handleDecryptOfflineMessages = useCallback(async () => {
-    if (activeConversation?.type !== 'dm') return;
-    if (dmOfflineState !== 'ready_offline') return;
-    if (isOnline) {
-      toast('Disconnect from the internet before decrypting offline messages.');
-      return;
-    }
-    try {
-      const session = await ensureE2EESession();
-      const decryptedEntries = {};
-      for (const message of messages) {
-        if (!message?.e2ee?.ciphertext) continue;
-        try {
-          decryptedEntries[String(message._id)] = await decryptEnvelope({
-            session,
-            roomId: activeConversationId,
-            envelope: message.e2ee
-          });
-        } catch {
-          // keep encrypted placeholder when key is unavailable
-        }
-      }
-      setDecryptedDmContentById(decryptedEntries);
-      setDmOfflineState('decrypted_offline');
-      toast.success('Offline DM decrypt complete.');
-    } catch (error) {
-      toast.error(error.message || 'Failed to decrypt offline messages');
-    }
-  }, [activeConversation?.type, activeConversationId, dmOfflineState, ensureE2EESession, isOnline, messages]);
-
-  const handleReturnOnline = useCallback(() => {
-    setDmOfflineState('online');
-    setDecryptedDmContentById({});
-    e2eeSessionRef.current = null;
-    if (!isOnline) {
-      toast('Reconnect to network to resume live DM sync.');
-    } else {
-      toast.success('Returned online and wiped decrypted offline DM state.');
-    }
-  }, [isOnline]);
-
-  const handleOpenProfileThread = useCallback(async (targetUserId) => {
-    try {
-      const { data } = await chatAPI.getProfileThread(targetUserId);
-      const conversationId = data?.conversation?._id ? String(data.conversation._id) : '';
-      await refreshHub('profile');
-      setActiveChannel('profile');
-      if (conversationId) {
-        setActiveConversationId(conversationId);
-      }
-      setMobileWorkspaceOpen(true);
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to open profile thread');
-    }
-  }, [refreshHub]);
-
   useEffect(() => {
     if (!profile?._id) return;
 
     const params = new URLSearchParams(window.location.search);
-    const profileThreadTarget = params.get('profile');
     const directMessageTarget = params.get('dm');
-    if (profileThreadTarget && String(profileThreadTarget) !== String(profile._id)) {
-      handleOpenProfileThread(profileThreadTarget).finally(() => {
-        window.history.replaceState({}, '', '/chat');
-      });
-      return;
-    }
 
     if (!directMessageTarget || String(directMessageTarget) === String(profile._id)) {
       return;
@@ -948,7 +809,7 @@ function Chat() {
     handleStartDM(directMessageTarget).finally(() => {
       window.history.replaceState({}, '', '/chat');
     });
-  }, [profile?._id, handleOpenProfileThread, handleStartDM]);
+  }, [profile?._id, handleStartDM]);
 
   const openUserContextMenu = (event, user, point) => {
     if (event?.preventDefault) event.preventDefault();
@@ -1001,9 +862,33 @@ function Chat() {
     }
   };
 
+  const handleToggleMessageReaction = useCallback((messageId, reactionKey) => {
+    const normalizedMessageId = String(messageId || '').trim();
+    const normalizedReactionKey = String(reactionKey || '').trim();
+    if (!normalizedMessageId || !normalizedReactionKey) return;
+    const actorId = String(profile?._id || '');
+    if (!actorId) return;
+    setReactionByMessageId((prev) => {
+      const currentByReaction = prev[normalizedMessageId] || {};
+      const existingActors = new Set(currentByReaction[normalizedReactionKey] || []);
+      if (existingActors.has(actorId)) {
+        existingActors.delete(actorId);
+      } else {
+        existingActors.add(actorId);
+      }
+      return {
+        ...prev,
+        [normalizedMessageId]: {
+          ...currentByReaction,
+          [normalizedReactionKey]: [...existingActors]
+        }
+      };
+    });
+  }, [profile?._id]);
+
   useEffect(() => {
     const query = dmQuery.trim();
-    if (query.length < 2) {
+    if (!query) {
       setDmSuggestions([]);
       setDmSearchLoading(false);
       return;
@@ -1026,7 +911,7 @@ function Chat() {
         .finally(() => {
           if (!cancelled) setDmSearchLoading(false);
         });
-    }, 300);
+    }, 180);
 
     return () => {
       clearTimeout(handle);
@@ -1077,7 +962,7 @@ function Chat() {
 
   const roomSuggestions = useMemo(() => {
     const query = roomQuery.trim().toLowerCase();
-    if (query.length < 2) return [];
+    if (!query) return [];
     return allRooms
       .filter((room) => room.__labelLower.includes(query))
       .slice(0, 8);
@@ -1094,7 +979,6 @@ function Chat() {
   const activeConversationUser = useMemo(() => {
     if (!activeConversation) return null;
     if (activeConversation.type === 'dm') return activeConversation.peer || null;
-    if (activeConversation.type === 'profile-thread') return activeConversation.profileUser || null;
     return null;
   }, [activeConversation]);
 
@@ -1127,141 +1011,161 @@ function Chat() {
             activeTheme.panel
           ].join(' ')}
         >
-          <div className="sticky top-0 z-10 space-y-3 pb-3">
+          <div className="sticky top-0 z-10 space-y-2 pb-2">
             <h3 className="font-semibold">Conversations</h3>
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid grid-cols-2 gap-1.5 rounded border p-1 ${activeTheme.panelGlass}`}>
               {CHANNELS.map((channel) => (
                 <button
                   key={channel.key}
                   type="button"
                   onClick={() => setActiveChannel(channel.key)}
-                  className={`rounded border px-2 py-2 text-xs md:text-sm transition ${activeChannel === channel.key ? activeTheme.subtle : 'opacity-80 hover:opacity-100'}`}
+                  className={[
+                    'rounded px-2 py-1.5 text-xs font-semibold transition',
+                    activeChannel === channel.key ? activeTheme.subtle : 'opacity-80 hover:opacity-100'
+                  ].join(' ')}
                 >
                   {channel.label}
                 </button>
               ))}
             </div>
+            <div className={`grid grid-cols-2 gap-1 rounded border p-1 ${activeTheme.panelGlass}`}>
+              <button
+                type="button"
+                onClick={() => setConversationPanelTab('list')}
+                className={`rounded px-2 py-1 text-[11px] font-semibold ${conversationPanelTab === 'list' ? activeTheme.subtle : 'opacity-75 hover:opacity-100'}`}
+              >
+                List
+              </button>
+              <button
+                type="button"
+                onClick={() => setConversationPanelTab('search')}
+                className={`rounded px-2 py-1 text-[11px] font-semibold ${conversationPanelTab === 'search' ? activeTheme.subtle : 'opacity-75 hover:opacity-100'}`}
+              >
+                Search
+              </button>
+            </div>
           </div>
 
           <div className="mt-2 space-y-3 overflow-y-auto pr-1">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold block">Find Rooms</label>
-              <input
-                value={roomQuery}
-                onChange={(event) => setRoomQuery(event.target.value)}
-                className={`w-full border rounded p-2 text-sm ${activeTheme.input}`}
-                placeholder="Search room names..."
-              />
-              {roomSuggestions.length > 0 ? (
-                <ul className={`max-h-36 overflow-auto border rounded divide-y text-xs ${activeTheme.panelGlass}`}>
-                  {roomSuggestions.map((room) => (
-                    <li key={String(room._id)}>
-                      <button
-                        type="button"
-                        onClick={() => selectRoomSuggestion(room)}
-                        className="w-full text-left p-2 hover:opacity-80"
-                      >
-                        {room.__label || getConversationLabel(room)}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-
-            <div className="space-y-2 border-t pt-3">
-              <label className="text-xs font-semibold block">Find Users (DM)</label>
-              <input
-                value={dmQuery}
-                onChange={(event) => setDmQuery(event.target.value)}
-                className={`w-full border rounded p-2 text-sm ${activeTheme.input}`}
-                placeholder="Search username or name..."
-              />
-              {dmSearchLoading ? (
-                <p className="text-xs opacity-80">Searching users...</p>
-              ) : null}
-              {dmSuggestions.length > 0 ? (
-                <ul className={`max-h-40 overflow-auto border rounded divide-y text-xs ${activeTheme.panelGlass}`}>
-                  {dmSuggestions.map((user) => (
-                    <li key={String(user._id)} className="p-2 flex justify-between items-center gap-2">
-                      <span>@{user.username || user.realName || 'user'}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleStartDM(user._id)}
-                        className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
-                      >
-                        Start DM
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-
-            <div className="space-y-2 border-t pt-3">
-              {activeChannel === 'dm' ? (
-                <>
-                  <p className="text-xs font-semibold">Friends ({dmFriends.length})</p>
-                  {dmFriendsLoading ? (
-                    <p className="text-xs opacity-80">Loading friends...</p>
-                  ) : dmFriends.length === 0 ? (
-                    <p className="text-xs opacity-80">No friends found yet.</p>
-                  ) : (
-                    <ul className={`max-h-40 overflow-auto border rounded divide-y text-xs ${activeTheme.panelGlass}`}>
-                      {dmFriends.map((friend) => (
-                        <li key={String(friend._id)} className="p-2 flex justify-between items-center gap-2">
-                          <span>@{friend.username || friend.realName || 'friend'}</span>
+            {conversationPanelTab === 'search' ? (
+              <>
+                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                  <label className="text-xs font-semibold block">Search rooms</label>
+                  <input
+                    value={roomQuery}
+                    onChange={(event) => setRoomQuery(event.target.value)}
+                    className={`mt-1 w-full rounded border p-2 text-sm ${activeTheme.input}`}
+                    placeholder="Type to filter rooms..."
+                  />
+                  {!roomQuery.trim() ? <p className="mt-2 text-xs opacity-75">Start typing to see room results.</p> : null}
+                  {roomQuery.trim() && roomSuggestions.length === 0 ? <p className="mt-2 text-xs opacity-75">No rooms match your search.</p> : null}
+                  {roomSuggestions.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-xs">
+                      {roomSuggestions.map((room) => (
+                        <li key={String(room._id)}>
                           <button
                             type="button"
-                            onClick={() => handleStartDM(friend._id)}
-                            className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
+                            onClick={() => selectRoomSuggestion(room)}
+                            className={`w-full rounded border px-2 py-1.5 text-left transition ${activeTheme.subtle}`}
                           >
-                            Message
+                            {room.__label || getConversationLabel(room)}
                           </button>
                         </li>
                       ))}
                     </ul>
+                  ) : null}
+                </section>
+                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                  <label className="text-xs font-semibold block">Search users for DM</label>
+                  <input
+                    value={dmQuery}
+                    onChange={(event) => setDmQuery(event.target.value)}
+                    className={`mt-1 w-full rounded border p-2 text-sm ${activeTheme.input}`}
+                    placeholder="Type username or name..."
+                  />
+                  {dmSearchLoading ? <p className="mt-2 text-xs opacity-75">Searching users...</p> : null}
+                  {!dmQuery.trim() ? <p className="mt-2 text-xs opacity-75">Start typing to see people.</p> : null}
+                  {dmQuery.trim() && !dmSearchLoading && dmSuggestions.length === 0 ? <p className="mt-2 text-xs opacity-75">No users found.</p> : null}
+                  {dmSuggestions.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-xs">
+                      {dmSuggestions.map((user) => (
+                        <li key={String(user._id)} className="flex items-center justify-between gap-2 rounded border p-1.5">
+                          <span>@{user.username || user.realName || 'user'}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleStartDM(user._id)}
+                            className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
+                          >
+                            Start DM
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </section>
+              </>
+            ) : (
+              <>
+                {activeChannel === 'dm' ? (
+                  <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                    <p className="text-xs font-semibold">Friends ({dmFriends.length})</p>
+                    {dmFriendsLoading ? (
+                      <p className="mt-1 text-xs opacity-80">Loading friends...</p>
+                    ) : dmFriends.length === 0 ? (
+                      <p className="mt-1 text-xs opacity-80">No friends found yet.</p>
+                    ) : (
+                      <ul className="mt-2 space-y-1 text-xs">
+                        {dmFriends.map((friend) => (
+                          <li key={String(friend._id)} className="flex items-center justify-between gap-2 rounded border p-1.5">
+                            <span>@{friend.username || friend.realName || 'friend'}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleStartDM(friend._id)}
+                              className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
+                            >
+                              Message
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                ) : null}
+                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                  <p className="text-xs font-semibold">{activeChannel === 'dm' ? 'Direct message threads' : 'Room list'}</p>
+                  {conversationList.length === 0 ? (
+                    <p className="mt-2 text-xs opacity-80">No conversations available here yet.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1">
+                      {conversationList.map((conversation) => {
+                        const selected = String(conversation._id) === String(activeConversationId);
+                        const status = getPresenceState(conversation.lastMessageAt);
+                        return (
+                          <li key={String(conversation._id)}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveConversationId(String(conversation._id));
+                                setMobileWorkspaceOpen(true);
+                              }}
+                              className={`w-full rounded border px-2.5 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium">{getConversationLabel(conversation)}</span>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
+                                  <span className={`h-2 w-2 rounded-full ${status.tone}`} />
+                                  {status.label}
+                                </span>
+                              </div>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
-                </>
-              ) : null}
-            </div>
-
-            <div className="space-y-2 border-t pt-3">
-              <p className="text-xs font-semibold">Rooms in this channel</p>
-              {conversationList.length === 0 ? (
-                <p className="text-xs opacity-80">No rooms available in this channel yet.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {conversationList.map((conversation) => {
-                    const selected = String(conversation._id) === String(activeConversationId);
-                    const status = getPresenceState(conversation.lastMessageAt);
-                    return (
-                      <li key={String(conversation._id)}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveConversationId(String(conversation._id));
-                            setMobileWorkspaceOpen(true);
-                          }}
-                          className={`w-full rounded border px-3 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium">{getConversationLabel(conversation)}</span>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
-                              <span className={`h-2 w-2 rounded-full ${status.tone}`} />
-                              {status.label}
-                            </span>
-                          </div>
-                          {conversation.lastMessageAt ? (
-                            <div className="text-[11px] opacity-80 font-mono">Last active {new Date(conversation.lastMessageAt).toLocaleString()}</div>
-                          ) : null}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+                </section>
+              </>
+            )}
           </div>
         </aside>
 
@@ -1363,45 +1267,28 @@ function Chat() {
                   </span>
                 ) : null}
                 {activeConversation?.type === 'dm' ? (
-                  <div className="inline-flex items-center gap-1">
+                  <div className="inline-flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={dmUnlockedByConversation[String(activeConversationId)] ? handleLockActiveDM : handleUnlockActiveDM}
-                      className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle}`}
+                      className={[
+                        'rounded border px-2.5 py-1 text-[10px] font-semibold transition',
+                        dmUnlockedByConversation[String(activeConversationId)]
+                          ? activeTheme.subtle
+                          : `${activeTheme.accent} shadow-[0_0_18px_rgba(56,189,248,0.35)]`
+                      ].join(' ')}
                     >
                       {dmUnlockedByConversation[String(activeConversationId)] ? 'Lock DM' : 'Unlock DM'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleGoOffline}
-                      disabled={dmOfflineState !== 'online'}
-                      className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
-                    >
-                      {dmOfflineState === 'downloading_encrypted' ? 'Downloading…' : 'Go Offline'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDecryptOfflineMessages}
-                      disabled={dmOfflineState !== 'ready_offline'}
-                      className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
-                    >
-                      Decrypt Offline Messages
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleReturnOnline}
-                      disabled={dmOfflineState === 'online'}
-                      className={`rounded border px-2 py-1 text-[10px] ${activeTheme.subtle} disabled:opacity-50`}
-                    >
-                      Return Online
                     </button>
                   </div>
                 ) : null}
               </div>
             </div>
-            {activeConversation?.type === 'dm' && dmOfflineState === 'ready_offline' && isOnline ? (
+            {activeConversation?.type === 'dm' ? (
               <div className={`mt-2 rounded border px-2 py-1 text-[10px] ${activeTheme.panelGlass}`}>
-                Offline package ready. Disconnect from the internet, then use “Decrypt Offline Messages”.
+                {profile?.hasPGP
+                  ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
+                  : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
               </div>
             ) : null}
           </header>
@@ -1417,6 +1304,9 @@ function Chat() {
             profile={profile}
             theme={activeTheme}
             onOpenUserMenu={openUserContextMenu}
+            reactionsByMessageId={reactionByMessageId}
+            reactionOptions={MESSAGE_REACTIONS}
+            onToggleReaction={handleToggleMessageReaction}
             longPressDelayMs={LONG_PRESS_DELAY_MS}
           />
 
@@ -1439,7 +1329,6 @@ function Chat() {
                   !activeConversationId
                   || (activeConversation?.type === 'dm' && (
                     !dmUnlockedByConversation[String(activeConversationId)]
-                    || dmOfflineState !== 'online'
                   ))
                 }
                 sending={sending}
@@ -1528,23 +1417,18 @@ function Chat() {
             {activeConversation?.type === 'dm' ? (
               <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
                 <h4 className="text-sm font-semibold">DM Security</h4>
-                <label className="mt-2 flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={rememberDmUnlock}
-                    onChange={(event) => setRememberDmUnlock(event.target.checked)}
-                    disabled={strictDmLockMode}
-                  />
-                  Remember unlock for 30 minutes (cookie cache)
-                </label>
-                <label className="mt-2 flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={strictDmLockMode}
-                    onChange={(event) => setStrictDmLockMode(event.target.checked)}
-                  />
-                  Strict mode (always lock, no cached access)
-                </label>
+                <p className="mt-1 text-[11px] opacity-80">Set how long secure DM access stays unlocked on this device.</p>
+                <label className="mt-2 block text-xs font-semibold" htmlFor="dm-unlock-duration">Unlock duration</label>
+                <select
+                  id="dm-unlock-duration"
+                  value={String(unlockDurationMinutes)}
+                  onChange={(event) => setUnlockDurationMinutes(Number(event.target.value) || DEFAULT_UNLOCK_DURATION_MINUTES)}
+                  className={`mt-1 w-full rounded border px-2 py-1 text-xs ${activeTheme.input}`}
+                >
+                  {UNLOCK_DURATION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={handleClearDmUnlockCache}
@@ -1560,9 +1444,9 @@ function Chat() {
       {passwordModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
           <div className={`w-full max-w-sm rounded border p-3 ${activeTheme.panelGlass}`}>
-            <h3 className="text-sm font-semibold">Unlock DM encryption</h3>
+            <h3 className="text-sm font-semibold">Unlock secure direct messages</h3>
             <p className="mt-1 text-xs opacity-80">
-              Enter your encryption password to unlock and decrypt now, or use offline mode to prepare messages for offline decryption.
+              Step 1 of 2: enter your encryption password, then continue to unlock and decrypt protected messages.
             </p>
             <input
               type="password"
@@ -1572,6 +1456,17 @@ function Chat() {
               placeholder="Encryption password"
               aria-label="Encryption password"
             />
+            <label className="mt-2 block text-xs font-semibold" htmlFor="password-modal-unlock-duration">Unlock duration</label>
+            <select
+              id="password-modal-unlock-duration"
+              value={String(unlockDurationMinutes)}
+              onChange={(event) => setUnlockDurationMinutes(Number(event.target.value) || DEFAULT_UNLOCK_DURATION_MINUTES)}
+              className={`mt-1 w-full rounded border px-2 py-1.5 text-sm ${activeTheme.input}`}
+            >
+              {UNLOCK_DURATION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
             <div className="mt-3 flex justify-end gap-2">
               <button
                 type="button"
@@ -1582,17 +1477,10 @@ function Chat() {
               </button>
               <button
                 type="button"
-                onClick={handleUseOfflineMode}
-                className={`rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
-              >
-                Use Offline Mode
-              </button>
-              <button
-                type="button"
                 onClick={handlePasswordUnlock}
-                className={`rounded border px-2 py-1 text-xs ${activeTheme.accent}`}
+                className={`rounded border px-3 py-1.5 text-xs font-semibold ${activeTheme.accent} shadow-[0_0_18px_rgba(56,189,248,0.45)]`}
               >
-                Unlock
+                Unlock secure messages
               </button>
             </div>
           </div>

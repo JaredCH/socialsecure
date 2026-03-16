@@ -1208,11 +1208,18 @@ router.post('/encryption-password/change', [
   }
 });
 
-// Verify encryption password and create 12-hour unlock session
+const ALLOWED_ENCRYPTION_UNLOCK_MINUTES = new Set([2, 10, 30, 60, 720, 1440, 10080]);
+const DEFAULT_ENCRYPTION_UNLOCK_MINUTES = 30;
+
+// Verify encryption password and create unlock session
 router.post('/encryption-password/verify', [
   body('encryptionPassword')
     .isString()
-    .withMessage('Encryption password is required')
+    .withMessage('Encryption password is required'),
+  body('unlockDurationMinutes')
+    .optional()
+    .isInt({ min: 2, max: 10080 })
+    .withMessage('unlockDurationMinutes must be a valid duration')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -1244,7 +1251,13 @@ router.post('/encryption-password/verify', [
       return res.status(401).json({ error: 'Incorrect encryption password' });
     }
 
-    // Create a signed unlock token valid for 12 hours
+    const requestedDurationMinutes = Number(req.body.unlockDurationMinutes);
+    const unlockDurationMinutes = ALLOWED_ENCRYPTION_UNLOCK_MINUTES.has(requestedDurationMinutes)
+      ? requestedDurationMinutes
+      : DEFAULT_ENCRYPTION_UNLOCK_MINUTES;
+    const unlockDurationSeconds = unlockDurationMinutes * 60;
+
+    // Create a signed unlock token valid for selected duration
     const unlockToken = jwt.sign(
       {
         userId: user._id,
@@ -1252,7 +1265,7 @@ router.post('/encryption-password/verify', [
         version: user.encryptionPasswordVersion
       },
       process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-      { expiresIn: '12h' }
+      { expiresIn: `${unlockDurationSeconds}s` }
     );
 
     // Set secure cookie with unlock token
@@ -1260,13 +1273,13 @@ router.post('/encryption-password/verify', [
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 12 * 60 * 60 * 1000 // 12 hours
+      maxAge: unlockDurationSeconds * 1000
     });
 
     res.json({
       success: true,
-      message: 'Encryption unlocked for 12 hours',
-      expiresIn: 12 * 60 * 60 // 12 hours in seconds
+      message: `Encryption unlocked for ${unlockDurationMinutes} minute${unlockDurationMinutes === 1 ? '' : 's'}`,
+      expiresIn: unlockDurationSeconds
     });
   } catch (error) {
     console.error('Verify encryption password error:', error);

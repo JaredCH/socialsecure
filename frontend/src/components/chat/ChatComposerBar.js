@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const QUICK_EMOJIS = ['😀', '🔥', '✨', '❤️', '👏'];
+const QUICK_EMOJIS = ['😀', '😂', '🙂', '😉', '😍', '🤩', '😎', '😭', '😡', '😲', '🤔', '🙌', '👏', '👍', '👎', '❤️', '🔥', '✨', '🎉', '🚀', '💯', '🙏', '💬', '🤝'];
 const MAX_LINK_LABEL_LENGTH = 80;
 
 function ChatComposerBar({
@@ -103,8 +103,8 @@ function ChatComposerBar({
       </div>
 
       {showEmojiTray && !disabled ? (
-        <div className={`absolute bottom-12 left-1 rounded border p-1 shadow-xl ${theme.panelGlass}`}>
-          <div className="flex gap-1">
+        <div className={`absolute bottom-12 left-1 max-w-64 rounded border p-1 shadow-xl ${theme.panelGlass}`}>
+          <div className="grid grid-cols-8 gap-1">
             {QUICK_EMOJIS.map((emoji) => (
               <button
                 key={emoji}

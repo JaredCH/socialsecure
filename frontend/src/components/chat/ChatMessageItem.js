@@ -115,7 +115,17 @@ const renderMessageContent = (content) => {
   return rendered;
 };
 
-function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu, longPressDelayMs = DEFAULT_LONG_PRESS_DELAY_MS }) {
+function ChatMessageItem({
+  message,
+  isOwnMessage,
+  currentUserId,
+  theme,
+  onOpenUserMenu,
+  reactionsByType = {},
+  reactionOptions = [],
+  onToggleReaction,
+  longPressDelayMs = DEFAULT_LONG_PRESS_DELAY_MS
+}) {
   const author = message.userId?.username || message.userId?.realName || 'user';
   const usernameForProfileLink = typeof message.userId?.username === 'string' ? message.userId.username.trim() : '';
   const profileLink = usernameForProfileLink ? `/social?user=${encodeURIComponent(usernameForProfileLink)}` : null;
@@ -134,6 +144,7 @@ function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu, longPre
       textShadow: '0 0 1px rgba(15, 23, 42, 0.4)'
     };
   const longPressTimerRef = useRef(null);
+  const normalizedCurrentUserId = String(currentUserId || '');
   const menuUser = message.userId?._id ? {
     _id: message.userId._id,
     username: message.userId.username,
@@ -211,15 +222,49 @@ function ChatMessageItem({ message, isOwnMessage, theme, onOpenUserMenu, longPre
           <p className="whitespace-pre-wrap break-words text-[13px] leading-4">{renderMessageContent(message.content)}</p>
           <div className={`absolute right-1 top-full z-10 mt-0.5 hidden items-center gap-2 rounded border px-1 py-0.5 text-[10px] opacity-95 shadow-sm group-hover:flex group-focus-within:flex ${theme.subtle}`}>
             <span className="font-mono">{fullTimestamp}</span>
-            <button
-              type="button"
-              className="rounded border px-1 leading-3 font-mono disabled:opacity-60"
-              aria-label="React with thumbs up"
-              disabled
-              title="Reactions coming soon"
-            >
-              👍
-            </button>
+            {reactionOptions.map((reaction) => (
+              <button
+                key={reaction.key}
+                type="button"
+                className="rounded border px-1 leading-3 font-mono hover:opacity-85"
+                aria-label={`React with ${reaction.label}`}
+                title={reaction.label}
+                onClick={() => onToggleReaction?.(message._id, reaction.key)}
+              >
+                {reaction.emoji}
+              </button>
+            ))}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {reactionOptions.map((reaction) => {
+              const actors = Array.isArray(reactionsByType?.[reaction.key]) ? reactionsByType[reaction.key] : [];
+              if (actors.length === 0) return null;
+              const reactedByMe = normalizedCurrentUserId && actors.includes(normalizedCurrentUserId);
+              return (
+                <button
+                  key={reaction.key}
+                  type="button"
+                  onClick={() => onToggleReaction?.(message._id, reaction.key)}
+                  className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${reactedByMe ? 'font-semibold' : ''}`}
+                  title={reaction.label}
+                >
+                  <span>{reaction.emoji}</span>
+                  <span>{actors.length}</span>
+                </button>
+              );
+            })}
+            {reactionOptions.map((reaction) => (
+              <button
+                key={`pick-${reaction.key}`}
+                type="button"
+                onClick={() => onToggleReaction?.(message._id, reaction.key)}
+                className="rounded-full border px-1 py-0.5 text-[10px] opacity-75 hover:opacity-100"
+                aria-label={`Add ${reaction.label} reaction`}
+                title={reaction.label}
+              >
+                {reaction.emoji}
+              </button>
+            ))}
           </div>
         </div>
       </div>

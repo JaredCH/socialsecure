@@ -8,7 +8,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock('../utils/api', () => ({
   authAPI: {
-    getProfile: jest.fn()
+    getProfile: jest.fn(),
+    verifyEncryptionPassword: jest.fn()
   },
   chatAPI: {
     getConversations: jest.fn(),
@@ -69,6 +70,7 @@ describe('Chat zip room indicator', () => {
     localStorage.clear();
     document.cookie = 'socialsecure_dm_unlock_v1=; Max-Age=0; Path=/';
     chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
+    authAPI.verifyEncryptionPassword.mockResolvedValue({ data: { success: true } });
     chatAPI.getConversationUsers.mockResolvedValue({ data: { users: [] } });
     chatAPI.getConversationDevices.mockResolvedValue({ data: { devices: [] } });
     chatAPI.publishConversationKeyPackages.mockResolvedValue({ data: { success: true } });
@@ -259,8 +261,14 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const roomInput = container.querySelector('input[placeholder="Search room names..."]');
-    const userInput = container.querySelector('input[placeholder="Search username or name..."]');
+    const searchTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Search');
+    await act(async () => {
+      searchTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const roomInput = container.querySelector('input[placeholder="Type to filter rooms..."]');
+    const userInput = container.querySelector('input[placeholder="Type username or name..."]');
     expect(roomInput).not.toBeNull();
     expect(userInput).not.toBeNull();
 
@@ -798,9 +806,7 @@ describe('Chat zip room indicator', () => {
     expect(chatAPI.startDM).toHaveBeenCalledWith('u2');
   });
 
-  it('opens a profile thread when loaded with a social profile deep link target', async () => {
-    window.history.replaceState({}, '', '/chat?profile=u2');
-
+  it('removes profile thread channel controls from chat sidebar', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -809,24 +815,14 @@ describe('Chat zip room indicator', () => {
         conversations: {
           zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
           dm: [],
-          profile: [{ _id: 'pt-u2', type: 'profile-thread', profileUser: { _id: 'u2', username: 'buddy' } }]
-        }
-      }
-    });
-    chatAPI.getProfileThread.mockResolvedValue({
-      data: {
-        conversation: {
-          _id: 'pt-u2',
-          type: 'profile-thread'
+          profile: []
         }
       }
     });
 
     await renderChat();
 
-    expect(chatAPI.getProfileThread).toHaveBeenCalledWith('u2');
-    expect(window.location.pathname).toBe('/chat');
-    expect(window.location.search).toBe('');
+    expect(container.textContent).not.toContain('Profile Threads');
   });
 
   it('locks direct messages by default and unlocks after password prompt', async () => {
@@ -865,7 +861,7 @@ describe('Chat zip room indicator', () => {
       setInputValue(passwordInput, 'secret-password');
       await flush();
     });
-    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock secure messages');
     await act(async () => {
       unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -917,7 +913,7 @@ describe('Chat zip room indicator', () => {
       setInputValue(passwordInput, 'secret-password');
       await flush();
     });
-    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock secure messages');
     await act(async () => {
       unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1004,7 +1000,7 @@ describe('Chat zip room indicator', () => {
       setInputValue(passwordInput, 'secret-password');
       await flush();
     });
-    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock secure messages');
     await act(async () => {
       unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1015,8 +1011,7 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).not.toContain('[Encrypted message]');
   });
 
-  it('supports DM offline controls state transitions', async () => {
-    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+  it('supports configurable secure unlock duration in DM flow', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -1028,33 +1023,6 @@ describe('Chat zip room indicator', () => {
           profile: []
         }
       }
-    });
-    chatAPI.getConversationMessages.mockImplementation((conversationId) => {
-      if (conversationId === 'dm1') {
-        return Promise.resolve({
-          data: {
-            messages: [{
-              _id: 'dm-msg-offline-1',
-              conversationId: 'dm1',
-              content: '[Encrypted message]',
-              userId: { _id: 'u2', username: 'buddy' },
-              createdAt: new Date().toISOString(),
-              e2ee: {
-                version: 1,
-                senderDeviceId: 'device-2',
-                clientMessageId: 'dm-offline-1',
-                keyVersion: 1,
-                nonce: 'abc',
-                aad: '',
-                ciphertext: 'ciphertext',
-                signature: 'sig',
-                ciphertextHash: 'h'.repeat(64)
-              }
-            }]
-          }
-        });
-      }
-      return Promise.resolve({ data: { messages: [] } });
     });
 
     await renderChat();
@@ -1070,45 +1038,28 @@ describe('Chat zip room indicator', () => {
       unlockDmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
-    const offlineModeButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Use Offline Mode');
-    expect(offlineModeButton).not.toBeUndefined();
+
+    const durationSelect = container.querySelector('select#password-modal-unlock-duration');
+    expect(durationSelect).not.toBeNull();
     await act(async () => {
-      offlineModeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flush();
-    });
-
-    expect(container.textContent).toContain('Offline package ready. Disconnect from the internet');
-    const decryptButtonWhileOnline = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Decrypt Offline Messages');
-    expect(decryptButtonWhileOnline.disabled).toBe(false);
-
-    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
-    await act(async () => {
-      window.dispatchEvent(new Event('offline'));
-      await flush();
-    });
-
-    const decryptButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Decrypt Offline Messages');
-    expect(decryptButton.disabled).toBe(false);
-
-    await act(async () => {
-      decryptButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      nativeSetter.call(durationSelect, '60');
+      durationSelect.dispatchEvent(new Event('change', { bubbles: true }));
       await flush();
     });
 
     const passwordInput = container.querySelector('input[aria-label="Encryption password"]');
-    expect(passwordInput).not.toBeNull();
     await act(async () => {
       setInputValue(passwordInput, 'secret-password');
       await flush();
     });
-    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock');
+    const unlockButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Unlock secure messages');
     await act(async () => {
       unlockButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 
-    expect(container.textContent).toContain('decrypted dm');
-    const returnOnlineButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Return Online');
-    expect(returnOnlineButton.disabled).toBe(false);
+    expect(chatAPI.sendConversationE2EEMessage).not.toHaveBeenCalled();
+    expect(container.querySelector('textarea').disabled).toBe(false);
   });
 });
