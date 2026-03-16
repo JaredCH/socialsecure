@@ -788,8 +788,8 @@ describe('Chat zip room indicator', () => {
 
     const pageHeader = container.querySelector('[data-testid="chat-page-header"]');
     expect(pageHeader).not.toBeNull();
-    expect(pageHeader.className).toContain('px-2');
-    expect(pageHeader.className).toContain('py-1.5');
+    expect(pageHeader.className).toContain('px-1.5');
+    expect(pageHeader.className).toContain('py-1');
 
     const workspacePanel = container.querySelector('[data-testid="chat-workspace-panel"]');
     expect(workspacePanel).not.toBeNull();
@@ -940,7 +940,7 @@ describe('Chat zip room indicator', () => {
 
     expect(container.querySelector('input[type="color"]')).toBeNull();
     expect(container.textContent).not.toContain('Theme-tuned accents');
-    expect(container.querySelector('button[aria-label="Open chat theme menu"]').textContent).toContain('Midnight');
+    expect(container.querySelector('select#chat-theme-select-fallback').value).toBe('midnight');
 
     const composer = container.querySelector('textarea[placeholder="Type your message"]');
     expect(composer).not.toBeNull();
