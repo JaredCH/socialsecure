@@ -228,6 +228,7 @@ describe('App navbar features dropdown', () => {
     window.history.pushState({}, '', '/social');
 
     await renderApp();
+    expect(window.location.pathname).toBe('/social');
 
     const logoutButton = Array.from(container.querySelectorAll('button'))
       .find((node) => node.textContent === 'Logout');
@@ -245,6 +246,9 @@ describe('App navbar features dropdown', () => {
 
   it('does not clear a newer token when an older bootstrap profile request fails', async () => {
     localStorage.setItem('token', 'old-token');
+    clearAuthToken.mockImplementation(() => {
+      localStorage.removeItem('token');
+    });
     let rejectProfile;
     authAPI.getProfile.mockImplementationOnce(() => new Promise((_, reject) => {
       rejectProfile = reject;
@@ -262,6 +266,7 @@ describe('App navbar features dropdown', () => {
     });
 
     expect(clearAuthToken).not.toHaveBeenCalled();
+    expect(localStorage.getItem('token')).toBe('new-token');
   });
 
 });

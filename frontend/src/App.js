@@ -403,7 +403,6 @@ function App() {
 
   const handleAuthSuccess = (payload) => {
     setAuthToken(payload.token);
-    setCheckingAuth(false);
     try {
       sessionStorage.removeItem(LOGOUT_REDIRECT_KEY);
     } catch {

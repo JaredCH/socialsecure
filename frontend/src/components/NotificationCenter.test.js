@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import NotificationCenter from './NotificationCenter';
 import { friendsAPI, notificationAPI } from '../utils/api';
 
+const HOVER_CLOSE_DELAY_MS = 150;
 const mockNavigate = jest.fn();
 
 jest.mock('react-router-dom', () => ({
@@ -100,13 +101,21 @@ describe('NotificationCenter corner behavior', () => {
     expect(container.textContent).toContain('Notifications');
 
     await act(async () => {
-      jest.advanceTimersByTime(100);
+      jest.advanceTimersByTime(HOVER_CLOSE_DELAY_MS - 1);
       rootPanel.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      jest.advanceTimersByTime(75);
+      jest.advanceTimersByTime(10);
       await Promise.resolve();
     });
 
     expect(container.textContent).toContain('Notifications');
+
+    await act(async () => {
+      rootPanel.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+      jest.advanceTimersByTime(HOVER_CLOSE_DELAY_MS);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('Notifications');
     jest.useRealTimers();
   });
 

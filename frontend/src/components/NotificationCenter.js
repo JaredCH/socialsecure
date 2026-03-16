@@ -4,6 +4,7 @@ import { friendsAPI, notificationAPI } from '../utils/api';
 import NotificationItem from './NotificationItem';
 
 const PAGE_SIZE = 20;
+const HOVER_CLOSE_DELAY_MS = 150;
 const isResolvedFriendRequestNotification = (notification) => (
   notification?.type === 'follow' && notification?.isRead
 );
@@ -239,7 +240,7 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
     closeTimerRef.current = setTimeout(() => {
       setOpen(false);
       closeTimerRef.current = null;
-    }, 150);
+    }, HOVER_CLOSE_DELAY_MS);
   };
 
   return (
