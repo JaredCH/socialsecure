@@ -6,6 +6,10 @@ import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
 import TypingIndicator from '../components/TypingIndicator';
+import NotificationCenter from '../components/NotificationCenter';
+import SecurityScore from '../components/SecurityScore';
+import PresenceIndicator from '../components/PresenceIndicator';
+import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
 import SocialHero from '../components/social/SocialHero';
 import SocialStageSettingsSidebar from '../components/social/SocialStageSettingsSidebar';
 import CircleSpiderDiagram from '../components/social/CircleSpiderDiagram';
@@ -4141,7 +4145,8 @@ const Social = () => {
     }
   };
 
-  const accentColor = socialPreferences.hero?.menuActiveColor || socialPreferences.globalStyles?.headerColor || '#3b82f6';
+   const accentColor = socialPreferences.hero?.menuActiveColor || socialPreferences.globalStyles?.headerColor || '#3b82f6';
+  const accentColor2 = socialPreferences.globalStyles?.headerColor || accentColor;
   const hubFontFamily = socialPreferences.globalStyles?.fontFamily || socialPreferences.hero?.fontFamily || 'Inter';
   const hubSurfaceStyle = {
     backgroundColor: 'rgba(255, 255, 255, 0.64)',
@@ -4901,15 +4906,62 @@ const Social = () => {
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
+  const cssCustomProperties = {
+    '--accent': accentColor,
+    '--accent2': accentColor2,
+    '--bg-base': socialPreferences.globalStyles?.pageBackgroundColor || '#0d0d14',
+    '--bg-panel': 'rgba(255, 255, 255, 0.06)',
+    '--panel-blur': '16px',
+    '--radius-md': '16px',
+    backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor || '#0d0d14',
+    fontFamily: `"${hubFontFamily}", "DM Sans", sans-serif`,
+    color: '#e2e8f0'
+  };
+
   return (
     <div
-      className={`min-h-[calc(100vh-4rem)] w-full pb-8 ${pageThemeClass}`}
-      style={{ backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor, fontFamily: `"${hubFontFamily}", sans-serif` }}
+      className={`min-h-screen w-full ${pageThemeClass}`}
+      style={cssCustomProperties}
     >
+      {/* Sticky Topbar */}
+      <div className="sticky top-0 z-50 border-b border-white/10" style={{ background: 'rgba(13,13,20,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+          <span className="text-lg font-extrabold tracking-tight" style={{ backgroundImage: `linear-gradient(135deg, ${accentColor}, ${accentColor2})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>SocialSecure</span>
+          <div className="flex items-center gap-3">
+            {isAuthenticated ? (
+              <NotificationCenter
+                unreadCount={heroOverlayActivity.unreadNotificationCount}
+                userDisplayName={currentUser?.realName || currentUser?.username || 'Account'}
+              />
+            ) : null}
+            {ownerEditingEnabled ? (
+              <button
+                type="button"
+                onClick={() => setDesignStudioOpen(true)}
+                className="rounded-xl px-3 py-1.5 text-xs font-semibold transition hover:opacity-80"
+                style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})`, color: '#fff' }}
+              >
+                ✦ Design Studio
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {/* Guest Preview Notice */}
+      {isGuestPreview ? (
+        <GuestPreviewNotice
+          sectionId="social-guest-preview"
+          isGuestPreview={isGuestPreview}
+          onExitPreview={() => setIsGuestPreview(false)}
+        />
+      ) : null}
+
+      {/* Slim header for scroll (existing) */}
       {showSlimHeader ? (
         <div className="fixed inset-x-0 top-16 z-40 hidden lg:block">
           <div className="mx-auto max-w-7xl px-6">
-            <div className="flex items-center justify-between gap-4 rounded-b-2xl border border-white/30 bg-slate-950/90 px-4 py-3 text-white shadow-lg backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-4 rounded-b-2xl border border-white/10 px-4 py-3 text-white shadow-lg" style={{ background: 'rgba(13,13,20,0.92)', backdropFilter: 'blur(20px)' }}>
               <p className="truncate text-sm font-semibold">{heroProfile?.name || activeProfile?.realName || activeProfile?.username || 'Social'}</p>
               <div className="flex items-center gap-1">
                 {SOCIAL_HERO_TABS.map((tab) => (
@@ -4917,7 +4969,8 @@ const Social = () => {
                     key={`slim-tab-${tab.id}`}
                     type="button"
                     onClick={() => handleHeroTabChange(tab.id)}
-                    className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${activeHeroTab === tab.id ? 'bg-blue-500 text-white' : 'text-slate-200 hover:bg-white/10'}`}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${activeHeroTab === tab.id ? 'text-white' : 'text-slate-400 hover:text-white'}`}
+                    style={activeHeroTab === tab.id ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
                   >
                     {tab.label}
                   </button>
@@ -4928,6 +4981,7 @@ const Social = () => {
         </div>
       ) : null}
 
+      {/* Hero Section */}
       <div className="w-full">
         <SocialHero
           profile={heroProfile}
@@ -4941,31 +4995,166 @@ const Social = () => {
           onMobileMenuToggle={setHeroOverlayOpen}
           enableMobileLauncher={false}
         />
+      </div>
 
-        <div className={`px-4 sm:px-6 lg:px-8 ${isMobile ? 'pb-24 pt-8' : 'pt-8'}`}>
-          <div className="rounded-[2rem] border border-white/25 bg-white/8 p-4 shadow-[0_30px_90px_rgba(15,23,42,0.16)] backdrop-blur-xl sm:p-6">
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,24rem)]">
-              <main className="space-y-6">
-                {!isAuthenticated ? renderGlassPanel('Guest Access', renderPanelBody('guest_lookup'), {
-                  subtitle: 'Load a public profile by username or user ID'
-                }) : null}
-                {renderCenterStage()}
-              </main>
-
-              <aside className="space-y-6 xl:sticky xl:top-24">
-                {isPrivateGuestLock ? renderGlassPanel('Profile Privacy', renderPrivateProfileBody(), {
-                  subtitle: 'Limited details are available while this account is private'
-                }) : renderGlassPanel('Profile Snapshot', renderPanelBody('snapshot'), {
-                  subtitle: 'Identity, resume, and quick stats'
-                })}
-                {!isPrivateGuestLock ? renderSharedDesignCard : null}
-                {renderPulseRail()}
-              </aside>
-            </div>
-          </div>
+      {/* Tab Bar (pill-style) */}
+      <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
+        <div className="flex flex-wrap gap-1.5 rounded-2xl border border-white/10 p-1.5" style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}>
+          {SOCIAL_HERO_TABS.map((tab) => (
+            <button
+              key={`pill-tab-${tab.id}`}
+              type="button"
+              onClick={() => handleHeroTabChange(tab.id)}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${activeHeroTab === tab.id ? 'text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
+              style={activeHeroTab === tab.id ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* Main Two-Column Layout */}
+      <div className="mx-auto max-w-7xl px-4 pb-12 pt-6 sm:px-6">
+        <div className="grid grid-cols-1 gap-6" style={{ gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 300px' }}>
+          {/* Main Content Area */}
+          <main className="min-w-0 space-y-6">
+            {!isAuthenticated ? renderGlassPanel('Guest Access', renderPanelBody('guest_lookup'), {
+              subtitle: 'Load a public profile by username or user ID'
+            }) : null}
+            {renderCenterStage()}
+          </main>
+
+          {/* Left Sidebar (rendered as right on DOM for visual order, but on mobile it stacks below) */}
+          <aside className="space-y-5" style={isMobile ? {} : { order: -1 }}>
+            {/* About Panel */}
+            {!isPrivateGuestLock ? (
+              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+                <div className="border-b border-white/10 px-4 py-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">About</h3>
+                </div>
+                <div className="px-4 py-3 text-sm text-slate-300">
+                  {activeProfile?.bio || activeProfile?.tagline || <span className="text-slate-500">No bio shared yet.</span>}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Details Panel */}
+            {!isPrivateGuestLock ? (
+              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+                <div className="border-b border-white/10 px-4 py-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Details</h3>
+                </div>
+                <div className="space-y-2 px-4 py-3 text-sm text-slate-300">
+                  {activeProfile?.location ? <p>📍 {activeProfile.location}</p> : null}
+                  {activeProfile?.website ? <p>🌐 <a href={activeProfile.website} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: accentColor }}>{activeProfile.website}</a></p> : null}
+                  {activeProfile?.pronouns ? <p>💬 {activeProfile.pronouns}</p> : null}
+                  {activeProfile?.createdAt ? <p>📅 Joined {new Date(activeProfile.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p> : null}
+                  {ownerResumeMeta ? <p>📄 <Link to={`/resume/${activeProfile?.username}`} className="underline" style={{ color: accentColor }}>View Resume</Link></p> : null}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Security Score Widget */}
+            {isAuthenticated && isOwnSocialContext ? (
+              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+                <div className="border-b border-white/10 px-4 py-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Security Score</h3>
+                </div>
+                <div className="px-4 py-3">
+                  <SecurityScore score={currentUser?.securityScore || 0} breakdown={currentUser?.securityBreakdown || {}} />
+                </div>
+              </div>
+            ) : null}
+
+            {/* Circles Panel */}
+            {!isPrivateGuestLock ? (
+              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+                <div className="border-b border-white/10 px-4 py-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Circles</h3>
+                </div>
+                <div className="px-4 py-3">
+                  {circles.length > 0 ? (
+                    <div className="space-y-2">
+                      {circles.map((circle) => (
+                        <div key={circle._id || circle.name} className="flex items-center gap-2 text-sm text-slate-300">
+                          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: circle.color || accentColor }} />
+                          <span>{circle.name}</span>
+                          {circle.memberCount != null ? <span className="ml-auto text-xs text-slate-500">{circle.memberCount}</span> : null}
+                        </div>
+                      ))}
+                      {ownerEditingEnabled ? (
+                        <button type="button" onClick={() => {}} className="mt-2 text-xs font-semibold" style={{ color: accentColor }}>Manage Circles</button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">No circles visible.</p>
+                  )}
+                  <CircleSpiderDiagram circles={circles} accentColor={accentColor} />
+                </div>
+              </div>
+            ) : null}
+
+            {/* Top Friends Widget */}
+            {!isPrivateGuestLock ? (
+              <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+                <div className="border-b border-white/10 px-4 py-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Top Friends</h3>
+                </div>
+                <div className="px-4 py-3">
+                  {topFriends.length > 0 ? (
+                    <div className="grid grid-cols-5 gap-2">
+                      {topFriends.slice(0, 5).map((friend) => (
+                        <Link key={friend._id} to={`/social?user=${friend.username}`} className="group flex flex-col items-center gap-1">
+                          <div className="relative">
+                            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                              {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <PresenceIndicator presence={friend.presence} />
+                          </div>
+                          <span className="truncate text-[10px] text-slate-400 group-hover:text-slate-200">{friend.realName || friend.username}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">No top friends configured.</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Now Playing Widget (Coming Soon placeholder) */}
+            <div className="overflow-hidden rounded-2xl border border-white/10" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
+              <div className="border-b border-white/10 px-4 py-3">
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Now Playing</h3>
+              </div>
+              <div className="px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl text-lg" style={{ background: `linear-gradient(135deg, ${accentColor}33, ${accentColor2}33)` }}>🎵</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-300">Nothing playing</p>
+                    <p className="text-xs text-slate-500">Coming Soon</p>
+                  </div>
+                </div>
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full w-0 rounded-full" style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor2})` }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Profile Snapshot (existing) */}
+            {isPrivateGuestLock ? renderGlassPanel('Profile Privacy', renderPrivateProfileBody(), {
+              subtitle: 'Limited details are available while this account is private'
+            }) : renderGlassPanel('Profile Snapshot', renderPanelBody('snapshot'), {
+              subtitle: 'Identity, resume, and quick stats'
+            })}
+            {!isPrivateGuestLock ? renderSharedDesignCard : null}
+            {renderPulseRail()}
+          </aside>
+        </div>
+      </div>
+
+      {/* Modals */}
       {personalInfoModalOpen ? (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/55 px-4 py-6 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-3xl border border-white/60 bg-white p-5 shadow-2xl">
