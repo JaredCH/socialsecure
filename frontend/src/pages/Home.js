@@ -85,58 +85,122 @@ const platformCapabilities = [
 
 const mapDensityStats = [
   {
-    title: 'Hundreds of users',
-    description: 'Dots begin spread across the map, then drift inward to show how a community gathers around shared places.'
+    title: 'User convergence',
+    description: 'Ten glowing circles spread across the city grid drift inward, two merging on the way, showing how communities cluster.'
   },
   {
     title: 'Center convergence',
-    description: 'Every red glow eases toward the middle until individual users visually compress into one denser field.'
+    description: 'As circles arrive at staggered intervals the glow intensifies into a bright red heat cluster at the center of the map.'
   },
   {
     title: 'Transparent heat overlay',
-    description: 'The darkest red shows the heaviest concentration while lower-density areas stay softly faded at the edges.'
+    description: 'The semi-transparent red overlay lets the city grid remain visible, showing density without hiding geography.'
   }
 ];
 
-// These values spread the initial dots across most of the map while keeping the
-// pattern deterministic, so the homepage animation looks dense without relying
-// on runtime randomness.
-const INITIAL_DOT_X_MULTIPLIER = 37;
-const INITIAL_DOT_Y_MULTIPLIER = 29;
-const INITIAL_DOT_Y_OFFSET_MULTIPLIER = 5;
-const INITIAL_DOT_X_RANGE = 84;
-const INITIAL_DOT_Y_RANGE = 76;
+// Animation duration for one full convergence cycle (seconds).
+const DENSITY_DURATION = 18;
+const DENSITY_CENTER = { x: 50, y: 50 };
+const DENSITY_MERGE_POINT = { x: 22, y: 49 };
+// Diameter in px for each circle – with the radial-gradient glow the visible
+// footprint is roughly 100 ft at the city-block scale shown in the background.
+const DENSITY_GLOW_SIZE = 28;
 
-function getDotSize(index) {
-  if (index % 9 === 0) {
-    return 8;
+// Ten user-density circles with roles that drive the multi-phase animation.
+// 'normal'     – drifts to center and fades into the cluster.
+// 'merge-keep' – collides with the merge-fade circle, absorbs it, then continues.
+// 'merge-fade' – travels to the merge point and disappears into merge-keep.
+// 'break-off'  – converges to center then drifts back outward at the end.
+const densityCircles = [
+  { id: 'glow-0', startX: 12, startY: 15, role: 'break-off', breakX: 15, breakY: 8, convergeFrac: 0.58 },
+  { id: 'glow-1', startX: 82, startY: 12, role: 'normal', convergeFrac: 0.62 },
+  { id: 'glow-2', startX: 15, startY: 62, role: 'merge-keep', convergeFrac: 0.55 },
+  { id: 'glow-3', startX: 78, startY: 68, role: 'normal', convergeFrac: 0.70 },
+  { id: 'glow-4', startX: 42, startY: 22, role: 'normal', convergeFrac: 0.53 },
+  { id: 'glow-5', startX: 65, startY: 80, role: 'normal', convergeFrac: 0.68 },
+  { id: 'glow-6', startX: 30, startY: 35, role: 'merge-fade', convergeFrac: 0.38 },
+  { id: 'glow-7', startX: 72, startY: 35, role: 'normal', convergeFrac: 0.65 },
+  { id: 'glow-8', startX: 88, startY: 52, role: 'normal', convergeFrac: 0.72 },
+  { id: 'glow-9', startX: 50, startY: 88, role: 'break-off', breakX: 78, breakY: 85, convergeFrac: 0.60 }
+];
+
+function getDensityAnimation(circle, reducedMotion) {
+  if (reducedMotion) {
+    return {
+      animate: { left: `${DENSITY_CENTER.x}%`, top: `${DENSITY_CENTER.y}%`, opacity: 0.6, scale: 1 },
+      transition: { duration: 0.01 }
+    };
   }
 
-  if (index % 3 === 0) {
-    return 6;
-  }
+  const { startX, startY, role, convergeFrac, breakX = 0, breakY = 0 } = circle;
+  const cx = DENSITY_CENTER.x;
+  const cy = DENSITY_CENTER.y;
+  const mx = DENSITY_MERGE_POINT.x;
+  const my = DENSITY_MERGE_POINT.y;
 
-  return 5;
+  switch (role) {
+    case 'merge-keep':
+      return {
+        animate: {
+          left: [`${startX}%`, `${startX}%`, `${mx}%`, `${cx}%`, `${cx}%`, `${cx}%`],
+          top: [`${startY}%`, `${startY}%`, `${my}%`, `${cy}%`, `${cy}%`, `${cy}%`],
+          opacity: [0.45, 0.5, 0.8, 0.65, 0.3, 0.3],
+          scale: [1, 1, 1.4, 0.85, 0.4, 0.4]
+        },
+        transition: {
+          duration: DENSITY_DURATION,
+          times: [0, 0.11, 0.36, convergeFrac, 0.82, 1],
+          repeat: Infinity,
+          ease: 'easeInOut'
+        }
+      };
+    case 'merge-fade':
+      return {
+        animate: {
+          left: [`${startX}%`, `${startX}%`, `${mx}%`, `${mx}%`, `${mx}%`],
+          top: [`${startY}%`, `${startY}%`, `${my}%`, `${my}%`, `${my}%`],
+          opacity: [0.45, 0.5, 0.2, 0, 0],
+          scale: [1, 1, 0.5, 0, 0]
+        },
+        transition: {
+          duration: DENSITY_DURATION,
+          times: [0, 0.11, 0.36, 0.42, 1],
+          repeat: Infinity,
+          ease: 'easeInOut'
+        }
+      };
+    case 'break-off':
+      return {
+        animate: {
+          left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`, `${breakX}%`],
+          top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`, `${breakY}%`],
+          opacity: [0.45, 0.5, 0.65, 0.5, 0.4],
+          scale: [1, 1, 0.85, 0.6, 1]
+        },
+        transition: {
+          duration: DENSITY_DURATION,
+          times: [0, 0.11, convergeFrac, 0.84, 1],
+          repeat: Infinity,
+          ease: 'easeInOut'
+        }
+      };
+    default:
+      return {
+        animate: {
+          left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`, `${cx}%`],
+          top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`, `${cy}%`],
+          opacity: [0.45, 0.5, 0.65, 0.3, 0.3],
+          scale: [1, 1, 0.85, 0.4, 0.4]
+        },
+        transition: {
+          duration: DENSITY_DURATION,
+          times: [0, 0.11, convergeFrac, 0.82, 1],
+          repeat: Infinity,
+          ease: 'easeInOut'
+        }
+      };
+  }
 }
-
-const convergingUserDots = Array.from({ length: 180 }, (_, index) => {
-  const startX = 8 + ((index * INITIAL_DOT_X_MULTIPLIER) % INITIAL_DOT_X_RANGE);
-  const startY = 10 + ((index * INITIAL_DOT_Y_MULTIPLIER + (index % 7) * INITIAL_DOT_Y_OFFSET_MULTIPLIER) % INITIAL_DOT_Y_RANGE);
-  const angle = (((index * 19) % 360) * Math.PI) / 180;
-  const targetX = 50 + Math.cos(angle) * (4 + (index % 5) * 1.4);
-  const targetY = 50 + Math.sin(angle) * (3 + (index % 4) * 1.1);
-
-  return {
-    id: `user-dot-${index}`,
-    startX,
-    startY,
-    targetX: Number(targetX.toFixed(2)),
-    targetY: Number(targetY.toFixed(2)),
-    size: getDotSize(index),
-    delay: (index % 24) * 0.08,
-    duration: 6 + (index % 7) * 0.35
-  };
-});
 
 const messagePreview = {
   plainText: 'Meet me at the center marker at 7:30. I will share the final route here.',
@@ -198,8 +262,8 @@ function Home({ isAuthenticated = false }) {
                 into one platform so you can manage friendships without trading away privacy.
               </p>
               <p className="mt-4 max-w-2xl text-sm text-blue-200 sm:text-base">
-                Watch hundreds of users drift across a generic map into a shared red density glow, then follow a direct
-                message as it encrypts, sends, and unlocks on the other side.
+                Watch ten user glows drift across a city grid and converge into a shared red heat cluster, then follow a
+                direct message as it encrypts, sends, and unlocks on the other side.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
@@ -263,119 +327,111 @@ function Home({ isAuthenticated = false }) {
                     <h2 className="mt-2 text-xl font-semibold">Community density map</h2>
                   </div>
                   <div className="rounded-full border border-rose-400/30 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-100">
-                    Hundreds of users • Center glow
+                    10 users • Heat cluster
                   </div>
                 </div>
 
                 <div
                   data-testid="hero-map-system"
-                  className="relative mt-5 h-[22rem] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(248,113,113,0.08),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.98),rgba(15,23,42,0.82))]"
+                  className="relative mt-5 h-[22rem] overflow-hidden rounded-[1.75rem] border border-white/10"
+                  style={{
+                    backgroundColor: 'rgb(26, 32, 44)',
+                    backgroundImage: [
+                      'linear-gradient(to right, rgba(100,116,139,0.22) 1px, transparent 1px)',
+                      'linear-gradient(to bottom, rgba(100,116,139,0.22) 1px, transparent 1px)',
+                      'linear-gradient(to right, rgba(120,133,150,0.38) 2px, transparent 2px)',
+                      'linear-gradient(to bottom, rgba(120,133,150,0.38) 2px, transparent 2px)'
+                    ].join(', '),
+                    backgroundSize: '8.33% 8.33%, 8.33% 8.33%, 33.33% 33.33%, 33.33% 33.33%'
+                  }}
                 >
-                  <motion.div
-                    aria-hidden="true"
-                    className="absolute inset-0 opacity-25"
-                    animate={prefersReducedMotion ? {} : { opacity: [0.18, 0.3, 0.2], scale: [1, 1.02, 1] }}
-                    transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-                    style={{
-                      backgroundImage:
-                        'linear-gradient(rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.18) 1px, transparent 1px)',
-                      backgroundSize: '42px 42px'
-                    }}
-                  />
-                  <motion.div
-                    aria-hidden="true"
-                    className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(248,113,113,0.2),transparent_24%),radial-gradient(circle_at_50%_50%,rgba(239,68,68,0.12),transparent_38%),radial-gradient(circle_at_22%_26%,rgba(248,113,113,0.08),transparent_26%),radial-gradient(circle_at_80%_72%,rgba(248,113,113,0.08),transparent_24%)]"
-                    style={{ y: middleLayerY }}
-                  />
-
+                  {/* NYC block-grid map overlay with subtle block shading */}
                   <svg
-                    viewBox="0 0 100 100"
+                    viewBox="0 0 12 12"
                     className="absolute inset-0 h-full w-full"
+                    preserveAspectRatio="none"
                     role="img"
-                    aria-label="Generic community map with hundreds of users converging into a dense red center overlay"
+                    aria-label="New York City block grid with ten user density points converging into a red heat cluster"
                   >
-                    <path
-                      d="M 9 28 C 14 18 24 16 33 20 C 43 24 53 20 57 26 C 61 33 58 40 48 44 C 38 48 23 47 16 41 C 10 36 7 33 9 28 Z"
-                      fill="rgba(226,232,240,0.08)"
-                      stroke="rgba(248,250,252,0.12)"
-                      strokeWidth="0.45"
-                    />
-                    <path
-                      d="M 58 23 C 66 16 79 18 86 26 C 92 33 93 43 87 50 C 80 58 67 60 60 53 C 53 47 51 31 58 23 Z"
-                      fill="rgba(226,232,240,0.07)"
-                      stroke="rgba(248,250,252,0.1)"
-                      strokeWidth="0.45"
-                    />
-                    <path
-                      d="M 22 58 C 29 52 40 54 46 61 C 52 68 50 77 43 82 C 35 87 22 85 16 77 C 11 70 14 63 22 58 Z"
-                      fill="rgba(226,232,240,0.08)"
-                      stroke="rgba(248,250,252,0.1)"
-                      strokeWidth="0.45"
-                    />
-                    <path
-                      d="M 60 61 C 69 55 82 57 88 65 C 94 73 90 84 80 88 C 71 91 59 88 54 79 C 49 70 52 66 60 61 Z"
-                      fill="rgba(226,232,240,0.07)"
-                      stroke="rgba(248,250,252,0.1)"
-                      strokeWidth="0.45"
-                    />
-                    <circle cx="50" cy="50" r="10" fill="rgba(248,113,113,0.16)" />
-                    <circle cx="50" cy="50" r="6.5" fill="rgba(239,68,68,0.16)" />
+                    <rect x="1" y="0" width="1" height="1" fill="rgba(40,48,62,0.45)" />
+                    <rect x="3" y="2" width="1" height="1" fill="rgba(45,53,67,0.35)" />
+                    <rect x="5" y="3" width="2" height="1" fill="rgba(40,60,48,0.2)" />
+                    <rect x="8" y="1" width="1" height="1" fill="rgba(45,53,67,0.3)" />
+                    <rect x="10" y="5" width="1" height="1" fill="rgba(40,48,62,0.35)" />
+                    <rect x="2" y="7" width="1" height="1" fill="rgba(45,53,67,0.3)" />
+                    <rect x="7" y="9" width="1" height="1" fill="rgba(40,48,62,0.4)" />
+                    <rect x="0" y="5" width="1" height="1" fill="rgba(45,53,67,0.3)" />
+                    <rect x="9" y="3" width="1" height="1" fill="rgba(40,48,62,0.35)" />
+                    <rect x="4" y="10" width="2" height="1" fill="rgba(40,60,48,0.18)" />
+                    <rect x="11" y="7" width="1" height="1" fill="rgba(45,53,67,0.25)" />
+                    <rect x="6" y="0" width="1" height="1" fill="rgba(40,48,62,0.3)" />
                   </svg>
 
+                  {/* Central convergence glow – grows as circles arrive */}
                   <motion.div
                     aria-hidden="true"
-                    className="absolute left-1/2 top-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,_rgba(239,68,68,0.5)_0%,_rgba(239,68,68,0.22)_30%,_rgba(239,68,68,0.08)_58%,_transparent_78%)] blur-2xl"
-                    initial={prefersReducedMotion ? false : { opacity: 0.16, scale: 0.72 }}
-                    animate={prefersReducedMotion ? { opacity: 0.35, scale: 1 } : { opacity: [0.2, 0.42, 0.28], scale: [0.78, 1.1, 0.92] }}
-                    transition={{ duration: prefersReducedMotion ? 0.01 : 6.5, repeat: prefersReducedMotion ? 0 : Infinity, ease: 'easeInOut' }}
-                  />
-                  <motion.div
-                    aria-hidden="true"
-                    className="absolute left-1/2 top-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,_rgba(127,29,29,0.32)_0%,_rgba(220,38,38,0.2)_22%,_rgba(248,113,113,0.12)_45%,_rgba(248,113,113,0.06)_62%,_transparent_82%)] blur-3xl"
-                    initial={prefersReducedMotion ? false : { opacity: 0.1, scale: 0.68 }}
-                    animate={prefersReducedMotion ? { opacity: 0.28, scale: 1 } : { opacity: [0.14, 0.3, 0.2], scale: [0.72, 1.08, 0.9] }}
-                    transition={{ duration: prefersReducedMotion ? 0.01 : 7.5, delay: prefersReducedMotion ? 0 : 0.4, repeat: prefersReducedMotion ? 0 : Infinity, ease: 'easeInOut' }}
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                    style={{
+                      width: 180,
+                      height: 180,
+                      background:
+                        'radial-gradient(circle, rgba(239,68,68,0.5) 0%, rgba(239,68,68,0.22) 28%, rgba(239,68,68,0.08) 55%, transparent 78%)',
+                      filter: 'blur(12px)',
+                      willChange: 'transform, opacity'
+                    }}
+                    initial={prefersReducedMotion ? false : { opacity: 0.04, scale: 0.15 }}
+                    animate={
+                      prefersReducedMotion
+                        ? { opacity: 0.4, scale: 1 }
+                        : {
+                            opacity: [0.04, 0.04, 0.18, 0.5, 0.38],
+                            scale: [0.15, 0.15, 0.45, 1.08, 0.88]
+                          }
+                    }
+                    transition={
+                      prefersReducedMotion
+                        ? { duration: 0.01 }
+                        : {
+                            duration: DENSITY_DURATION,
+                            times: [0, 0.11, 0.5, 0.82, 1],
+                            repeat: Infinity,
+                            ease: 'easeInOut'
+                          }
+                    }
                   />
 
-                  {convergingUserDots.map((dot) => (
-                    <motion.div
-                      key={dot.id}
-                      data-testid="hero-map-dot"
-                      className="absolute rounded-full bg-rose-400"
-                      style={{
-                        left: `${dot.startX}%`,
-                        top: `${dot.startY}%`,
-                        width: dot.size,
-                        height: dot.size,
-                        boxShadow: '0 0 12px rgba(248, 113, 113, 0.95)',
-                        opacity: 0.7
-                      }}
-                      initial={prefersReducedMotion ? false : { scale: 0.72, opacity: 0.35 }}
-                      animate={
-                        prefersReducedMotion
-                          ? { left: `${dot.targetX}%`, top: `${dot.targetY}%`, scale: 1, opacity: 0.85 }
-                          : {
-                              left: [`${dot.startX}%`, `${dot.targetX}%`],
-                              top: [`${dot.startY}%`, `${dot.targetY}%`],
-                              scale: [0.75, 1.15, 0.95],
-                              opacity: [0.4, 0.88, 0.7]
-                            }
-                      }
-                      transition={{
-                        duration: prefersReducedMotion ? 0.01 : dot.duration,
-                        delay: prefersReducedMotion ? 0 : dot.delay,
-                        repeat: prefersReducedMotion ? 0 : Infinity,
-                        repeatType: 'reverse',
-                        ease: 'easeInOut'
-                      }}
-                    />
-                  ))}
+                  {/* 10 glowing user-density circles */}
+                  {densityCircles.map((circle) => {
+                    const anim = getDensityAnimation(circle, prefersReducedMotion);
+                    return (
+                      <motion.div
+                        key={circle.id}
+                        data-testid="hero-map-dot"
+                        className="absolute rounded-full"
+                        style={{
+                          left: `${circle.startX}%`,
+                          top: `${circle.startY}%`,
+                          width: DENSITY_GLOW_SIZE,
+                          height: DENSITY_GLOW_SIZE,
+                          marginLeft: -DENSITY_GLOW_SIZE / 2,
+                          marginTop: -DENSITY_GLOW_SIZE / 2,
+                          background:
+                            'radial-gradient(circle, rgba(239,68,68,0.65) 0%, rgba(248,113,113,0.35) 40%, rgba(248,113,113,0.1) 70%, transparent 100%)',
+                          boxShadow: '0 0 16px 4px rgba(239,68,68,0.35)',
+                          willChange: 'transform, opacity'
+                        }}
+                        initial={prefersReducedMotion ? false : { scale: 0.8, opacity: 0.3 }}
+                        animate={anim.animate}
+                        transition={anim.transition}
+                      />
+                    );
+                  })}
 
                   <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 backdrop-blur">
                     <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-200">Converging user density</p>
                     <p className="mt-2 text-sm text-blue-50">
-                      Hundreds of glowing user dots travel toward the center until they visually merge into a single red
-                      density field with a darker core and softly faded edges.
+                      Ten user glows travel across the city grid, two merging on the way, until all converge into
+                      a single red heat cluster that gently releases two circles back outward.
                     </p>
                   </div>
                 </div>
