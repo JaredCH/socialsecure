@@ -154,6 +154,8 @@ const normalizePhoneForSubmission = (value) => {
   return `+1${normalizedDigits}`;
 };
 
+const normalizeSportsTeamId = (value) => String(value || '').trim().toLowerCase();
+
 function OnboardingWizard({
   user,
   onboarding,
@@ -451,8 +453,10 @@ function OnboardingWizard({
   };
 
   const toggleTeam = (teamId) => {
+    const normalizedId = normalizeSportsTeamId(teamId);
+    if (!normalizedId) return;
     setFollowedTeams((prev) =>
-      prev.includes(teamId) ? prev.filter((t) => t !== teamId) : [...prev, teamId]
+      prev.includes(normalizedId) ? prev.filter((t) => t !== normalizedId) : [...prev, normalizedId]
     );
   };
 
@@ -502,8 +506,9 @@ function OnboardingWizard({
       }
 
       // 2. Save news category preferences + followed teams
+      const normalizedFollowedTeams = Array.from(new Set(followedTeams.map(normalizeSportsTeamId).filter(Boolean)));
       await newsAPI.updatePreferences({
-        followedSportsTeams: sportsEnabled ? followedTeams : []
+        followedSportsTeams: sportsEnabled ? normalizedFollowedTeams : []
       });
       await newsAPI.updateHiddenCategories(hiddenCategories);
 
@@ -859,7 +864,7 @@ function OnboardingWizard({
                           className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-800 py-1 hover:bg-yellow-100 rounded px-1"
                         >
                           <span>{league.icon || '\u26BD'}</span>
-                          <span>{league.label}</span>
+                          <span>{league.label || league.name || league.id}</span>
                           <span className="ml-auto text-xs text-gray-500">
                             {expandedLeagues[league.id] ? '\u25B2' : '\u25BC'}
                           </span>
@@ -876,7 +881,9 @@ function OnboardingWizard({
                                     onChange={() => toggleTeam(t.id)}
                                     className="accent-blue-600"
                                   />
-                                  <span className={isFollowed ? 'text-blue-800 font-medium' : 'text-gray-700'}>{t.team}</span>
+                                  <span className={isFollowed ? 'text-blue-800 font-medium' : 'text-gray-700'}>
+                                    {t.team || t.name || t.shortName || t.id}
+                                  </span>
                                 </label>
                               );
                             })}

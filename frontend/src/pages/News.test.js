@@ -137,9 +137,9 @@ describe('News inline preferences updates', () => {
         leagues: [
           {
             id: 'NFL',
-            label: 'NFL',
+            name: 'NFL',
             icon: '🏈',
-            teams: [{ id: 'nfl:dallas-cowboys', team: 'Dallas Cowboys', city: 'Dallas', state: 'TX', leagueLabel: 'NFL' }]
+            teams: [{ id: 'nfl:dallas-cowboys', name: 'Dallas Cowboys', city: 'Dallas', state: 'TX', leagueLabel: 'NFL' }]
           }
         ]
       }
