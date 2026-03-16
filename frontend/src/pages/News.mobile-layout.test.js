@@ -95,4 +95,20 @@ describe('News mobile persistent header layout', () => {
     expect(openSettingsButton.className).toContain('bg-slate-950/75');
     expect(openSettingsButton.className).toContain('backdrop-blur-xl');
   });
+
+  it('keeps the mobile filter shell above the feed for dropdown layering', async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <News />
+        </MemoryRouter>
+      );
+    });
+    await act(async () => Promise.resolve());
+
+    const mobileFilterShell = container.querySelector('[data-testid="news-mobile-filter-bar-shell"]');
+    expect(mobileFilterShell).not.toBeNull();
+    expect(mobileFilterShell.className).toContain('relative');
+    expect(mobileFilterShell.className).toContain('z-40');
+  });
 });

@@ -167,7 +167,9 @@ describe('News category controls', () => {
 
     const categoryRow = container.querySelector('[data-category-key]');
     const categoryButton = categoryRow.querySelector('button[aria-label^="Filter by"]');
+    const categoryLabel = categoryButton.querySelector('span.flex-1');
     expect(categoryRow.className).toContain('py-0.5');
     expect(categoryButton.className).toContain('py-0.5');
+    expect(categoryLabel.className).toContain('leading-[1.05]');
   });
 });

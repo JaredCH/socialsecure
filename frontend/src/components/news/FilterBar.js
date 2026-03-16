@@ -34,7 +34,7 @@ function Dropdown({ label, children, icon }) {
   }, []);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative z-30" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
@@ -48,7 +48,7 @@ function Dropdown({ label, children, icon }) {
         <span className={`material-symbols-outlined text-sm leading-none transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
       </button>
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 bg-white rounded-xl shadow-xl ring-1 ring-gray-200 min-w-[200px] overflow-hidden">
+        <div data-testid="filter-dropdown-menu" className="absolute top-full mt-1 left-0 z-[70] bg-white rounded-xl shadow-xl ring-1 ring-gray-200 min-w-[200px] overflow-hidden">
           {children({ close: () => setOpen(false) })}
         </div>
       )}
@@ -189,7 +189,7 @@ export default function FilterBar({
     : 'All';
 
   return (
-    <div className={`bg-white/95 backdrop-blur border-b border-gray-100 px-3 py-2 ${className}`}>
+    <div className={`relative z-30 bg-white/95 backdrop-blur border-b border-gray-100 px-3 py-2 ${className}`}>
       <div className="flex items-center gap-2 flex-wrap">
         {/* Search */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-400">

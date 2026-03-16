@@ -48,4 +48,36 @@ describe('FilterBar', () => {
     expect(container.textContent).toContain('All');
     expect(container.textContent).toContain('Any time');
   });
+
+  it('uses elevated z-index classes so dropdown menus render above feed content', async () => {
+    await act(async () => {
+      root.render(
+        <FilterBar
+          categories={[{ key: 'sports', label: 'Sports' }]}
+          onCategoryChange={() => {}}
+          onSearch={() => {}}
+          onRegionChange={() => {}}
+          onDateChange={() => {}}
+        />
+      );
+    });
+
+    const shell = container.querySelector('.bg-white\\/95');
+    expect(shell).not.toBeNull();
+    expect(shell.className).toContain('relative');
+    expect(shell.className).toContain('z-30');
+
+    const categoryTrigger = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent.includes('All')
+    );
+    expect(categoryTrigger).toBeTruthy();
+
+    await act(async () => {
+      categoryTrigger.click();
+    });
+
+    const openMenu = container.querySelector('[data-testid="filter-dropdown-menu"]');
+    expect(openMenu).not.toBeNull();
+    expect(openMenu.className).toContain('z-[70]');
+  });
 });

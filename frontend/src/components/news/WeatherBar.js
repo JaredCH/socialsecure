@@ -234,25 +234,34 @@ export default function WeatherBar({ variant = 'sticky' }) {
 
   if (isCard) {
     return (
-      <section className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 rounded-2xl shadow-lg overflow-hidden">
+      <section className="bg-gradient-to-br from-slate-500 via-blue-700 to-indigo-900 rounded-2xl shadow-lg overflow-hidden">
         <button
           type="button"
           onClick={() => setCardExpanded((value) => !value)}
           aria-expanded={cardExpanded}
           aria-label={cardExpanded ? 'Collapse weather details' : 'Expand weather details'}
-          className="w-full px-4 pt-3 pb-3 border-b border-white/10 text-left transition-colors hover:bg-white/5"
+          className="w-full px-4 pt-4 pb-3 border-b border-white/15 text-left transition-colors hover:bg-white/5"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">Weather</h2>
-              <div className="mt-1 text-sm font-semibold text-white leading-tight truncate">{displayCity}</div>
-              <div className="mt-1 text-xs text-white/75 truncate">{current?.shortForecast || weather.forecastSummary || 'Current conditions unavailable'}</div>
+              <div className="flex items-center gap-1.5 text-white/90">
+                <span className="material-symbols-outlined text-sm leading-none" aria-hidden="true">location_on</span>
+                <h2 className="text-base font-semibold leading-tight truncate">{displayCity}</h2>
+              </div>
+              <div className="mt-2 flex items-end gap-2">
+                <div className="text-6xl font-light text-white leading-none">
+                  {current?.temperature != null ? `${current.temperature}°` : '--'}
+                </div>
+                <span className="text-3xl leading-none pb-1" aria-hidden="true">{currentIcon}</span>
+              </div>
+              <div className="mt-1 text-lg leading-tight text-white/95 truncate">
+                {current?.shortForecast || weather.forecastSummary || 'Current conditions unavailable'}
+              </div>
+              <div className="text-sm text-white/80 mt-0.5">
+                Wind: {current?.windSpeed != null ? `${current.windSpeed} mph` : '--'}
+              </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-2xl leading-none" aria-hidden="true">{currentIcon}</span>
-              <div className="text-3xl font-bold text-white leading-none">
-                {current?.temperature != null ? `${current.temperature}°` : '--'}
-              </div>
               <span
                 className={`material-symbols-outlined text-white/80 text-base shrink-0 transition-transform duration-200 ${cardExpanded ? 'rotate-180' : ''}`}
                 aria-hidden="true"
@@ -261,6 +270,22 @@ export default function WeatherBar({ variant = 'sticky' }) {
               </span>
             </div>
           </div>
+
+          {wk.length > 0 && (
+            <div className="mt-3 grid grid-cols-4 gap-2">
+              {wk.slice(0, 4).map((day, index) => (
+                <div
+                  key={`${day.date || index}`}
+                  className="rounded-xl border border-white/20 bg-white/10 px-2 py-2 text-center text-white/90"
+                >
+                  <div className="text-sm leading-none">{getDayAbbr(day.date)}</div>
+                  <div className="mt-1 text-2xl leading-none">{ICON_MAP[day.icon] || '🌤️'}</div>
+                  <div aria-label={`High ${day.high != null ? `${day.high} degrees` : 'unavailable'}`} className="mt-1 text-sm font-semibold">{day.high != null ? `${day.high}°` : '--'}</div>
+                  <div aria-label={`Low ${day.low != null ? `${day.low} degrees` : 'unavailable'}`} className="text-xs text-white/75">{day.low != null ? `${day.low}°` : '--'}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="mt-2.5 flex flex-wrap gap-1.5 text-[10px] text-white/85">
             {high != null && <span className="rounded-full bg-white/10 px-2 py-0.5">High {high}°</span>}
@@ -276,7 +301,7 @@ export default function WeatherBar({ variant = 'sticky' }) {
         </button>
 
         {cardExpanded && (
-          <div className="px-4 py-2.5 space-y-2.5">
+          <div data-testid="weather-card-expanded" className="max-h-[24rem] overflow-y-auto px-4 py-2.5 space-y-2.5">
             {(uvIndex != null || airQuality != null || pollen != null) && (
               <div className="grid grid-cols-1 gap-2">
                 <WeatherMetric label="UV Index" value={uvIndex} badgeColor={UV_COLOR(uvIndex)} />

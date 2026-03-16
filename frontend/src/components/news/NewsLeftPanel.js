@@ -149,7 +149,7 @@ export default function NewsLeftPanel({
           <span className="w-5 h-5 rounded-md bg-gray-100 flex items-center justify-center shrink-0">
             <span className="material-symbols-outlined text-sm text-gray-500 leading-none">newspaper</span>
           </span>
-          <span className="flex-1 text-left text-xs leading-tight">All</span>
+          <span className="flex-1 text-left text-xs leading-[1.05]">All</span>
         </button>
 
         {categories.map((cat) => {
@@ -179,7 +179,7 @@ export default function NewsLeftPanel({
                 <span className={`w-5 h-5 rounded-md ${bg} flex items-center justify-center shrink-0`}>
                   <span className={`material-symbols-outlined text-sm leading-none ${text}`}>{symbol}</span>
                 </span>
-                <span className="flex-1 text-left text-xs leading-tight truncate">{cat.label}</span>
+                <span className="flex-1 text-left text-xs leading-[1.05] truncate">{cat.label}</span>
               </button>
               <button
                 type="button"

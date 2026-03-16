@@ -269,7 +269,7 @@ function News() {
           <h1 className="text-lg font-semibold text-slate-900">Your Daily Briefing</h1>
         </div>
         <WeatherBar variant="sticky" />
-        <div className="border-b border-slate-200 bg-white">
+        <div data-testid="news-mobile-filter-bar-shell" className="relative z-40 border-b border-slate-200 bg-white">
           <FilterBar
             categories={enabledCategories}
             activeCategory={feedCategory}
