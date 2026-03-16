@@ -420,7 +420,7 @@ describe('Chat zip room indicator', () => {
     expect(menuBar.textContent).toContain('1/6');
   });
 
-  it('renders alphabetical state chats with county rooms and a topics dropdown', async () => {
+  it('renders alphabetical state chats with city rooms and a topics dropdown', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -438,12 +438,12 @@ describe('Chat zip room indicator', () => {
         rooms: [
           { _id: 'topic-tech', type: 'topic', name: 'Technology' },
           { _id: 'state-wy', type: 'state', name: 'Wyoming', state: 'WY' },
-          { _id: 'county-la', type: 'county', name: 'Los Angeles County, California', state: 'CA', county: 'Los Angeles County' },
+          { _id: 'city-la', type: 'city', name: 'Los Angeles, California', state: 'CA', city: 'Los Angeles', stableKey: 'city:CA:los angeles' },
           { _id: 'topic-ai', type: 'topic', name: 'AI' },
           { _id: 'state-ca', type: 'state', name: 'California', state: 'CA' },
-          { _id: 'county-orange', type: 'county', name: 'Orange County, California', state: 'CA', county: 'Orange County' },
+          { _id: 'city-sd', type: 'city', name: 'San Diego, California', state: 'CA', city: 'San Diego', stableKey: 'city:CA:san diego' },
           { _id: 'state-al', type: 'state', name: 'Alabama', state: 'AL' },
-          { _id: 'county-mobile', type: 'county', name: 'Mobile County, Alabama', state: 'AL', county: 'Mobile County' }
+          { _id: 'city-mobile', type: 'city', name: 'Mobile, Alabama', state: 'AL', city: 'Mobile', stableKey: 'city:AL:mobile' }
         ]
       }
     });
@@ -473,7 +473,7 @@ describe('Chat zip room indicator', () => {
     ]);
 
     expect(container.querySelectorAll('[data-discovery-state-summary]')).toHaveLength(0);
-    expect(container.querySelectorAll('[data-discovery-county]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-discovery-city]')).toHaveLength(0);
     expect(container.querySelectorAll('[data-topic-room]')).toHaveLength(0);
 
     const stateChatsToggle = Array.from(container.querySelectorAll('button'))
@@ -498,12 +498,12 @@ describe('Chat zip room indicator', () => {
       });
     }
 
-    const countyRows = Array.from(container.querySelectorAll('[data-discovery-county]'))
-      .map((node) => node.getAttribute('data-discovery-county'));
-    expect(countyRows).toEqual([
-      'Mobile County, Alabama',
-      'Los Angeles County, California',
-      'Orange County, California'
+    const cityRows = Array.from(container.querySelectorAll('[data-discovery-city]'))
+      .map((node) => node.getAttribute('data-discovery-city'));
+    expect(cityRows).toEqual([
+      'Mobile, Alabama',
+      'Los Angeles, California',
+      'San Diego, California'
     ]);
 
     const topicsToggle = Array.from(container.querySelectorAll('button'))
