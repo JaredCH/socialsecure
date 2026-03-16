@@ -138,6 +138,10 @@ function baseCategoryFilter(category) {
   return { category };
 }
 
+/**
+ * Combine a base article query with an optional category clause using $and so
+ * category filters can safely coexist with other $or predicates.
+ */
 function applyCategoryFilter(query, categoryFilter) {
   if (!categoryFilter || Object.keys(categoryFilter).length === 0) return query;
   return { $and: [query, categoryFilter] };

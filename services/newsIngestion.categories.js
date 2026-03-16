@@ -27,30 +27,29 @@ const MAX_JITTER_MS = 300;  // additional random jitter
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MARIJUANA_TOPIC = 'marijuana';
+const MARIJUANA_TEXT_PATTERNS = [
+  /\bmarijuana\b/i,
+  /\bcannabis\b/i,
+  /\bhemp\b/i,
+  /\bthc\b/i,
+  /\bthca\b/i,
+  /\bdelta[\s-]*8\b/i,
+  /\bdelta[\s-]*9\b/i,
+];
 const MARIJUANA_TOPIC_QUERY = {
   $or: [
     { category: MARIJUANA_TOPIC },
-    { title: /\bmarijuana\b/i },
-    { description: /\bmarijuana\b/i },
-    { title: /\bcannabis\b/i },
-    { description: /\bcannabis\b/i },
-    { title: /\bhemp\b/i },
-    { description: /\bhemp\b/i },
-    { title: /\bthc\b/i },
-    { description: /\bthc\b/i },
-    { title: /\bthca\b/i },
-    { description: /\bthca\b/i },
-    { title: /\bdelta[\s-]*8\b/i },
-    { description: /\bdelta[\s-]*8\b/i },
-    { title: /\bdelta[\s-]*9\b/i },
-    { description: /\bdelta[\s-]*9\b/i },
+    ...MARIJUANA_TEXT_PATTERNS.flatMap((pattern) => ([
+      { title: pattern },
+      { description: pattern },
+    ])),
   ],
 };
 
 function normalizeTopics(topics = []) {
   return Array.from(new Set(
     topics
-      .map((topic) => String(topic || '').trim().toLowerCase())
+      .map((topic) => String(topic ?? '').trim().toLowerCase())
       .filter(Boolean)
   ));
 }
@@ -59,19 +58,12 @@ function shouldTagAsMarijuana(item, category) {
   if (category === MARIJUANA_TOPIC) return true;
   const searchableText = [
     item?.title,
-    item?.contentSnippet,
-    item?.summary,
-    item?.description,
+    item?.contentSnippet || item?.summary,
   ]
     .filter(Boolean)
     .join(' ');
 
-  return MARIJUANA_TOPIC_QUERY.$or
-    .filter((clause) => clause.title || clause.description)
-    .some((clause) => {
-      const pattern = clause.title || clause.description;
-      return pattern.test(searchableText);
-    });
+  return MARIJUANA_TEXT_PATTERNS.some((pattern) => pattern.test(searchableText));
 }
 
 function deriveTopics(item, category, existingTopics = []) {
@@ -118,8 +110,9 @@ async function persistItem(item, category, feedSource) {
     ]
   }).lean();
   if (existing) {
-    const topics = deriveTopics(item, category, existing.topics);
-    if (topics.length !== normalizeTopics(existing.topics).length) {
+    const existingTopics = normalizeTopics(existing.topics);
+    const topics = deriveTopics(item, category, existingTopics);
+    if (!existingTopics.includes(MARIJUANA_TOPIC) && topics.includes(MARIJUANA_TOPIC)) {
       await Article.updateOne(
         { _id: existing._id },
         { $addToSet: { topics: MARIJUANA_TOPIC } }
