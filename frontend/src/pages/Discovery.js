@@ -14,12 +14,22 @@ const formatDate = (value) => {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+const resolveUserId = (user) => {
+  const rawUserId = user?._id ?? user?.id ?? user?.userId ?? null;
+  if (rawUserId === null || rawUserId === undefined) return '';
+  return String(rawUserId).trim();
+};
+
+const extractApiErrorMessage = (error, fallbackMessage) => (
+  error?.response?.data?.error || fallbackMessage
+);
+
 const UserCard = ({ user, onSendRequest }) => {
   const [requestState, setRequestState] = useState('idle'); // idle | loading | sent | error
   const [requestError, setRequestError] = useState('');
 
   const handleSendRequest = async () => {
-    const targetUserId = String(user?._id || user?.id || user?.userId || '').trim();
+    const targetUserId = resolveUserId(user);
     if (!targetUserId) {
       setRequestError('Unable to identify this user. Please refresh and try again.');
       setRequestState('error');
@@ -32,7 +42,7 @@ const UserCard = ({ user, onSendRequest }) => {
       await onSendRequest(targetUserId);
       setRequestState('sent');
     } catch (error) {
-      setRequestError(error?.response?.data?.error || 'Failed to send request. Please try again.');
+      setRequestError(extractApiErrorMessage(error, 'Failed to send request. Please try again.'));
       setRequestState('error');
     }
   };
@@ -209,7 +219,7 @@ const Discovery = () => {
       setUsersHasMore(data.hasMore ?? false);
       setUsersPage(page);
     } catch (err) {
-      setUsersError(err?.response?.data?.error || 'Failed to load suggestions. Please try again.');
+      setUsersError(extractApiErrorMessage(err, 'Failed to load suggestions. Please try again.'));
     } finally {
       setUsersLoaded(true);
       setUsersLoading(false);
@@ -231,7 +241,7 @@ const Discovery = () => {
       setPostsHasMore(data.hasMore ?? false);
       setPostsPage(page);
     } catch (err) {
-      setPostsError(err?.response?.data?.error || 'Failed to load posts. Please try again.');
+      setPostsError(extractApiErrorMessage(err, 'Failed to load posts. Please try again.'));
     } finally {
       setPostsLoaded(true);
       setPostsLoading(false);
