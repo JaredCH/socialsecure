@@ -1,4 +1,0 @@
-{
-  "error": "MongooseServerSelectionError: connect ECONNREFUSED 127.0.0.1:27017",
-  "stack": "MongooseServerSelectionError: connect ECONNREFUSED 127.0.0.1:27017\n    at _handleConnectionErrors (C:\\Users\\Jared\\source\\repos\\JaredCH\\SS\\socialsecure\\node_modules\\mongoose\\lib\\connection.js:1169:11)\n    at NativeConnection.openUri (C:\\Users\\Jared\\source\\repos\\JaredCH\\SS\\socialsecure\\node_modules\\mongoose\\lib\\connection.js:1100:11)\n    at async [eval]:1:321"
-}
