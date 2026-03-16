@@ -7,10 +7,12 @@ describe('ChatRoom.syncUserLocationRooms zip-first behavior', () => {
 
   it('uses zipCode as the primary city-room key when present', async () => {
     const zipRoom = { members: [], save: jest.fn().mockResolvedValue(true) };
+    const countyRoom = { members: [], save: jest.fn().mockResolvedValue(true) };
     const stateRoom = { members: [], save: jest.fn().mockResolvedValue(true) };
 
     const findOrCreateSpy = jest.spyOn(ChatRoom, 'findOrCreateByLocation')
       .mockResolvedValueOnce({ room: zipRoom, created: true })
+      .mockResolvedValueOnce({ room: countyRoom, created: false })
       .mockResolvedValueOnce({ room: stateRoom, created: false });
 
     const result = await ChatRoom.syncUserLocationRooms({
@@ -28,25 +30,39 @@ describe('ChatRoom.syncUserLocationRooms zip-first behavior', () => {
       zipCode: '78701',
       county: 'Travis'
     }));
+    expect(findOrCreateSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      type: 'county',
+      county: 'Travis',
+      state: 'TX'
+    }));
     expect(result.created).toBe(1);
   });
 
   it('only creates state room when zipCode is missing', async () => {
+    const countyRoom = { members: [], save: jest.fn().mockResolvedValue(true) };
     const stateRoom = { members: [], save: jest.fn().mockResolvedValue(true) };
 
     const findOrCreateSpy = jest.spyOn(ChatRoom, 'findOrCreateByLocation')
+      .mockResolvedValueOnce({ room: countyRoom, created: false })
       .mockResolvedValueOnce({ room: stateRoom, created: false });
 
     await ChatRoom.syncUserLocationRooms({
       _id: 'user-legacy',
       location: { coordinates: [-97.7431, 30.2672] },
       city: 'Austin',
+      county: 'Travis County',
       state: 'TX',
       country: 'US'
     });
 
-    expect(findOrCreateSpy).toHaveBeenCalledTimes(1);
-    expect(findOrCreateSpy).toHaveBeenCalledWith(expect.objectContaining({
+    expect(findOrCreateSpy).toHaveBeenCalledTimes(2);
+    expect(findOrCreateSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      type: 'county',
+      county: 'Travis County',
+      state: 'TX',
+      country: 'US'
+    }));
+    expect(findOrCreateSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
       type: 'state',
       state: 'TX',
       country: 'US'

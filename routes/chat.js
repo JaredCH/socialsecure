@@ -166,6 +166,7 @@ const E2EE_LIMITS = {
 };
 const NEARBY_ZIP_THRESHOLD = 25;
 const MAX_NEARBY_ZIP_ROOMS = 100;
+const METERS_PER_MILE = 1609.34;
 const PROFILE_THREAD_ROLE_VALUES = ['friends', 'circles', 'guests'];
 const DEFAULT_PROFILE_THREAD_ACCESS = Object.freeze({
   readRoles: ['friends', 'circles'],
@@ -226,6 +227,68 @@ const buildRouteLimiter = (max, message) => rateLimit({
     xForwardedForHeader: false
   }
 });
+const DISCOVERY_ROOM_FILTER = {
+  $or: [
+    { type: 'state' },
+    { type: 'county' },
+    { type: 'topic' },
+    { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
+  ]
+};
+const buildAllRoomsAggregationPipeline = (skip, limit) => ([
+  { $match: DISCOVERY_ROOM_FILTER },
+  {
+    $addFields: {
+      discoveryTypePriority: {
+        $switch: {
+          branches: [
+            { case: { $eq: ['$type', 'state'] }, then: 0 },
+            { case: { $eq: ['$type', 'county'] }, then: 1 },
+            { case: { $eq: ['$type', 'topic'] }, then: 2 }
+          ],
+          default: 3
+        }
+      }
+    }
+  },
+  { $sort: { discoveryTypePriority: 1, lastActivity: -1, createdAt: -1 } },
+  { $skip: skip },
+  { $limit: limit },
+  {
+    $project: {
+      _id: 1,
+      name: 1,
+      type: 1,
+      createdBy: 1,
+      city: 1,
+      state: 1,
+      country: 1,
+      county: 1,
+      zipCode: 1,
+      discoverable: 1,
+      eventRef: 1,
+      stableKey: 1,
+      autoLifecycle: 1,
+      members: 1,
+      messageCount: 1,
+      lastActivity: 1
+    }
+  }
+]);
+const formatDiscoveryRoomSummary = (room, userId = null) => ({
+  ...room,
+  memberCount: Array.isArray(room?.members) ? room.members.length : Number(room?.memberCount || 0),
+  isMember: userId
+    ? Array.isArray(room?.members) && room.members.some((memberId) => String(memberId) === String(userId))
+    : undefined
+});
+const toPlainDoc = (doc) => (doc?.toObject ? doc.toObject() : doc);
+const hasValidCoordinates = (location) => (
+  Array.isArray(location?.coordinates)
+  && location.coordinates.length === 2
+  && Number.isFinite(Number(location.coordinates[0]))
+  && Number.isFinite(Number(location.coordinates[1]))
+);
 const discoveryLimiter = buildRouteLimiter(90, 'Too many room discovery requests. Please slow down.');
 const allRoomsLimiter = buildRouteLimiter(20, 'Too many full room list requests. Please try again soon.');
 const roomReadLimiter = buildRouteLimiter(120, 'Too many room requests. Please slow down.');
@@ -948,56 +1011,14 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = parseDiscoveryLimit(req.query.limit);
     const skip = (page - 1) * limit;
-    const allowedRoomFilter = {
-      $or: [
-        { type: 'state' },
-        { type: 'county' },
-        { type: 'topic' },
-        { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
-      ]
-    };
+    const pipeline = buildAllRoomsAggregationPipeline(skip, limit);
+    let total = await ChatRoom.countDocuments(DISCOVERY_ROOM_FILTER);
 
-    const rooms = await ChatRoom.aggregate([
-      { $match: allowedRoomFilter },
-      {
-        $addFields: {
-          discoveryTypePriority: {
-            $switch: {
-              branches: [
-                { case: { $eq: ['$type', 'state'] }, then: 0 },
-                { case: { $eq: ['$type', 'county'] }, then: 1 },
-                { case: { $eq: ['$type', 'topic'] }, then: 2 }
-              ],
-              default: 3
-            }
-          }
-        }
-      },
-      { $sort: { discoveryTypePriority: 1, lastActivity: -1, createdAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-      {
-        $project: {
-          _id: 1,
-          name: 1,
-          type: 1,
-          createdBy: 1,
-          city: 1,
-          state: 1,
-          country: 1,
-          county: 1,
-          discoverable: 1,
-          eventRef: 1,
-          stableKey: 1,
-          autoLifecycle: 1,
-          members: 1,
-          messageCount: 1,
-          lastActivity: 1
-        }
-      }
-    ]);
-
-    const total = await ChatRoom.countDocuments(allowedRoomFilter);
+    if (total === 0) {
+      await ChatRoom.ensureDefaultDiscoveryRooms({ force: true });
+      total = await ChatRoom.countDocuments(DISCOVERY_ROOM_FILTER);
+    }
+    const rooms = total > 0 ? await ChatRoom.aggregate(pipeline) : [];
 
     return res.json({
       success: true,
@@ -1005,14 +1026,109 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
       limit,
       total,
       hasMore: (skip + rooms.length) < total,
-      rooms: rooms.map((room) => ({
-        ...room,
-        memberCount: Array.isArray(room.members) ? room.members.length : 0
-      }))
+      rooms: rooms.map((room) => formatDiscoveryRoomSummary(room))
     });
   } catch (error) {
     console.error('Error loading all rooms:', error);
     return res.status(500).json({ error: 'Failed to load all rooms', details: error.message });
+  }
+});
+
+router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (req, res) => {
+  try {
+    await ChatRoom.ensureDefaultDiscoveryRooms();
+
+    const user = await resolveLeanDoc(
+      User.findById(req.user.userId)
+        .select('_id city state country county zipCode location')
+    );
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await ChatRoom.syncUserLocationRooms(user);
+
+    const normalizedZipCode = normalizeZipCode(user.zipCode);
+    const country = user.country || 'US';
+    const [stateResult, countyResult, zipConversation] = await Promise.all([
+      user.state
+        ? ChatRoom.findOrCreateByLocation({
+          type: 'state',
+          state: user.state,
+          country,
+          coordinates: user.location?.coordinates
+        })
+        : Promise.resolve(null),
+      user.state && user.county
+        ? ChatRoom.findOrCreateByLocation({
+          type: 'county',
+          state: user.state,
+          country,
+          county: user.county,
+          coordinates: user.location?.coordinates
+        })
+        : Promise.resolve(null),
+      normalizedZipCode
+        ? resolveLeanDoc(ChatConversation.findOne({ type: 'zip-room', zipCode: normalizedZipCode }))
+        : Promise.resolve(null)
+    ]);
+
+    let nearbyCities = [];
+    if (hasValidCoordinates(user.location)) {
+      const [longitude, latitude] = user.location.coordinates.map((value) => Number(value));
+      nearbyCities = await ChatRoom.aggregate([
+        {
+          $geoNear: {
+            near: { type: 'Point', coordinates: [longitude, latitude] },
+            distanceField: 'distanceMeters',
+            spherical: true,
+            maxDistance: 100 * METERS_PER_MILE,
+            query: {
+              type: 'city',
+              zipCode: {
+                $exists: true,
+                $nin: [null, '', normalizedZipCode]
+              },
+              ...(user.state ? { state: user.state } : {})
+            }
+          }
+        },
+        { $sort: { distanceMeters: 1, messageCount: -1, lastActivity: -1 } },
+        { $limit: 3 },
+        {
+          $project: {
+            _id: 1,
+            name: 1,
+            type: 1,
+            city: 1,
+            state: 1,
+            country: 1,
+            county: 1,
+            zipCode: 1,
+            members: 1,
+            messageCount: 1,
+            lastActivity: 1,
+            distanceMeters: 1
+          }
+        }
+      ]);
+    }
+
+    return res.json({
+      success: true,
+      rooms: {
+        state: stateResult?.room ? formatDiscoveryRoomSummary(toPlainDoc(stateResult.room), user._id) : null,
+        county: countyResult?.room ? formatDiscoveryRoomSummary(toPlainDoc(countyResult.room), user._id) : null,
+        zip: zipConversation ? formatConversationSummary(zipConversation, new Map(), user._id, new Map()) : null,
+        cities: nearbyCities.map((room) => ({
+          ...formatDiscoveryRoomSummary(room, user._id),
+          distanceMiles: Number((Number(room.distanceMeters || 0) / METERS_PER_MILE).toFixed(1))
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Error loading quick-access rooms:', error);
+    return res.status(500).json({ error: 'Failed to load quick-access rooms', details: error.message });
   }
 });
 
