@@ -722,6 +722,7 @@ function Chat() {
   }, [
     activeConversation?.type,
     activeConversationId,
+    decryptedDmContentById,
     dmUnlockedByConversation,
     ensureE2EESession,
     messages,

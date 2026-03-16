@@ -1187,7 +1187,7 @@ describe('Chat zip room indicator', () => {
       await wait(20);
     });
 
-    expect(decryptEnvelope).toHaveBeenCalledTimes(5);
+    expect(decryptEnvelope).toHaveBeenCalledTimes(10);
 
     const loadEarlierButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Load earlier messages');
     expect(loadEarlierButton).not.toBeUndefined();
@@ -1198,7 +1198,7 @@ describe('Chat zip room indicator', () => {
       await wait(20);
     });
 
-    expect(decryptEnvelope).toHaveBeenCalledTimes(10);
+    expect(decryptEnvelope).toHaveBeenCalledTimes(12);
   });
 
   it('shows reaction picker only after opening it', async () => {
