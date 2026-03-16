@@ -552,14 +552,6 @@ function Chat() {
     () => new Map(dmFriends.map((friend) => [normalizeId(friend?._id), friend?.presence || null])),
     [dmFriends]
   );
-  const adminMutedUserIds = useMemo(() => (
-    new Set(
-      roomUsers
-        .filter((entry) => new Date(entry?.mutedUntil || 0).getTime() > Date.now())
-        .map((entry) => normalizeId(entry?._id))
-        .filter(Boolean)
-    )
-  ), [roomUsers]);
   const getConversationUserPresence = useCallback((conversation) => {
     if (!conversation) return null;
     const targetUser = conversation.type === 'dm' ? conversation.peer : conversation.profileUser;
@@ -744,23 +736,6 @@ function Chat() {
   const topicRooms = useMemo(
     () => allChatRooms.filter((room) => room.type === 'topic').sort(sortRoomsByName),
     [allChatRooms]
-  );
-  const adminMutedUserIds = useMemo(() => new Set(
-    roomUsers
-      .filter((entry) => {
-        const mutedUntilTs = new Date(entry?.mutedUntil || 0).getTime();
-        return Number.isFinite(mutedUntilTs) && mutedUntilTs > Date.now();
-      })
-      .map((entry) => String(entry?._id || ''))
-      .filter(Boolean)
-  ), [roomUsers]);
-  const adminProcessingMessageIds = useMemo(
-    () => new Set(adminMessageActionIds.map((entry) => String(entry || '')).filter(Boolean)),
-    [adminMessageActionIds]
-  );
-  const adminProcessingUserIds = useMemo(
-    () => new Set(adminMuteActionUserIds.map((entry) => String(entry || '')).filter(Boolean)),
-    [adminMuteActionUserIds]
   );
 
   const activeTheme = useMemo(
