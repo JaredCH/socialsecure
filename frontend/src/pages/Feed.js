@@ -79,6 +79,10 @@ const formatDate = (value) => {
   return date.toLocaleString();
 };
 
+const getDisplayContent = (content, contentCensored, censorEnabled) => (
+  censorEnabled && typeof contentCensored === 'string' ? contentCensored : content
+);
+
 const normalizePost = (post) => {
   const normalizedLikes = Array.isArray(post.likes)
     ? post.likes.map((like) => (typeof like === 'string' ? like : String(like?._id || like)))
@@ -557,6 +561,11 @@ const Social = () => {
                 const postTarget = post.targetFeedId?.username || postAuthor;
                 const hasLiked = currentUser ? post.likes.includes(currentUser._id) : false;
                 const postBusy = Boolean(actionLoadingByPost[post._id]);
+                const displayContent = getDisplayContent(
+                  post.content,
+                  post.contentCensored,
+                  currentUser?.enableMaturityWordCensor !== false
+                );
 
                 return (
                   <article key={post._id} className="bg-white rounded-xl shadow p-5 space-y-3 border border-gray-100">
@@ -572,7 +581,7 @@ const Social = () => {
                       </span>
                     </header>
 
-                    {post.content && <p className="text-gray-800 whitespace-pre-wrap">{post.content}</p>}
+                    {displayContent && <p className="text-gray-800 whitespace-pre-wrap">{displayContent}</p>}
 
                     {post.mediaUrls.length > 0 && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

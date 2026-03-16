@@ -143,6 +143,7 @@ function ChatMessageItem({
   isOwnMessage,
   currentUserId,
   theme,
+  censorSensitiveWords = true,
   onOpenUserMenu,
   reactionsByType = {},
   reactionOptions = [],
@@ -164,6 +165,9 @@ function ChatMessageItem({
     username: message.userId.username,
     realName: message.userId.realName
   } : null;
+  const displayContent = censorSensitiveWords && typeof message.contentCensored === 'string'
+    ? message.contentCensored
+    : message.content;
 
   useEffect(() => () => {
     if (longPressTimerRef.current) {

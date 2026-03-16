@@ -1599,7 +1599,11 @@ router.put('/profile', [
   body('stripImageMetadataOnUpload')
     .optional({ nullable: true })
     .isBoolean()
-    .withMessage('stripImageMetadataOnUpload must be a boolean')
+    .withMessage('stripImageMetadataOnUpload must be a boolean'),
+  body('enableMaturityWordCensor')
+    .optional({ nullable: true })
+    .isBoolean()
+    .withMessage('enableMaturityWordCensor must be a boolean')
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -1641,7 +1645,8 @@ router.put('/profile', [
       links,
       profileTheme,
       socialPagePreferences,
-      stripImageMetadataOnUpload
+      stripImageMetadataOnUpload,
+      enableMaturityWordCensor
     } = req.body;
     const now = Date.now();
 
@@ -1838,6 +1843,9 @@ router.put('/profile', [
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'stripImageMetadataOnUpload')) {
       user.stripImageMetadataOnUpload = stripImageMetadataOnUpload === true;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'enableMaturityWordCensor')) {
+      user.enableMaturityWordCensor = enableMaturityWordCensor !== false;
     }
     
     user.updatedAt = new Date();

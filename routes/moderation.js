@@ -18,6 +18,8 @@ const Article = require('../models/Article');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
 const NewsPreferences = require('../models/NewsPreferences');
+const SiteContentFilter = require('../models/SiteContentFilter');
+const { normalizeFilterWords } = require('../utils/contentFilter');
 
 const REPORT_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const REPORT_LIMIT_MAX = 5;
@@ -105,6 +107,13 @@ const haversineMiles = (lat1, lon1, lat2, lon2) => {
 };
 const hasValidCoordinates = (entry = {}) => Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude);
 const toUniqueStrings = (values = []) => [...new Set(values.filter(Boolean))];
+const getSiteContentFilter = async () => {
+  const existing = await SiteContentFilter.findOne({ key: 'global' }).lean();
+  return {
+    zeroToleranceWords: normalizeFilterWords(existing?.zeroToleranceWords || []),
+    maturityCensoredWords: normalizeFilterWords(existing?.maturityCensoredWords || [])
+  };
+};
 
 const buildNewsIngestionLocationFilter = async (locationQuery = '') => {
   const rawQuery = String(locationQuery || '').trim();
@@ -531,6 +540,47 @@ router.get('/control-panel/overview', authenticateToken, requireAdmin, async (re
   } catch (error) {
     console.error('Control panel overview error:', error);
     return res.status(500).json({ error: 'Failed to load control panel overview' });
+  }
+});
+
+router.get('/control-panel/content-filter', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const contentFilter = await getSiteContentFilter();
+    return res.json({ success: true, ...contentFilter });
+  } catch (error) {
+    console.error('Control panel content filter read error:', error);
+    return res.status(500).json({ error: 'Failed to load content filter settings' });
+  }
+});
+
+router.put('/control-panel/content-filter', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const zeroToleranceWords = normalizeFilterWords(req.body?.zeroToleranceWords || []);
+    const maturityCensoredWords = normalizeFilterWords(req.body?.maturityCensoredWords || []);
+
+    const updated = await SiteContentFilter.findOneAndUpdate(
+      { key: 'global' },
+      {
+        $set: {
+          zeroToleranceWords,
+          maturityCensoredWords
+        }
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true
+      }
+    ).lean();
+
+    return res.json({
+      success: true,
+      zeroToleranceWords: normalizeFilterWords(updated?.zeroToleranceWords || zeroToleranceWords),
+      maturityCensoredWords: normalizeFilterWords(updated?.maturityCensoredWords || maturityCensoredWords)
+    });
+  } catch (error) {
+    console.error('Control panel content filter update error:', error);
+    return res.status(500).json({ error: 'Failed to save content filter settings' });
   }
 });
 

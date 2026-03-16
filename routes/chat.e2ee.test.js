@@ -13,6 +13,7 @@ const mockChatConversation = {};
 const mockConversationMessage = { findOne: jest.fn() };
 const mockConversationKeyPackage = {};
 const mockBlockList = { findOne: jest.fn() };
+const mockSiteContentFilter = { findOne: jest.fn() };
 
 const createSelectLean = (value) => ({
   select: jest.fn().mockReturnValue({
@@ -60,6 +61,7 @@ jest.mock('../models/ConversationMessage', () => mockConversationMessage);
 jest.mock('../models/ConversationKeyPackage', () => mockConversationKeyPackage);
 jest.mock('../models/User', () => mockUser);
 jest.mock('../models/BlockList', () => mockBlockList);
+jest.mock('../models/SiteContentFilter', () => mockSiteContentFilter);
 jest.mock('../services/realtime', () => ({
   emitChatMessage: jest.fn()
 }));
@@ -104,6 +106,10 @@ describe('Chat E2EE boundary hardening', () => {
     mockBlockList.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue(createLeanResult(null))
     });
+    mockSiteContentFilter.findOne.mockReturnValue(createLeanResult({
+      zeroToleranceWords: [],
+      maturityCensoredWords: []
+    }));
     mockChatMessage.findOne.mockReturnValue(createSelectLeanOrSort(null));
     mockConversationMessage.findOne.mockReturnValue(createSelectLeanOrSort(null));
   });
@@ -193,6 +199,27 @@ describe('Chat E2EE boundary hardening', () => {
 
     expect(response.status).toBe(409);
     expect(response.body.error).toMatch(/Duplicate clientMessageId/);
+  });
+
+  it('rejects zero-tolerance words in plaintext room messages', async () => {
+    const app = buildApp();
+    mockSiteContentFilter.findOne.mockReturnValue(createLeanResult({
+      zeroToleranceWords: ['banned'],
+      maturityCensoredWords: []
+    }));
+    mockChatRoom.findById.mockResolvedValue({ _id: 'room-1', city: 'City', incrementMessageCount: jest.fn(), addMember: jest.fn(), members: [] });
+    mockUser.findById
+      .mockImplementationOnce(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] }, isAdmin: false }))
+      .mockImplementationOnce(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] }, isAdmin: false }));
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'A banned word appears here' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('banned');
+    expect(mockChatMessage).not.toHaveBeenCalled();
   });
 
   it('supports idempotent migration and tombstones plaintext', async () => {
