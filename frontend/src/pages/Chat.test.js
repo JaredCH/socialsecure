@@ -290,9 +290,30 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
+    expect(container.querySelectorAll('[data-discovery-state-summary]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-discovery-county]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-topic-room]')).toHaveLength(0);
+
+    const stateChatsToggle = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('State Chats'));
+    expect(stateChatsToggle).not.toBeNull();
+
+    await act(async () => {
+      stateChatsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
     const stateSummaries = Array.from(container.querySelectorAll('[data-discovery-state-summary]'))
-      .map((node) => node.textContent);
+      .map((node) => node.getAttribute('data-discovery-state-summary'));
     expect(stateSummaries).toEqual(['Alabama', 'California', 'Wyoming']);
+
+    const stateSummaryButtons = Array.from(container.querySelectorAll('[data-discovery-state-summary]'));
+    for (const button of stateSummaryButtons) {
+      await act(async () => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await flush();
+      });
+    }
 
     const countyRows = Array.from(container.querySelectorAll('[data-discovery-county]'))
       .map((node) => node.getAttribute('data-discovery-county'));
@@ -301,6 +322,15 @@ describe('Chat zip room indicator', () => {
       'Los Angeles County, California',
       'Orange County, California'
     ]);
+
+    const topicsToggle = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Topics'));
+    expect(topicsToggle).not.toBeNull();
+
+    await act(async () => {
+      topicsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
 
     const topicRows = Array.from(container.querySelectorAll('[data-topic-room]'))
       .map((node) => node.getAttribute('data-topic-room'));
