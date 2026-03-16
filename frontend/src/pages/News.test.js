@@ -431,6 +431,22 @@ describe('News inline preferences updates', () => {
     expect(feedScroller).toBeTruthy();
   });
 
+  it('renders redesigned briefing surfaces for mobile and desktop', async () => {
+    await renderNews();
+
+    const briefingHeaders = Array.from(container.querySelectorAll('h1'))
+      .filter((h) => h.textContent?.includes('Your Daily Briefing'));
+    expect(briefingHeaders.length).toBeGreaterThanOrEqual(2);
+
+    const desktopSurface = Array.from(container.querySelectorAll('div')).find((el) => (
+      typeof el.className === 'string'
+      && el.className.includes('rounded-2xl')
+      && el.className.includes('border-slate-200')
+      && el.className.includes('min-h-0')
+    ));
+    expect(desktopSurface).toBeTruthy();
+  });
+
   it('renders list/grid view toggle buttons', async () => {
     await renderNews();
 

@@ -215,9 +215,13 @@ function News() {
   return (
     <>
       {/* ─── Mobile layout (< lg) ──────────────────────────────────────────── */}
-      <div data-testid="news-mobile-layout" className="lg:hidden flex h-full flex-col overflow-hidden bg-gray-50">
+      <div data-testid="news-mobile-layout" className="lg:hidden flex h-full flex-col overflow-hidden bg-slate-100">
+        <div className="border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">News</p>
+          <h1 className="text-lg font-semibold text-slate-900">Your Daily Briefing</h1>
+        </div>
         <WeatherBar variant="sticky" />
-        <div>
+        <div className="border-b border-slate-200 bg-white">
           <FilterBar
             categories={CATEGORIES}
             activeCategory={feedCategory}
@@ -230,18 +234,20 @@ function News() {
             activeDate={activeDate}
           />
         </div>
-        <div data-testid="news-mobile-feed" className="flex-1 overflow-y-auto">
-          <AlgorithmicFeed
-            categories={CATEGORIES}
-            activeCategory={feedCategory}
-            activeRegion={activeRegion}
-            activeDate={activeDate}
-            searchQuery={searchQuery}
-            onArticle={setSelectedArticle}
-          />
+        <div data-testid="news-mobile-feed" className="flex-1 overflow-y-auto p-3">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <AlgorithmicFeed
+              categories={CATEGORIES}
+              activeCategory={feedCategory}
+              activeRegion={activeRegion}
+              activeDate={activeDate}
+              searchQuery={searchQuery}
+              onArticle={setSelectedArticle}
+            />
+          </div>
         </div>
         <button
-          className="fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full bg-blue-600 text-white shadow-lg flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-transform"
+          className="fixed bottom-20 right-4 z-40 h-12 w-12 rounded-full bg-blue-600 text-white shadow-lg ring-4 ring-white/90 flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-transform"
           onClick={() => setSettingsOpen(true)}
           aria-label="Open news settings"
         >
@@ -250,7 +256,7 @@ function News() {
       </div>
 
       {/* ─── Desktop layout (>= lg) ────────────────────────────────────────── */}
-      <div className="hidden lg:flex h-full min-h-0 overflow-hidden bg-gray-50">
+      <div className="hidden lg:flex h-full min-h-0 overflow-hidden bg-slate-100 p-4 gap-4">
         <NewsLeftPanel
           categories={CATEGORIES}
           activeCategories={activeCategories}
@@ -265,19 +271,24 @@ function News() {
           searchValue={searchQuery}
           onOpenSettings={() => setSettingsOpen(true)}
         />
-        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-          <FilterBar
-            categories={CATEGORIES}
-            activeCategory={feedCategory}
-            onCategoryChange={handleToggleCategory}
-            onSearch={setSearchQuery}
-            searchValue={searchQuery}
-            onRegionChange={setActiveRegion}
-            onDateChange={setActiveDate}
-            activeRegion={activeRegion}
-            activeDate={activeDate}
-          />
-          <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-6 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">News</p>
+            <h1 className="text-2xl font-semibold text-slate-900">Your Daily Briefing</h1>
+          </div>
+          <div className="border-b border-slate-200">
+            <FilterBar
+              categories={CATEGORIES}
+              activeCategory={feedCategory}
+              onCategoryChange={handleToggleCategory}
+              onSearch={setSearchQuery}
+              onRegionChange={setActiveRegion}
+              onDateChange={setActiveDate}
+              activeRegion={activeRegion}
+              activeDate={activeDate}
+            />
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-4">
             <AlgorithmicFeed
               categories={CATEGORIES}
               activeCategory={feedCategory}
@@ -288,7 +299,7 @@ function News() {
             />
           </div>
         </div>
-        <div className="w-[300px] shrink-0 flex min-h-0 flex-col gap-4 overflow-y-auto p-4 border-l border-gray-100 bg-white">
+        <div className="w-[320px] shrink-0 flex min-h-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <WeatherBar variant="card" />
           {followedTeams.length > 0 && (
             <SportsSchedulePanel
