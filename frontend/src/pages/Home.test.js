@@ -75,14 +75,19 @@ describe('Home landing page', () => {
     await renderHome({ isAuthenticated: false });
 
     expect(container.querySelector('[data-testid="hero-map-system"]')).not.toBeNull();
-    expect(container.querySelectorAll('[data-testid="floating-map-badge"]')).toHaveLength(4);
-    expect(container.textContent).toContain('Parallax community map');
-    expect(container.textContent).toContain('Live pins • Heat overlays');
-    expect(container.textContent).toContain('Map layers in motion');
-    expect(container.textContent).toContain('Heatmap overlays');
+    expect(container.querySelectorAll('[data-testid="hero-map-dot"]')).toHaveLength(180);
+    expect(container.textContent).toContain('Community density map');
+    expect(container.textContent).toContain('Hundreds of users • Center glow');
+    expect(container.textContent).toContain('Converging user density');
+    expect(container.textContent).toContain('Transparent heat overlay');
     expect(container.querySelector('[data-testid="encrypted-dm-showcase"]')).not.toBeNull();
-    expect(container.querySelectorAll('[data-testid="animated-dm-bubble"]')).toHaveLength(4);
+    expect(container.querySelectorAll('[data-testid="dm-flow-stage"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid="dm-cipher-row"]')).toHaveLength(6);
     expect(container.textContent).toContain('Encrypted direct messaging, presented as a living conversation');
     expect(container.textContent).toContain('End-to-end encrypted');
+    expect(container.textContent).toContain('Matrix-style ciphering');
+    expect(container.textContent).toContain('New message');
+    expect(container.textContent).toContain('Encryption password required');
+    expect(container.textContent).toContain('Plain readable text');
   });
 });
