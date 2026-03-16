@@ -745,8 +745,8 @@ function Chat() {
   );
 
   const stateRoomGroups = useMemo(() => {
-    const countyRoomsByState = allChatRooms
-      .filter((room) => room.type === 'county')
+    const cityRoomsByState = allChatRooms
+      .filter((room) => room.type === 'city' && room.stableKey)
       .sort(sortRoomsByName)
       .reduce((acc, room) => {
         const stateCode = String(room.state || '').trim();
@@ -761,7 +761,7 @@ function Chat() {
       .sort(sortRoomsByName)
       .map((room) => ({
         room,
-        counties: countyRoomsByState[String(room.state || '').trim()] || []
+        cities: cityRoomsByState[String(room.state || '').trim()] || []
       }));
   }, [allChatRooms]);
 
@@ -2088,7 +2088,7 @@ function Chat() {
                       {stateChatsOpen ? (
                         <ul id="chat-state-discovery-list" className="mt-2 space-y-1 text-xs">
                           {stateRoomGroups.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
-                          {stateRoomGroups.map(({ room, counties }) => {
+                          {stateRoomGroups.map(({ room, cities }) => {
                             const roomId = String(room._id);
                             const joinedState = Boolean(joinedRoomIds[roomId]);
                             const stateExpanded = Boolean(expandedStateRooms[roomId]);
@@ -2122,23 +2122,23 @@ function Chat() {
                                       )}
                                     </div>
                                     <div>
-                                      <p className="text-[10px] font-semibold uppercase opacity-80">County Chats</p>
+                                      <p className="text-[10px] font-semibold uppercase opacity-80">Cities</p>
                                       <ul className="mt-1 space-y-1">
-                                        {counties.length === 0 ? <li className="opacity-75">No county chats available.</li> : null}
-                                        {counties.map((countyRoom) => {
-                                          const countyRoomId = String(countyRoom._id);
-                                          const joinedCounty = Boolean(joinedRoomIds[countyRoomId]);
+                                        {cities.length === 0 ? <li className="opacity-75">No city chats available.</li> : null}
+                                        {cities.map((cityRoom) => {
+                                          const cityRoomId = String(cityRoom._id);
+                                          const joinedCity = Boolean(joinedRoomIds[cityRoomId]);
                                           return (
                                             <li
-                                              key={countyRoomId}
+                                              key={cityRoomId}
                                               className="flex items-center justify-between gap-2 rounded border px-2 py-1"
-                                              data-discovery-county={countyRoom.name}
+                                              data-discovery-city={cityRoom.name}
                                             >
-                                              <span>{countyRoom.name}</span>
-                                              {!joinedCounty ? (
+                                              <span>{cityRoom.name}</span>
+                                              {!joinedCity ? (
                                                 <button
                                                   type="button"
-                                                  onClick={() => handleOpenRoom(countyRoom._id)}
+                                                  onClick={() => handleOpenRoom(cityRoom._id)}
                                                   className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
                                                 >
                                                   Join

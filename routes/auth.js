@@ -11,6 +11,7 @@ const Session = require('../models/Session');
 const SecurityEvent = require('../models/SecurityEvent');
 const DeviceKey = require('../models/DeviceKey');
 const NewsPreferences = require('../models/NewsPreferences');
+const ChatRoom = require('../models/ChatRoom');
 const { createNotification } = require('../services/notifications');
 const {
   SOCIAL_THEME_PRESETS,
@@ -559,6 +560,24 @@ router.post('/register', [
         registrationNewsPrefetch = await require('../services/newsIngestion.local').triggerLocationIngest(user.zipCode);
       } catch (e) {
         console.warn('Unable to trigger local news ingest on registration:', e.message);
+      }
+    }
+
+    // Expand city chat rooms based on the user's zip code
+    if (user.zipCode) {
+      try {
+        const resolvedCoords = resolvedRegistrationLocation?.coordinates;
+        await ChatRoom.expandCityRoomsForZip({
+          zipCode: user.zipCode,
+          city: canonicalLocation.city || undefined,
+          state: user.state,
+          country: user.country || 'US',
+          coordinates: resolvedCoords
+            ? [Number(resolvedCoords.lon), Number(resolvedCoords.lat)]
+            : undefined
+        });
+      } catch (e) {
+        console.warn('Unable to expand city rooms on registration:', e.message);
       }
     }
 
