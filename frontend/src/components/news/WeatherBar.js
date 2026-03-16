@@ -242,7 +242,7 @@ export default function WeatherBar({ variant = 'sticky' }) {
   if (isCard) {
     return (
       <section
-        className="rounded-3xl shadow-lg overflow-hidden text-white"
+        className="shrink-0 rounded-3xl shadow-lg overflow-hidden text-white"
         style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #312e81 100%)' }}
       >
         <div className="p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(12px)' }}>
@@ -326,30 +326,22 @@ export default function WeatherBar({ variant = 'sticky' }) {
             <div data-testid="weather-card-expanded" className="space-y-3 pt-2">
               {/* Hourly grid */}
               {hourly.length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-4 gap-1.5">
                   {hourly.slice(0, 8).map((h, i) => (
                     <div
                       key={i}
-                      className="min-w-0 rounded-xl px-2 py-1.5 text-center"
+                      className="min-w-0 rounded-lg px-1.5 py-1 text-center leading-tight"
                       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
                     >
-                      <p className="text-[10px]" style={{ color: '#9ca3af' }}>
+                      <p className="text-[9px]" style={{ color: '#9ca3af' }}>
                         {new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}
                       </p>
-                      <div className="text-sm mt-0.5">{ICON_MAP[h.icon] || '🌤️'}</div>
-                      <p className="text-xs font-semibold mt-0.5">{h.temperature}°</p>
-                      <div className="mt-1 space-y-0.5 text-[9px] text-white/70">
+                      <p className="text-[11px] font-semibold mt-0.5">{h.temperature}°</p>
+                      <div className="mt-0.5 space-y-0.5 text-[8px] text-white/70">
                         {h.precipitationProbability != null && (
                           <p className="flex items-center justify-center gap-1">
                             <span aria-hidden="true">💧</span>
                             <span>{h.precipitationProbability}%</span>
-                          </p>
-                        )}
-                        {h.windSpeed != null && (
-                          <p className="flex items-center justify-center gap-1">
-                            <span aria-hidden="true">🌬️</span>
-                            <span className="sr-only">Wind </span>
-                            <span>{h.windSpeed} mph</span>
                           </p>
                         )}
                         {h.windGust != null && (
