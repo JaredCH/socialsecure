@@ -75,9 +75,9 @@ describe('Home landing page', () => {
     await renderHome({ isAuthenticated: false });
 
     expect(container.querySelector('[data-testid="hero-map-system"]')).not.toBeNull();
-    expect(container.querySelectorAll('[data-testid="hero-map-dot"]')).toHaveLength(180);
+    expect(container.querySelectorAll('[data-testid="hero-map-dot"]')).toHaveLength(10);
     expect(container.textContent).toContain('Community density map');
-    expect(container.textContent).toContain('Hundreds of users • Center glow');
+    expect(container.textContent).toContain('10 users • Heat cluster');
     expect(container.textContent).toContain('Converging user density');
     expect(container.textContent).toContain('Transparent heat overlay');
     expect(container.querySelector('[data-testid="encrypted-dm-showcase"]')).not.toBeNull();
