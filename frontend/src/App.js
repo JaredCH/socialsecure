@@ -83,7 +83,7 @@ const RouteMain = ({ children }) => {
     <main className={isChatRoute || isMapsRoute
       ? 'flex-1 min-h-0 overflow-hidden'
       : isNewsRoute
-        ? 'flex-1 min-h-0 overflow-y-auto'
+        ? 'flex-1 min-h-0 overflow-hidden'
       : isProfileRoute
         ? 'mx-auto flex-1 min-h-0 w-full overflow-y-auto'
       : isSocialRoute

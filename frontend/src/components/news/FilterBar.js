@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { newsAPI } from '../../utils/api';
 
 /**
@@ -176,21 +176,13 @@ export default function FilterBar({
   activeCategory,
   onCategoryChange,
   onSearch,
+  searchValue = '',
   onRegionChange,
   onDateChange,
   activeRegion,
   activeDate = 'all',
   className = '',
 }) {
-  const [searchVal, setSearchVal] = useState('');
-  const debounceRef = useRef(null);
-
-  const handleSearchChange = (val) => {
-    setSearchVal(val);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => onSearch?.(val), 300);
-  };
-
   const activeDateLabel = DATE_OPTIONS.find((o) => o.value === activeDate)?.label || 'Any time';
   const activeCatLabel = activeCategory
     ? (categories.find((c) => c.key === activeCategory)?.label || activeCategory)
@@ -204,14 +196,14 @@ export default function FilterBar({
           <span className="material-symbols-outlined text-base text-gray-400 leading-none shrink-0" aria-hidden="true">search</span>
           <input
             type="search"
-            value={searchVal}
-            onChange={(e) => handleSearchChange(e.target.value)}
+            value={searchValue}
+            onChange={(e) => onSearch?.(e.target.value)}
             placeholder="Search news…"
             className="flex-1 bg-transparent text-xs outline-none text-gray-700 placeholder-gray-400 min-w-0"
           />
-          {searchVal && (
+          {searchValue && (
             <button
-              onClick={() => { setSearchVal(''); onSearch?.(''); }}
+              onClick={() => onSearch?.('')}
               className="text-gray-400 hover:text-gray-600 leading-none"
               aria-label="Clear search"
             >

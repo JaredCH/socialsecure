@@ -29,17 +29,10 @@ export default function NewsLeftPanel({
   onRemoveKeyword,
   onAddKeyword,
   onSearch,
+  searchValue = '',
   onOpenSettings,
 }) {
   const [kwInput, setKwInput] = React.useState('');
-  const [searchVal, setSearchVal] = React.useState('');
-  const searchDebounce = React.useRef(null);
-
-  const handleSearch = (val) => {
-    setSearchVal(val);
-    clearTimeout(searchDebounce.current);
-    searchDebounce.current = setTimeout(() => onSearch?.(val), 300);
-  };
 
   const handleAddKeyword = () => {
     const trimmed = kwInput.trim().toLowerCase();
@@ -58,13 +51,13 @@ export default function NewsLeftPanel({
           <span className="material-symbols-outlined text-base text-gray-400 leading-none" aria-hidden="true">search</span>
           <input
             type="search"
-            value={searchVal}
-            onChange={(e) => handleSearch(e.target.value)}
+            value={searchValue}
+            onChange={(e) => onSearch?.(e.target.value)}
             placeholder="Search news…"
             className="flex-1 bg-transparent text-xs outline-none text-gray-700 placeholder-gray-400"
           />
-          {searchVal && (
-            <button onClick={() => { setSearchVal(''); onSearch?.(''); }} aria-label="Clear">
+          {searchValue && (
+            <button onClick={() => onSearch?.('')} aria-label="Clear">
               <span className="material-symbols-outlined text-sm text-gray-400">close</span>
             </button>
           )}

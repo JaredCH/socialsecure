@@ -93,4 +93,64 @@ describe('AlgorithmicFeed', () => {
     expect(container.textContent).toContain('San Marcos update');
     expect(window.sessionStorage.getItem('registrationNewsPrefetchStatus')).toBeNull();
   });
+
+  it('filters the currently loaded articles using searchQuery without calling remote search', async () => {
+    newsAPI.getFeed.mockResolvedValue({
+      data: {
+        sections: { keyword: [], local: [], state: [], national: [], trending: [] },
+        feed: [
+          {
+            _id: 'article-1',
+            title: 'Austin technology update',
+            description: 'Startup funding grows',
+            category: 'technology',
+            source: 'Local Wire',
+            publishedAt: '2026-03-14T23:30:00.000Z',
+          },
+          {
+            _id: 'article-2',
+            title: 'City council budget vote',
+            description: 'Municipal finance and planning',
+            category: 'politics',
+            source: 'Metro Times',
+            publishedAt: '2026-03-14T22:00:00.000Z',
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <AlgorithmicFeed
+          categories={[{ key: 'general', label: 'General' }]}
+          activeCategory={null}
+          activeRegion={null}
+          activeDate="all"
+          searchQuery=""
+        />
+      );
+    });
+
+    expect(newsAPI.getFeed).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Austin technology update');
+    expect(container.textContent).toContain('City council budget vote');
+
+    await act(async () => {
+      root.render(
+        <AlgorithmicFeed
+          categories={[{ key: 'general', label: 'General' }]}
+          activeCategory={null}
+          activeRegion={null}
+          activeDate="all"
+          searchQuery="budget"
+        />
+      );
+    });
+
+    expect(newsAPI.getFeed).toHaveBeenCalledTimes(1);
+    expect(newsAPI.searchArticles).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('City council budget vote');
+    expect(container.textContent).not.toContain('Austin technology update');
+    expect(container.textContent).toContain('1 result for "budget"');
+  });
 });
