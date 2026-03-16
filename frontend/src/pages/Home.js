@@ -86,11 +86,11 @@ const platformCapabilities = [
 const mapDensityStats = [
   {
     title: 'User convergence',
-    description: 'Ten glowing circles spread across the city grid drift inward, two merging on the way, showing how communities cluster.'
+    description: 'Ten glowing circles spread across the city grid drift inward; when two merge the resulting glow doubles in size and brightness.'
   },
   {
     title: 'Center convergence',
-    description: 'As circles arrive at staggered intervals the glow intensifies into a bright red heat cluster at the center of the map.'
+    description: 'Each new arrival doubles the cluster\u2019s glow—size and brightness cascade upward until the heat peak, then reverse as circles break off.'
   },
   {
     title: 'Transparent heat overlay',
@@ -138,14 +138,20 @@ function getDensityAnimation(circle, reducedMotion) {
   const mx = DENSITY_MERGE_POINT.x;
   const my = DENSITY_MERGE_POINT.y;
 
+  // Progressive factor – later arrivals encounter more already-merged glows so
+  // their visual size/brightness is higher, showing cascading density.
+  const arrivalFactor = (convergeFrac - 0.5) * 4; // ≈0 for early, ≈0.9 for late
+
   switch (role) {
     case 'merge-keep':
+      // Absorbs merge-fade → doubles in size and brightness at the merge point,
+      // stays enlarged toward center, then eases down at the tail of the cycle.
       return {
         animate: {
           left: [`${startX}%`, `${startX}%`, `${mx}%`, `${cx}%`, `${cx}%`, `${cx}%`],
           top: [`${startY}%`, `${startY}%`, `${my}%`, `${cy}%`, `${cy}%`, `${cy}%`],
-          opacity: [0.45, 0.5, 0.84, 0.72, 0.42, 0.32],
-          scale: [1, 1, 1.36, 1.22, 0.92, 0.75]
+          opacity: [0.5, 0.55, 1.0, 0.92, 0.5, 0.35],
+          scale: [1, 1, 2.0, 2.2, 1.1, 0.8]
         },
         transition: {
           duration: DENSITY_DURATION,
@@ -155,12 +161,13 @@ function getDensityAnimation(circle, reducedMotion) {
         }
       };
     case 'merge-fade':
+      // Shrinks into merge-keep at the merge point and disappears.
       return {
         animate: {
           left: [`${startX}%`, `${startX}%`, `${mx}%`, `${mx}%`, `${mx}%`],
           top: [`${startY}%`, `${startY}%`, `${my}%`, `${my}%`, `${my}%`],
-          opacity: [0.45, 0.5, 0.2, 0, 0],
-          scale: [1, 1, 0.5, 0, 0]
+          opacity: [0.5, 0.55, 0.1, 0, 0],
+          scale: [1, 1, 0.3, 0, 0]
         },
         transition: {
           duration: DENSITY_DURATION,
@@ -170,12 +177,14 @@ function getDensityAnimation(circle, reducedMotion) {
         }
       };
     case 'break-off':
+      // At center the glow is large (part of the dense cluster); as it drifts
+      // outward both size and brightness drop – reversing the merge growth.
       return {
         animate: {
           left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`, `${breakX}%`],
           top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`, `${breakY}%`],
-          opacity: [0.45, 0.5, 0.72, 0.56, 0.42],
-          scale: [1, 1, 1.2, 1.12, 0.82]
+          opacity: [0.5, 0.55, 1.0, 0.6, 0.3],
+          scale: [1, 1, 2.5, 1.4, 0.65]
         },
         transition: {
           duration: DENSITY_DURATION,
@@ -184,13 +193,17 @@ function getDensityAnimation(circle, reducedMotion) {
           ease: 'easeInOut'
         }
       };
-    default:
+    default: {
+      // Normal circles double in size/brightness when they reach the center.
+      // Later arrivals scale even larger because more glows have already merged.
+      const peakScale = 1.6 + arrivalFactor;   // ≈1.7 → ≈2.5
+      const peakOpacity = Math.min(0.82 + arrivalFactor * 0.2, 1.0); // ≈0.82 → ≈1.0
       return {
         animate: {
           left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`, `${cx}%`],
           top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`, `${cy}%`],
-          opacity: [0.45, 0.5, 0.72, 0.38, 0.3],
-          scale: [1, 1, 1.16, 0.9, 0.72]
+          opacity: [0.5, 0.55, peakOpacity, 0.4, 0.3],
+          scale: [1, 1, peakScale, 0.9, 0.7]
         },
         transition: {
           duration: DENSITY_DURATION,
@@ -199,6 +212,7 @@ function getDensityAnimation(circle, reducedMotion) {
           ease: 'easeInOut'
         }
       };
+    }
   }
 }
 
@@ -377,17 +391,17 @@ function Home({ isAuthenticated = false }) {
                       width: 180,
                       height: 180,
                       background:
-                        'radial-gradient(circle, rgba(239,68,68,0.5) 0%, rgba(239,68,68,0.22) 28%, rgba(239,68,68,0.08) 55%, transparent 78%)',
-                      filter: 'blur(12px)',
+                        'radial-gradient(circle, rgba(239,68,68,0.7) 0%, rgba(239,68,68,0.35) 28%, rgba(239,68,68,0.12) 55%, transparent 78%)',
+                      filter: 'blur(10px)',
                       willChange: 'transform, opacity'
                     }}
-                    initial={prefersReducedMotion ? false : { opacity: 0.04, scale: 0.15 }}
+                    initial={prefersReducedMotion ? false : { opacity: 0.02, scale: 0.1 }}
                     animate={
                       prefersReducedMotion
-                        ? { opacity: 0.4, scale: 1 }
+                        ? { opacity: 0.5, scale: 1 }
                         : {
-                            opacity: [0.04, 0.08, 0.24, 0.56, 0.34],
-                            scale: [0.15, 0.3, 0.68, 1.3, 0.78]
+                            opacity: [0.02, 0.06, 0.4, 0.9, 0.35],
+                            scale: [0.1, 0.2, 1.2, 2.8, 1.4]
                           }
                     }
                     transition={
@@ -418,8 +432,8 @@ function Home({ isAuthenticated = false }) {
                           marginLeft: -DENSITY_GLOW_SIZE / 2,
                           marginTop: -DENSITY_GLOW_SIZE / 2,
                           background:
-                            'radial-gradient(circle, rgba(239,68,68,0.65) 0%, rgba(248,113,113,0.35) 40%, rgba(248,113,113,0.1) 70%, transparent 100%)',
-                          boxShadow: '0 0 16px 4px rgba(239,68,68,0.35)',
+                            'radial-gradient(circle, rgba(239,68,68,0.8) 0%, rgba(248,113,113,0.45) 38%, rgba(248,113,113,0.12) 68%, transparent 100%)',
+                          boxShadow: '0 0 20px 6px rgba(239,68,68,0.4)',
                           willChange: 'transform, opacity'
                         }}
                         initial={prefersReducedMotion ? false : { scale: 0.8, opacity: 0.3 }}
@@ -432,8 +446,8 @@ function Home({ isAuthenticated = false }) {
                   <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 backdrop-blur">
                     <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-200">Converging user density</p>
                     <p className="mt-2 text-sm text-blue-50">
-                      Ten user glows travel across the city grid, two merging on the way, until all converge into
-                      a single red heat cluster that gently releases two circles back outward.
+                      Ten user glows travel across the city grid—each merge doubles the glow in size and brightness.
+                      As circles converge the cluster grows exponentially, then shrinks as two break back outward.
                     </p>
                   </div>
                 </div>
