@@ -412,7 +412,7 @@ describe('News inline preferences updates', () => {
     expect(container.querySelector('.max-w-7xl')).toBeNull();
   });
 
-  it('uses min-height constrained desktop containers so feed can scroll', async () => {
+  it('applies min-h-0 to desktop flex containers for scrolling', async () => {
     await renderNews();
 
     const desktopShell = Array.from(container.querySelectorAll('div')).find((el) => (
