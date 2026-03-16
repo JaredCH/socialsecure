@@ -1,37 +1,17 @@
 import React from 'react';
-
-const formatLastSeen = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.max(1, Math.round(diffMs / 60000));
-  if (diffMinutes < 60) return `Last seen ${diffMinutes}m ago`;
-
-  const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `Last seen ${diffHours}h ago`;
-
-  const diffDays = Math.round(diffHours / 24);
-  return `Last seen ${diffDays}d ago`;
-};
+import { getPresenceMeta } from '../utils/presence';
 
 const PresenceIndicator = ({ presence }) => {
-  const status = presence?.status || 'offline';
-  const isOnline = status === 'online';
-  const isHidden = status === 'hidden';
+  const [referenceTime, setReferenceTime] = React.useState(() => Date.now());
 
-  const label = isHidden
-    ? 'Presence hidden'
-    : isOnline
-      ? 'Online now'
-      : formatLastSeen(presence?.lastSeen) || 'Offline';
+  React.useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setReferenceTime(Date.now());
+    }, 60000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
-  const dotClassName = isHidden
-    ? 'bg-gray-300'
-    : isOnline
-      ? 'bg-emerald-500'
-      : 'bg-gray-400';
+  const { label, dotClassName } = getPresenceMeta(presence, referenceTime);
 
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-gray-500" title={label}>

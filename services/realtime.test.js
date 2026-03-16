@@ -34,4 +34,19 @@ describe('services/realtime', () => {
     expect(emit).toHaveBeenCalledWith('friend_online', { userId: 'u2' });
     expect(events).toHaveLength(0);
   });
+
+  test('normalizePresenceRecord keeps recently disconnected users inactive before degrading to offline', () => {
+    const inactiveSeenAt = new Date(Date.now() - (2 * 60 * 1000)).toISOString();
+    const offlineSeenAt = new Date(Date.now() - (7 * 60 * 1000)).toISOString();
+
+    expect(realtime.normalizePresenceRecord({
+      status: 'inactive',
+      lastSeen: inactiveSeenAt
+    }).status).toBe('inactive');
+
+    expect(realtime.normalizePresenceRecord({
+      status: 'inactive',
+      lastSeen: offlineSeenAt
+    }).status).toBe('offline');
+  });
 });

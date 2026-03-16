@@ -26,6 +26,7 @@ import {
   getRealtimeSocket,
   onFeedInteraction,
   onFeedPost,
+  onFriendPresence,
   onTyping,
   subscribeToPost,
   unsubscribeFromPost
@@ -796,15 +797,20 @@ const Social = () => {
     const locationLabel = [profileSource?.city, profileSource?.state, profileSource?.country]
       .filter(Boolean)
       .join(', ');
+    const matchingFriend = friends.find((friend) => String(friend?._id || '') === String(profileSource?._id || ''));
+    const presence = isOwnSocialContext
+      ? { status: 'online', lastSeen: null }
+      : (matchingFriend?.presence || { status: 'offline', lastSeen: profileSource?.lastActive || null });
 
     return {
       name: profileSource?.realName || profileSource?.name || profileSource?.username || 'User',
       location: locationLabel || profileSource?.location || '',
       avatarUrl: socialPreferences.hero?.profileImage || profileSource?.avatarUrl || '',
+      presence,
       isOnline: Boolean(isOwnSocialContext),
-      lastActive: profileSource?.lastActive || null
+      lastActive: presence.lastSeen || profileSource?.lastActive || null
     };
-  }, [activeProfile, currentUser, isOwnSocialContext, socialPreferences.hero?.profileImage]);
+  }, [activeProfile, currentUser, friends, isOwnSocialContext, socialPreferences.hero?.profileImage]);
   const isPrivateGuestLock = !isOwnSocialContext && Boolean(activeProfile?.isPrivateProfile);
   const socialCalendarPath = useMemo(() => {
     const calendarUsername = activeProfile?.username || requestedProfileIdentifier;
@@ -1652,6 +1658,17 @@ const Social = () => {
       }));
     });
 
+    const offFriendPresence = onFriendPresence((payload) => {
+      const userId = String(payload?.userId || '').trim();
+      if (!userId) return;
+
+      setFriends((prev) => prev.map((friend) => (
+        String(friend?._id || '') === userId
+          ? { ...friend, presence: { status: payload.status, lastSeen: payload.lastSeen || null } }
+          : friend
+      )));
+    });
+
     const offTyping = onTyping((payload) => {
       if (payload?.scope !== 'comment' || !payload?.targetId || !payload?.userId) return;
 
@@ -1713,6 +1730,7 @@ const Social = () => {
       subscribedPostIds.forEach((postId) => unsubscribeFromPost(postId));
       offFeedPost();
       offFeedInteraction();
+      offFriendPresence();
       offTyping();
       void socket;
     };

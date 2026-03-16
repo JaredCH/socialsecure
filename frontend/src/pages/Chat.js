@@ -4,7 +4,8 @@ import ChatComposerBar from '../components/chat/ChatComposerBar';
 import ChatMessageList from '../components/chat/ChatMessageList';
 import { authAPI, chatAPI, friendsAPI, moderationAPI } from '../utils/api';
 import { parseSlashCommand, runSlashCommand } from '../utils/chatCommands';
-import { joinRealtimeRoom, leaveRealtimeRoom, onChatMessage } from '../utils/realtime';
+import { joinRealtimeRoom, leaveRealtimeRoom, onChatMessage, onFriendPresence, onPresenceUpdate } from '../utils/realtime';
+import { getPresenceMeta } from '../utils/presence';
 import {
   createWrappedRoomKeyPackage,
   decryptEnvelope,
@@ -155,13 +156,22 @@ const getConversationLabel = (conversation) => {
   return conversation.title || conversation.name || 'Conversation';
 };
 
-const getPresenceState = (lastActiveAt) => {
+const getActivityState = (lastActiveAt) => {
   if (!lastActiveAt) return { label: 'Away', tone: 'bg-amber-400' };
   const ageMs = Date.now() - new Date(lastActiveAt).getTime();
   if (Number.isNaN(ageMs)) return { label: 'Away', tone: 'bg-amber-400' };
   return ageMs <= 5 * 60 * 1000
     ? { label: 'Online', tone: 'bg-emerald-400' }
     : { label: 'Away', tone: 'bg-amber-400' };
+};
+
+const getPresenceState = (presence, referenceTime = Date.now()) => {
+  const meta = getPresenceMeta(presence, referenceTime);
+  return {
+    label: meta.shortLabel,
+    description: meta.label,
+    tone: meta.dotClassName
+  };
 };
 
 const DEFAULT_CHAT_THEME = 'midnight';
@@ -365,6 +375,7 @@ function Chat() {
   const [unlockingDm, setUnlockingDm] = useState(false);
   const [dmFriends, setDmFriends] = useState([]);
   const [dmFriendsLoading, setDmFriendsLoading] = useState(false);
+  const [presenceReferenceTime, setPresenceReferenceTime] = useState(() => Date.now());
   const [openChatTabIds, setOpenChatTabIds] = useState([]);
   const search = window.location.search;
   const previousActiveChannelRef = useRef('zip');
@@ -382,6 +393,50 @@ function Chat() {
       setActiveChannel('zip');
     }
   }, [search]);
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setPresenceReferenceTime(Date.now());
+    }, 60000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onFriendPresence((payload) => {
+      const userId = normalizeId(payload?.userId);
+      if (!userId) return;
+
+      setDmFriends((prev) => prev.map((friend) => (
+        normalizeId(friend?._id) === userId
+          ? { ...friend, presence: { status: payload.status, lastSeen: payload.lastSeen || null } }
+          : friend
+      )));
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onPresenceUpdate((payload) => {
+      const userId = normalizeId(payload?.userId);
+      if (!userId) return;
+
+      setRoomUsers((prev) => prev.map((user) => (
+        normalizeId(user?._id) === userId
+          ? { ...user, presence: { status: payload.status, lastSeen: payload.lastSeen || null } }
+          : user
+      )));
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
   const [passwordInput, setPasswordInput] = useState('');
   const [reactionByMessageId, setReactionByMessageId] = useState({});
   const [adminMessageActionIds, setAdminMessageActionIds] = useState([]);
@@ -472,6 +527,33 @@ function Chat() {
     });
     return entries;
   }, [allChatRooms, hubData]);
+  const roomUserPresenceMap = useMemo(
+    () => new Map(roomUsers.map((user) => [normalizeId(user?._id), user?.presence || null])),
+    [roomUsers]
+  );
+  const dmFriendPresenceMap = useMemo(
+    () => new Map(dmFriends.map((friend) => [normalizeId(friend?._id), friend?.presence || null])),
+    [dmFriends]
+  );
+  const adminMutedUserIds = useMemo(() => (
+    new Set(
+      roomUsers
+        .filter((entry) => new Date(entry?.mutedUntil || 0).getTime() > Date.now())
+        .map((entry) => normalizeId(entry?._id))
+        .filter(Boolean)
+    )
+  ), [roomUsers]);
+  const getConversationUserPresence = useCallback((conversation) => {
+    if (!conversation) return null;
+    const targetUser = conversation.type === 'dm' ? conversation.peer : conversation.profileUser;
+    const targetUserId = normalizeId(targetUser?._id);
+    if (!targetUserId) return null;
+
+    return roomUserPresenceMap.get(targetUserId)
+      || targetUser?.presence
+      || dmFriendPresenceMap.get(targetUserId)
+      || null;
+  }, [dmFriendPresenceMap, roomUserPresenceMap]);
 
   const openChatTabs = useMemo(
     () => openChatTabIds.map((tabId) => workspaceEntries.get(String(tabId))).filter(Boolean),
@@ -1510,10 +1592,19 @@ function Chat() {
     }
   }, [activeConversationId, workspaceEntries]);
 
-  const conversationPresence = getPresenceState(getConversationActivityAt(activeConversation));
+  const activeConversationPresence = useMemo(
+    () => getConversationUserPresence(activeConversation),
+    [activeConversation, getConversationUserPresence]
+  );
+  const conversationPresence = useMemo(() => (
+    activeConversation?.type === 'dm' || activeConversation?.type === 'profile-thread'
+      ? getPresenceState(activeConversationPresence, presenceReferenceTime)
+      : getActivityState(getConversationActivityAt(activeConversation))
+  ), [activeConversation, activeConversationPresence, presenceReferenceTime]);
   const activeConversationUser = useMemo(() => {
     if (!activeConversation) return null;
     if (activeConversation.type === 'dm') return activeConversation.peer || null;
+    if (activeConversation.type === 'profile-thread') return activeConversation.profileUser || null;
     return null;
   }, [activeConversation]);
   const activeMenuLabel = useMemo(() => {
@@ -1790,7 +1881,7 @@ function Chat() {
                     <ul className="mt-2 space-y-1">
                       {filteredDmConversations.map((conversation) => {
                         const selected = String(conversation._id) === String(activeConversationId);
-                        const status = getPresenceState(conversation.lastMessageAt);
+                        const status = getPresenceState(getConversationUserPresence(conversation), presenceReferenceTime);
                         return (
                           <li key={String(conversation._id)}>
                             <button
@@ -2217,38 +2308,45 @@ function Chat() {
                   <p className="p-2 text-xs opacity-80">No users to display.</p>
                 ) : (
                   <ul className="divide-y">
-                    {roomUsers.map((user) => (
-                      <li
-                        key={String(user._id)}
-                        className="flex cursor-pointer items-center gap-3 p-2 text-sm"
-                        onClick={(event) => openUserContextMenu(event, user)}
-                        onContextMenu={(event) => openUserContextMenu(event, user)}
-                        onTouchStart={(event) => {
-                          const touch = event.touches?.[0];
-                          if (!touch) return;
-                          if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
-                          userLongPressTimerRef.current = setTimeout(() => {
-                            openUserContextMenu(event, user, { x: touch.clientX, y: touch.clientY });
-                          }, LONG_PRESS_DELAY_MS);
-                        }}
-                        onTouchEnd={() => {
-                          if (userLongPressTimerRef.current) {
-                            clearTimeout(userLongPressTimerRef.current);
-                            userLongPressTimerRef.current = null;
-                          }
-                        }}
-                      >
-                        <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${activeTheme.subtle}`}>
-                          {String(user.username || user.realName || 'user').slice(0, 1).toUpperCase()}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold">@{user.username || user.realName || 'user'}</p>
-                          <p className="truncate text-[11px] opacity-75">
-                            {String(user._id) === String(profile?._id) ? 'You' : 'Available in this conversation'}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
+                    {roomUsers.map((user) => {
+                      const presenceState = getPresenceState(user.presence, presenceReferenceTime);
+                      return (
+                        <li
+                          key={String(user._id)}
+                          className="flex cursor-pointer items-center gap-3 p-2 text-sm"
+                          onClick={(event) => openUserContextMenu(event, user)}
+                          onContextMenu={(event) => openUserContextMenu(event, user)}
+                          onTouchStart={(event) => {
+                            const touch = event.touches?.[0];
+                            if (!touch) return;
+                            if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
+                            userLongPressTimerRef.current = setTimeout(() => {
+                              openUserContextMenu(event, user, { x: touch.clientX, y: touch.clientY });
+                            }, LONG_PRESS_DELAY_MS);
+                          }}
+                          onTouchEnd={() => {
+                            if (userLongPressTimerRef.current) {
+                              clearTimeout(userLongPressTimerRef.current);
+                              userLongPressTimerRef.current = null;
+                            }
+                          }}
+                        >
+                          <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${activeTheme.subtle}`}>
+                            {String(user.username || user.realName || 'user').slice(0, 1).toUpperCase()}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold">@{user.username || user.realName || 'user'}</p>
+                            <p className="truncate text-[11px] opacity-75">
+                              {String(user._id) === String(profile?._id) ? 'You' : 'Available in this conversation'}
+                            </p>
+                            <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] opacity-75">
+                              <span className={`h-2 w-2 rounded-full ${presenceState.tone}`} />
+                              <span>{presenceState.description}</span>
+                            </p>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>

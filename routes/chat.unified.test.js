@@ -5,7 +5,7 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn()
 }));
 
-const mockChatRoom = {};
+const mockChatRoom = { findById: jest.fn() };
 const mockChatMessage = { findOne: jest.fn() };
 const mockDeviceKey = { findOne: jest.fn(), find: jest.fn() };
 const mockSecurityEvent = {};
@@ -45,10 +45,18 @@ jest.mock('../models/ChatConversation', () => mockChatConversation);
 jest.mock('../models/ConversationMessage', () => mockConversationMessage);
 jest.mock('../models/ConversationKeyPackage', () => mockConversationKeyPackage);
 jest.mock('../services/notifications', () => ({ createNotification: jest.fn() }));
-jest.mock('../services/realtime', () => ({ emitChatMessage: jest.fn() }));
+jest.mock('../services/realtime', () => ({
+  emitChatMessage: jest.fn(),
+  getPresenceMapForUsers: jest.fn(),
+  buildPresencePayload: jest.fn((userId, presence) => ({
+    userId: String(userId),
+    status: presence?.status || 'offline',
+    lastSeen: presence?.lastSeen || null
+  }))
+}));
 
 const jwt = require('jsonwebtoken');
-const { emitChatMessage } = require('../services/realtime');
+const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload } = require('../services/realtime');
 const chatRouter = require('./chat');
 
 const buildApp = () => {
@@ -104,6 +112,7 @@ describe('Unified chat hub routes', () => {
         lean: jest.fn().mockResolvedValue([])
       })
     });
+    getPresenceMapForUsers.mockResolvedValue(new Map());
     mockBlockList.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue(null)
@@ -417,6 +426,60 @@ describe('Unified chat hub routes', () => {
     expect(response.body.messages[0].content).toBe('hello world');
   });
 
+  it('includes presence details when listing conversation users', async () => {
+    const app = buildApp();
+    mockChatConversation.findById.mockResolvedValue({
+      _id: 'conv-dm-1',
+      type: 'dm',
+      participants: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439022']
+    });
+    mockUser.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          {
+            _id: '507f1f77bcf86cd799439011',
+            username: 'viewer',
+            realName: 'Viewer',
+            mutedUntil: null,
+            realtimePreferences: { showPresence: true, showLastSeen: true }
+          },
+          {
+            _id: '507f1f77bcf86cd799439022',
+            username: 'buddy',
+            realName: 'Buddy',
+            mutedUntil: null,
+            realtimePreferences: { showPresence: true, showLastSeen: true }
+          }
+        ])
+      })
+    });
+    getPresenceMapForUsers.mockResolvedValue(new Map([
+      ['507f1f77bcf86cd799439022', { status: 'inactive', lastSeen: new Date('2024-01-04T00:00:00.000Z') }]
+    ]));
+
+    const response = await request(app)
+      .get('/api/chat/conversations/conv-dm-1/users')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(getPresenceMapForUsers).toHaveBeenCalledWith(['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439022']);
+    expect(buildPresencePayload).toHaveBeenCalledWith(
+      '507f1f77bcf86cd799439022',
+      { status: 'inactive', lastSeen: new Date('2024-01-04T00:00:00.000Z') },
+      { showPresence: true, showLastSeen: true }
+    );
+    expect(response.body.users).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        _id: '507f1f77bcf86cd799439022',
+        presence: {
+          userId: '507f1f77bcf86cd799439022',
+          status: 'inactive',
+          lastSeen: '2024-01-04T00:00:00.000Z'
+        }
+      })
+    ]));
+  });
+
   it('allows profile owners to update profile thread access settings', async () => {
     const app = buildApp();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: '507f1f77bcf86cd799439022' }));
@@ -478,7 +541,17 @@ describe('Unified chat hub routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.users).toEqual([
-      { _id: '507f1f77bcf86cd799439022', username: 'buddy', realName: 'Buddy' }
+      {
+        _id: '507f1f77bcf86cd799439022',
+        username: 'buddy',
+        realName: 'Buddy',
+        mutedUntil: null,
+        presence: {
+          userId: '507f1f77bcf86cd799439022',
+          status: 'offline',
+          lastSeen: null
+        }
+      }
     ]);
   });
 

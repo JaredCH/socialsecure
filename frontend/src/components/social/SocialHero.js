@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
 import { notificationAPI } from '../../utils/api';
+import { getPresenceMeta } from '../../utils/presence';
 
 const MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB = {
   main: { x: -72, y: 0 },
@@ -150,6 +151,7 @@ const SocialHero = ({
     name = 'User Name',
     location = '',
     avatarUrl = '',
+    presence = null,
     isOnline = false,
     lastActive = null
   } = profile;
@@ -173,8 +175,17 @@ const SocialHero = ({
   const [acknowledgedMessageIds, setAcknowledgedMessageIds] = useState(() => new Set());
   const [allNotificationsAcknowledged, setAllNotificationsAcknowledged] = useState(false);
   const [allMessagesAcknowledged, setAllMessagesAcknowledged] = useState(false);
+  const [presenceReferenceTime, setPresenceReferenceTime] = useState(() => Date.now());
   const navigate = useNavigate();
   const routeLocation = useLocation();
+  const resolvedPresence = useMemo(
+    () => (presence || { status: isOnline ? 'online' : 'offline', lastSeen: lastActive }),
+    [presence, isOnline, lastActive]
+  );
+  const presenceMeta = useMemo(
+    () => getPresenceMeta(resolvedPresence, presenceReferenceTime),
+    [resolvedPresence, presenceReferenceTime]
+  );
 
   const socialMenuItems = useMemo(
     () => buildMobileMenuLayout(SOCIAL_HERO_TABS, MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB, -72),
@@ -216,6 +227,13 @@ const SocialHero = ({
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [routeLocation.pathname]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setPresenceReferenceTime(Date.now());
+    }, 60000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     if (!isMobileMenuOpen) {
@@ -381,9 +399,9 @@ const SocialHero = ({
             <div className="absolute bottom-2 right-2">
               <div 
                 className={`h-4 w-4 rounded-full border-2 border-white ${
-                  isOnline ? 'bg-green-500' : 'bg-slate-400'
+                  presenceMeta.dotClassName
                 }`}
-                title={isOnline ? 'Online' : formatLastActive(lastActive)}
+                title={presenceMeta.status === 'online' ? 'Online' : presenceMeta.label || formatLastActive(lastActive)}
               />
             </div>
           )}
