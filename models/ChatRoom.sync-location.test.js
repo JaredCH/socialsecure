@@ -53,3 +53,56 @@ describe('ChatRoom.syncUserLocationRooms zip-first behavior', () => {
     }));
   });
 });
+
+describe('ChatRoom.findOrCreateByLocation canonical seeded room reuse', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('reuses canonical seeded state rooms by stable key', async () => {
+    const canonicalRoom = { _id: 'state-tx', stableKey: 'state:TX', members: [] };
+    const findOneSpy = jest.spyOn(ChatRoom, 'findOne')
+      .mockResolvedValueOnce(canonicalRoom);
+
+    const result = await ChatRoom.findOrCreateByLocation({
+      type: 'state',
+      state: 'Texas',
+      country: 'US',
+      coordinates: [-97.7431, 30.2672]
+    });
+
+    expect(findOneSpy).toHaveBeenCalledWith({ stableKey: 'state:TX' });
+    expect(result).toEqual({ room: canonicalRoom, created: false });
+  });
+
+  it('upgrades a legacy state room to the canonical seeded format instead of creating a duplicate', async () => {
+    const legacyRoom = {
+      _id: 'legacy-state-tx',
+      name: 'TX',
+      type: 'state',
+      state: 'TX',
+      country: 'US',
+      members: ['user-1'],
+      save: jest.fn().mockResolvedValue(true)
+    };
+    const findOneSpy = jest.spyOn(ChatRoom, 'findOne')
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(legacyRoom);
+
+    const result = await ChatRoom.findOrCreateByLocation({
+      type: 'state',
+      state: 'TX',
+      country: 'US',
+      coordinates: [-97.7431, 30.2672]
+    });
+
+    expect(findOneSpy).toHaveBeenNthCalledWith(1, { stableKey: 'state:TX' });
+    expect(findOneSpy).toHaveBeenNthCalledWith(2, { type: 'state', state: 'TX', country: 'US' });
+    expect(legacyRoom.name).toBe('Texas');
+    expect(legacyRoom.stableKey).toBe('state:TX');
+    expect(legacyRoom.radius).toBe(100);
+    expect(legacyRoom.location).toEqual({ type: 'Point', coordinates: [0, 0] });
+    expect(legacyRoom.save).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ room: legacyRoom, created: false });
+  });
+});

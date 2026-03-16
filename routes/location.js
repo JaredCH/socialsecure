@@ -97,6 +97,7 @@ router.post('/update', [
     // Sync location rooms for the user (auto-create rooms if needed)
     let locationRooms = [];
     try {
+      await ChatRoom.ensureDefaultStateRooms();
       const roomSyncResult = await ChatRoom.syncUserLocationRooms(user);
       locationRooms = roomSyncResult.rooms;
     } catch (roomError) {
