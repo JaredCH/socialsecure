@@ -2,6 +2,14 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import SocialHero from './SocialHero';
+import { notificationAPI } from '../../utils/api';
+
+jest.mock('../../utils/api', () => ({
+  notificationAPI: {
+    markAsRead: jest.fn(),
+    markAllAsRead: jest.fn()
+  }
+}));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -27,6 +35,9 @@ describe('SocialHero mobile navigation', () => {
   };
 
   beforeEach(() => {
+    notificationAPI.markAsRead.mockResolvedValue({ data: { success: true } });
+    notificationAPI.markAllAsRead.mockResolvedValue({ data: { success: true } });
+
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -39,6 +50,7 @@ describe('SocialHero mobile navigation', () => {
     container.remove();
     container = null;
     root = null;
+    jest.clearAllMocks();
   });
 
   it('opens and closes the circular mobile section launcher', async () => {
@@ -186,6 +198,13 @@ describe('SocialHero mobile navigation', () => {
       launcher.click();
     });
 
+    const expandLatestUpdates = container.querySelector('button[aria-label="Expand latest updates"]');
+    expect(expandLatestUpdates).not.toBeNull();
+
+    await act(async () => {
+      expandLatestUpdates.click();
+    });
+
     const seenAlertCard = Array.from(container.querySelectorAll('div')).find(
       (node) => typeof node.className === 'string'
         && node.className.includes('rounded-2xl')
@@ -193,5 +212,54 @@ describe('SocialHero mobile navigation', () => {
     );
     expect(seenAlertCard).toBeDefined();
     expect(seenAlertCard.className).toContain('opacity-55');
+  });
+
+  it('renders follow requester details and acknowledge actions in latest updates', async () => {
+    await renderHero({
+      activitySummary: {
+        unreadNotificationCount: 2,
+        unreadMessageCount: 0,
+        notifications: [
+          {
+            _id: 'n1',
+            title: 'New follow request',
+            body: 'Casey sent you a follow request',
+            createdAt: new Date().toISOString()
+          },
+          {
+            _id: 'n2',
+            title: 'Another alert',
+            createdAt: new Date().toISOString()
+          }
+        ],
+        messages: []
+      }
+    });
+
+    const launcher = container.querySelector('button[aria-label="Expand social section menu"]');
+
+    await act(async () => {
+      launcher.click();
+    });
+
+    expect(container.textContent).toContain('Casey sent you a follow request');
+
+    const acknowledgeButtons = Array.from(container.querySelectorAll('button')).filter((button) => button.textContent === 'Acknowledge');
+    expect(acknowledgeButtons.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      acknowledgeButtons[0].click();
+    });
+
+    expect(notificationAPI.markAsRead).toHaveBeenCalledWith('n1');
+
+    const markAll = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Mark all as read');
+    expect(markAll).toBeTruthy();
+
+    await act(async () => {
+      markAll.click();
+    });
+
+    expect(notificationAPI.markAllAsRead).toHaveBeenCalled();
   });
 });

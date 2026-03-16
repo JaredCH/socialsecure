@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SOCIAL_HERO_TABS, SOCIAL_HERO_TAB_LABELS } from '../../utils/socialPagePreferences';
+import { notificationAPI } from '../../utils/api';
 
 const MOBILE_SOCIAL_MENU_LAYOUT_BY_TAB = {
-  main: { x: -84, y: 2 },
-  friends: { x: -84, y: -34 },
-  gallery: { x: -42, y: -68 },
-  chat: { x: -42, y: -102 },
-  calendar: { x: -42, y: -134 }
+  main: { x: -72, y: 0 },
+  friends: { x: -72, y: -32 },
+  gallery: { x: -24, y: -68 },
+  chat: { x: -24, y: -102 },
+  calendar: { x: -24, y: -134 }
 };
 
 const SITE_NAV_LINKS = [
@@ -47,6 +48,32 @@ const formatActivityTimestamp = (value) => {
   if (diffMinutes < 60) return `${diffMinutes}m`;
   if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h`;
   return `${Math.floor(diffMinutes / 1440)}d`;
+};
+
+const getActivityItemKey = (item, fallback = 'activity') => String(item?._id || item?.id || item?.title || fallback);
+
+const isActivityAcknowledged = (item) => Boolean(item?.isRead || item?.readAt || item?.acknowledgedAt);
+
+const getNotificationSupportingText = (item) => {
+  const bodyText = String(item?.body || '').trim();
+  if (bodyText) return bodyText;
+
+  const senderName = String(
+    item?.senderName
+      || item?.senderRealName
+      || item?.senderUsername
+      || item?.sender?.realName
+      || item?.sender?.username
+      || item?.data?.senderName
+      || ''
+  ).trim();
+  if (!senderName) return '';
+
+  if (/follow request/i.test(String(item?.title || ''))) {
+    return `${senderName} sent you a follow request`;
+  }
+
+  return senderName;
 };
 
 const isActivityMuted = (item, timestampKey = 'createdAt') => {
@@ -141,6 +168,11 @@ const SocialHero = ({
   } = heroConfig;
   const currentAvatarSize = isMobile ? 88 : 128;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [expandedPanels, setExpandedPanels] = useState({ notifications: false, messages: false });
+  const [acknowledgedNotificationIds, setAcknowledgedNotificationIds] = useState(() => new Set());
+  const [acknowledgedMessageIds, setAcknowledgedMessageIds] = useState(() => new Set());
+  const [allNotificationsAcknowledged, setAllNotificationsAcknowledged] = useState(false);
+  const [allMessagesAcknowledged, setAllMessagesAcknowledged] = useState(false);
   const navigate = useNavigate();
   const routeLocation = useLocation();
 
@@ -157,6 +189,18 @@ const SocialHero = ({
   const unreadMessageCount = Number(activitySummary?.unreadMessageCount || 0);
   const notificationItems = Array.isArray(activitySummary?.notifications) ? activitySummary.notifications.slice(0, 2) : [];
   const messageItems = Array.isArray(activitySummary?.messages) ? activitySummary.messages.slice(0, 2) : [];
+  const unacknowledgedNotificationCount = allNotificationsAcknowledged
+    ? 0
+    : notificationItems.filter((item) => !isActivityAcknowledged(item) && !acknowledgedNotificationIds.has(getActivityItemKey(item))).length;
+  const hasUnacknowledgedNotifications = unreadNotificationCount > 0 || unacknowledgedNotificationCount > 0;
+  const hasUnacknowledgedMessages = unreadMessageCount > 0
+    || (!allMessagesAcknowledged && messageItems.some((item) => !acknowledgedMessageIds.has(getActivityItemKey(item, 'message'))));
+  const notificationBadgeCount = hasUnacknowledgedNotifications
+    ? (unreadNotificationCount > 99 ? '99+' : Math.max(1, unreadNotificationCount || unacknowledgedNotificationCount))
+    : 0;
+  const messageBadgeCount = hasUnacknowledgedMessages
+    ? (unreadMessageCount > 99 ? '99+' : Math.max(1, unreadMessageCount || messageItems.length))
+    : 0;
   const hasActivityRail = unreadNotificationCount > 0 || unreadMessageCount > 0 || notificationItems.length > 0 || messageItems.length > 0;
 
   useEffect(() => {
@@ -191,6 +235,66 @@ const SocialHero = ({
   useEffect(() => {
     onMobileMenuToggle?.(Boolean(isMobile && isMobileMenuOpen));
   }, [isMobileMenuOpen, isMobile, onMobileMenuToggle]);
+
+  useEffect(() => {
+    setExpandedPanels({
+      notifications: hasUnacknowledgedNotifications,
+      messages: hasUnacknowledgedMessages
+    });
+  }, [hasUnacknowledgedMessages, hasUnacknowledgedNotifications, isMobileMenuOpen]);
+
+  useEffect(() => {
+    setAcknowledgedNotificationIds(new Set());
+    setAcknowledgedMessageIds(new Set());
+    setAllNotificationsAcknowledged(false);
+    setAllMessagesAcknowledged(false);
+  }, [activitySummary]);
+
+  const acknowledgeNotification = async (item) => {
+    const itemKey = getActivityItemKey(item);
+    if (!itemKey || allNotificationsAcknowledged || isActivityAcknowledged(item)) {
+      return;
+    }
+
+    try {
+      if (item?._id || item?.id) {
+        await notificationAPI.markAsRead(item._id || item.id);
+      }
+    } catch {
+      // no-op
+    } finally {
+      setAcknowledgedNotificationIds((prev) => {
+        const next = new Set(prev);
+        next.add(itemKey);
+        return next;
+      });
+    }
+  };
+
+  const acknowledgeAllNotifications = async () => {
+    try {
+      await notificationAPI.markAllAsRead();
+    } catch {
+      // no-op
+    } finally {
+      setAllNotificationsAcknowledged(true);
+      setAcknowledgedNotificationIds(new Set(notificationItems.map((item, index) => getActivityItemKey(item, `notification-${index}`))));
+    }
+  };
+
+  const acknowledgeMessage = (item) => {
+    const itemKey = getActivityItemKey(item, 'message');
+    setAcknowledgedMessageIds((prev) => {
+      const next = new Set(prev);
+      next.add(itemKey);
+      return next;
+    });
+  };
+
+  const acknowledgeAllMessages = () => {
+    setAllMessagesAcknowledged(true);
+    setAcknowledgedMessageIds(new Set(messageItems.map((item, index) => getActivityItemKey(item, `message-${index}`))));
+  };
 
   const getNavItemClasses = (tabId) => {
     const isActive = activeTab === tabId;
@@ -380,27 +484,65 @@ const SocialHero = ({
                 {(unreadNotificationCount > 0 || notificationItems.length > 0) && (
                   <div className="rounded-3xl border border-white/15 bg-slate-950/78 p-3 text-white shadow-[0_20px_50px_rgba(2,6,23,0.32)] backdrop-blur-xl">
                     <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[0.65rem] uppercase tracking-[0.28em] text-white/55">Notifications</p>
-                        <p className="mt-1 text-sm font-semibold">{unreadNotificationCount > 0 ? `${unreadNotificationCount} unread` : 'Latest updates'}</p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPanels((prev) => ({ ...prev, notifications: !prev.notifications }))}
+                        className="pointer-events-auto flex flex-1 items-center justify-between rounded-xl px-1 py-1 text-left transition-colors hover:bg-white/5"
+                        aria-label={expandedPanels.notifications ? 'Collapse latest updates' : 'Expand latest updates'}
+                      >
+                        <div>
+                          <p className="text-[0.65rem] uppercase tracking-[0.28em] text-white/55">Notifications</p>
+                          <p className="mt-1 text-sm font-semibold">Latest Updates</p>
+                        </div>
+                        <span className="ml-2 text-xs text-white/70" aria-hidden="true">{expandedPanels.notifications ? '▲' : '▼'}</span>
+                      </button>
                       <span className="inline-flex min-w-[2rem] justify-center rounded-full bg-white/12 px-2 py-1 text-xs font-semibold text-white/88">
-                        {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount || notificationItems.length}
+                        {notificationBadgeCount}
                       </span>
                     </div>
-                    {notificationItems.length > 0 && (
+                    {notificationItems.length > 0 && expandedPanels.notifications && (
                       <div className="mt-3 space-y-2">
-                        {notificationItems.map((item) => (
+                        {notificationItems.map((item) => {
+                          const itemKey = getActivityItemKey(item);
+                          const isAcknowledged = allNotificationsAcknowledged || acknowledgedNotificationIds.has(itemKey) || isActivityAcknowledged(item);
+                          const supportingText = getNotificationSupportingText(item);
+                          return (
                           <div
-                            key={item._id || item.id || item.title}
-                            className={`rounded-2xl border border-white/10 bg-white/6 px-3 py-2 transition-opacity ${isActivityMuted(item, 'createdAt') ? MUTED_ACTIVITY_CLASS : 'opacity-100'}`}
+                            key={itemKey}
+                            className={`rounded-2xl border border-white/10 bg-white/6 px-3 py-2 transition-opacity ${isAcknowledged || isActivityMuted(item, 'createdAt') ? MUTED_ACTIVITY_CLASS : 'opacity-100'}`}
                           >
                             <div className="flex items-start justify-between gap-3">
-                              <p className="line-clamp-2 text-sm font-medium text-white/92">{item.title || item.message || item.type || 'New activity'}</p>
+                              <div>
+                                <p className="line-clamp-2 text-sm font-medium text-white/92">{item.title || item.message || item.type || 'New activity'}</p>
+                                {supportingText ? <p className="mt-0.5 line-clamp-1 text-xs text-white/56">{supportingText}</p> : null}
+                              </div>
                               <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.18em] text-white/45">{formatActivityTimestamp(item.createdAt || item.updatedAt)}</span>
                             </div>
+                            {!isAcknowledged && (
+                              <div className="mt-2">
+                                <button
+                                  type="button"
+                                  className="pointer-events-auto rounded-full border border-white/20 px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-white/80 transition-colors hover:bg-white/10"
+                                  onClick={() => acknowledgeNotification(item)}
+                                >
+                                  Acknowledge
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        ))}
+                        );
+                        })}
+                        {!allNotificationsAcknowledged && unacknowledgedNotificationCount > 0 && (
+                          <div className="pt-1 text-right">
+                            <button
+                              type="button"
+                              className="pointer-events-auto rounded-full border border-white/20 px-3 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-white/80 transition-colors hover:bg-white/10"
+                              onClick={acknowledgeAllNotifications}
+                            >
+                              Mark all as read
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -409,18 +551,29 @@ const SocialHero = ({
                 {(unreadMessageCount > 0 || messageItems.length > 0) && (
                   <div className="rounded-3xl border border-white/15 bg-slate-950/72 p-3 text-white shadow-[0_18px_46px_rgba(2,6,23,0.28)] backdrop-blur-xl">
                     <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[0.65rem] uppercase tracking-[0.28em] text-white/55">Messages</p>
-                        <p className="mt-1 text-sm font-semibold">{unreadMessageCount > 0 ? `${unreadMessageCount} unread` : 'Recent activity'}</p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPanels((prev) => ({ ...prev, messages: !prev.messages }))}
+                        className="pointer-events-auto flex flex-1 items-center justify-between rounded-xl px-1 py-1 text-left transition-colors hover:bg-white/5"
+                        aria-label={expandedPanels.messages ? 'Collapse recent activity' : 'Expand recent activity'}
+                      >
+                        <div>
+                          <p className="text-[0.65rem] uppercase tracking-[0.28em] text-white/55">Messages</p>
+                          <p className="mt-1 text-sm font-semibold">Recent Activity</p>
+                        </div>
+                        <span className="ml-2 text-xs text-white/70" aria-hidden="true">{expandedPanels.messages ? '▲' : '▼'}</span>
+                      </button>
                       <span className="inline-flex min-w-[2rem] justify-center rounded-full bg-sky-500/20 px-2 py-1 text-xs font-semibold text-sky-100">
-                        {unreadMessageCount > 99 ? '99+' : unreadMessageCount || messageItems.length}
+                        {messageBadgeCount}
                       </span>
                     </div>
-                    {messageItems.length > 0 && (
+                    {messageItems.length > 0 && expandedPanels.messages && (
                       <div className="mt-3 space-y-2">
-                        {messageItems.map((item) => (
-                          <div key={item.id || item._id || item.title} className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2">
+                        {messageItems.map((item, index) => {
+                          const itemKey = getActivityItemKey(item, `message-${index}`);
+                          const isAcknowledged = allMessagesAcknowledged || acknowledgedMessageIds.has(itemKey) || isActivityMuted(item, 'timestamp');
+                          return (
+                          <div key={itemKey} className={`rounded-2xl border border-white/10 bg-white/6 px-3 py-2 transition-opacity ${isAcknowledged ? MUTED_ACTIVITY_CLASS : 'opacity-100'}`}>
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <p className="text-sm font-medium text-white/92">{item.title || 'Conversation'}</p>
@@ -428,8 +581,31 @@ const SocialHero = ({
                               </div>
                               <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.18em] text-white/45">{formatActivityTimestamp(item.timestamp || item.lastMessageAt)}</span>
                             </div>
+                            {!isAcknowledged && (
+                              <div className="mt-2">
+                                <button
+                                  type="button"
+                                  className="pointer-events-auto rounded-full border border-white/20 px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-white/80 transition-colors hover:bg-white/10"
+                                  onClick={() => acknowledgeMessage(item)}
+                                >
+                                  Acknowledge
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        ))}
+                          );
+                        })}
+                        {!allMessagesAcknowledged && messageItems.length > 0 && (
+                          <div className="pt-1 text-right">
+                            <button
+                              type="button"
+                              className="pointer-events-auto rounded-full border border-white/20 px-3 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-white/80 transition-colors hover:bg-white/10"
+                              onClick={acknowledgeAllMessages}
+                            >
+                              Mark all as read
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -489,6 +665,7 @@ const SocialHero = ({
               >
                 {isMobileMenuOpen && socialMenuItems.map((tab, index) => {
                   const isActive = activeTab === tab.id;
+                  const isExtendedChip = tab.id === 'calendar' || tab.id === 'chat' || tab.id === 'gallery';
                   const transitionDelay = `${index * 28 + 24}ms`;
                   const transform = `translate3d(${tab.x}px, ${tab.y}px, 0) scale(1)`;
 
@@ -501,7 +678,7 @@ const SocialHero = ({
                         onTabChange?.(tab.id);
                         setIsMobileMenuOpen(false);
                       }}
-                      className={`pointer-events-auto absolute bottom-5 right-5 flex w-[4.85rem] origin-bottom-right items-center gap-1.5 rounded-full border px-2.5 py-[7px] text-left shadow-[0_10px_22px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isActive ? 'border-white/25 bg-white text-slate-950' : isViewingOtherSocialContext ? 'border-violet-200/35 bg-violet-500/18 text-violet-50 backdrop-blur-xl' : 'border-sky-200/30 bg-sky-500/16 text-sky-50 backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                      className={`pointer-events-auto absolute bottom-5 right-5 flex origin-bottom-right items-center gap-1.5 rounded-full border text-left shadow-[0_10px_22px_rgba(2,6,23,0.24)] transition-all duration-300 ease-out ${isExtendedChip ? 'w-[5.7rem] px-2.5 py-[8px]' : 'w-[4.95rem] px-2.5 py-[7px]'} ${isActive ? 'border-white/25 bg-white text-slate-950' : isViewingOtherSocialContext ? 'border-violet-200/35 bg-violet-500/18 text-violet-50 backdrop-blur-xl' : isExtendedChip ? 'border-sky-100/45 bg-sky-500/24 text-sky-50 backdrop-blur-xl' : 'border-sky-200/30 bg-sky-500/16 text-sky-50 backdrop-blur-xl'} ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'}`}
                       style={{
                         transform,
                         transitionDelay,
@@ -511,7 +688,7 @@ const SocialHero = ({
                       <span style={{ color: isActive ? menuActiveColor : menuTextColor }} className="shrink-0">
                         <TabIcon icon={tab.icon} className="h-3.5 w-3.5" />
                       </span>
-                      <span className="truncate text-[0.55rem] font-semibold tracking-[0.02em]">
+                      <span className={`truncate font-semibold tracking-[0.02em] ${isExtendedChip ? 'text-[0.6rem]' : 'text-[0.55rem]'}`}>
                         {SOCIAL_HERO_TAB_LABELS[tab.id]}
                       </span>
                     </button>
