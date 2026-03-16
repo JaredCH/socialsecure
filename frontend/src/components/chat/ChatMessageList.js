@@ -156,10 +156,13 @@ function ChatMessageList({
         ) : messages.length === 0 ? (
           <p className="text-sm opacity-80">No messages yet.</p>
         ) : (
-          visibleMessages.map((message) => (
+          visibleMessagesWithGrouping.map(({ message, groupedWithPrevious, groupedWithNext }) => (
             <ChatMessageItem
               key={String(message._id)}
               message={message}
+              conversationType={conversationType}
+              groupedWithPrevious={groupedWithPrevious}
+              groupedWithNext={groupedWithNext}
               isOwnMessage={String(message.userId?._id) === String(profile?._id)}
               currentUserId={profile?._id}
               censorSensitiveWords={censorSensitiveWords}
