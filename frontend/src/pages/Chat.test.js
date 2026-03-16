@@ -724,12 +724,12 @@ describe('Chat zip room indicator', () => {
     expect(desktopGrid.className).toContain('gap-1');
     expect(desktopGrid.className).toContain('p-1');
 
-    const pageHeader = container.querySelector('[data-chat-menu-bar]');
+    const pageHeader = container.querySelector('[data-testid="chat-page-header"]');
     expect(pageHeader).not.toBeNull();
     expect(pageHeader.className).toContain('px-2');
     expect(pageHeader.className).toContain('py-1.5');
 
-    const workspacePanel = container.querySelector('section.min-h-0.flex-col.rounded-2xl.border.px-1\\.5');
+    const workspacePanel = container.querySelector('[data-testid="chat-workspace-panel"]');
     expect(workspacePanel).not.toBeNull();
     expect(workspacePanel.className).toContain('px-1.5');
     expect(workspacePanel.className).toContain('pt-1');

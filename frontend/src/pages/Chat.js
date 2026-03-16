@@ -1594,7 +1594,11 @@ function Chat() {
 
   return (
     <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${activeTheme.shell}`}>
-      <header className={`sticky top-0 z-40 border-b px-2 py-1.5 md:px-3 md:py-2 ${activeTheme.panelGlass}`} data-chat-menu-bar>
+      <header
+        className={`sticky top-0 z-40 border-b px-2 py-1.5 md:px-3 md:py-2 ${activeTheme.panelGlass}`}
+        data-chat-menu-bar
+        data-testid="chat-page-header"
+      >
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
@@ -2132,6 +2136,7 @@ function Chat() {
             'min-h-0 flex-col rounded-2xl border px-1.5 pb-1.5 pt-1 sm:px-2 sm:pb-2 md:p-3 lg:flex',
             activeTheme.panel
           ].join(' ')}
+          data-testid="chat-workspace-panel"
         >
           {messagesError ? (
             <div className="mb-3 rounded border border-red-400 bg-red-50 p-2 text-sm text-red-700">{messagesError}</div>

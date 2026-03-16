@@ -2139,7 +2139,7 @@ router.post('/rooms', [
   }
 });
 
-router.delete('/rooms/:roomId', authenticateToken, async (req, res) => {
+router.delete('/rooms/:roomId', roomWriteLimiter, authenticateToken, async (req, res) => {
   try {
     const { roomId } = req.params;
     const requesterId = String(req.user.userId || '');
