@@ -146,10 +146,10 @@ export default function NewsLeftPanel({
               : 'text-gray-700 hover:bg-gray-50'
           }`}
         >
-          <span className="w-5 h-5 rounded-md bg-gray-100 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-sm text-gray-500 leading-none">newspaper</span>
+          <span className="w-4 h-4 rounded-md bg-gray-100 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[11px] text-gray-500 leading-none">newspaper</span>
           </span>
-          <span className="flex-1 text-left text-xs leading-[0.85]">All</span>
+          <span className="flex-1 text-left text-[10px] leading-[1.2]">All</span>
         </button>
 
         {categories.map((cat) => {
@@ -176,10 +176,10 @@ export default function NewsLeftPanel({
                 disabled={isDisabled}
                 type="button"
               >
-                <span className={`w-5 h-5 rounded-md ${bg} flex items-center justify-center shrink-0`}>
-                  <span className={`material-symbols-outlined text-sm leading-none ${text}`}>{symbol}</span>
+                <span className={`w-4 h-4 rounded-md ${bg} flex items-center justify-center shrink-0`}>
+                  <span className={`material-symbols-outlined text-[11px] leading-none ${text}`}>{symbol}</span>
                 </span>
-                <span className="flex-1 text-left text-xs leading-[0.85] truncate">{cat.label}</span>
+                <span className="flex-1 text-left text-[10px] leading-[1.2] truncate">{cat.label}</span>
               </button>
               <button
                 type="button"
@@ -187,13 +187,13 @@ export default function NewsLeftPanel({
                 aria-label={isDisabled ? `Enable category ${cat.label}` : `Disable category ${cat.label}`}
                 role="switch"
                 aria-checked={!isDisabled}
-                className={`relative h-5 w-9 rounded-full border transition-colors ${
+                className={`relative h-4 w-8 rounded-full border transition-colors ${
                   isDisabled ? 'border-gray-300 bg-gray-200' : 'border-blue-500 bg-blue-500'
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    isDisabled ? 'left-0.5' : 'left-4'
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${
+                    isDisabled ? 'left-0.5' : 'left-[1.25rem]'
                   }`}
                 />
               </button>
