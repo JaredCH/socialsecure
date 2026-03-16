@@ -679,6 +679,10 @@ const validateRoomKeyPackagePayload = (payload) => {
     return 'recipientUserId is required';
   }
 
+  if (payload.senderPublicKey != null && (typeof payload.senderPublicKey !== 'string' || payload.senderPublicKey.length > E2EE_LIMITS.publicKey)) {
+    return 'senderPublicKey exceeds allowed size';
+  }
+
   if (!Number.isInteger(payload.keyVersion) || payload.keyVersion < 1 || payload.keyVersion > 1000000) {
     return 'keyVersion must be an integer between 1 and 1000000';
   }
@@ -2569,6 +2573,7 @@ router.post(
         conversationId,
         senderUserId: userId,
         senderDeviceId: payload.senderDeviceId,
+        senderPublicKey: payload.senderPublicKey || '',
         recipientUserId: payload.recipientUserId,
         recipientDeviceId: payload.recipientDeviceId,
         keyVersion: payload.keyVersion,
@@ -2690,6 +2695,7 @@ router.get('/conversations/:conversationId/keys/packages/sync', unifiedChatLimit
         conversationId: pkg.conversationId,
         senderUserId: pkg.senderUserId,
         senderDeviceId: pkg.senderDeviceId,
+        senderPublicKey: pkg.senderPublicKey || '',
         recipientUserId: pkg.recipientUserId,
         recipientDeviceId: pkg.recipientDeviceId,
         keyVersion: pkg.keyVersion,
