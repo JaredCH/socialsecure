@@ -7,6 +7,25 @@ const LINK_PREVIEW_PERCENTAGE = 0.25;
 const DM_MESSAGE_TEXT_CLASS = 'text-[13px] leading-5';
 const ROOM_MESSAGE_TEXT_CLASS = 'text-[14px] leading-6';
 
+const supportsHoverInput = () => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+};
+
+const formatCompactTimestamp = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const year = String(date.getFullYear()).slice(-2);
+  const rawHours = date.getHours();
+  const hours = rawHours % 12 || 12;
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const meridiem = rawHours >= 12 ? 'pm' : 'am';
+  return `${month}/${day}/${year} - ${hours}:${minutes}:${seconds}${meridiem}`;
+};
+
 const getLinkPreview = (href) => {
   const mainUrl = String(href || '').replace(/^https?:\/\//i, '');
   if (!mainUrl) return '';
@@ -135,12 +154,12 @@ function ChatMessageItem({
   const usernameForProfileLink = typeof message.userId?.username === 'string' ? message.userId.username.trim() : '';
   const profileLink = usernameForProfileLink ? `/social?user=${encodeURIComponent(usernameForProfileLink)}` : null;
   const createdAt = message.createdAt ? new Date(message.createdAt) : null;
-  const timestamp = createdAt ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-  const fullTimestamp = createdAt ? createdAt.toLocaleString() : '';
+  const timestamp = createdAt ? formatCompactTimestamp(createdAt) : '';
   const longPressTimerRef = useRef(null);
   const normalizedCurrentUserId = String(currentUserId || '');
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const isDmConversation = conversationType === 'dm';
+  const canHoverForReactions = supportsHoverInput();
   const menuUser = message.userId?._id ? {
     _id: message.userId._id,
     username: message.userId.username,
@@ -200,55 +219,40 @@ function ChatMessageItem({
           </button>
         );
       })}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            setReactionPickerOpen((open) => !open);
-          }}
+      {reactionPickerOpen ? (
+        <div
+          className={[
+            'absolute bottom-full z-20 mb-1 flex items-center gap-1 rounded border px-1 py-1 text-[10px] shadow-sm',
+            isOwnMessage ? 'right-0' : 'left-0',
+            theme.subtle
+          ].join(' ')}
           data-chat-no-user-menu="true"
-          className="rounded-full border px-1 py-0.5 text-[10px] opacity-75 hover:opacity-100"
-          aria-label="Open reaction picker"
-          title="Add reaction"
         >
-          😊
-        </button>
-        {reactionPickerOpen ? (
-          <div
-            className={[
-              'absolute bottom-full z-20 mb-1 flex items-center gap-1 rounded border px-1 py-1 text-[10px] shadow-sm',
-              isOwnMessage ? 'right-0' : 'left-0',
-              theme.subtle
-            ].join(' ')}
-          >
-            {reactionOptions.map((reaction) => (
-              <button
-                key={`pick-${reaction.key}`}
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleReaction?.(message._id, reaction.key);
-                  setReactionPickerOpen(false);
-                }}
-                data-chat-no-user-menu="true"
-                className="rounded border px-1 py-0.5 text-[10px] hover:opacity-100"
-                aria-label={`Add ${reaction.label} reaction`}
-                title={reaction.label}
-              >
-                {reaction.emoji}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
+          {reactionOptions.map((reaction) => (
+            <button
+              key={`pick-${reaction.key}`}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleReaction?.(message._id, reaction.key);
+                setReactionPickerOpen(false);
+              }}
+              data-chat-no-user-menu="true"
+              className="rounded border px-1 py-0.5 text-[10px] hover:opacity-100"
+              aria-label={`Add ${reaction.label} reaction`}
+              title={reaction.label}
+            >
+              {reaction.emoji}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 
   if (isDmConversation) {
     const showAvatar = !isOwnMessage && !groupedWithNext;
     const showHeader = !isOwnMessage && !groupedWithPrevious;
-    const showTimestamp = !groupedWithNext;
     const dmAvatarNode = isOwnMessage
       ? null
       : (showAvatar ? avatarNode : <span className="block h-9 w-9 shrink-0" />);
@@ -306,12 +310,28 @@ function ChatMessageItem({
                   ].join(' '),
                 isOwnMessage ? theme.messageOwn : theme.messageOther
               ].join(' ')}
+              onMouseOver={() => {
+                if (canHoverForReactions) {
+                  setReactionPickerOpen(true);
+                }
+              }}
+              onMouseLeave={(event) => {
+                if (canHoverForReactions && (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget))) {
+                  setReactionPickerOpen(false);
+                }
+              }}
+              onClick={(event) => {
+                if (canHoverForReactions) return;
+                if (event.target?.closest?.('a, button, [data-chat-no-user-menu="true"]')) return;
+                event.stopPropagation();
+                setReactionPickerOpen((open) => !open);
+              }}
             >
               <p className={`whitespace-pre-wrap break-words ${DM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(message.content)}</p>
               {reactionsMarkup}
             </div>
-            {showTimestamp ? (
-              <span className="mt-1 px-2 text-[10px] font-mono opacity-65">{timestamp || fullTimestamp}</span>
+            {timestamp ? (
+              <span className="mt-1 px-2 text-[10px] font-mono opacity-65">{timestamp}</span>
             ) : null}
           </div>
         </div>
@@ -357,82 +377,32 @@ function ChatMessageItem({
               >
                 {isOwnMessage ? 'You' : `@${author}`}
               </button>
-            </span>
-            <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
-          </header>
-          <p className="whitespace-pre-wrap break-words text-[13px] leading-5">{renderMessageContent(displayContent)}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] opacity-70">
-            <span className="font-mono">{fullTimestamp}</span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            {reactionOptions.map((reaction) => {
-              const actors = Array.isArray(reactionsByType?.[reaction.key]) ? reactionsByType[reaction.key] : [];
-              if (actors.length === 0) return null;
-              const reactedByMe = normalizedCurrentUserId && actors.includes(normalizedCurrentUserId);
-              return (
-                <button
-                  key={reaction.key}
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onToggleReaction?.(message._id, reaction.key);
-                  }}
-                  data-chat-no-user-menu="true"
-                  className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${reactedByMe ? 'font-semibold' : ''}`}
-                  title={reaction.label}
-                >
-                  <span>{reaction.emoji}</span>
-                  <span>{actors.length}</span>
-                </button>
-              );
-            })}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setReactionPickerOpen((open) => !open);
-                }}
-                data-chat-no-user-menu="true"
-                className="rounded-full border px-1 py-0.5 text-[10px] opacity-75 hover:opacity-100"
-                aria-label="Open reaction picker"
-                title="Add reaction"
-              >
-                😊
-              </button>
-              {reactionPickerOpen ? (
-                <div
-                  className={[
-                    'absolute bottom-full z-20 mb-1 flex items-center gap-1 rounded border px-1 py-1 text-[10px] shadow-sm',
-                    isOwnMessage ? 'right-0' : 'left-0',
-                    theme.subtle
-                  ].join(' ')}
-                >
-                  {reactionOptions.map((reaction) => (
-                    <button
-                      key={`pick-${reaction.key}`}
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onToggleReaction?.(message._id, reaction.key);
-                        setReactionPickerOpen(false);
-                      }}
-                      data-chat-no-user-menu="true"
-                      className="rounded border px-1 py-0.5 text-[10px] hover:opacity-100"
-                      aria-label={`Add ${reaction.label} reaction`}
-                      title={reaction.label}
-                    >
-                      {reaction.emoji}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
             </div>
           ) : null}
-          <div tabIndex={0} className="rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1">
+          <div
+            tabIndex={0}
+            className="relative rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
+            onMouseOver={() => {
+              if (canHoverForReactions) {
+                setReactionPickerOpen(true);
+              }
+            }}
+            onMouseLeave={(event) => {
+              if (canHoverForReactions && (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget))) {
+                setReactionPickerOpen(false);
+              }
+            }}
+            onClick={(event) => {
+              if (canHoverForReactions) return;
+              if (event.target?.closest?.('a, button, [data-chat-no-user-menu="true"]')) return;
+              event.stopPropagation();
+              setReactionPickerOpen((open) => !open);
+            }}
+          >
             <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(message.content)}</p>
             {reactionsMarkup}
           </div>
+          {timestamp ? <span className="mt-1 block text-[10px] font-mono opacity-60">{timestamp}</span> : null}
         </div>
       </div>
     </article>
