@@ -179,6 +179,18 @@ const getChatTabTypeLabel = (conversation) => {
   if (isRoomConversation(conversation)) return 'Room';
   return 'Zip';
 };
+const addCurrentUserToRoomEntry = (entry, profileId) => {
+  const normalizedProfileId = normalizeId(profileId);
+  if (String(entry?._id || '') === '') return entry;
+  const nextMembers = Array.isArray(entry?.members)
+    ? Array.from(new Set([...entry.members.map((memberId) => String(memberId)), normalizedProfileId].filter(Boolean)))
+    : [normalizedProfileId].filter(Boolean);
+  return {
+    ...entry,
+    memberCount: Math.max(Number(entry?.memberCount || 0), nextMembers.length),
+    members: nextMembers
+  };
+};
 
 const upsertConversationMessage = (messages, incomingMessage) => {
   const normalizedId = String(incomingMessage?._id || '').trim();
@@ -1153,13 +1165,7 @@ function Chat() {
         }));
         setAllChatRooms((prev) => prev.map((entry) => (
           String(entry?._id) === normalizedRoomId
-            ? {
-              ...entry,
-              memberCount: Math.max(Number(entry?.memberCount || 0), 1),
-              members: Array.isArray(entry?.members)
-                ? Array.from(new Set([...entry.members.map((memberId) => String(memberId)), String(profile?._id || '')].filter(Boolean)))
-                : [String(profile?._id || '')].filter(Boolean)
-            }
+            ? addCurrentUserToRoomEntry(entry, profile?._id)
             : entry
         )));
         toast.success('Joined room');
@@ -1389,6 +1395,9 @@ function Chat() {
 
   useEffect(() => {
     setOpenChatTabIds((prev) => prev.filter((tabId) => workspaceEntries.has(String(tabId))));
+  }, [workspaceEntries]);
+
+  useEffect(() => {
     if (activeConversationId && !workspaceEntries.has(String(activeConversationId))) {
       setActiveConversationId('');
     }
@@ -1575,6 +1584,7 @@ function Chat() {
                                       <button
                                         type="button"
                                         onClick={() => handleOpenRoom(room)}
+                                        aria-label={`Open ${room.name} state room`}
                                         className="truncate text-left font-medium hover:underline"
                                       >
                                         State room
@@ -1607,6 +1617,7 @@ function Chat() {
                                             <button
                                               type="button"
                                               onClick={() => handleOpenRoom(countyRoom)}
+                                              aria-label={`Open ${countyRoom.name} room`}
                                               className="truncate text-left hover:underline"
                                             >
                                               {countyRoom.name}
@@ -1650,6 +1661,7 @@ function Chat() {
                               <button
                                 type="button"
                                 onClick={() => handleOpenRoom(room)}
+                                aria-label={`Open ${room.name} topic room`}
                                 className="truncate text-left hover:underline"
                               >
                                 {room.name}
@@ -1709,6 +1721,7 @@ function Chat() {
                               <button
                                 type="button"
                                 onClick={() => handleOpenRoom(room)}
+                                aria-label={`Open ${room.name} room`}
                                 className="min-w-0 flex-1 text-left"
                               >
                                 <p className="truncate font-semibold">{room.name}</p>
