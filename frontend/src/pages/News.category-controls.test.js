@@ -12,6 +12,7 @@ jest.mock('../utils/api', () => ({
     getSportsTeams: jest.fn(),
     getFeed: jest.fn(),
     getWeather: jest.fn(),
+    getSportsSchedules: jest.fn(),
     updateHiddenCategories: jest.fn(),
     reportImpressions: jest.fn(),
   }
@@ -42,6 +43,7 @@ describe('News category controls', () => {
       }
     });
     newsAPI.getWeather.mockResolvedValue({ data: { locations: [] } });
+    newsAPI.getSportsSchedules.mockResolvedValue({ data: { schedules: {} } });
     newsAPI.updateHiddenCategories.mockResolvedValue({ data: { preferences: { ...basePreferences, hiddenCategories: ['sports'] } } });
     newsAPI.reportImpressions.mockResolvedValue({ data: { ok: true } });
   };
@@ -127,5 +129,45 @@ describe('News category controls', () => {
     const settingsDrawer = container.querySelector('[aria-label="News Settings"]');
     expect(settingsDrawer).toBeTruthy();
     expect(settingsDrawer.className).toContain('pointer-events-none');
+  });
+
+  it('shows settings and keywords above categories and omits the My Teams section', async () => {
+    newsAPI.getPreferences.mockResolvedValueOnce({
+      data: {
+        preferences: {
+          ...basePreferences,
+          followedSportsTeams: ['nfl:dallas-cowboys'],
+          followedKeywords: [{ keyword: 'ai' }]
+        }
+      }
+    });
+
+    await renderNews();
+
+    const leftPanel = container.querySelector('aside');
+    expect(leftPanel).toBeTruthy();
+    expect(leftPanel.textContent).not.toContain('My Teams');
+
+    const settingsButton = Array.from(leftPanel.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Settings')
+    );
+    const keywordsHeader = Array.from(leftPanel.querySelectorAll('p')).find((p) => p.textContent === 'Keywords');
+    const categoriesHeader = Array.from(leftPanel.querySelectorAll('span')).find((s) => s.textContent === 'Categories');
+
+    expect(settingsButton).toBeTruthy();
+    expect(keywordsHeader).toBeTruthy();
+    expect(categoriesHeader).toBeTruthy();
+    expect(
+      keywordsHeader.compareDocumentPosition(categoriesHeader) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('uses compact category row spacing to fit more items', async () => {
+    await renderNews();
+
+    const categoryRow = container.querySelector('[data-category-key]');
+    const categoryButton = categoryRow.querySelector('button[aria-label^="Filter by"]');
+    expect(categoryRow.className).toContain('py-0.5');
+    expect(categoryButton.className).toContain('py-0.5');
   });
 });

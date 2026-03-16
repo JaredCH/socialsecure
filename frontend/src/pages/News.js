@@ -315,7 +315,6 @@ function News() {
           onToggleCategory={handleToggleCategory}
           onToggleCategoryEnabled={handleToggleCategoryEnabled}
           onMultiSelectToggle={() => setMultiSelect((v) => !v)}
-          followedTeams={followedTeams}
           keywords={keywords}
           onAddKeyword={handleAddKeyword}
           onRemoveKeyword={handleRemoveKeyword}

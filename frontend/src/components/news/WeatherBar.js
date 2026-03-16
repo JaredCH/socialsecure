@@ -50,6 +50,13 @@ function getDayAbbr(dateStr) {
   try { return DAY_ABBR[new Date(dateStr).getDay()]; } catch { return ''; }
 }
 
+function formatClockLabel(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
 function hasUsableWeather(location) {
   return Boolean(location?.weather?.current);
 }
@@ -149,6 +156,7 @@ export default function WeatherBar({ variant = 'sticky' }) {
   const [loading, setLoading] = useState(true);
   const [requestError, setRequestError] = useState(null);
   const [expanded, setExpanded] = useState(false);
+  const [cardExpanded, setCardExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('hourly');
   const [carouselGroup, setCarouselGroup] = useState(0); // 0=d1-3, 1=d4-6, 2=d7
   const [fade, setFade] = useState(true);
@@ -214,6 +222,9 @@ export default function WeatherBar({ variant = 'sticky' }) {
   const { current, high, low, hourly = [], weekly: wk = [], uvIndex, airQuality, pollen } = weather;
   const displayCity = formatLocationLine(primary) || label || city || '';
   const currentIcon = ICON_MAP[current?.icon] || '🌤️';
+  const pressure = current?.pressure ?? null;
+  const sunriseLabel = formatClockLabel(weather?.sunrise || wk?.[0]?.sunrise);
+  const sunsetLabel = formatClockLabel(weather?.sunset || wk?.[0]?.sunset);
 
   // Carousel day slots
   const groupStart = carouselGroup * 3;
@@ -224,104 +235,123 @@ export default function WeatherBar({ variant = 'sticky' }) {
   if (isCard) {
     return (
       <section className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 rounded-2xl shadow-lg overflow-hidden">
-        <div className="px-4 pt-3 pb-2.5 border-b border-white/10">
+        <button
+          type="button"
+          onClick={() => setCardExpanded((value) => !value)}
+          aria-expanded={cardExpanded}
+          aria-label={cardExpanded ? 'Collapse weather details' : 'Expand weather details'}
+          className="w-full px-4 pt-3 pb-3 border-b border-white/10 text-left transition-colors hover:bg-white/5"
+        >
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">Weather</div>
-              <div className="mt-1 text-base font-semibold text-white leading-tight">{displayCity}</div>
-              <div className="mt-1 text-sm text-white/70">{current?.shortForecast || weather.forecastSummary || 'Current conditions unavailable'}</div>
+            <div className="min-w-0">
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">Weather</h2>
+              <div className="mt-1 text-sm font-semibold text-white leading-tight truncate">{displayCity}</div>
+              <div className="mt-1 text-xs text-white/75 truncate">{current?.shortForecast || weather.forecastSummary || 'Current conditions unavailable'}</div>
             </div>
-            <div className="text-right shrink-0">
-              <div className="text-3xl leading-none" aria-hidden="true">{currentIcon}</div>
-              <div className="mt-1.5 text-4xl font-bold text-white leading-none">
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-2xl leading-none" aria-hidden="true">{currentIcon}</span>
+              <div className="text-3xl font-bold text-white leading-none">
                 {current?.temperature != null ? `${current.temperature}°` : '--'}
               </div>
+              <span
+                className={`material-symbols-outlined text-white/80 text-base shrink-0 transition-transform duration-200 ${cardExpanded ? 'rotate-180' : ''}`}
+                aria-hidden="true"
+              >
+                expand_more
+              </span>
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-white/80">
-            {high != null && <span className="rounded-full bg-white/10 px-2.5 py-1">High {high}°</span>}
-            {low != null && <span className="rounded-full bg-white/10 px-2.5 py-1">Low {low}°</span>}
-            {current?.humidity != null && <span className="rounded-full bg-white/10 px-2.5 py-1">Humidity {current.humidity}%</span>}
-            {current?.windSpeed != null && <span className="rounded-full bg-white/10 px-2.5 py-1">Wind {current.windSpeed} mph</span>}
+          <div className="mt-2.5 flex flex-wrap gap-1.5 text-[10px] text-white/85">
+            {high != null && <span className="rounded-full bg-white/10 px-2 py-0.5">High {high}°</span>}
+            {low != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Low {low}°</span>}
+            {current?.humidity != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Humidity {current.humidity}%</span>}
+            {current?.windSpeed != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Air {current.windSpeed} mph</span>}
+            {current?.windGust != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Gust {current.windGust} mph</span>}
+            {pressure != null && <span className="rounded-full bg-white/10 px-2 py-0.5">Pressure {Math.round(pressure)} hPa</span>}
+            {airQuality?.index != null && <span className="rounded-full bg-white/10 px-2 py-0.5">AQI {airQuality.index}</span>}
+            {sunriseLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">Sunrise {sunriseLabel}</span>}
+            {sunsetLabel && <span className="rounded-full bg-white/10 px-2 py-0.5">Sunset {sunsetLabel}</span>}
           </div>
-        </div>
+        </button>
 
-        <div className="px-4 py-2.5 space-y-2.5">
-          {(uvIndex != null || airQuality != null || pollen != null) && (
-            <div className="grid grid-cols-1 gap-2">
-              <WeatherMetric label="UV Index" value={uvIndex} badgeColor={UV_COLOR(uvIndex)} />
-              <WeatherMetric label="Air Quality" value={airQuality?.index} badgeColor={AQI_COLOR(airQuality?.index)} detail={airQuality?.label || null} />
-              <WeatherMetric
-                label="Pollen"
-                value={pollen ? [
-                  pollen.grass != null ? `Grass ${Math.round(pollen.grass)}` : null,
-                  pollen.birch != null ? `Birch ${Math.round(pollen.birch)}` : null,
-                  pollen.ragweed != null ? `Ragweed ${Math.round(pollen.ragweed)}` : null,
-                ].filter(Boolean).join(' · ') : null}
-              />
-            </div>
-          )}
-
-          {(hourly.length > 0 || wk.length > 0) && (
-            <>
-              <div className="flex gap-2">
-                {hourly.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('hourly')}
-                    className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
-                      activeTab === 'hourly'
-                        ? 'bg-white text-blue-700'
-                        : 'bg-white/10 text-white hover:bg-white/20'
-                    }`}
-                  >
-                    Hourly
-                  </button>
-                )}
-                {wk.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('weekly')}
-                    className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
-                      activeTab === 'weekly'
-                        ? 'bg-white text-blue-700'
-                        : 'bg-white/10 text-white hover:bg-white/20'
-                    }`}
-                  >
-                    5-Day
-                  </button>
-                )}
+        {cardExpanded && (
+          <div className="px-4 py-2.5 space-y-2.5">
+            {(uvIndex != null || airQuality != null || pollen != null) && (
+              <div className="grid grid-cols-1 gap-2">
+                <WeatherMetric label="UV Index" value={uvIndex} badgeColor={UV_COLOR(uvIndex)} />
+                <WeatherMetric label="Air Quality" value={airQuality?.index} badgeColor={AQI_COLOR(airQuality?.index)} detail={airQuality?.label || null} />
+                <WeatherMetric
+                  label="Pollen"
+                  value={pollen ? [
+                    pollen.grass != null ? `Grass ${Math.round(pollen.grass)}` : null,
+                    pollen.birch != null ? `Birch ${Math.round(pollen.birch)}` : null,
+                    pollen.ragweed != null ? `Ragweed ${Math.round(pollen.ragweed)}` : null,
+                  ].filter(Boolean).join(' · ') : null}
+                />
               </div>
+            )}
 
-              {activeTab === 'hourly' && hourly.length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {hourly.slice(0, 8).map((h, i) => (
-                    <div key={i} className="rounded-xl bg-white/8 px-2 py-2 text-center text-white/80">
-                      <div className="text-[10px]">{new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}</div>
-                      <div className="mt-1 text-base">{ICON_MAP[h.icon] || '🌤️'}</div>
-                      <div className="mt-1 text-sm font-semibold text-white">{h.temperature}°</div>
-                      <div className="text-[10px]">{h.precipitationProbability ?? '--'}%</div>
-                    </div>
-                  ))}
+            {(hourly.length > 0 || wk.length > 0) && (
+              <>
+                <div className="flex gap-2">
+                  {hourly.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('hourly')}
+                      className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
+                        activeTab === 'hourly'
+                          ? 'bg-white text-blue-700'
+                          : 'bg-white/10 text-white hover:bg-white/20'
+                      }`}
+                    >
+                      Hourly
+                    </button>
+                  )}
+                  {wk.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('weekly')}
+                      className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
+                        activeTab === 'weekly'
+                          ? 'bg-white text-blue-700'
+                          : 'bg-white/10 text-white hover:bg-white/20'
+                      }`}
+                    >
+                      5-Day
+                    </button>
+                  )}
                 </div>
-              )}
 
-              {activeTab === 'weekly' && wk.length > 0 && (
-                <div className="space-y-2">
-                  {wk.map((day, index) => (
-                    <div key={index} className="flex items-center gap-3 rounded-xl bg-white/8 px-3 py-1.5 text-sm text-white/85">
-                      <div className="w-10 font-medium">{getDayAbbr(day.date)}</div>
-                      <div className="text-lg">{ICON_MAP[day.icon] || '🌤️'}</div>
-                      <div className="w-20 font-semibold text-white">{day.high}° / {day.low}°</div>
-                      <div className="min-w-0 flex-1 truncate text-white/70">{day.shortForecast}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                {activeTab === 'hourly' && hourly.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2">
+                    {hourly.slice(0, 8).map((h, i) => (
+                      <div key={i} className="rounded-xl bg-white/8 px-2 py-2 text-center text-white/80">
+                        <div className="text-[10px]">{new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}</div>
+                        <div className="mt-1 text-base">{ICON_MAP[h.icon] || '🌤️'}</div>
+                        <div className="mt-1 text-sm font-semibold text-white">{h.temperature}°</div>
+                        <div className="text-[10px]">{h.precipitationProbability ?? '--'}%</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {activeTab === 'weekly' && wk.length > 0 && (
+                  <div className="space-y-2">
+                    {wk.map((day, index) => (
+                      <div key={index} className="flex items-center gap-3 rounded-xl bg-white/8 px-3 py-1.5 text-sm text-white/85">
+                        <div className="w-10 font-medium">{getDayAbbr(day.date)}</div>
+                        <div className="text-lg">{ICON_MAP[day.icon] || '🌤️'}</div>
+                        <div className="w-20 font-semibold text-white">{day.high}° / {day.low}°</div>
+                        <div className="min-w-0 flex-1 truncate text-white/70">{day.shortForecast}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </section>
     );
   }
