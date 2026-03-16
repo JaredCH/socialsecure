@@ -17,6 +17,8 @@ const SITE_NAV_LINKS = [
   { id: 'market', label: 'Market', path: '/market', icon: 'market' },
   { id: 'discover', label: 'Discover', path: '/discover', icon: 'discover' }
 ];
+const MAX_RECENT_NOTIFICATIONS = 3;
+const MUTED_ACTIVITY_CLASS = 'opacity-55';
 
 const buildMobileMenuLayout = (items) => {
   if (!Array.isArray(items) || items.length === 0) {
@@ -191,8 +193,9 @@ const GlobalSocialLauncher = ({ currentUsername = '', unreadNotificationCount = 
         return;
       }
 
+      // Keep a small mixed window of recent alerts (including acknowledged/read) so older activity can be shown as faded context.
       const notifications = Array.isArray(notificationsResponse.data?.notifications)
-        ? notificationsResponse.data.notifications.slice(0, 3)
+        ? notificationsResponse.data.notifications.slice(0, MAX_RECENT_NOTIFICATIONS)
         : [];
 
       const conversations = conversationsResponse.data?.conversations || {};
@@ -293,7 +296,7 @@ const GlobalSocialLauncher = ({ currentUsername = '', unreadNotificationCount = 
                     {activitySummary.notifications.map((item) => (
                       <div
                         key={item._id || item.id || item.title}
-                        className={`rounded-2xl border border-white/10 bg-white/6 px-3 py-2 transition-opacity ${isActivityMuted(item, 'createdAt') ? 'opacity-55' : 'opacity-100'}`}
+                        className={`rounded-2xl border border-white/10 bg-white/6 px-3 py-2 transition-opacity ${isActivityMuted(item, 'createdAt') ? MUTED_ACTIVITY_CLASS : 'opacity-100'}`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <p className="line-clamp-2 text-sm font-medium text-white/92">{item.title || item.message || item.type || 'New activity'}</p>

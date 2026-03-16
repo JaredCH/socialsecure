@@ -16,6 +16,7 @@ const SITE_NAV_LINKS = [
   { id: 'market', label: 'Market', path: '/market', icon: 'market' },
   { id: 'discover', label: 'Discover', path: '/discover', icon: 'discover' }
 ];
+const MUTED_ACTIVITY_CLASS = 'opacity-55';
 
 const buildMobileMenuLayout = (items, layoutMap, fallbackOriginX) => {
   if (!Array.isArray(items) || items.length === 0) {
@@ -392,7 +393,7 @@ const SocialHero = ({
                         {notificationItems.map((item) => (
                           <div
                             key={item._id || item.id || item.title}
-                            className={`rounded-2xl border border-white/10 bg-white/6 px-3 py-2 transition-opacity ${isActivityMuted(item, 'createdAt') ? 'opacity-55' : 'opacity-100'}`}
+                            className={`rounded-2xl border border-white/10 bg-white/6 px-3 py-2 transition-opacity ${isActivityMuted(item, 'createdAt') ? MUTED_ACTIVITY_CLASS : 'opacity-100'}`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <p className="line-clamp-2 text-sm font-medium text-white/92">{item.title || item.message || item.type || 'New activity'}</p>
