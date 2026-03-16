@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import Chat from './Chat';
 import { authAPI, chatAPI, friendsAPI, moderationAPI } from '../utils/api';
 import { createWrappedRoomKeyPackage, decryptEnvelope, encryptEnvelope, ingestWrappedRoomKeyPackage, unlockOrCreateVault } from '../utils/e2ee';
-import { onChatMessage } from '../utils/realtime';
+import { onChatMessage, onFriendPresence, onPresenceUpdate } from '../utils/realtime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let mockRealtimeChatHandler = null;
@@ -58,6 +58,8 @@ jest.mock('../utils/e2ee', () => ({
 jest.mock('../utils/realtime', () => ({
   joinRealtimeRoom: jest.fn(),
   leaveRealtimeRoom: jest.fn(),
+  onFriendPresence: jest.fn(() => jest.fn()),
+  onPresenceUpdate: jest.fn(() => jest.fn()),
   onChatMessage: jest.fn((handler) => {
     mockRealtimeChatHandler = handler;
     return () => {
@@ -120,6 +122,8 @@ describe('Chat zip room indicator', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRealtimeChatHandler = null;
+    onFriendPresence.mockReturnValue(jest.fn());
+    onPresenceUpdate.mockReturnValue(jest.fn());
     localStorage.clear();
     document.cookie = 'socialsecure_dm_unlock_v1=; Max-Age=0; Path=/';
     chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
@@ -398,6 +402,7 @@ describe('Chat zip room indicator', () => {
 
     expect(menuBar.textContent).toContain('Zip 02115');
     expect(menuBar.textContent).toContain('Live conversation');
+    expect(menuBar.textContent).not.toContain('Theme-tuned accents');
     expect(menuBar.querySelector('[data-open-chat-tab="Zip 02115"]')).not.toBeNull();
     expect(menuBar.textContent).toContain('1/6');
   });
@@ -899,7 +904,8 @@ describe('Chat zip room indicator', () => {
     await renderChat();
 
     expect(container.querySelector('input[type="color"]')).toBeNull();
-    expect(container.textContent).toContain('Theme-tuned accents');
+    expect(container.textContent).not.toContain('Theme-tuned accents');
+    expect(container.querySelector('button[aria-label="Open chat theme menu"]').textContent).toContain('Midnight');
 
     const composer = container.querySelector('textarea[placeholder="Type your message"]');
     expect(composer).not.toBeNull();
