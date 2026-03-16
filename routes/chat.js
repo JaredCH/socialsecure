@@ -2221,7 +2221,7 @@ router.post('/rooms/:roomId/leave', authenticateToken, async (req, res) => {
 });
 
 // List room members for slash /list UX
-router.get('/rooms/:roomId/users', authenticateToken, async (req, res) => {
+router.get('/rooms/:roomId/users', roomReadLimiter, authenticateToken, async (req, res) => {
   try {
     const { roomId } = req.params;
     const room = await ChatRoom.findById(roomId).select('_id name members').lean();

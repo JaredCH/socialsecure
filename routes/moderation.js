@@ -110,7 +110,7 @@ const haversineMiles = (lat1, lon1, lat2, lon2) => {
 };
 const hasValidCoordinates = (entry = {}) => Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude);
 const toUniqueStrings = (values = []) => [...new Set(values.filter(Boolean))];
-const cloneModerationValue = (value) => {
+const cloneValue = (value) => {
   if (value == null) return value;
   return JSON.parse(JSON.stringify(value));
 };
@@ -130,13 +130,13 @@ const applyAdminMessageRemoval = (message, adminUserId) => {
     content: message.content ?? null,
     messageType: message.messageType || 'text',
     mediaType: message.mediaType ?? null,
-    audio: cloneModerationValue(message.audio ?? null),
-    commandData: cloneModerationValue(message.commandData ?? null),
+    audio: cloneValue(message.audio ?? null),
+    commandData: cloneValue(message.commandData ?? null),
     senderNameColor: message.senderNameColor ?? null,
     chatScope: message.chatScope ?? null,
     encryptedContent: message.encryptedContent ?? null,
     isEncrypted: !!message.isEncrypted,
-    e2ee: cloneModerationValue(message.e2ee ?? null)
+    e2ee: cloneValue(message.e2ee ?? null)
   };
 
   message.moderation = {
@@ -192,7 +192,7 @@ const restoreAdminMessageRemoval = (message) => {
     }
   }
   if ('commandData' in message) {
-    message.commandData = cloneModerationValue(snapshot.commandData ?? null);
+    message.commandData = cloneValue(snapshot.commandData ?? null);
   }
   if ('senderNameColor' in message) {
     message.senderNameColor = snapshot.senderNameColor ?? null;
@@ -207,7 +207,7 @@ const restoreAdminMessageRemoval = (message) => {
     message.isEncrypted = !!snapshot.isEncrypted;
   }
   if ('e2ee' in message) {
-    message.e2ee = cloneModerationValue(snapshot.e2ee ?? { enabled: false });
+    message.e2ee = cloneValue(snapshot.e2ee ?? { enabled: false });
   }
 
   message.moderation = {
@@ -219,7 +219,7 @@ const restoreAdminMessageRemoval = (message) => {
   };
   return true;
 };
-const parseAdminMessageType = (value) => (String(value || 'room').toLowerCase() === 'conversation' ? 'conversation' : 'room');
+const normalizeAdminMessageType = (value) => (String(value || 'room').toLowerCase() === 'conversation' ? 'conversation' : 'room');
 const getAdminMessageContext = async (messageId, type) => {
   if (type === 'conversation') {
     const message = await ConversationMessage.findById(messageId);
@@ -1375,7 +1375,7 @@ router.delete('/control-panel/messages/:messageId', authenticateToken, requireAd
 
 router.post('/control-panel/messages/:messageId/remove', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const messageType = parseAdminMessageType(req.query.type);
+    const messageType = normalizeAdminMessageType(req.query.type);
     const context = await getAdminMessageContext(req.params.messageId, messageType);
     if (!context?.message) {
       return res.status(404).json({ error: 'Message not found' });
@@ -1399,7 +1399,7 @@ router.post('/control-panel/messages/:messageId/remove', authenticateToken, requ
 
 router.delete('/control-panel/messages/:messageId/remove', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const messageType = parseAdminMessageType(req.query.type);
+    const messageType = normalizeAdminMessageType(req.query.type);
     const context = await getAdminMessageContext(req.params.messageId, messageType);
     if (!context?.message) {
       return res.status(404).json({ error: 'Message not found' });
