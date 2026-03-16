@@ -7,6 +7,8 @@ jest.mock('jsonwebtoken', () => ({
 
 const adminAuthUser = { _id: 'admin-user-id', isAdmin: true, moderationStatus: 'active' };
 let targetUser;
+let mockTargetRoomMessage;
+let mockTargetConversationMessage;
 
 const mockUserFindById = jest.fn();
 const mockUserCountDocuments = jest.fn().mockResolvedValue(0);
@@ -51,15 +53,31 @@ jest.mock('../models/Post', () => ({
 jest.mock('../models/ChatMessage', () => ({
   countDocuments: jest.fn().mockResolvedValue(0),
   find: jest.fn(() => ({ ...mockEmptyQueryResult })),
+  findById: jest.fn((id) => (id === 'room-message-id' ? mockTargetRoomMessage : null)),
   findByIdAndDelete: jest.fn().mockResolvedValue(null),
-  deleteMany: jest.fn().mockResolvedValue({})
+  deleteMany: jest.fn().mockResolvedValue({}),
+  toPublicMessageShape: jest.fn((message) => ({
+    _id: message._id,
+    content: message.content,
+    messageType: message.messageType,
+    moderation: message.moderation,
+    userId: message.userId
+  }))
 }));
 
 jest.mock('../models/ConversationMessage', () => ({
   countDocuments: jest.fn().mockResolvedValue(0),
   find: jest.fn(() => ({ ...mockEmptyQueryResult })),
+  findById: jest.fn((id) => (id === 'conversation-message-id' ? mockTargetConversationMessage : null)),
   findByIdAndDelete: jest.fn().mockResolvedValue(null),
-  deleteMany: jest.fn().mockResolvedValue({})
+  deleteMany: jest.fn().mockResolvedValue({}),
+  toPublicMessageShape: jest.fn((message) => ({
+    _id: message._id,
+    content: message.content,
+    messageType: message.messageType,
+    moderation: message.moderation,
+    userId: message.userId
+  }))
 }));
 
 const mockReportFind = jest.fn();
@@ -90,14 +108,20 @@ const mockChatRoomFind = jest.fn();
 const mockChatRoomCountDocuments = jest.fn().mockResolvedValue(0);
 jest.mock('../models/ChatRoom', () => ({
   countDocuments: (...args) => mockChatRoomCountDocuments(...args),
-  find: (...args) => mockChatRoomFind(...args)
+  find: (...args) => mockChatRoomFind(...args),
+  findById: jest.fn(() => ({
+    select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ _id: 'room-1', members: ['admin-user-id', 'target-user-id'] }) })
+  }))
 }));
 
 const mockChatConversationFind = jest.fn();
 const mockChatConversationCountDocuments = jest.fn().mockResolvedValue(0);
 jest.mock('../models/ChatConversation', () => ({
   countDocuments: (...args) => mockChatConversationCountDocuments(...args),
-  find: (...args) => mockChatConversationFind(...args)
+  find: (...args) => mockChatConversationFind(...args),
+  findById: jest.fn(() => ({
+    select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ _id: 'conversation-1', type: 'zip-room', participants: ['admin-user-id', 'target-user-id'] }) })
+  }))
 }));
 
 const mockArticleFindById = jest.fn();
@@ -146,6 +170,71 @@ describe('Moderation control panel admin actions', () => {
       moderationStatus: 'active',
       moderationHistory: [],
       save: jest.fn().mockResolvedValue(true)
+    };
+    mockTargetRoomMessage = {
+      _id: 'room-message-id',
+      roomId: 'room-1',
+      userId: { _id: 'target-user-id', username: 'member' },
+      content: 'hello room',
+      messageType: 'text',
+      mediaType: null,
+      audio: {
+        storageKey: null,
+        url: null,
+        durationMs: null,
+        waveformBins: [],
+        mimeType: null,
+        sizeBytes: null
+      },
+      commandData: null,
+      encryptedContent: null,
+      isEncrypted: false,
+      e2ee: { enabled: false },
+      moderation: { removedByAdmin: false, removedByAdminAt: null, removedByAdminBy: null, originalPayload: null },
+      save: jest.fn().mockResolvedValue(true),
+      toObject() {
+        return {
+          _id: this._id,
+          roomId: this.roomId,
+          userId: this.userId,
+          content: this.content,
+          messageType: this.messageType,
+          mediaType: this.mediaType,
+          audio: this.audio,
+          commandData: this.commandData,
+          encryptedContent: this.encryptedContent,
+          isEncrypted: this.isEncrypted,
+          e2ee: this.e2ee,
+          moderation: this.moderation
+        };
+      }
+    };
+    mockTargetConversationMessage = {
+      _id: 'conversation-message-id',
+      conversationId: 'conversation-1',
+      userId: { _id: 'target-user-id', username: 'member' },
+      content: 'hello conversation',
+      messageType: 'text',
+      commandData: null,
+      senderNameColor: '#123456',
+      chatScope: 'chat',
+      e2ee: { enabled: false },
+      moderation: { removedByAdmin: false, removedByAdminAt: null, removedByAdminBy: null, originalPayload: null },
+      save: jest.fn().mockResolvedValue(true),
+      toObject() {
+        return {
+          _id: this._id,
+          conversationId: this.conversationId,
+          userId: this.userId,
+          content: this.content,
+          messageType: this.messageType,
+          commandData: this.commandData,
+          senderNameColor: this.senderNameColor,
+          chatScope: this.chatScope,
+          e2ee: this.e2ee,
+          moderation: this.moderation
+        };
+      }
     };
 
     mockUserFindById.mockImplementation((id) => {
@@ -210,6 +299,41 @@ describe('Moderation control panel admin actions', () => {
       expect.arrayContaining([expect.objectContaining({ action: 'mute' })])
     );
     expect(targetUser.save).toHaveBeenCalled();
+  });
+
+  it('supports a 2 hour admin mute duration for in-room moderation', async () => {
+    const app = buildApp();
+    const before = Date.now();
+    const response = await request(app)
+      .post('/api/moderation/control-panel/users/target-user-id/mute')
+      .set('Authorization', 'Bearer token')
+      .send({ durationKey: '2h', reason: 'chat room admin action' });
+
+    expect(response.status).toBe(200);
+    const mutedUntilMs = new Date(targetUser.mutedUntil).getTime();
+    expect(mutedUntilMs).toBeGreaterThanOrEqual(before + (2 * 60 * 60 * 1000) - 5000);
+    expect(mutedUntilMs).toBeLessThanOrEqual(before + (2 * 60 * 60 * 1000) + 5000);
+  });
+
+  it('redacts and restores room messages for admin chat actions', async () => {
+    const app = buildApp();
+    const removeResponse = await request(app)
+      .post('/api/moderation/control-panel/messages/room-message-id/remove')
+      .set('Authorization', 'Bearer token');
+
+    expect(removeResponse.status).toBe(200);
+    expect(mockTargetRoomMessage.content).toBe('Removed by site Admin');
+    expect(mockTargetRoomMessage.moderation.removedByAdmin).toBe(true);
+    expect(mockTargetRoomMessage.moderation.originalPayload).toEqual(expect.objectContaining({ content: 'hello room' }));
+
+    const restoreResponse = await request(app)
+      .delete('/api/moderation/control-panel/messages/room-message-id/remove')
+      .set('Authorization', 'Bearer token');
+
+    expect(restoreResponse.status).toBe(200);
+    expect(mockTargetRoomMessage.content).toBe('hello room');
+    expect(mockTargetRoomMessage.moderation.removedByAdmin).toBe(false);
+    expect(mockTargetRoomMessage.moderation.originalPayload).toBeNull();
   });
 
   it('prevents deleting own admin account', async () => {

@@ -108,6 +108,26 @@ const conversationMessageSchema = new mongoose.Schema({
         maxlength: 32
       }
     }
+  },
+  moderation: {
+    removedByAdmin: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    removedByAdminAt: {
+      type: Date,
+      default: null
+    },
+    removedByAdminBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    originalPayload: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
+    }
   }
 }, {
   timestamps: true
@@ -138,7 +158,11 @@ conversationMessageSchema.statics.toPublicMessageShape = function toPublicMessag
     senderNameColor: message.senderNameColor || null,
     createdAt: message.createdAt,
     updatedAt: message.updatedAt,
-    isE2EE
+    isE2EE,
+    moderation: {
+      removedByAdmin: !!message?.moderation?.removedByAdmin,
+      removedByAdminAt: message?.moderation?.removedByAdminAt || null
+    }
   };
 
   if (isE2EE) {

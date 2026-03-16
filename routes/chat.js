@@ -2251,7 +2251,7 @@ router.post('/rooms/:roomId/leave', authenticateToken, async (req, res) => {
 });
 
 // List room members for slash /list UX
-router.get('/rooms/:roomId/users', authenticateToken, async (req, res) => {
+router.get('/rooms/:roomId/users', roomReadLimiter, authenticateToken, async (req, res) => {
   try {
     const { roomId } = req.params;
     const room = await ChatRoom.findById(roomId).select('_id name members').lean();
@@ -2262,15 +2262,16 @@ router.get('/rooms/:roomId/users', authenticateToken, async (req, res) => {
 
     const memberIds = Array.isArray(room.members) ? room.members : [];
     const users = memberIds.length > 0
-      ? await User.find({ _id: { $in: memberIds } }).select('_id username realName').lean()
+      ? await User.find({ _id: { $in: memberIds } }).select('_id username realName mutedUntil').lean()
       : [];
 
     const sortedUsers = users
-      .map((u) => ({
-        _id: u._id,
-        username: u.username || null,
-        realName: u.realName || null
-      }))
+        .map((u) => ({
+          _id: u._id,
+          username: u.username || null,
+          realName: u.realName || null,
+          mutedUntil: u.mutedUntil || null
+        }))
       .sort((a, b) => {
         const aName = (a.username || a.realName || '').toLowerCase();
         const bName = (b.username || b.realName || '').toLowerCase();
@@ -2583,14 +2584,15 @@ router.get('/conversations/:conversationId/users', unifiedChatLimiter, authentic
     }
 
     const users = await User.find({ _id: { $in: [...participantIds] } })
-      .select('_id username realName')
+      .select('_id username realName mutedUntil')
       .lean();
 
     const sortedUsers = users
       .map((u) => ({
         _id: u._id,
         username: u.username || null,
-        realName: u.realName || null
+        realName: u.realName || null,
+        mutedUntil: u.mutedUntil || null
       }))
       .sort((a, b) => {
         const aName = (a.username || a.realName || '').toLowerCase();
