@@ -26,6 +26,75 @@ const MIN_DELAY_MS = 900;   // min ms between requests
 const MAX_JITTER_MS = 300;  // additional random jitter
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const MARIJUANA_TOPIC = 'marijuana';
+const MARIJUANA_TOPIC_QUERY = {
+  $or: [
+    { category: MARIJUANA_TOPIC },
+    { title: /\bmarijuana\b/i },
+    { description: /\bmarijuana\b/i },
+    { title: /\bcannabis\b/i },
+    { description: /\bcannabis\b/i },
+    { title: /\bhemp\b/i },
+    { description: /\bhemp\b/i },
+    { title: /\bthc\b/i },
+    { description: /\bthc\b/i },
+    { title: /\bthca\b/i },
+    { description: /\bthca\b/i },
+    { title: /\bdelta[\s-]*8\b/i },
+    { description: /\bdelta[\s-]*8\b/i },
+    { title: /\bdelta[\s-]*9\b/i },
+    { description: /\bdelta[\s-]*9\b/i },
+  ],
+};
+
+function normalizeTopics(topics = []) {
+  return Array.from(new Set(
+    topics
+      .map((topic) => String(topic || '').trim().toLowerCase())
+      .filter(Boolean)
+  ));
+}
+
+function shouldTagAsMarijuana(item, category) {
+  if (category === MARIJUANA_TOPIC) return true;
+  const searchableText = [
+    item?.title,
+    item?.contentSnippet,
+    item?.summary,
+    item?.description,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return MARIJUANA_TOPIC_QUERY.$or
+    .filter((clause) => clause.title || clause.description)
+    .some((clause) => {
+      const pattern = clause.title || clause.description;
+      return pattern.test(searchableText);
+    });
+}
+
+function deriveTopics(item, category, existingTopics = []) {
+  const topics = normalizeTopics(existingTopics);
+  if (shouldTagAsMarijuana(item, category) && !topics.includes(MARIJUANA_TOPIC)) {
+    topics.push(MARIJUANA_TOPIC);
+  }
+  return topics;
+}
+
+async function retagExistingMarijuanaArticles() {
+  const result = await Article.updateMany(
+    {
+      ...MARIJUANA_TOPIC_QUERY,
+      topics: { $ne: MARIJUANA_TOPIC },
+    },
+    {
+      $addToSet: { topics: MARIJUANA_TOPIC },
+    }
+  );
+
+  return result?.modifiedCount || result?.nModified || 0;
+}
 
 async function persistItem(item, category, feedSource) {
   const url = item.link || item.guid;
@@ -48,7 +117,16 @@ async function persistItem(item, category, feedSource) {
       ...(contentFingerprint ? [{ contentFingerprint }] : []),
     ]
   }).lean();
-  if (existing) return 'duplicate';
+  if (existing) {
+    const topics = deriveTopics(item, category, existing.topics);
+    if (topics.length !== normalizeTopics(existing.topics).length) {
+      await Article.updateOne(
+        { _id: existing._id },
+        { $addToSet: { topics: MARIJUANA_TOPIC } }
+      );
+    }
+    return 'duplicate';
+  }
 
   const articleData = {
     title: (item.title || '').trim(),
@@ -67,6 +145,7 @@ async function persistItem(item, category, feedSource) {
     localityLevel: 'global',
     scopeReason: 'source_default',
     scopeConfidence: 0.1,
+    topics: deriveTopics(item, category),
   };
 
   const scored = calculateViralScore(articleData, {});
@@ -94,7 +173,16 @@ async function ingestCategory(categoryKey) {
     return { categoryKey, error: 'unknown_category' };
   }
 
-  const counts = { inserted: 0, duplicates: 0, errors: 0, fetched: 0 };
+  const counts = { inserted: 0, duplicates: 0, errors: 0, fetched: 0, retagged: 0 };
+
+  if (categoryKey === MARIJUANA_TOPIC) {
+    try {
+      counts.retagged = await retagExistingMarijuanaArticles();
+    } catch (err) {
+      counts.errors++;
+      console.warn('[cat-ingest] Marijuana article retag failed:', err.message);
+    }
+  }
 
   for (const feed of def.feeds) {
     try {
@@ -127,7 +215,8 @@ async function ingestCategory(categoryKey) {
 
   console.log(
     `[cat-ingest] ${categoryKey}: ${counts.inserted} inserted, ` +
-    `${counts.duplicates} dups, ${counts.errors} errors (${counts.fetched} fetched)`
+    `${counts.duplicates} dups, ${counts.retagged} retagged, ` +
+    `${counts.errors} errors (${counts.fetched} fetched)`
   );
   return { categoryKey, ...counts };
 }
