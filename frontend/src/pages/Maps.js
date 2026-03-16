@@ -24,6 +24,10 @@ export const HEATMAP_CIRCLE_RADIUS_METERS = 200 * 0.3048;
 export const LOCATION_PUBLISH_INTERVAL_MS = 30 * 1000;
 export const FRIENDS_REFRESH_INTERVAL_MS = 10 * 1000;
 const MAP_REFRESH_INTERVAL_MS = 60 * 1000;
+const MAP_DATA_CACHE_TTL_MS = 90 * 1000;
+const MAP_DATA_CACHE_MAX_ENTRIES = 6;
+const MAP_DATA_CACHE_COORDINATE_PRECISION = 2;
+const FAVORITES_CACHE_TTL_MS = 5 * 60 * 1000;
 const HEATMAP_USERS_PER_LAYER = 3;
 const HEATMAP_MAX_STACK_LAYERS = 6;
 const HEATMAP_BASE_FILL_OPACITY = 0.08;
@@ -32,6 +36,8 @@ const HEATMAP_MAX_FILL_OPACITY = 0.34;
 const MAP_FRIEND_FOCUS_ZOOM_LEVEL = 15;
 const MAP_SELF_FOCUS_ZOOM_LEVEL = 14;
 const createFallbackResponse = (data) => ({ data });
+const mapDataCache = new Map();
+let favoriteLocationsCacheEntry = null;
 
 export const withDataFallback = (request, fallbackData) =>
   request.catch(() => createFallbackResponse(fallbackData));
@@ -65,6 +71,53 @@ export const sortFriendsByStatusAndActivity = (friends = []) => (
     return getFriendActivityTimestamp(right) - getFriendActivityTimestamp(left);
   })
 );
+
+const pruneCacheEntries = (cache, maxEntries) => {
+  while (cache.size > maxEntries) {
+    const oldestKey = cache.keys().next().value;
+    if (typeof oldestKey === 'undefined') break;
+    cache.delete(oldestKey);
+  }
+};
+
+const getCachedValue = (cache, key, maxAgeMs) => {
+  const entry = cache.get(key);
+  if (!entry) return null;
+
+  if ((Date.now() - entry.cachedAt) > maxAgeMs) {
+    cache.delete(key);
+    return null;
+  }
+
+  cache.delete(key);
+  cache.set(key, entry);
+  return entry.value;
+};
+
+const setCachedValue = (cache, key, value, maxEntries) => {
+  cache.delete(key);
+  cache.set(key, {
+    value,
+    cachedAt: Date.now()
+  });
+  pruneCacheEntries(cache, maxEntries);
+};
+
+const roundMapCacheCoordinate = (value) => Number(value).toFixed(MAP_DATA_CACHE_COORDINATE_PRECISION);
+
+export const createMapDataCacheKey = ({ lat, lng, viewMode, includeHeatmap }) => (
+  [
+    viewMode,
+    roundMapCacheCoordinate(lat),
+    roundMapCacheCoordinate(lng),
+    includeHeatmap ? 'heatmap' : 'markers'
+  ].join(':')
+);
+
+export const clearMapsClientCaches = () => {
+  mapDataCache.clear();
+  favoriteLocationsCacheEntry = null;
+};
 
 const getFriendDisplayLocation = (friend) =>
   friend?.locationName
@@ -294,7 +347,7 @@ function Maps() {
   }, [userLocation, layers.friends]);
 
   // Fetch map data based on view mode
-  const fetchMapData = async ({ showLoading = true } = {}) => {
+  const fetchMapData = async ({ showLoading = true, forceRefresh = false } = {}) => {
     if (!userLocation) return;
     
     try {
@@ -302,6 +355,26 @@ function Maps() {
         setLoading(true);
       }
       const [lat, lng] = userLocation;
+      const cacheKey = createMapDataCacheKey({
+        lat,
+        lng,
+        viewMode,
+        includeHeatmap: layers.heatmap
+      });
+
+      if (!forceRefresh) {
+        const cachedMapData = getCachedValue(mapDataCache, cacheKey, MAP_DATA_CACHE_TTL_MS);
+        if (cachedMapData) {
+          setSpotlights(cachedMapData.spotlights);
+          setHeatmapData(cachedMapData.heatmap);
+          setLastMapRefreshAt(new Date(cachedMapData.fetchedAt));
+          setError(null);
+          if (showLoading) {
+            setLoading(false);
+          }
+          return;
+        }
+      }
       
       // Fetch map data
       const mapEndpoint = viewMode === 'local' ? 'getLocalMap' : 'getCommunityMap';
@@ -320,9 +393,16 @@ function Maps() {
           : Promise.resolve(createFallbackResponse({ heatmap: [] }))
       ]);
       
-      setSpotlights(mapRes.data.spotlights || []);
-      setHeatmapData(resolveMapHeatmapData(mapRes.data, heatmapRes.data));
-      setLastMapRefreshAt(new Date());
+      const nextMapData = {
+        spotlights: mapRes.data.spotlights || [],
+        heatmap: resolveMapHeatmapData(mapRes.data, heatmapRes.data),
+        fetchedAt: Date.now()
+      };
+
+      setCachedValue(mapDataCache, cacheKey, nextMapData, MAP_DATA_CACHE_MAX_ENTRIES);
+      setSpotlights(nextMapData.spotlights);
+      setHeatmapData(nextMapData.heatmap);
+      setLastMapRefreshAt(new Date(nextMapData.fetchedAt));
       setError(null);
     } catch (err) {
       console.error('Error fetching map data:', err);
@@ -349,10 +429,24 @@ function Maps() {
     }
   };
 
-  const fetchFavoriteLocations = async () => {
+  const fetchFavoriteLocations = async ({ forceRefresh = false } = {}) => {
     try {
+      if (!forceRefresh && favoriteLocationsCacheEntry) {
+        const isFavoriteCacheFresh = (Date.now() - favoriteLocationsCacheEntry.cachedAt) <= FAVORITES_CACHE_TTL_MS;
+        if (isFavoriteCacheFresh) {
+          setFavoriteLocations(favoriteLocationsCacheEntry.favorites);
+          return;
+        }
+        favoriteLocationsCacheEntry = null;
+      }
+
       const favoritesRes = await withDataFallback(mapsAPI.getFavoriteLocations(), { favorites: [] });
-      setFavoriteLocations(favoritesRes.data.favorites || []);
+      const nextFavorites = favoritesRes.data.favorites || [];
+      favoriteLocationsCacheEntry = {
+        favorites: nextFavorites,
+        cachedAt: Date.now()
+      };
+      setFavoriteLocations(nextFavorites);
     } catch (err) {
       console.error('Error fetching favorite locations:', err);
     }
@@ -393,7 +487,7 @@ function Maps() {
           }
           
           if (recenterMap) {
-            fetchMapData({ showLoading: true });
+            fetchMapData({ showLoading: true, forceRefresh: true });
           }
         } catch (err) {
           console.error('Error updating presence:', err);
@@ -456,9 +550,10 @@ function Maps() {
         ...spotlightForm
       });
       
+      mapDataCache.clear();
       setShowCreateSpotlight(false);
       setSpotlightForm({ locationName: '', description: '', category: 'other' });
-      fetchMapData();
+      fetchMapData({ forceRefresh: true });
     } catch (err) {
       console.error('Error creating spotlight:', err);
       setError(err.response?.data?.error || 'Failed to create spotlight');
@@ -471,7 +566,8 @@ function Maps() {
   const handleReact = async (spotlightId, reactionType) => {
     try {
       await mapsAPI.reactToSpotlight(spotlightId, reactionType);
-      fetchMapData();
+      mapDataCache.clear();
+      fetchMapData({ forceRefresh: true });
     } catch (err) {
       console.error('Error reacting to spotlight:', err);
     }
@@ -484,10 +580,11 @@ function Maps() {
     try {
       const res = await mapsAPI.createFavoriteLocation(payload);
       const nextFavorite = res?.data?.favorite;
+      favoriteLocationsCacheEntry = null;
       if (nextFavorite) {
         setFavoriteLocations((prev) => [nextFavorite, ...prev]);
       } else {
-        fetchFavoriteLocations();
+        await fetchFavoriteLocations({ forceRefresh: true });
       }
       setFavoriteForm({ address: '' });
       setShowFavoritesModal(false);
@@ -537,6 +634,7 @@ function Maps() {
   const handleDeleteFavorite = async (favoriteId) => {
     try {
       await mapsAPI.deleteFavoriteLocation(favoriteId);
+      favoriteLocationsCacheEntry = null;
       setFavoriteLocations((prev) => prev.filter((favorite) => favorite._id !== favoriteId));
     } catch (err) {
       setFavoriteError(err.response?.data?.error || 'Failed to remove favorite location');
@@ -1212,7 +1310,12 @@ function Maps() {
 
       {/* Create Spotlight Modal */}
       {showCreateSpotlight && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div
+          className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Create Spotlight"
+        >
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-4">✨ Create Spotlight</h2>
 
@@ -1281,7 +1384,12 @@ function Maps() {
       )}
 
       {showFavoritesModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div
+          className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Save Favorite"
+        >
           <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xl font-bold text-gray-900">★ Save Favorite</h2>
@@ -1304,6 +1412,7 @@ function Maps() {
                   type="text"
                   value={favoriteForm.address}
                   onChange={(event) => setFavoriteForm({ address: event.target.value })}
+                  aria-label="Favorite address"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   placeholder="123 Main St, Austin, TX"
                 />

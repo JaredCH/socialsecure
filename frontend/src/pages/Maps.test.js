@@ -4,7 +4,9 @@ import Maps, {
   FRIENDS_REFRESH_INTERVAL_MS,
   HEATMAP_CIRCLE_RADIUS_METERS,
   LOCATION_PUBLISH_INTERVAL_MS,
+  clearMapsClientCaches,
   configureLeafletMarkerAssets,
+  createMapDataCacheKey,
   resolveMapHeatmapData,
   resolveLeafletModule,
   sortFriendsByStatusAndActivity,
@@ -129,6 +131,17 @@ describe('resolveMapHeatmapData', () => {
   });
 });
 
+describe('createMapDataCacheKey', () => {
+  it('rounds nearby coordinates into a bounded cache key', () => {
+    expect(createMapDataCacheKey({
+      lat: 30.26721,
+      lng: -97.74306,
+      viewMode: 'local',
+      includeHeatmap: true
+    })).toBe('local:30.27:-97.74:heatmap');
+  });
+});
+
 describe('configureLeafletMarkerAssets', () => {
   it('sets explicit marker icon URLs from bundled Leaflet assets', async () => {
     const mergeOptions = jest.fn();
@@ -202,6 +215,7 @@ describe('Maps mobile-first controls', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    clearMapsClientCaches();
     mapsAPI.getPresence.mockResolvedValue({ data: { presence: { shareWithFriends: true } } });
     mapsAPI.getLocalMap.mockResolvedValue({ data: { spotlights: [] } });
     mapsAPI.getCommunityMap.mockResolvedValue({ data: { spotlights: [] } });
@@ -286,7 +300,7 @@ describe('Maps mobile-first controls', () => {
     });
     await flushPromises();
 
-    const addressInput = container.querySelector('input[placeholder="123 Main St, Austin, TX"]');
+    const addressInput = container.querySelector('input[aria-label="Favorite address"]');
     const modalForm = Array.from(container.querySelectorAll('form'))
       .find((form) => form.textContent.includes('Use Current Location'));
     const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -305,5 +319,128 @@ describe('Maps mobile-first controls', () => {
     expect(mapsAPI.createFavoriteLocation).toHaveBeenCalledWith({
       address: '123 Main St, Austin, TX'
     });
+  });
+
+  it('renders the favorites modal above map controls when opened', async () => {
+    await act(async () => {
+      root.render(<Maps />);
+    });
+    await flushPromises();
+
+    const favoritesButton = container.querySelector('button[aria-label="Open favorite locations"]');
+
+    act(() => {
+      favoritesButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    const favoritesModal = container.querySelector('[role="dialog"][aria-label="Save Favorite"]');
+
+    expect(favoritesModal).not.toBeNull();
+    expect(favoritesModal.className).toContain('z-[700]');
+  });
+
+  it('reuses cached map data between maps page mounts', async () => {
+    leaflet.map.mockImplementation(() => leaflet.__mapInstance);
+    leaflet.__mapInstance.setView.mockImplementation(() => leaflet.__mapInstance);
+    leaflet.tileLayer.mockImplementation(() => ({
+      addTo: jest.fn().mockReturnThis()
+    }));
+    leaflet.marker.mockImplementation(() => ({
+      bindPopup: jest.fn().mockReturnThis(),
+      addTo: jest.fn().mockReturnThis()
+    }));
+    leaflet.circle.mockImplementation(() => ({
+      addTo: jest.fn().mockReturnThis()
+    }));
+    navigator.geolocation.getCurrentPosition.mockImplementation((success) => {
+      success({ coords: { latitude: 30.2672, longitude: -97.7431 } });
+    });
+
+    mapsAPI.getLocalMap.mockResolvedValue({
+      data: {
+        spotlights: [{ _id: 'spotlight-1', locationName: 'Coffee Shop', lat: 30.2672, lng: -97.7431 }]
+      }
+    });
+    mapsAPI.getHeatmap.mockResolvedValue({
+      data: {
+        heatmap: [{ lat: 30.2672, lng: -97.7431, intensity: 0.5, userCount: 3 }]
+      }
+    });
+
+    await act(async () => {
+      root.render(<Maps />);
+    });
+    await flushPromises();
+    await flushPromises();
+
+    expect(mapsAPI.getLocalMap).toHaveBeenCalledTimes(1);
+    expect(mapsAPI.getHeatmap).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      root.unmount();
+    });
+
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(<Maps />);
+    });
+    await flushPromises();
+    await flushPromises();
+
+    expect(mapsAPI.getLocalMap).toHaveBeenCalledTimes(1);
+    expect(mapsAPI.getHeatmap).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes favorites when the save response omits the created favorite payload', async () => {
+    mapsAPI.createFavoriteLocation.mockResolvedValueOnce({ data: { favorite: null } });
+    mapsAPI.getFavoriteLocations
+      .mockResolvedValueOnce({ data: { favorites: [] } })
+      .mockResolvedValueOnce({
+        data: {
+          favorites: [{
+            _id: 'favorite-2',
+            address: '500 W 2nd St, Austin, TX',
+            lat: 30.2654,
+            lng: -97.7483,
+            sourceType: 'address'
+          }]
+        }
+      });
+
+    await act(async () => {
+      root.render(<Maps />);
+    });
+    await flushPromises();
+
+    const favoritesButton = container.querySelector('button[aria-label="Open favorite locations"]');
+
+    act(() => {
+      favoritesButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    const addressInput = container.querySelector('input[aria-label="Favorite address"]');
+    const modalForm = Array.from(container.querySelectorAll('form'))
+      .find((form) => form.textContent.includes('Use Current Location'));
+    const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+
+    act(() => {
+      valueSetter.call(addressInput, '500 W 2nd St, Austin, TX');
+      addressInput.dispatchEvent(new Event('input', { bubbles: true }));
+      addressInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    await act(async () => {
+      modalForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await flushPromises();
+
+    expect(mapsAPI.createFavoriteLocation).toHaveBeenCalledWith({
+      address: '500 W 2nd St, Austin, TX'
+    });
+    expect(mapsAPI.getFavoriteLocations).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('500 W 2nd St, Austin, TX');
   });
 });
