@@ -697,6 +697,8 @@ export const moderationAPI = {
   deletePostByAdmin: (postId) => api.delete(`/moderation/control-panel/posts/${encodeURIComponent(postId)}`),
   deleteMessageByAdmin: (messageId, type = 'room') => api.delete(`/moderation/control-panel/messages/${encodeURIComponent(messageId)}?type=${encodeURIComponent(type)}`),
   deleteUserByAdmin: (userId) => api.delete(`/moderation/control-panel/users/${encodeURIComponent(userId)}`),
+  getContentFilter: () => api.get('/moderation/control-panel/content-filter'),
+  updateContentFilter: (data) => api.put('/moderation/control-panel/content-filter', data),
   // News Review — article auditing and feed simulation
   getNewsReviewArticles: (params = {}) => api.get('/moderation/control-panel/news-review/articles', { params }),
   simulateNewsFeed: (params = {}) => api.get('/moderation/control-panel/news-review/simulate', { params }),

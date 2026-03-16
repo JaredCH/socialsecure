@@ -44,6 +44,12 @@ const TOTAL_KEY_TO_SECTION = {
   conversations: 'conversations'
 };
 
+const wordListToText = (values = []) => (Array.isArray(values) ? values.join('\n') : '');
+const textToWordList = (value) => String(value || '')
+  .split(/\r?\n|,/)
+  .map((entry) => entry.trim())
+  .filter(Boolean);
+
 const StatusBadge = ({ status, className = '' }) => {
   const colors = {
     processed: 'bg-emerald-100 text-emerald-700',
@@ -157,6 +163,11 @@ function ModerationDashboard() {
   const [scheduleInfo, setScheduleInfo] = useState(null);
   const [ingestionStats, setIngestionStats] = useState(null);
   const [countdownMs, setCountdownMs] = useState(null);
+  const [contentFilterForm, setContentFilterForm] = useState({
+    zeroToleranceWordsText: '',
+    maturityCensoredWordsText: ''
+  });
+  const [contentFilterSaving, setContentFilterSaving] = useState(false);
 
   const muteDurations = useMemo(() => overview?.muteDurations || FALLBACK_MUTE_DURATIONS, [overview]);
 
@@ -172,8 +183,21 @@ function ModerationDashboard() {
     }
   };
 
+  const loadContentFilter = async () => {
+    try {
+      const { data } = await moderationAPI.getContentFilter();
+      setContentFilterForm({
+        zeroToleranceWordsText: wordListToText(data?.zeroToleranceWords),
+        maturityCensoredWordsText: wordListToText(data?.maturityCensoredWords)
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to load content filter settings');
+    }
+  };
+
   useEffect(() => {
     loadOverview();
+    loadContentFilter();
     loadIngestionRecords(1);
     loadScheduleInfo();
     loadIngestionStats();
@@ -331,11 +355,32 @@ function ModerationDashboard() {
   const refreshAll = async () => {
     await Promise.all([
       loadOverview(),
+      loadContentFilter(),
       details.open ? openDetails(details.section, details.page) : Promise.resolve(),
       loadIngestionRecords(ingestion.page || 1),
       loadScheduleInfo(),
       loadIngestionStats()
     ]);
+  };
+
+  const handleSaveContentFilter = async (event) => {
+    event.preventDefault();
+    setContentFilterSaving(true);
+    try {
+      const { data } = await moderationAPI.updateContentFilter({
+        zeroToleranceWords: textToWordList(contentFilterForm.zeroToleranceWordsText),
+        maturityCensoredWords: textToWordList(contentFilterForm.maturityCensoredWordsText)
+      });
+      setContentFilterForm({
+        zeroToleranceWordsText: wordListToText(data?.zeroToleranceWords),
+        maturityCensoredWordsText: wordListToText(data?.maturityCensoredWords)
+      });
+      toast.success('Content filter settings saved');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to save content filter settings');
+    } finally {
+      setContentFilterSaving(false);
+    }
   };
 
   const handleDeletePost = async (postId) => {
@@ -513,6 +558,44 @@ function ModerationDashboard() {
             </ul>
           </div>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b bg-gray-50 px-5 py-3">
+          <h2 className="text-base font-semibold text-gray-900">🛡️ Content Filters</h2>
+          <p className="mt-1 text-xs text-gray-500">
+            Zero-tolerance words block submission. Maturity-censored words are masked for viewers who enable the user setting.
+          </p>
+        </div>
+        <form onSubmit={handleSaveContentFilter} className="grid gap-4 p-5 md:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-800">Zero-tolerance words</label>
+            <textarea
+              value={contentFilterForm.zeroToleranceWordsText}
+              onChange={(event) => setContentFilterForm((prev) => ({ ...prev, zeroToleranceWordsText: event.target.value }))}
+              className="min-h-[180px] w-full rounded-lg border border-gray-200 p-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="One word per line"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-800">Maturity-censored words</label>
+            <textarea
+              value={contentFilterForm.maturityCensoredWordsText}
+              onChange={(event) => setContentFilterForm((prev) => ({ ...prev, maturityCensoredWordsText: event.target.value }))}
+              className="min-h-[180px] w-full rounded-lg border border-gray-200 p-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="One word per line"
+            />
+          </div>
+          <div className="md:col-span-2 flex justify-end">
+            <button
+              type="submit"
+              disabled={contentFilterSaving}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {contentFilterSaving ? 'Saving…' : 'Save content filters'}
+            </button>
+          </div>
+        </form>
       </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">

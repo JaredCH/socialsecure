@@ -299,6 +299,10 @@ const renderFormattedPostContent = (content) => {
   });
 };
 
+const getDisplayContent = (content, contentCensored, censorEnabled) => (
+  censorEnabled && typeof contentCensored === 'string' ? contentCensored : content
+);
+
 const buildRecentImageHistory = (previousValue, nextValue, existing = []) => {
   const normalizedPrevious = typeof previousValue === 'string' ? previousValue.trim() : '';
   const normalizedNext = typeof nextValue === 'string' ? nextValue.trim() : '';
@@ -3703,6 +3707,11 @@ const Social = () => {
               const isPostOwner = postAuthorId && postAuthorId === String(currentUser?._id || '');
               const isBlocked = blockedUserIds.includes(postAuthorId);
               const isMuted = mutedUserIds.includes(postAuthorId);
+              const displayContent = getDisplayContent(
+                post.content,
+                post.contentCensored,
+                currentUser?.enableMaturityWordCensor !== false
+              );
               const interaction = post.interaction;
               const interactionStatus = getInteractionStatus(interaction);
 
@@ -3728,7 +3737,7 @@ const Social = () => {
                     {post.locationRadius ? <span className="rounded-full bg-gray-100 px-2 py-1">Radius: {post.locationRadius} mi</span> : null}
                     {post.expiresAt ? <span className="rounded-full bg-gray-100 px-2 py-1">Expires: {formatDate(post.expiresAt)}</span> : null}
                   </div>
-                  {post.content ? <div className="space-y-1 text-gray-800">{renderFormattedPostContent(post.content)}</div> : null}
+                  {displayContent ? <div className="space-y-1 text-gray-800">{renderFormattedPostContent(displayContent)}</div> : null}
                   {post.mediaUrls.length > 0 ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{post.mediaUrls.map((url, index) => renderMediaItem(url, `${post._id}-media-${index}`))}</div> : null}
                   {interaction?.type === 'poll' ? <div className="rounded-xl border bg-slate-50 p-3"><p className="font-medium text-sm">{interaction.poll?.question}</p><p className="text-xs text-gray-500">Poll status: <span className="font-medium">{interactionStatus}</span></p></div> : null}
                   {interaction?.type === 'quiz' ? <div className="rounded-xl border bg-violet-50/40 p-3"><p className="font-medium text-sm">{interaction.quiz?.question}</p><p className="text-xs text-gray-500">Quiz status: <span className="font-medium">{interactionStatus}</span></p></div> : null}

@@ -99,6 +99,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  enableMaturityWordCensor: {
+    type: Boolean,
+    default: true
+  },
   location: {
     type: {
       type: String,
@@ -567,6 +571,7 @@ userSchema.methods.toPublicProfile = function() {
       profileTheme: this.profileTheme || 'default'
     }),
     stripImageMetadataOnUpload: this.stripImageMetadataOnUpload === true,
+    enableMaturityWordCensor: this.enableMaturityWordCensor !== false,
     city: this.city,
     state: this.state,
     country: this.country,

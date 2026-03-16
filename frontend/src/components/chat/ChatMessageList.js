@@ -11,6 +11,7 @@ function ChatMessageList({
   messages,
   loading,
   profile,
+  censorSensitiveWords,
   theme,
   onOpenUserMenu,
   reactionsByMessageId,
@@ -131,50 +132,46 @@ function ChatMessageList({
         }}
         className="h-full overflow-y-auto px-3 py-3 [scrollbar-gutter:stable]"
       >
-        <div className="flex min-h-full flex-col justify-end gap-1.5">
-          {hasOlderMessages ? (
-            <div className="sticky top-0 z-10 flex justify-center pb-2">
-              <button
-                type="button"
-                onClick={() => setRenderCount((count) => count + LOAD_MORE_STEP)}
-                className={`rounded border px-3 py-1 text-xs font-semibold backdrop-blur ${theme.subtle}`}
-              >
-                Load earlier messages
-              </button>
-            </div>
-          ) : null}
-          {!hasOlderMessages && hasMoreMessages ? (
-            <div className="sticky top-0 z-10 flex justify-center pb-2">
-              <span className={`rounded border px-3 py-1 text-xs font-semibold backdrop-blur ${theme.subtle}`}>
-                {loadingOlderMessages ? 'Loading earlier messages...' : 'Scroll up to load earlier messages'}
-              </span>
-            </div>
-          ) : null}
+        {hasOlderMessages ? (
+          <div className="sticky top-0 z-10 flex justify-center pb-2">
+            <button
+              type="button"
+              onClick={() => setRenderCount((count) => count + LOAD_MORE_STEP)}
+              className={`rounded border px-3 py-1 text-xs font-semibold backdrop-blur ${theme.subtle}`}
+            >
+              Load earlier messages
+            </button>
+          </div>
+        ) : null}
+        {!hasOlderMessages && hasMoreMessages ? (
+          <div className="sticky top-0 z-10 flex justify-center pb-2">
+            <span className={`rounded border px-3 py-1 text-xs font-semibold backdrop-blur ${theme.subtle}`}>
+              {loadingOlderMessages ? 'Loading earlier messages...' : 'Scroll up to load earlier messages'}
+            </span>
+          </div>
+        ) : null}
 
-          {loading ? (
-            <p className="text-sm opacity-80">Loading messages...</p>
-          ) : messages.length === 0 ? (
-            <p className="text-sm opacity-80">No messages yet.</p>
-          ) : (
-            visibleMessagesWithGrouping.map(({ message, groupedWithPrevious, groupedWithNext }) => (
-              <ChatMessageItem
-                key={String(message._id)}
-                message={message}
-                conversationType={conversationType}
-                groupedWithPrevious={groupedWithPrevious}
-                groupedWithNext={groupedWithNext}
-                isOwnMessage={String(message.userId?._id) === String(profile?._id)}
-                currentUserId={profile?._id}
-                theme={theme}
-                onOpenUserMenu={onOpenUserMenu}
-                reactionsByType={reactionsByMessageId?.[String(message._id)] || {}}
-                reactionOptions={reactionOptions}
-                onToggleReaction={onToggleReaction}
-                longPressDelayMs={longPressDelayMs}
-              />
-            ))
-          )}
-        </div>
+        {loading ? (
+          <p className="text-sm opacity-80">Loading messages...</p>
+        ) : messages.length === 0 ? (
+          <p className="text-sm opacity-80">No messages yet.</p>
+        ) : (
+          visibleMessages.map((message) => (
+            <ChatMessageItem
+              key={String(message._id)}
+              message={message}
+              isOwnMessage={String(message.userId?._id) === String(profile?._id)}
+              currentUserId={profile?._id}
+              censorSensitiveWords={censorSensitiveWords}
+              theme={theme}
+              onOpenUserMenu={onOpenUserMenu}
+              reactionsByType={reactionsByMessageId?.[String(message._id)] || {}}
+              reactionOptions={reactionOptions}
+              onToggleReaction={onToggleReaction}
+              longPressDelayMs={longPressDelayMs}
+            />
+          ))
+        )}
       </div>
     </div>
   );

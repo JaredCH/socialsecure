@@ -21,11 +21,15 @@ const mockBlockList = {
 const mockPost = {
   find: jest.fn()
 };
+const mockSiteContentFilter = {
+  findOne: jest.fn()
+};
 
 jest.mock('../models/User', () => mockUser);
 jest.mock('../models/Friendship', () => mockFriendship);
 jest.mock('../models/BlockList', () => mockBlockList);
 jest.mock('../models/Post', () => mockPost);
+jest.mock('../models/SiteContentFilter', () => mockSiteContentFilter);
 
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
@@ -79,6 +83,11 @@ const mockFriendAndBlockLookups = () => {
 describe('Discovery routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSiteContentFilter.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        maturityCensoredWords: []
+      })
+    });
   });
 
   it('returns ranked and paginated user discovery results', async () => {

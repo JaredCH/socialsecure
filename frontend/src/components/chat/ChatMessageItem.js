@@ -124,6 +124,7 @@ function ChatMessageItem({
   isOwnMessage,
   currentUserId,
   theme,
+  censorSensitiveWords = true,
   onOpenUserMenu,
   reactionsByType = {},
   reactionOptions = [],
@@ -145,6 +146,9 @@ function ChatMessageItem({
     username: message.userId.username,
     realName: message.userId.realName
   } : null;
+  const displayContent = censorSensitiveWords && typeof message.contentCensored === 'string'
+    ? message.contentCensored
+    : message.content;
 
   useEffect(() => () => {
     if (longPressTimerRef.current) {
@@ -353,7 +357,76 @@ function ChatMessageItem({
               >
                 {isOwnMessage ? 'You' : `@${author}`}
               </button>
-              <span className="text-[10px] font-mono opacity-60">{fullTimestamp || timestamp}</span>
+            </span>
+            <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
+          </header>
+          <p className="whitespace-pre-wrap break-words text-[13px] leading-5">{renderMessageContent(displayContent)}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] opacity-70">
+            <span className="font-mono">{fullTimestamp}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {reactionOptions.map((reaction) => {
+              const actors = Array.isArray(reactionsByType?.[reaction.key]) ? reactionsByType[reaction.key] : [];
+              if (actors.length === 0) return null;
+              const reactedByMe = normalizedCurrentUserId && actors.includes(normalizedCurrentUserId);
+              return (
+                <button
+                  key={reaction.key}
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggleReaction?.(message._id, reaction.key);
+                  }}
+                  data-chat-no-user-menu="true"
+                  className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${reactedByMe ? 'font-semibold' : ''}`}
+                  title={reaction.label}
+                >
+                  <span>{reaction.emoji}</span>
+                  <span>{actors.length}</span>
+                </button>
+              );
+            })}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setReactionPickerOpen((open) => !open);
+                }}
+                data-chat-no-user-menu="true"
+                className="rounded-full border px-1 py-0.5 text-[10px] opacity-75 hover:opacity-100"
+                aria-label="Open reaction picker"
+                title="Add reaction"
+              >
+                😊
+              </button>
+              {reactionPickerOpen ? (
+                <div
+                  className={[
+                    'absolute bottom-full z-20 mb-1 flex items-center gap-1 rounded border px-1 py-1 text-[10px] shadow-sm',
+                    isOwnMessage ? 'right-0' : 'left-0',
+                    theme.subtle
+                  ].join(' ')}
+                >
+                  {reactionOptions.map((reaction) => (
+                    <button
+                      key={`pick-${reaction.key}`}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onToggleReaction?.(message._id, reaction.key);
+                        setReactionPickerOpen(false);
+                      }}
+                      data-chat-no-user-menu="true"
+                      className="rounded border px-1 py-0.5 text-[10px] hover:opacity-100"
+                      aria-label={`Add ${reaction.label} reaction`}
+                      title={reaction.label}
+                    >
+                      {reaction.emoji}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
           <div tabIndex={0} className="rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1">
