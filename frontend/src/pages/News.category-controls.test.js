@@ -162,14 +162,21 @@ describe('News category controls', () => {
     ).toBeTruthy();
   });
 
-  it('uses compact category row spacing to fit more items', async () => {
+  it('uses tighter category row spacing to fit more items without scrolling', async () => {
     await renderNews();
 
+    const allButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      Array.from(button.querySelectorAll('span')).some((span) => span.textContent === 'All')
+    );
     const categoryRow = container.querySelector('[data-category-key]');
     const categoryButton = categoryRow.querySelector('button[aria-label^="Filter by"]');
     const categoryLabel = categoryButton.querySelector('span.flex-1');
-    expect(categoryRow.className).toContain('py-0.5');
-    expect(categoryButton.className).toContain('py-0.5');
-    expect(categoryLabel.className).toContain('leading-[1.05]');
+    expect(allButton).toBeTruthy();
+    const allLabel = allButton.querySelector('span.flex-1');
+    expect(allButton.className).toContain('py-[0.2rem]');
+    expect(allLabel.className).toContain('leading-[0.85]');
+    expect(categoryRow.className).toContain('py-[0.1rem]');
+    expect(categoryButton.className).toContain('py-[0.1rem]');
+    expect(categoryLabel.className).toContain('leading-[0.85]');
   });
 });

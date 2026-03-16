@@ -140,7 +140,7 @@ export default function NewsLeftPanel({
         {/* All */}
         <button
           onClick={() => onToggleCategory?.(null)}
-          className={`w-full flex items-center gap-2 px-2 py-1 rounded-xl mb-0.5 text-sm transition-colors ${
+          className={`w-full flex items-center gap-2 px-2 py-[0.2rem] rounded-xl mb-0.5 text-sm transition-colors ${
             isAllActive && !multiSelect
               ? 'bg-blue-50 text-blue-700 font-semibold'
               : 'text-gray-700 hover:bg-gray-50'
@@ -149,7 +149,7 @@ export default function NewsLeftPanel({
           <span className="w-5 h-5 rounded-md bg-gray-100 flex items-center justify-center shrink-0">
             <span className="material-symbols-outlined text-sm text-gray-500 leading-none">newspaper</span>
           </span>
-          <span className="flex-1 text-left text-xs leading-[1.05]">All</span>
+          <span className="flex-1 text-left text-xs leading-[0.85]">All</span>
         </button>
 
         {categories.map((cat) => {
@@ -161,11 +161,11 @@ export default function NewsLeftPanel({
               key={cat.key}
               data-category-key={cat.key}
               data-disabled={isDisabled ? 'true' : 'false'}
-              className={`mb-0.5 flex items-center gap-2 rounded-xl px-2 py-0.5 ${isDisabled ? 'opacity-65' : ''}`}
+              className={`mb-0.5 flex items-center gap-2 rounded-xl px-2 py-[0.1rem] ${isDisabled ? 'opacity-65' : ''}`}
             >
               <button
                 onClick={() => !isDisabled && onToggleCategory?.(cat.key)}
-                className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-0.5 text-sm transition-colors ${
+                className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-[0.1rem] text-sm transition-colors ${
                   active
                     ? 'bg-blue-50 text-blue-700 font-semibold'
                     : isDisabled
@@ -179,7 +179,7 @@ export default function NewsLeftPanel({
                 <span className={`w-5 h-5 rounded-md ${bg} flex items-center justify-center shrink-0`}>
                   <span className={`material-symbols-outlined text-sm leading-none ${text}`}>{symbol}</span>
                 </span>
-                <span className="flex-1 text-left text-xs leading-[1.05] truncate">{cat.label}</span>
+                <span className="flex-1 text-left text-xs leading-[0.85] truncate">{cat.label}</span>
               </button>
               <button
                 type="button"
