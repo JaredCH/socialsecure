@@ -112,12 +112,11 @@ async function fetchKeywordTier(keywords, categoryFilter, excludeIds, limit = 10
   const query = {
     $or: orClauses,
     publishedAt: { $gte: cutoff },
-    ...categoryFilter,
     _id: { $nin: excludeIds },
     isActive: { $ne: false },
   };
 
-  return Article.find(query)
+  return Article.find(applyCategoryFilter(query, categoryFilter))
     .sort({ viralScore: -1, publishedAt: -1 })
     .limit(limit)
     .lean();
@@ -128,7 +127,24 @@ async function fetchKeywordTier(keywords, categoryFilter, excludeIds, limit = 10
  */
 function baseCategoryFilter(category) {
   if (!category || category === 'all') return {};
+  if (category === 'marijuana') {
+    return {
+      $or: [
+        { category },
+        { topics: category },
+      ]
+    };
+  }
   return { category };
+}
+
+/**
+ * Combine a base article query with an optional category clause using $and so
+ * category filters can safely coexist with other $or predicates.
+ */
+function applyCategoryFilter(query, categoryFilter) {
+  if (!categoryFilter || Object.keys(categoryFilter).length === 0) return query;
+  return { $and: [query, categoryFilter] };
 }
 
 /**
@@ -140,12 +156,11 @@ async function fetchLocalTier(cityKey, categoryFilter, excludeIds, minCount = 2)
   const query = {
     pipeline: 'local',
     cityKey,
-    ...categoryFilter,
     _id: { $nin: excludeIds },
     isActive: { $ne: false },
   };
 
-  return Article.find(query)
+  return Article.find(applyCategoryFilter(query, categoryFilter))
     .sort({ viralScore: -1, publishedAt: -1 })
     .limit(Math.max(minCount, 3))
     .lean();
@@ -160,12 +175,11 @@ async function fetchStateTier(stateCode, categoryFilter, excludeIds) {
   const query = {
     'locationTags.states': stateCode.toLowerCase(),
     pipeline: { $in: ['local', 'category'] },
-    ...categoryFilter,
     _id: { $nin: excludeIds },
     isActive: { $ne: false },
   };
 
-  const articles = await Article.find(query)
+  const articles = await Article.find(applyCategoryFilter(query, categoryFilter))
     .sort({ viralScore: -1, publishedAt: -1 })
     .limit(1)
     .lean();
@@ -185,12 +199,11 @@ async function fetchNationalTier(country, categoryFilter, excludeIds) {
       { localityLevel: 'country' },
       { pipeline: 'category', category: { $in: ['politics', 'business', 'breaking', 'general'] } },
     ],
-    ...categoryFilter,
     _id: { $nin: excludeIds },
     isActive: { $ne: false },
   };
 
-  return Article.find(query)
+  return Article.find(applyCategoryFilter(query, categoryFilter))
     .sort({ viralScore: -1, publishedAt: -1 })
     .limit(1)
     .lean();
@@ -202,12 +215,11 @@ async function fetchNationalTier(country, categoryFilter, excludeIds) {
 async function fetchTrendingTier(categoryFilter, excludeIds, limit = TRENDING_LIMIT) {
   const query = {
     viralScore: { $gte: PROMOTED_THRESHOLD },
-    ...categoryFilter,
     _id: { $nin: excludeIds },
     isActive: { $ne: false },
   };
 
-  return Article.find(query)
+  return Article.find(applyCategoryFilter(query, categoryFilter))
     .sort({ viralScore: -1, publishedAt: -1 })
     .limit(limit)
     .lean();
@@ -220,18 +232,18 @@ async function fetchFeedTier(categoryFilter, excludeIds, page = 1, limit = DEFAU
   const skip = (page - 1) * limit;
 
   const query = {
-    ...categoryFilter,
     _id: { $nin: excludeIds },
     isActive: { $ne: false },
   };
+  const filteredQuery = applyCategoryFilter(query, categoryFilter);
 
   const [articles, total] = await Promise.all([
-    Article.find(query)
+    Article.find(filteredQuery)
       .sort({ publishedAt: -1, viralScore: -1 })
       .skip(skip)
       .limit(limit)
       .lean(),
-    Article.countDocuments(query),
+    Article.countDocuments(filteredQuery),
   ]);
 
   return { articles, total };
@@ -334,7 +346,10 @@ async function buildFeed(userId, options = {}) {
   let finalFeedArticles = feedArticles;
   if (feedArticles.length < limit && deprioritisedIds.length > 0) {
     const backfillExclude = [...usedIds, ...feedArticles.map((a) => a._id)];
-    const backfillQuery = { ...categoryFilter, _id: { $nin: backfillExclude }, isActive: { $ne: false } };
+    const backfillQuery = applyCategoryFilter(
+      { _id: { $nin: backfillExclude }, isActive: { $ne: false } },
+      categoryFilter
+    );
     const backfill = await Article.find(backfillQuery)
       .sort({ publishedAt: -1, viralScore: -1 })
       .limit(limit - feedArticles.length)
