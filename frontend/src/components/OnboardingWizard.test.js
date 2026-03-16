@@ -167,11 +167,11 @@ describe('OnboardingWizard Step 3 additional information flow', () => {
         leagues: [
           {
             id: 'nfl',
-            label: 'NFL',
+            name: 'NFL',
             icon: '🏈',
             teams: [
-              { id: 'dal-cowboys', team: 'Dallas Cowboys' },
-              { id: 'kc-chiefs', team: 'Kansas City Chiefs' }
+              { id: 'dal-cowboys', name: 'Dallas Cowboys' },
+              { id: 'kc-chiefs', name: 'Kansas City Chiefs' }
             ]
           }
         ]

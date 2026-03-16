@@ -17,7 +17,7 @@ export default function SportsTeamsPanel({
     return (leagues || []).map((league) => {
       const teams = (league.teams || []).filter((team) => {
         if (!normalizedQuery) return true;
-        const haystack = `${team.team} ${team.city} ${team.state} ${team.leagueLabel}`.toLowerCase();
+        const haystack = `${team.team || team.name || ''} ${team.city || ''} ${team.state || ''} ${team.leagueLabel || league.label || league.name || ''}`.toLowerCase();
         return haystack.includes(normalizedQuery);
       });
       return { ...league, teams };
@@ -81,7 +81,7 @@ export default function SportsTeamsPanel({
                 onClick={() => toggleLeague(league.id)}
                 className="w-full px-3 py-2.5 flex items-center justify-between text-left hover:bg-gray-50"
               >
-                <span className="text-sm font-semibold text-gray-800">{league.icon} {league.label}</span>
+                <span className="text-sm font-semibold text-gray-800">{league.icon} {league.label || league.name || league.id}</span>
                 <span className="text-xs text-gray-500">{selectedCount}/{league.teams.length}</span>
               </button>
 
@@ -110,7 +110,7 @@ export default function SportsTeamsPanel({
                       return (
                         <label key={team.id} className="flex items-center justify-between gap-3 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer">
                           <div className="min-w-0">
-                            <p className="text-sm text-gray-800 truncate">{team.team}</p>
+                            <p className="text-sm text-gray-800 truncate">{team.team || team.name || team.shortName || team.id}</p>
                             <p className="text-[11px] text-gray-500 truncate">{team.city}{team.state ? `, ${team.state}` : ''}</p>
                           </div>
                           <input
