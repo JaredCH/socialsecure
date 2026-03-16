@@ -453,8 +453,9 @@ function Chat() {
       });
     }
     return messages.map((message) => {
-      const decrypted = decryptedDmContentById[String(message._id)];
-      if (!decrypted) return message;
+      const messageId = String(message._id);
+      if (!Object.prototype.hasOwnProperty.call(decryptedDmContentById, messageId)) return message;
+      const decrypted = decryptedDmContentById[messageId];
       return {
         ...message,
         content: decrypted
@@ -672,14 +673,15 @@ function Chat() {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
     if (!dmUnlockedByConversation[String(activeConversationId)]) return;
     const visibleIdSet = new Set(visibleMessageIds);
+    const hasVisibleSelection = visibleIdSet.size > 0;
     const encryptedMessages = messages.filter((message) => (
-      message?.e2ee?.ciphertext && visibleIdSet.has(String(message._id))
+      message?.e2ee?.ciphertext && (hasVisibleSelection ? visibleIdSet.has(String(message._id)) : true)
     ));
     if (encryptedMessages.length === 0) return;
     const pendingMessages = [...encryptedMessages]
       .reverse()
       .filter((message) => (
-        !decryptedDmContentById[String(message._id)]
+        !Object.prototype.hasOwnProperty.call(decryptedDmContentById, String(message._id))
         && !decryptingMessageIdsRef.current.has(String(message._id))
       ))
       .slice(0, DM_DECRYPT_BATCH_SIZE);
