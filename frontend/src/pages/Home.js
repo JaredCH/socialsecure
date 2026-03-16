@@ -83,60 +83,56 @@ const platformCapabilities = [
   }
 ];
 
-const floatingEncryptionIcons = [
+const floatingMapBadges = [
   {
-    icon: '🔐',
-    label: 'Encrypted DM',
-    conversation: 'msg.enc',
+    icon: '📍',
+    label: 'Location sharing',
+    conversation: 'Live pin sync',
     className: '-left-2 top-12 md:left-0 md:top-10'
   },
   {
-    icon: '🛡️',
-    label: 'Trust circle',
-    conversation: 'friends-only',
+    icon: '🔥',
+    label: 'Density overlay',
+    conversation: 'Heatmap live',
     className: 'right-3 top-3 md:right-6 md:top-8'
   },
   {
-    icon: '🗝️',
-    label: 'PGP key',
-    conversation: 'BYO key',
+    icon: '🧭',
+    label: 'Nearby activity',
+    conversation: 'Local view',
     className: 'left-8 bottom-12 md:left-12 md:bottom-16'
   },
   {
-    icon: '💬',
-    label: 'Secure reply',
-    conversation: 'route locked',
+    icon: '👥',
+    label: 'Population trend',
+    conversation: 'Cluster alert',
     className: 'right-0 bottom-4 md:right-4 md:bottom-10'
   }
 ];
 
-const networkNodes = [
-  { id: 'u1', x: 16, y: 70, size: 'lg', label: 'You' },
-  { id: 'u2', x: 36, y: 48, size: 'md', label: 'Friend' },
-  { id: 'u3', x: 55, y: 32, size: 'md', label: 'Circle A' },
-  { id: 'u4', x: 55, y: 66, size: 'md', label: 'Circle B' },
-  { id: 'u5', x: 76, y: 14, size: 'sm', label: 'Node 1' },
-  { id: 'u6', x: 82, y: 26, size: 'sm', label: 'Node 2' },
-  { id: 'u7', x: 86, y: 40, size: 'sm', label: 'Node 3' },
-  { id: 'u8', x: 84, y: 56, size: 'sm', label: 'Node 4' },
-  { id: 'u9', x: 78, y: 72, size: 'sm', label: 'Node 5' },
-  { id: 'u10', x: 71, y: 86, size: 'sm', label: 'Node 6' },
-  { id: 'u11', x: 92, y: 58, size: 'sm', label: 'Node 7' },
-  { id: 'u12', x: 92, y: 80, size: 'sm', label: 'Node 8' }
+const sharedLocations = [
+  { id: 'loc1', x: 22, y: 68, size: 'lg', label: 'Shared location' },
+  { id: 'loc2', x: 39, y: 44, size: 'md', label: 'City meetup' },
+  { id: 'loc3', x: 57, y: 28, size: 'md', label: 'Downtown pulse' },
+  { id: 'loc4', x: 64, y: 60, size: 'md', label: 'Neighborhood check-in' },
+  { id: 'loc5', x: 79, y: 21, size: 'sm', label: 'North cluster' },
+  { id: 'loc6', x: 83, y: 41, size: 'sm', label: 'Market density' },
+  { id: 'loc7', x: 76, y: 75, size: 'sm', label: 'Event hotspot' }
 ];
 
-const networkLinks = [
-  { from: 'u1', to: 'u2', stage: 0, curve: 10 },
-  { from: 'u2', to: 'u3', stage: 1, curve: 8 },
-  { from: 'u2', to: 'u4', stage: 1, curve: -6 },
-  { from: 'u3', to: 'u5', stage: 2, curve: 7 },
-  { from: 'u3', to: 'u6', stage: 2, curve: 2 },
-  { from: 'u3', to: 'u7', stage: 2, curve: -4 },
-  { from: 'u3', to: 'u8', stage: 2, curve: -9 },
-  { from: 'u4', to: 'u9', stage: 2, curve: -4 },
-  { from: 'u4', to: 'u10', stage: 2, curve: -9 },
-  { from: 'u4', to: 'u11', stage: 2, curve: 3 },
-  { from: 'u4', to: 'u12', stage: 2, curve: -2 }
+const densityHotspots = [
+  { id: 'heat1', x: '14%', y: '18%', size: 120, color: 'rgba(56, 189, 248, 0.25)' },
+  { id: 'heat2', x: '48%', y: '14%', size: 150, color: 'rgba(249, 115, 22, 0.22)' },
+  { id: 'heat3', x: '62%', y: '42%', size: 170, color: 'rgba(239, 68, 68, 0.22)' },
+  { id: 'heat4', x: '28%', y: '58%', size: 135, color: 'rgba(16, 185, 129, 0.2)' },
+  { id: 'heat5', x: '72%', y: '70%', size: 120, color: 'rgba(168, 85, 247, 0.18)' }
+];
+
+const directMessageMoments = [
+  { sender: 'Ava', text: 'Heading your way — sending the exact pin in DM.', align: 'left' },
+  { sender: 'You', text: 'Got it. The route and meetup details stay encrypted.', align: 'right' },
+  { sender: 'Marcus', text: 'Switching from the public room to a locked conversation now.', align: 'left' },
+  { sender: 'You', text: 'Perfect. Keep the plan private, share the update when we arrive.', align: 'right' }
 ];
 
 const nodeRadius = {
@@ -144,13 +140,6 @@ const nodeRadius = {
   md: 3.4,
   sm: 2.5
 };
-
-function buildCurvePath(start, end, curve = 0) {
-  const controlX = (start.x + end.x) / 2;
-  const controlY = (start.y + end.y) / 2 - curve;
-
-  return `M ${start.x} ${start.y} Q ${controlX} ${controlY} ${end.x} ${end.y}`;
-}
 
 function Home({ isAuthenticated = false }) {
   const prefersReducedMotion = useReducedMotion();
@@ -205,8 +194,8 @@ function Home({ isAuthenticated = false }) {
                 into one platform so you can manage friendships without trading away privacy.
               </p>
               <p className="mt-4 max-w-2xl text-sm text-blue-200 sm:text-base">
-                Scroll through parallax layers, see encrypted conversations floating in motion, and watch a secure
-                connection map grow from one trusted person into a wider network.
+                Scroll through parallax layers, preview the live map system with location sharing and density overlays,
+                then drop into encrypted direct messages when a conversation needs to stay private.
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
@@ -266,16 +255,16 @@ function Home({ isAuthenticated = false }) {
               <div className="rounded-[2rem] border border-white/20 bg-slate-950/35 p-5 shadow-2xl backdrop-blur">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-200">Live secure growth</p>
-                    <h2 className="mt-2 text-xl font-semibold">Parallax connection map</h2>
+                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-200">Map intelligence</p>
+                    <h2 className="mt-2 text-xl font-semibold">Parallax community map</h2>
                   </div>
                   <div className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                    1 → 2 → 8 secure hops
+                    Live pins • Heat overlays
                   </div>
                 </div>
 
                 <div
-                  data-testid="hero-network-map"
+                  data-testid="hero-map-system"
                   className="relative mt-5 h-[22rem] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.16),transparent_45%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(15,23,42,0.75))]"
                 >
                   <motion.div
@@ -295,10 +284,32 @@ function Home({ isAuthenticated = false }) {
                     style={{ y: middleLayerY }}
                   />
 
-                  {floatingEncryptionIcons.map((item, index) => (
+                  {densityHotspots.map((hotspot, index) => (
+                    <motion.div
+                      key={hotspot.id}
+                      aria-hidden="true"
+                      className="absolute rounded-full blur-3xl"
+                      style={{
+                        left: hotspot.x,
+                        top: hotspot.y,
+                        width: hotspot.size,
+                        height: hotspot.size,
+                        backgroundColor: hotspot.color
+                      }}
+                      animate={prefersReducedMotion ? {} : { scale: [0.92, 1.08, 0.98], opacity: [0.55, 0.92, 0.65] }}
+                      transition={{
+                        duration: prefersReducedMotion ? 0 : 6 + index,
+                        repeat: prefersReducedMotion ? 0 : Infinity,
+                        ease: 'easeInOut',
+                        delay: prefersReducedMotion ? 0 : index * 0.4
+                      }}
+                    />
+                  ))}
+
+                  {floatingMapBadges.map((item, index) => (
                     <motion.div
                       key={item.label}
-                      data-testid="floating-encryption-icon"
+                      data-testid="floating-map-badge"
                       className={`absolute w-28 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 shadow-lg backdrop-blur ${item.className}`}
                       initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.94 }}
                       animate={
@@ -330,43 +341,51 @@ function Home({ isAuthenticated = false }) {
                     viewBox="0 0 100 100"
                     className="absolute inset-0 h-full w-full"
                     role="img"
-                    aria-label="Network diagram showing secure connections branching from one user to trusted contacts"
+                    aria-label="Map diagram showing shared locations, activity routes, and population density overlays"
                   >
                     <defs>
-                      <linearGradient id="network-line-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <linearGradient id="map-route-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#60a5fa" />
                         <stop offset="50%" stopColor="#38bdf8" />
-                        <stop offset="100%" stopColor="#34d399" />
+                        <stop offset="100%" stopColor="#f97316" />
                       </linearGradient>
                     </defs>
 
-                    {networkLinks.map((link, index) => {
-                      const start = networkNodes.find((node) => node.id === link.from);
-                      const end = networkNodes.find((node) => node.id === link.to);
-                      const delay = link.stage * 0.6 + index * 0.08;
+                    <motion.path
+                      d="M 18 72 Q 30 56 42 46 T 60 30 T 81 22"
+                      fill="none"
+                      stroke="url(#map-route-gradient)"
+                      strokeWidth="0.85"
+                      strokeLinecap="round"
+                      strokeDasharray="1.8 1.8"
+                      initial={prefersReducedMotion ? false : { pathLength: 0, opacity: 0.45 }}
+                      animate={prefersReducedMotion ? { pathLength: 1, opacity: 0.8 } : { pathLength: 1, opacity: [0.5, 1, 0.7] }}
+                      transition={{
+                        duration: prefersReducedMotion ? 0.01 : 1.05,
+                        repeat: prefersReducedMotion ? 0 : Infinity,
+                        repeatDelay: prefersReducedMotion ? 0 : 2.8,
+                        ease: 'easeInOut'
+                      }}
+                    />
+                    <motion.path
+                      d="M 40 46 Q 54 50 66 62 T 78 76"
+                      fill="none"
+                      stroke="rgba(52, 211, 153, 0.9)"
+                      strokeWidth="0.75"
+                      strokeLinecap="round"
+                      strokeDasharray="1.4 2"
+                      initial={prefersReducedMotion ? false : { pathLength: 0, opacity: 0.35 }}
+                      animate={prefersReducedMotion ? { pathLength: 1, opacity: 0.75 } : { pathLength: 1, opacity: [0.35, 0.95, 0.55] }}
+                      transition={{
+                        duration: prefersReducedMotion ? 0.01 : 0.95,
+                        delay: prefersReducedMotion ? 0 : 0.2,
+                        repeat: prefersReducedMotion ? 0 : Infinity,
+                        repeatDelay: prefersReducedMotion ? 0 : 3.1,
+                        ease: 'easeInOut'
+                      }}
+                    />
 
-                      return (
-                        <motion.path
-                          key={`${link.from}-${link.to}`}
-                          d={buildCurvePath(start, end, link.curve)}
-                          fill="none"
-                          stroke="url(#network-line-gradient)"
-                          strokeWidth="0.65"
-                          strokeLinecap="round"
-                          initial={prefersReducedMotion ? false : { pathLength: 0, opacity: 0.35 }}
-                          animate={prefersReducedMotion ? { pathLength: 1, opacity: 0.9 } : { pathLength: 1, opacity: [0.4, 1, 0.8] }}
-                          transition={{
-                            duration: prefersReducedMotion ? 0.01 : 0.95,
-                            delay,
-                            repeat: prefersReducedMotion ? 0 : Infinity,
-                            repeatDelay: prefersReducedMotion ? 0 : 3.2,
-                            ease: 'easeInOut'
-                          }}
-                        />
-                      );
-                    })}
-
-                    {networkNodes.map((node, index) => (
+                    {sharedLocations.map((node, index) => (
                       <motion.g
                         key={node.id}
                         initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.7 }}
@@ -383,14 +402,14 @@ function Home({ isAuthenticated = false }) {
                           cx={node.x}
                           cy={node.y}
                           r={nodeRadius[node.size] * 1.8}
-                          fill="rgba(96, 165, 250, 0.14)"
+                          fill={node.id === 'loc1' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(249, 115, 22, 0.12)'}
                         />
                         <circle
                           cx={node.x}
                           cy={node.y}
                           r={nodeRadius[node.size]}
-                          fill={node.id === 'u1' ? '#34d399' : '#e0f2fe'}
-                          stroke={node.id === 'u1' ? '#6ee7b7' : '#93c5fd'}
+                          fill={node.id === 'loc1' ? '#34d399' : '#fde68a'}
+                          stroke={node.id === 'loc1' ? '#6ee7b7' : '#fdba74'}
                           strokeWidth="0.45"
                         />
                       </motion.g>
@@ -398,31 +417,119 @@ function Home({ isAuthenticated = false }) {
                   </svg>
 
                   <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 backdrop-blur">
-                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-200">Encryption in motion</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-200">Map layers in motion</p>
                     <p className="mt-2 text-sm text-blue-50">
-                      One trusted connection becomes two shared circles, then grows into a wider protected community with
-                      every line drawn in sequence.
+                      Shared locations, local activity, and population density heatmap overlays animate together so the
+                      map system feels alive before users ever open the full feature.
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-2xl font-bold">1</p>
-                    <p className="mt-2 text-sm text-blue-100">Start with one secure conversation.</p>
+                    <p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-200">Location sharing</p>
+                    <p className="mt-2 text-sm text-blue-100">Drop precise meetup points onto the map without leaving the platform.</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-2xl font-bold">2</p>
-                    <p className="mt-2 text-sm text-blue-100">Branch into trusted circles with smooth fades.</p>
+                    <p className="text-sm font-semibold uppercase tracking-[0.22em] text-orange-200">Heatmap overlays</p>
+                    <p className="mt-2 text-sm text-blue-100">Visualize population density and activity pockets with layered color intensity.</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-2xl font-bold">8</p>
-                    <p className="mt-2 text-sm text-blue-100">Grow the network without losing privacy controls.</p>
+                    <p className="text-sm font-semibold uppercase tracking-[0.22em] text-sky-200">Local awareness</p>
+                    <p className="mt-2 text-sm text-blue-100">Track neighborhood trends and nearby activity with motion-rich layers.</p>
                   </div>
                 </div>
               </div>
             </motion.div>
           </div>
+        </div>
+      </section>
+
+      <section
+        data-testid="encrypted-dm-showcase"
+        className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 text-white shadow-sm"
+      >
+        <motion.div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,0.18)_0%,_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.2)_0%,_transparent_38%)]"
+          style={{ y: foregroundLayerY }}
+        />
+        <div className="relative grid grid-cols-1 gap-8 px-6 py-8 sm:px-8 lg:grid-cols-[1fr_1.1fr] lg:items-center lg:px-10">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">Animated privacy showcase</p>
+            <h2 className="mt-3 text-2xl font-bold sm:text-3xl">Encrypted direct messaging, presented as a living conversation</h2>
+            <p className="mt-4 max-w-2xl text-sm text-slate-300 sm:text-base">
+              After users discover people and places on the map, the next step is a private channel. This section shows
+              encrypted direct messages moving in real time, with lock-state visuals and copy that reinforces private-by-default communication.
+            </p>
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm font-semibold text-white">Locked delivery</p>
+                <p className="mt-2 text-sm text-slate-300">Every DM is encrypted so meetup details, addresses, and plans stay between participants.</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm font-semibold text-white">Bring your own PGP</p>
+                <p className="mt-2 text-sm text-slate-300">Advanced users can layer in their own keys while everyday users still get simple protection.</p>
+              </div>
+            </div>
+          </div>
+
+          <motion.div
+            className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-5 backdrop-blur"
+            initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }}
+            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.12 }}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div>
+                <p className="text-sm font-semibold text-white">Direct message preview</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.22em] text-emerald-200">End-to-end encrypted</p>
+              </div>
+              <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                Keys verified
+              </div>
+            </div>
+
+            <div className="relative mt-5 space-y-3">
+              {directMessageMoments.map((message, index) => (
+                <motion.div
+                  key={`${message.sender}-${index}`}
+                  data-testid="animated-dm-bubble"
+                  className={`max-w-[85%] rounded-2xl border px-4 py-3 text-sm shadow-lg ${
+                    message.align === 'right'
+                      ? 'ml-auto border-sky-400/25 bg-sky-400/10 text-sky-50'
+                      : 'border-white/10 bg-slate-900/80 text-slate-100'
+                  }`}
+                  initial={prefersReducedMotion ? false : { opacity: 0, x: message.align === 'right' ? 18 : -18 }}
+                  animate={
+                    prefersReducedMotion
+                      ? { opacity: 1 }
+                      : {
+                          opacity: 1,
+                          x: 0,
+                          y: [0, index % 2 === 0 ? -6 : 6, 0]
+                        }
+                  }
+                  transition={{
+                    duration: prefersReducedMotion ? 0.01 : 0.65,
+                    delay: prefersReducedMotion ? 0 : index * 0.16,
+                    repeat: prefersReducedMotion ? 0 : Infinity,
+                    repeatDelay: prefersReducedMotion ? 0 : 4.8,
+                    ease: 'easeInOut'
+                  }}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">{message.sender}</p>
+                  <p className="mt-2">{message.text}</p>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-3 text-xs text-slate-300">
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">🔒 Encrypted by default</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">🗝️ Optional BYO PGP</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">📨 Private meetup coordination</span>
+            </div>
+          </motion.div>
         </div>
       </section>
 
