@@ -776,8 +776,11 @@ function Chat() {
       try {
         await ingestWrappedRoomKeyPackage({ session, pkg });
         hasNewRoomKey = true;
-      } catch {
+      } catch (error) {
         // keep unlock flow resilient when legacy/corrupt packages are present
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('Skipping invalid DM key package during unlock hydration:', error);
+        }
       }
     }
     if (hasNewRoomKey) {
