@@ -778,9 +778,35 @@ router.get('/sports-schedules/seasons', authenticateToken, async (req, res) => {
  * GET /api/news/location-taxonomy
  * Returns the canonical US state/city taxonomy for location selectors.
  */
-router.get('/location-taxonomy', authenticateToken, (req, res) => {
+router.get('/location-taxonomy', authenticateToken, async (req, res) => {
   try {
-    res.json({ taxonomy: getLocationTaxonomyPayload() });
+    const taxonomy = getLocationTaxonomyPayload();
+    let preferredStateCode = '';
+    let preferredStateName = '';
+
+    try {
+      const user = await User.findById(req.user.userId).select('zipCode state').lean();
+      const normalizedZip = String(user?.zipCode || '').trim();
+      if (normalizedZip) {
+        const zipLocation = await resolveZipLocation(normalizedZip, { allowGeocode: true, persist: true });
+        preferredStateCode = canonicalizeStateCode(zipLocation?.stateCode || zipLocation?.state) || '';
+      }
+      if (!preferredStateCode) {
+        preferredStateCode = canonicalizeStateCode(user?.state) || '';
+      }
+      preferredStateName = taxonomy.states.find((state) => state.code === preferredStateCode)?.name || '';
+    } catch {
+      preferredStateCode = '';
+      preferredStateName = '';
+    }
+
+    res.json({
+      taxonomy: {
+        ...taxonomy,
+        preferredStateCode,
+        preferredStateName
+      }
+    });
   } catch (error) {
     console.error('Error fetching location taxonomy:', error);
     res.status(500).json({ error: 'Failed to fetch location taxonomy' });

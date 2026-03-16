@@ -1,5 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { newsAPI } from '../../utils/api';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * FilterBar — compact sticky filter strip.
@@ -56,113 +55,174 @@ function Dropdown({ label, children, icon }) {
   );
 }
 
+const NON_STATE_CODES = new Set(['AS', 'DC', 'GU', 'MP', 'PR', 'VI']);
+
+const getRegionStateLabel = (activeRegion, statesByCode) => {
+  const stateCode = String(activeRegion?.state || '').trim().toUpperCase();
+  if (activeRegion?.stateName) return activeRegion.stateName;
+  if (statesByCode.has(stateCode)) return statesByCode.get(stateCode).name;
+  return activeRegion?.state || '';
+};
+
 // ─── Region drill-down dropdown ───────────────────────────────────────────────
-function RegionDropdown({ activeRegion, onRegionChange }) {
-  const [country, setCountry] = useState(activeRegion?.country || 'US');
-  const [stateVal, setStateVal] = useState(activeRegion?.state || '');
-  const [cityVal, setCityVal] = useState(activeRegion?.city || '');
-  const [citySuggestions, setCitySuggestions] = useState([]);
-  const debounceRef = useRef(null);
+function RegionDropdown({ activeRegion, onRegionChange, locationTaxonomy }) {
+  const states = useMemo(
+    () => (Array.isArray(locationTaxonomy?.states) ? locationTaxonomy.states : [])
+      .filter((state) => state?.code && state?.name && !NON_STATE_CODES.has(state.code))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [locationTaxonomy]
+  );
+  const statesByCode = useMemo(
+    () => new Map(states.map((state) => [state.code, state])),
+    [states]
+  );
+  const preferredStateCode = String(locationTaxonomy?.preferredStateCode || '').trim().toUpperCase();
+  const preferredState = statesByCode.get(preferredStateCode) || null;
+  const otherStates = useMemo(
+    () => states.filter((state) => state.code !== preferredStateCode),
+    [preferredStateCode, states]
+  );
+  const [expandedStateCode, setExpandedStateCode] = useState(
+    String(activeRegion?.state || preferredStateCode || '').trim().toUpperCase()
+  );
 
-  const onCityInput = (val) => {
-    setCityVal(val);
-    clearTimeout(debounceRef.current);
-    if (val.length < 2) { setCitySuggestions([]); return; }
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const q = stateVal ? `${val}, ${stateVal}` : val;
-        const r = await newsAPI.geocodeWeatherLocations(q);
-        setCitySuggestions(r.data?.suggestions || []);
-      } catch { /* silent */ }
-    }, 300);
-  };
+  useEffect(() => {
+    const nextExpandedState = String(activeRegion?.state || preferredStateCode || '').trim().toUpperCase();
+    setExpandedStateCode(nextExpandedState);
+  }, [activeRegion, preferredStateCode]);
 
+  const regionStateLabel = getRegionStateLabel(activeRegion, statesByCode);
   const regionLabel = activeRegion?.city
-    ? `${activeRegion.city}${activeRegion.state ? `, ${activeRegion.state}` : ''}`
-    : activeRegion?.state
-    ? activeRegion.state
-    : activeRegion?.country && activeRegion.country !== 'US'
-    ? activeRegion.country
+    ? `${activeRegion.city}${regionStateLabel ? `, ${regionStateLabel}` : ''}`
+    : regionStateLabel
+    ? regionStateLabel
     : 'Region';
+
+  const renderStateRow = (state, close) => {
+    const cityOptions = locationTaxonomy?.citiesByState?.[state.code] || [];
+    const isExpanded = expandedStateCode === state.code;
+    const isSelectedState = String(activeRegion?.state || '').trim().toUpperCase() === state.code && !activeRegion?.city;
+
+    return (
+      <div key={state.code} className="border-t border-slate-100 first:border-t-0">
+        <div className="flex items-center gap-2 px-2 py-1.5">
+          <button
+            type="button"
+            data-testid={`region-state-option-${state.code}`}
+            className={`flex-1 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+              isSelectedState
+                ? 'bg-blue-50 text-blue-700'
+                : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+            onClick={() => {
+              onRegionChange({
+                country: 'US',
+                state: state.code,
+                stateName: state.name,
+              });
+              close();
+            }}
+          >
+            <span className="block">{state.name}</span>
+            <span className="block text-[10px] font-normal text-slate-400">{state.code}</span>
+          </button>
+          {cityOptions.length > 0 && (
+            <button
+              type="button"
+              aria-label={`${isExpanded ? 'Collapse' : 'Expand'} cities for ${state.name}`}
+              className={`rounded-lg border px-2 py-2 text-slate-500 transition-colors ${
+                isExpanded
+                  ? 'border-blue-200 bg-blue-50 text-blue-600'
+                  : 'border-slate-200 hover:border-slate-300 hover:text-slate-700'
+              }`}
+              onClick={() => {
+                setExpandedStateCode((current) => current === state.code ? '' : state.code);
+              }}
+            >
+              <span
+                className={`material-symbols-outlined text-base leading-none transition-transform ${
+                  isExpanded ? 'rotate-180' : ''
+                }`}
+                aria-hidden="true"
+              >
+                expand_more
+              </span>
+            </button>
+          )}
+        </div>
+        {isExpanded && cityOptions.length > 0 && (
+          <div className="border-t border-slate-100 bg-slate-50/70 px-2 py-2">
+            <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Cities with news
+            </p>
+            <div className="max-h-40 overflow-y-auto">
+              {cityOptions.map((city) => {
+                const isSelectedCity = String(activeRegion?.state || '').trim().toUpperCase() === state.code
+                  && activeRegion?.city === city;
+                return (
+                  <button
+                    key={`${state.code}-${city}`}
+                    type="button"
+                    data-testid={`region-city-option-${state.code}-${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                    className={`block w-full rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
+                      isSelectedCity
+                        ? 'bg-blue-600 font-medium text-white'
+                        : 'text-slate-700 hover:bg-white hover:text-slate-900'
+                    }`}
+                    onClick={() => {
+                      onRegionChange({
+                        country: 'US',
+                        state: state.code,
+                        stateName: state.name,
+                        city,
+                      });
+                      close();
+                    }}
+                  >
+                    {city}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <Dropdown label={regionLabel} icon="location_on">
       {({ close }) => (
-        <div className="p-3 space-y-2 w-64">
-          <p className="text-xs font-semibold text-gray-700 mb-1">Filter by Region</p>
-          {/* Country */}
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">Country</label>
-            <input
-              type="text"
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="US"
-            />
+        <div className="w-[18rem]">
+          <div className="border-b border-slate-200 px-3 py-3">
+            <p className="text-xs font-semibold text-slate-900">Filter by Region</p>
+            <p className="mt-1 text-[11px] text-slate-500">Choose a state or expand one to pick a city with local coverage.</p>
           </div>
-          {/* State */}
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">State / Province</label>
-            <input
-              type="text"
-              value={stateVal}
-              onChange={(e) => setStateVal(e.target.value)}
-              className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. TX"
-            />
-          </div>
-          {/* City with autocomplete */}
-          <div className="relative">
-            <label className="block text-[10px] text-gray-500 mb-0.5">City</label>
-            <input
-              type="text"
-              value={cityVal}
-              onChange={(e) => onCityInput(e.target.value)}
-              className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Type a city name…"
-            />
-            {citySuggestions.length > 0 && (
-              <ul className="absolute top-full left-0 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-md mt-0.5 max-h-36 overflow-y-auto">
-                {citySuggestions.slice(0, 5).map((s, i) => (
-                  <li key={i}>
-                    <button
-                      className="w-full text-left text-xs px-2 py-1.5 hover:bg-blue-50 hover:text-blue-700"
-                      onClick={() => {
-                        setCityVal(s.name || s.label || '');
-                        if (s.admin1 && !stateVal) setStateVal(s.admin1);
-                        if (s.country_code && !country) setCountry(s.country_code);
-                        setCitySuggestions([]);
-                      }}
-                    >
-                      {s.name || s.label}{s.admin1 ? `, ${s.admin1}` : ''}{s.country_code ? ` (${s.country_code})` : ''}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {/* Action buttons */}
-          <div className="flex gap-2 pt-1">
+          <div className="border-b border-slate-100 px-2 py-2">
             <button
-              className="flex-1 text-xs bg-blue-600 text-white rounded-lg py-1.5 font-medium hover:bg-blue-700"
+              type="button"
+              className={`block w-full rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                !activeRegion ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+              }`}
               onClick={() => {
-                onRegionChange({ country: country || undefined, state: stateVal || undefined, city: cityVal || undefined });
-                close();
-              }}
-            >
-              Apply
-            </button>
-            <button
-              className="flex-1 text-xs bg-gray-100 text-gray-600 rounded-lg py-1.5 font-medium hover:bg-gray-200"
-              onClick={() => {
-                setCountry('US'); setStateVal(''); setCityVal('');
                 onRegionChange(null);
                 close();
               }}
             >
-              Clear
+              All U.S. regions
             </button>
+          </div>
+          <div className="max-h-[24rem] overflow-y-auto">
+            {preferredState && (
+              <div>
+                <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Near you
+                </div>
+                {renderStateRow(preferredState, close)}
+                <div data-testid="region-preferred-divider" className="mx-3 border-t border-slate-200" />
+              </div>
+            )}
+            {otherStates.map((state) => renderStateRow(state, close))}
           </div>
         </div>
       )}
@@ -181,6 +241,7 @@ export default function FilterBar({
   onDateChange,
   activeRegion,
   activeDate = 'all',
+  locationTaxonomy,
   className = '',
 }) {
   const activeDateLabel = DATE_OPTIONS.find((o) => o.value === activeDate)?.label || 'Any time';
@@ -239,7 +300,11 @@ export default function FilterBar({
         </Dropdown>
 
         {/* Region dropdown */}
-        <RegionDropdown activeRegion={activeRegion} onRegionChange={onRegionChange} />
+        <RegionDropdown
+          activeRegion={activeRegion}
+          onRegionChange={onRegionChange}
+          locationTaxonomy={locationTaxonomy}
+        />
 
         {/* Date dropdown */}
         <Dropdown label={activeDateLabel} icon="calendar_today">
