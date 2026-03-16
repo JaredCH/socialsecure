@@ -412,6 +412,25 @@ describe('News inline preferences updates', () => {
     expect(container.querySelector('.max-w-7xl')).toBeNull();
   });
 
+  it('applies min-h-0 to desktop flex containers for scrolling', async () => {
+    await renderNews();
+
+    const desktopShell = Array.from(container.querySelectorAll('div')).find((el) => (
+      typeof el.className === 'string'
+      && el.className.includes('hidden lg:flex')
+      && el.className.includes('overflow-hidden')
+    ));
+    expect(desktopShell?.className).toContain('min-h-0');
+
+    const feedScroller = Array.from(container.querySelectorAll('div')).find((el) => (
+      typeof el.className === 'string'
+      && el.className.includes('flex-1')
+      && el.className.includes('min-h-0')
+      && el.className.includes('overflow-y-auto')
+    ));
+    expect(feedScroller).toBeTruthy();
+  });
+
   it('renders list/grid view toggle buttons', async () => {
     await renderNews();
 
