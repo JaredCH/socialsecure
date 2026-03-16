@@ -330,7 +330,7 @@ function Home({ isAuthenticated = false }) {
                     viewBox="0 0 100 100"
                     className="absolute inset-0 h-full w-full"
                     role="img"
-                    aria-label="Animated map background showing secure connections expanding from one person to more trusted contacts"
+                    aria-label="Network diagram showing secure connections branching from one user to trusted contacts"
                   >
                     <defs>
                       <linearGradient id="network-line-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
