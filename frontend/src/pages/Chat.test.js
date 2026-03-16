@@ -30,7 +30,8 @@ jest.mock('../utils/api', () => ({
     getRoomUsers: jest.fn(),
     sendMessage: jest.fn(),
     startDM: jest.fn(),
-    getProfileThread: jest.fn()
+    getProfileThread: jest.fn(),
+    deleteRoom: jest.fn()
   },
   friendsAPI: {
     sendRequest: jest.fn(),
@@ -152,6 +153,7 @@ describe('Chat zip room indicator', () => {
     chatAPI.syncLocationRooms.mockResolvedValue({ data: { success: true } });
     chatAPI.getAllRooms.mockResolvedValue({ data: { rooms: [] } });
     chatAPI.joinRoom.mockResolvedValue({ data: { success: true } });
+    chatAPI.deleteRoom.mockResolvedValue({ data: { success: true } });
     chatAPI.getMessages.mockResolvedValue({ data: { messages: [], pagination: { hasMore: false } } });
     chatAPI.getRoomUsers.mockResolvedValue({ data: { users: [] } });
     chatAPI.sendMessage.mockResolvedValue({
@@ -523,6 +525,54 @@ describe('Chat zip room indicator', () => {
     expect(container.querySelector('[data-open-chat-tab="AI"]')).not.toBeNull();
   });
 
+  it('shows a delete action for deletable rooms and confirms before deleting', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'topic-ai', type: 'topic', name: 'AI', createdBy: 'u1', members: [] },
+          { _id: 'topic-safe', type: 'topic', name: 'Safety', stableKey: 'topic:safety', members: [] }
+        ]
+      }
+    });
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+
+    await renderChat();
+
+    const roomSearchInput = container.querySelector('input[placeholder="Search by room or location..."]');
+    expect(roomSearchInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(roomSearchInput, 'AI');
+      await flush();
+    });
+
+    const deleteButton = container.querySelector('button[aria-label="Delete AI room"]');
+    expect(deleteButton).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Delete Safety room"]')).toBeNull();
+
+    await act(async () => {
+      deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith('Delete "AI"?');
+    expect(chatAPI.deleteRoom).toHaveBeenCalledWith('topic-ai');
+    expect(container.textContent).not.toContain('AI');
+
+    confirmSpy.mockRestore();
+  });
+
   it('limits open chat tabs to six most recent conversations', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
@@ -674,15 +724,15 @@ describe('Chat zip room indicator', () => {
     expect(desktopGrid.className).toContain('gap-1');
     expect(desktopGrid.className).toContain('p-1');
 
-    const pageHeader = container.querySelector('[data-testid="chat-page-header"]');
+    const pageHeader = container.querySelector('[data-chat-menu-bar]');
     expect(pageHeader).not.toBeNull();
     expect(pageHeader.className).toContain('px-2');
     expect(pageHeader.className).toContain('py-1.5');
 
-    const workspaceHeader = container.querySelector('[data-testid="chat-workspace-header"]');
-    expect(workspaceHeader).not.toBeNull();
-    expect(workspaceHeader.className).toContain('px-1.5');
-    expect(workspaceHeader.className).toContain('py-1');
+    const workspacePanel = container.querySelector('section.min-h-0.flex-col.rounded-2xl.border.px-1\\.5');
+    expect(workspacePanel).not.toBeNull();
+    expect(workspacePanel.className).toContain('px-1.5');
+    expect(workspacePanel.className).toContain('pt-1');
 
     const emptyMessages = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'No messages yet.');
     expect(emptyMessages).not.toBeUndefined();

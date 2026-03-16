@@ -524,42 +524,45 @@ function Chat() {
     };
   }, [profile?._id]);
 
+  const loadAllChatRooms = useCallback(async () => {
+    if (!profile?._id || typeof chatAPI.getAllRooms !== 'function') return;
+
+    setAllChatRoomsLoading(true);
+    try {
+      await Promise.resolve(chatAPI.syncLocationRooms?.()).catch(() => null);
+      const { data } = await chatAPI.getAllRooms(1, MAX_CHAT_ROOM_FETCH);
+      const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
+      setAllChatRooms(rooms);
+      const nextJoinedIds = rooms.reduce((acc, room) => {
+        const roomId = normalizeId(room?._id);
+        if (!roomId) return acc;
+        const members = Array.isArray(room?.members) ? room.members.map((memberId) => String(memberId)) : [];
+        if (members.includes(String(profile?._id))) {
+          acc[roomId] = true;
+        }
+        return acc;
+      }, {});
+      setJoinedRoomIds(nextJoinedIds);
+    } catch {
+      setAllChatRooms([]);
+      setJoinedRoomIds({});
+    } finally {
+      setAllChatRoomsLoading(false);
+    }
+  }, [profile?._id]);
+
   useEffect(() => {
     if (!profile?._id || typeof chatAPI.getAllRooms !== 'function') return;
     let cancelled = false;
-    setAllChatRoomsLoading(true);
-    Promise.resolve()
-      .then(() => chatAPI.syncLocationRooms?.())
+    loadAllChatRooms()
       .catch(() => null)
-      .then(() => chatAPI.getAllRooms(1, MAX_CHAT_ROOM_FETCH))
-      .then(({ data }) => {
-        if (cancelled) return;
-        const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
-        setAllChatRooms(rooms);
-        const nextJoinedIds = rooms.reduce((acc, room) => {
-          const roomId = normalizeId(room?._id);
-          if (!roomId) return acc;
-          const members = Array.isArray(room?.members) ? room.members.map((memberId) => String(memberId)) : [];
-          if (members.includes(String(profile?._id))) {
-            acc[roomId] = true;
-          }
-          return acc;
-        }, {});
-        setJoinedRoomIds(nextJoinedIds);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setAllChatRooms([]);
-          setJoinedRoomIds({});
-        }
-      })
       .finally(() => {
-        if (!cancelled) setAllChatRoomsLoading(false);
+        if (cancelled) return;
       });
     return () => {
       cancelled = true;
     };
-  }, [profile?._id]);
+  }, [loadAllChatRooms, profile?._id]);
 
   useEffect(() => {
     try {
@@ -642,6 +645,23 @@ function Chat() {
   const topicRooms = useMemo(
     () => allChatRooms.filter((room) => room.type === 'topic').sort(sortRoomsByName),
     [allChatRooms]
+  );
+  const adminMutedUserIds = useMemo(() => new Set(
+    roomUsers
+      .filter((entry) => {
+        const mutedUntilTs = new Date(entry?.mutedUntil || 0).getTime();
+        return Number.isFinite(mutedUntilTs) && mutedUntilTs > Date.now();
+      })
+      .map((entry) => String(entry?._id || ''))
+      .filter(Boolean)
+  ), [roomUsers]);
+  const adminProcessingMessageIds = useMemo(
+    () => new Set(adminMessageActionIds.map((entry) => String(entry || '')).filter(Boolean)),
+    [adminMessageActionIds]
+  );
+  const adminProcessingUserIds = useMemo(
+    () => new Set(adminMuteActionUserIds.map((entry) => String(entry || '')).filter(Boolean)),
+    [adminMuteActionUserIds]
   );
 
   const activeTheme = useMemo(
@@ -1232,6 +1252,46 @@ function Chat() {
       [normalizedRoomId]: !prev[normalizedRoomId]
     }));
   }, []);
+
+  const canDeleteRoom = useCallback((room) => {
+    const ownerId = String(room?.createdBy?._id || room?.createdBy || '').trim();
+    if (room?.stableKey || room?.eventRef || room?.autoLifecycle) return false;
+    return Boolean(profile?.isAdmin) || (ownerId && ownerId === String(profile?._id || ''));
+  }, [profile?._id, profile?.isAdmin]);
+
+  const handleDeleteRoom = useCallback(async (room) => {
+    const roomId = normalizeId(room?._id);
+    const roomName = String(room?.name || 'this room').trim() || 'this room';
+    if (!roomId || typeof chatAPI.deleteRoom !== 'function' || !canDeleteRoom(room)) return;
+    if (!window.confirm(`Delete "${roomName}"?`)) return;
+
+    try {
+      await chatAPI.deleteRoom(roomId);
+      setAllChatRooms((prev) => prev.filter((entry) => String(entry?._id) !== roomId));
+      setJoinedRoomIds((prev) => {
+        const next = { ...prev };
+        delete next[roomId];
+        return next;
+      });
+      setFavoriteRoomIds((prev) => {
+        if (!prev[roomId]) return prev;
+        const next = { ...prev };
+        delete next[roomId];
+        return next;
+      });
+      setOpenChatTabIds((prev) => prev.filter((tabId) => tabId !== roomId));
+      if (String(activeConversationId || '') === roomId) {
+        setActiveConversationId('');
+        setMessages([]);
+        setRoomUsers([]);
+        setMobileWorkspaceOpen(false);
+      }
+      toast.success('Deleted room');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to delete room');
+      await loadAllChatRooms().catch(() => null);
+    }
+  }, [activeConversationId, canDeleteRoom, loadAllChatRooms]);
 
   const handleUnlockActiveDM = useCallback(async () => {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
@@ -2016,6 +2076,16 @@ function Chat() {
                                     className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
                                   >
                                     {favorited ? '★' : '☆'}
+                                  </button>
+                                ) : null}
+                                {canDeleteRoom(room) ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRoom(room)}
+                                    className="rounded border px-2 py-1 text-rose-700"
+                                    aria-label={`Delete ${room.name} room`}
+                                  >
+                                    Delete
                                   </button>
                                 ) : null}
                               </div>
