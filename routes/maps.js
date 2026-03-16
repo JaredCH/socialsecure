@@ -1,11 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const NodeGeocoder = require('node-geocoder');
+const rateLimit = require('express-rate-limit');
 
 // Import models
 const LocationPresence = require('../models/LocationPresence');
 const Spotlight = require('../models/Spotlight');
 const HeatmapAggregation = require('../models/HeatmapAggregation');
+const FavoriteLocation = require('../models/FavoriteLocation');
 const User = require('../models/User');
 
 const parseCoordinate = (value) => {
@@ -20,9 +23,21 @@ const parsePositiveInteger = (value, fallbackValue) => {
 
 const FRIENDS_LIVE_WINDOW_MS = 60 * 1000;
 const FEET_TO_METERS = 0.3048;
-const HEATMAP_LOCATION_JITTER_RADIUS_METERS = 1500 * FEET_TO_METERS;
+const HEATMAP_LOCATION_JITTER_RADIUS_METERS = 200 * FEET_TO_METERS;
 const HEATMAP_TIME_JITTER_MAX_MS = 30 * 60 * 1000;
 const EARTH_RADIUS_METERS = 6378137;
+const favoriteLocationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many favorite location requests. Please try again shortly.' }
+});
+const geocoder = NodeGeocoder({
+  provider: 'openstreetmap',
+  httpAdapter: 'https',
+  formatter: null
+});
 
 const jitterCoordinates = (lat, lng, maxDistanceMeters = HEATMAP_LOCATION_JITTER_RADIUS_METERS) => {
   // sqrt(random) keeps the resulting points uniformly distributed across the full circle area.
@@ -34,6 +49,40 @@ const jitterCoordinates = (lat, lng, maxDistanceMeters = HEATMAP_LOCATION_JITTER
   return {
     lat: lat + (deltaLat * 180) / Math.PI,
     lng: lng + (deltaLng * 180) / Math.PI
+  };
+};
+
+const getPlainTextAddress = (result = {}) => {
+  const streetAddress = [result.streetNumber, result.streetName || result.street]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const parts = [
+    result.city || result.town || result.village || null,
+    result.state || result.region || null,
+    result.country || null
+  ].filter(Boolean);
+
+  return result.formattedAddress || Array.from(new Set([streetAddress || null, ...parts].filter(Boolean))).join(', ') || null;
+};
+
+const getCoordinateFallbackLabel = (latitude, longitude) =>
+  `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+
+const serializeFavoriteLocation = (favorite) => {
+  const [lng = null, lat = null] = favorite.location?.coordinates || [];
+
+  return {
+    _id: favorite._id,
+    address: favorite.address,
+    lat,
+    lng,
+    city: favorite.city,
+    state: favorite.state,
+    country: favorite.country,
+    sourceType: favorite.sourceType,
+    createdAt: favorite.createdAt,
+    updatedAt: favorite.updatedAt
   };
 };
 
@@ -206,18 +255,13 @@ router.get('/friends', authenticateToken, async (req, res) => {
   try {
     const locations = await LocationPresence.getFriendsLocations(req.user.userId);
     const now = Date.now();
-    
-    // Return coarse (already rounded by precision level) coordinates for map display
-    // and only include live updates from the last minute.
-    const sanitized = locations.flatMap(loc => {
-      // Missing activity timestamps are treated as stale and omitted.
+
+    const sanitized = locations.map((loc) => {
       const lastActivityTime = loc.lastActivityAt ? new Date(loc.lastActivityAt).getTime() : 0;
-      if (!lastActivityTime || now - lastActivityTime > FRIENDS_LIVE_WINDOW_MS) {
-        return [];
-      }
-      const [lng = null, lat = null] = loc.location?.coordinates || [];
-      const liveAgeSeconds = Math.max(0, Math.floor((now - lastActivityTime) / 1000));
-      const isLive = Boolean(loc.shareWithFriends);
+      const hasRecentActivity = Boolean(lastActivityTime) && (now - lastActivityTime <= FRIENDS_LIVE_WINDOW_MS);
+      const hasShareableLocation = Boolean(loc.location?.coordinates?.length >= 2) && Boolean(loc.shareWithFriends);
+      const [rawLng = null, rawLat = null] = loc.location?.coordinates || [];
+
       return {
         user: {
           _id: loc.user._id,
@@ -225,24 +269,134 @@ router.get('/friends', authenticateToken, async (req, res) => {
           realName: loc.user.realName,
           avatarUrl: loc.user.avatarUrl
         },
-        lat,
-        lng,
-        locationName: loc.locationName,
+        lat: hasShareableLocation ? rawLat : null,
+        lng: hasShareableLocation ? rawLng : null,
+        locationName: hasShareableLocation ? loc.locationName : null,
         city: loc.city,
         state: loc.state,
         country: loc.country,
         precisionLevel: loc.precisionLevel,
         lastActivityAt: loc.lastActivityAt,
-        liveAgeSeconds,
-        isLive,
-        isActive: loc.isActive
+        liveAgeSeconds: lastActivityTime
+          ? Math.max(0, Math.floor((now - lastActivityTime) / 1000))
+          : null,
+        isLive: Boolean(loc.isActive && hasRecentActivity),
+        isActive: Boolean(loc.isActive),
+        shareWithFriends: Boolean(loc.shareWithFriends),
+        hasLocation: hasShareableLocation
       };
     });
-    
+
     res.json({ friends: sanitized });
   } catch (error) {
     console.error('Error getting friends locations:', error);
     res.status(500).json({ error: 'Failed to get friends locations' });
+  }
+});
+
+router.get('/favorites', authenticateToken, async (req, res) => {
+  try {
+    const favorites = await FavoriteLocation.find({ user: req.user.userId }).sort({ createdAt: -1 });
+    res.json({ favorites: favorites.map(serializeFavoriteLocation) });
+  } catch (error) {
+    console.error('Error getting favorite locations:', error);
+    res.status(500).json({ error: 'Failed to get favorite locations' });
+  }
+});
+
+router.post('/favorites', favoriteLocationLimiter, authenticateToken, async (req, res) => {
+  try {
+    const rawAddress = typeof req.body.address === 'string' ? req.body.address.trim() : '';
+    const parsedLatitude = parseCoordinate(req.body.latitude);
+    const parsedLongitude = parseCoordinate(req.body.longitude);
+    const hasCoordinates = parsedLatitude !== null && parsedLongitude !== null;
+
+    if (!rawAddress && !hasCoordinates) {
+      return res.status(400).json({ error: 'Address or latitude/longitude are required' });
+    }
+
+    let latitude = parsedLatitude;
+    let longitude = parsedLongitude;
+    let address = rawAddress;
+    let city = null;
+    let state = null;
+    let country = null;
+    const sourceType = rawAddress ? 'address' : 'current_location';
+
+    if (rawAddress) {
+      const results = await geocoder.geocode(rawAddress);
+      if (!Array.isArray(results) || results.length === 0) {
+        return res.status(404).json({ error: 'Address not found' });
+      }
+
+      const result = results[0];
+      latitude = parseCoordinate(result.latitude);
+      longitude = parseCoordinate(result.longitude);
+
+      if (latitude === null || longitude === null) {
+        return res.status(404).json({ error: 'Address did not resolve to coordinates' });
+      }
+
+      address = getPlainTextAddress(result) || rawAddress;
+      city = result.city || result.town || result.village || null;
+      state = result.state || result.region || null;
+      country = result.country || null;
+    } else {
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        return res.status(400).json({ error: 'Invalid coordinates' });
+      }
+
+      try {
+        const results = await geocoder.reverse({ lat: latitude, lon: longitude });
+        const result = Array.isArray(results) ? results[0] : null;
+        if (result) {
+          address = getPlainTextAddress(result) || getCoordinateFallbackLabel(latitude, longitude);
+          city = result.city || result.town || result.village || null;
+          state = result.state || result.region || null;
+          country = result.country || null;
+        } else {
+          address = getCoordinateFallbackLabel(latitude, longitude);
+        }
+      } catch (geocodeError) {
+        address = getCoordinateFallbackLabel(latitude, longitude);
+      }
+    }
+
+    const favorite = await FavoriteLocation.create({
+      user: req.user.userId,
+      address,
+      sourceType,
+      location: {
+        type: 'Point',
+        coordinates: [longitude, latitude]
+      },
+      city,
+      state,
+      country
+    });
+
+    res.status(201).json({ favorite: serializeFavoriteLocation(favorite) });
+  } catch (error) {
+    console.error('Error saving favorite location:', error);
+    res.status(500).json({ error: 'Failed to save favorite location' });
+  }
+});
+
+router.delete('/favorites/:id', authenticateToken, async (req, res) => {
+  try {
+    const favorite = await FavoriteLocation.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user.userId
+    });
+
+    if (!favorite) {
+      return res.status(404).json({ error: 'Favorite location not found' });
+    }
+
+    res.json({ message: 'Favorite location removed' });
+  } catch (error) {
+    console.error('Error removing favorite location:', error);
+    res.status(500).json({ error: 'Failed to remove favorite location' });
   }
 });
 

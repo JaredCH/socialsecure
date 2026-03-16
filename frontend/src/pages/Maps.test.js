@@ -2,11 +2,14 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import Maps, {
   FRIENDS_REFRESH_INTERVAL_MS,
+  HEATMAP_CIRCLE_RADIUS_METERS,
   LOCATION_PUBLISH_INTERVAL_MS,
   configureLeafletMarkerAssets,
   resolveLeafletModule,
+  sortFriendsByStatusAndActivity,
   withDataFallback
 } from './Maps';
+import { mapsAPI } from '../utils/api';
 
 jest.mock('../utils/api', () => ({
   mapsAPI: {
@@ -15,23 +18,59 @@ jest.mock('../utils/api', () => ({
     getCommunityMap: jest.fn().mockResolvedValue({ data: { spotlights: [] } }),
     getHeatmap: jest.fn().mockResolvedValue({ data: { heatmap: [] } }),
     getFriendsLocations: jest.fn().mockResolvedValue({ data: { friends: [] } }),
+    getFavoriteLocations: jest.fn().mockResolvedValue({ data: { favorites: [] } }),
     updatePresence: jest.fn().mockResolvedValue({ data: {} }),
     updatePrivacy: jest.fn().mockResolvedValue({ data: {} }),
     createSpotlight: jest.fn().mockResolvedValue({ data: {} }),
-    reactToSpotlight: jest.fn().mockResolvedValue({ data: {} })
+    reactToSpotlight: jest.fn().mockResolvedValue({ data: {} }),
+    createFavoriteLocation: jest.fn().mockResolvedValue({ data: { favorite: null } }),
+    deleteFavoriteLocation: jest.fn().mockResolvedValue({ data: {} })
   }
 }));
 
-jest.mock('leaflet', () => ({
-  map: jest.fn(),
-  tileLayer: jest.fn(),
-  marker: jest.fn(),
-  circle: jest.fn(),
-  divIcon: jest.fn(),
-  Icon: {
-    Default: {}
-  }
-}));
+jest.mock('leaflet', () => {
+  const mapInstance = {
+    setView: jest.fn(),
+    eachLayer: jest.fn(),
+    removeLayer: jest.fn(),
+    remove: jest.fn()
+  };
+  mapInstance.setView.mockImplementation(() => mapInstance);
+
+  const tileLayerInstance = {
+    addTo: jest.fn().mockReturnThis()
+  };
+  const markerInstance = {
+    bindPopup: jest.fn().mockReturnThis(),
+    addTo: jest.fn().mockReturnThis()
+  };
+  const circleInstance = {
+    addTo: jest.fn().mockReturnThis()
+  };
+
+  const exported = {
+    __esModule: true,
+    __mapInstance: mapInstance,
+    map: jest.fn(() => mapInstance),
+    tileLayer: jest.fn(() => tileLayerInstance),
+    marker: jest.fn(() => markerInstance),
+    circle: jest.fn(() => circleInstance),
+    divIcon: jest.fn((options) => options),
+    Icon: {
+      Default: {}
+    }
+  };
+  exported.default = exported;
+  return exported;
+});
+
+const leaflet = require('leaflet');
+
+const flushPromises = async () => {
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
 
 describe('resolveLeafletModule', () => {
   it('uses default export when it contains Leaflet map API', () => {
@@ -111,6 +150,28 @@ describe('map polling intervals', () => {
   it('refreshes friend locations every 10 seconds', () => {
     expect(FRIENDS_REFRESH_INTERVAL_MS).toBe(10000);
   });
+
+  it('renders heatmap circles at a 200 foot radius', () => {
+    expect(HEATMAP_CIRCLE_RADIUS_METERS).toBeCloseTo(60.96, 2);
+  });
+});
+
+describe('sortFriendsByStatusAndActivity', () => {
+  it('groups online friends first and sorts each group by most recent activity', () => {
+    const sorted = sortFriendsByStatusAndActivity([
+      { user: { username: 'older-online' }, isLive: true, lastActivityAt: '2026-03-16T19:20:00.000Z' },
+      { user: { username: 'newest-offline' }, isLive: false, lastActivityAt: '2026-03-16T19:29:00.000Z' },
+      { user: { username: 'newest-online' }, isLive: true, lastActivityAt: '2026-03-16T19:30:00.000Z' },
+      { user: { username: 'older-offline' }, isLive: false, lastActivityAt: '2026-03-16T19:10:00.000Z' }
+    ]);
+
+    expect(sorted.map((friend) => friend.user.username)).toEqual([
+      'newest-online',
+      'older-online',
+      'newest-offline',
+      'older-offline'
+    ]);
+  });
 });
 
 describe('Maps mobile-first controls', () => {
@@ -124,6 +185,35 @@ describe('Maps mobile-first controls', () => {
   });
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    mapsAPI.getPresence.mockResolvedValue({ data: { presence: { shareWithFriends: true } } });
+    mapsAPI.getLocalMap.mockResolvedValue({ data: { spotlights: [] } });
+    mapsAPI.getCommunityMap.mockResolvedValue({ data: { spotlights: [] } });
+    mapsAPI.getHeatmap.mockResolvedValue({ data: { heatmap: [] } });
+    mapsAPI.getFriendsLocations.mockResolvedValue({ data: { friends: [] } });
+    mapsAPI.getFavoriteLocations.mockResolvedValue({ data: { favorites: [] } });
+    mapsAPI.createFavoriteLocation.mockResolvedValue({
+      data: {
+        favorite: {
+          _id: 'favorite-1',
+          address: '123 Main St, Austin, TX',
+          lat: 30.2672,
+          lng: -97.7431,
+          sourceType: 'address'
+        }
+      }
+    });
+
+    leaflet.__mapInstance.setView.mockClear();
+    leaflet.__mapInstance.eachLayer.mockImplementation(() => {});
+    leaflet.__mapInstance.removeLayer.mockClear();
+    leaflet.__mapInstance.remove.mockClear();
+    leaflet.map.mockClear();
+    leaflet.tileLayer.mockClear();
+    leaflet.marker.mockClear();
+    leaflet.circle.mockClear();
+    leaflet.divIcon.mockClear();
+
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -150,17 +240,54 @@ describe('Maps mobile-first controls', () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment;
   });
 
-  it('renders compact mobile overlay controls for layers and privacy', async () => {
+  it('renders compact mobile overlay controls for layers, privacy, favorites, and location', async () => {
     await act(async () => {
       root.render(<Maps />);
     });
+    await flushPromises();
 
     const layersControlButton = container.querySelector('button[aria-label="Open map layers controls"]');
     const privacyControlButton = container.querySelector('button[aria-label="Open map privacy controls"]');
     const updateLocationButton = container.querySelector('button[aria-label="Update map to your location"]');
+    const favoritesButton = container.querySelector('button[aria-label="Open favorite locations"]');
 
     expect(layersControlButton).not.toBeNull();
     expect(privacyControlButton).not.toBeNull();
     expect(updateLocationButton).not.toBeNull();
+    expect(favoritesButton).not.toBeNull();
+  });
+
+  it('saves a favorite location from a typed address', async () => {
+    await act(async () => {
+      root.render(<Maps />);
+    });
+    await flushPromises();
+
+    const favoritesButton = container.querySelector('button[aria-label="Open favorite locations"]');
+
+    act(() => {
+      favoritesButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    const addressInput = container.querySelector('input[placeholder="123 Main St, Austin, TX"]');
+    const modalForm = Array.from(container.querySelectorAll('form'))
+      .find((form) => form.textContent.includes('Use Current Location'));
+    const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+
+    act(() => {
+      valueSetter.call(addressInput, '123 Main St, Austin, TX');
+      addressInput.dispatchEvent(new Event('input', { bubbles: true }));
+      addressInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    await act(async () => {
+      modalForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await flushPromises();
+
+    expect(mapsAPI.createFavoriteLocation).toHaveBeenCalledWith({
+      address: '123 Main St, Austin, TX'
+    });
   });
 });

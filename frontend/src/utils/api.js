@@ -332,6 +332,7 @@ export const chatAPI = {
   },
   joinRoom: (roomId) => api.post(`/chat/rooms/${roomId}/join`),
   leaveRoom: (roomId) => api.post(`/chat/rooms/${roomId}/leave`),
+  deleteRoom: (roomId) => api.delete(`/chat/rooms/${roomId}`),
   getAllRooms: (page = 1, limit = 100) =>
     api.get(`/chat/rooms/all?page=${page}&limit=${limit}`),
   getRoomUsers: (roomId) => api.get(`/chat/rooms/${roomId}/users`),
@@ -651,6 +652,11 @@ export const mapsAPI = {
   
   // Friend locations
   getFriendsLocations: () => api.get('/maps/friends'),
+
+  // Favorite locations
+  getFavoriteLocations: () => api.get('/maps/favorites'),
+  createFavoriteLocation: (data) => api.post('/maps/favorites', data),
+  deleteFavoriteLocation: (favoriteId) => api.delete(`/maps/favorites/${encodeURIComponent(favoriteId)}`),
   
   // Spotlights
   createSpotlight: (data) => api.post('/maps/spotlight', data),
