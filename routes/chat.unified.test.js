@@ -215,6 +215,60 @@ describe('Unified chat hub routes', () => {
     expect(response.body.error).toMatch(/Access denied/);
   });
 
+  it('allows a room owner to delete a deletable room and its related room data', async () => {
+    const app = buildApp();
+    const deleteRoomDoc = jest.fn().mockResolvedValue(undefined);
+    mockUser.findById
+      .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
+      .mockImplementationOnce(() => createSelectLean({ _id: '507f1f77bcf86cd799439011', isAdmin: false }));
+    mockChatRoom.findById = jest.fn().mockResolvedValue({
+      _id: 'room-1',
+      createdBy: '507f1f77bcf86cd799439011',
+      stableKey: null,
+      eventRef: null,
+      autoLifecycle: false,
+      deleteOne: deleteRoomDoc
+    });
+    mockChatMessage.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 2 });
+    mockRoomKeyPackage.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 1 });
+
+    const response = await request(app)
+      .delete('/api/chat/rooms/room-1')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(mockChatMessage.deleteMany).toHaveBeenCalledWith({ roomId: 'room-1' });
+    expect(mockRoomKeyPackage.deleteMany).toHaveBeenCalledWith({ roomId: 'room-1' });
+    expect(deleteRoomDoc).toHaveBeenCalled();
+  });
+
+  it('prevents deleting protected default rooms', async () => {
+    const app = buildApp();
+    mockUser.findById
+      .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
+      .mockImplementationOnce(() => createSelectLean({ _id: '507f1f77bcf86cd799439011', isAdmin: true }));
+    mockChatRoom.findById = jest.fn().mockResolvedValue({
+      _id: 'room-locked',
+      createdBy: null,
+      stableKey: 'topic:ai',
+      eventRef: null,
+      autoLifecycle: false,
+      deleteOne: jest.fn()
+    });
+    mockChatMessage.deleteMany = jest.fn();
+    mockRoomKeyPackage.deleteMany = jest.fn();
+
+    const response = await request(app)
+      .delete('/api/chat/rooms/room-locked')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toMatch(/cannot be deleted/i);
+    expect(mockChatMessage.deleteMany).not.toHaveBeenCalled();
+    expect(mockRoomKeyPackage.deleteMany).not.toHaveBeenCalled();
+  });
+
   it('applies a 20 second global cooldown to non-DM conversation messages', async () => {
     const app = buildApp();
     const saveConversation = jest.fn().mockResolvedValue(undefined);
@@ -478,7 +532,7 @@ describe('Unified chat hub routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.users).toEqual([
-      { _id: '507f1f77bcf86cd799439022', username: 'buddy', realName: 'Buddy' }
+      { _id: '507f1f77bcf86cd799439022', username: 'buddy', realName: 'Buddy', mutedUntil: null }
     ]);
   });
 

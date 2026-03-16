@@ -979,12 +979,15 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
           _id: 1,
           name: 1,
           type: 1,
+          createdBy: 1,
           city: 1,
           state: 1,
           country: 1,
           county: 1,
           discoverable: 1,
           eventRef: 1,
+          stableKey: 1,
+          autoLifecycle: 1,
           members: 1,
           messageCount: 1,
           lastActivity: 1
@@ -2094,6 +2097,7 @@ router.post('/rooms', [
   
   try {
     const { name, type, latitude, longitude, city, state, country, radius = 50 } = req.body;
+    const createdBy = req.user.userId;
     
     // Check if room already exists for this location
     const existingRoom = await ChatRoom.findOne({
@@ -2111,6 +2115,7 @@ router.post('/rooms', [
     const room = new ChatRoom({
       name,
       type,
+      createdBy,
       location: {
         type: 'Point',
         coordinates: [parseFloat(longitude), parseFloat(latitude)]
@@ -2131,6 +2136,48 @@ router.post('/rooms', [
   } catch (error) {
     console.error('Error creating chat room:', error);
     res.status(500).json({ error: 'Failed to create chat room', details: error.message });
+  }
+});
+
+router.delete('/rooms/:roomId', roomWriteLimiter, authenticateToken, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const requesterId = String(req.user.userId || '');
+    const requester = await User.findById(requesterId).select('_id isAdmin').lean();
+
+    if (!requester) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const room = await ChatRoom.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Chat room not found' });
+    }
+
+    const ownerId = String(room.createdBy || '');
+    const canDelete = Boolean(requester.isAdmin) || (ownerId && ownerId === requesterId);
+    if (!canDelete) {
+      return res.status(403).json({ error: 'Only the room owner or an admin can delete this chat room' });
+    }
+
+    if (room.stableKey || room.eventRef || room.autoLifecycle) {
+      return res.status(403).json({ error: 'This chat room cannot be deleted' });
+    }
+
+    await Promise.all([
+      ChatMessage.deleteMany({ roomId: room._id }),
+      RoomKeyPackage.deleteMany({ roomId: room._id }),
+      room.deleteOne()
+    ]);
+
+    return res.json({
+      success: true,
+      message: 'Chat room deleted successfully',
+      roomId: String(room._id)
+    });
+  } catch (error) {
+    console.error('Error deleting room:', error);
+    return res.status(500).json({ error: 'Failed to delete chat room', details: error.message });
   }
 });
 
