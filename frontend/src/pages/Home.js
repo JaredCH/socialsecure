@@ -98,9 +98,30 @@ const mapDensityStats = [
   }
 ];
 
+// These values spread the initial dots across most of the map while keeping the
+// pattern deterministic, so the homepage animation looks dense without relying
+// on runtime randomness.
+const INITIAL_DOT_X_MULTIPLIER = 37;
+const INITIAL_DOT_Y_MULTIPLIER = 29;
+const INITIAL_DOT_Y_OFFSET_MULTIPLIER = 5;
+const INITIAL_DOT_X_RANGE = 84;
+const INITIAL_DOT_Y_RANGE = 76;
+
+function getDotSize(index) {
+  if (index % 9 === 0) {
+    return 8;
+  }
+
+  if (index % 3 === 0) {
+    return 6;
+  }
+
+  return 5;
+}
+
 const convergingUserDots = Array.from({ length: 180 }, (_, index) => {
-  const startX = 8 + ((index * 37) % 84);
-  const startY = 10 + ((index * 29 + (index % 7) * 5) % 76);
+  const startX = 8 + ((index * INITIAL_DOT_X_MULTIPLIER) % INITIAL_DOT_X_RANGE);
+  const startY = 10 + ((index * INITIAL_DOT_Y_MULTIPLIER + (index % 7) * INITIAL_DOT_Y_OFFSET_MULTIPLIER) % INITIAL_DOT_Y_RANGE);
   const angle = (((index * 19) % 360) * Math.PI) / 180;
   const targetX = 50 + Math.cos(angle) * (4 + (index % 5) * 1.4);
   const targetY = 50 + Math.sin(angle) * (3 + (index % 4) * 1.1);
@@ -111,7 +132,7 @@ const convergingUserDots = Array.from({ length: 180 }, (_, index) => {
     startY,
     targetX: Number(targetX.toFixed(2)),
     targetY: Number(targetY.toFixed(2)),
-    size: index % 9 === 0 ? 8 : index % 3 === 0 ? 6 : 5,
+    size: getDotSize(index),
     delay: (index % 24) * 0.08,
     duration: 6 + (index % 7) * 0.35
   };
