@@ -1966,7 +1966,7 @@ function Chat() {
 
   const chatMenuBar = (
     <header
-      className={`mb-2 rounded-2xl border px-3 py-2 shadow-sm backdrop-blur ${activeTheme.panelGlass}`}
+      className={`mb-2 rounded-2xl border px-3 py-2 shadow-sm backdrop-blur-sm ${activeTheme.panelGlass}`}
       data-chat-menu-bar
       data-testid="chat-page-header"
     >
