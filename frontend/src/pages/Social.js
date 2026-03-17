@@ -725,6 +725,21 @@ const Social = () => {
   const [showProfileCompletionHint, setShowProfileCompletionHint] = useState(false);
   const [showSlimHeader, setShowSlimHeader] = useState(false);
   const [enabledSections, setEnabledSections] = useState({ blog: false, resume: false, aboutme: false });
+  const [blogPosts, setBlogPosts] = useState([]);
+  const [blogLoading, setBlogLoading] = useState(false);
+  const [blogError, setBlogError] = useState('');
+  const [blogEditing, setBlogEditing] = useState(null);
+  const [blogViewingPost, setBlogViewingPost] = useState(null);
+  const [blogForm, setBlogForm] = useState({ title: '', content: '', excerpt: '', category: 'General', tags: [], audience: 'social', status: 'draft', backgroundImage: '', backgroundColor: '', fontFamily: '', fontSize: 16, fontColor: '' });
+  const [blogFormBusy, setBlogFormBusy] = useState(false);
+  const [blogIndexStyle, setBlogIndexStyle] = useState('date');
+  const [blogCategories, setBlogCategories] = useState([]);
+  const [aboutMeContent, setAboutMeContent] = useState('');
+  const [aboutMeEditing, setAboutMeEditing] = useState(false);
+  const [aboutMeSaving, setAboutMeSaving] = useState(false);
+  const [resumeData, setResumeData] = useState(null);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [resumeEditing, setResumeEditing] = useState(false);
   const localTypingTimeoutsRef = useRef({});
   const remoteTypingTimeoutsRef = useRef({});
   const designDirtyRef = useRef(false);
@@ -772,6 +787,37 @@ const Social = () => {
     }
   }, [activeProfile?.socialPagePreferences?.enabledSections]);
 
+  useEffect(() => {
+    if (!enabledSections.blog) { setBlogPosts([]); return; }
+    const username = activeProfile?.username;
+    if (!username) return;
+    setBlogLoading(true);
+    setBlogError('');
+    const loadBlog = isOwnSocialContext && !isGuestPreview
+      ? blogAPI.getMyPosts()
+      : blogAPI.getUserPosts(username);
+    loadBlog.then(({ data }) => {
+      setBlogPosts(Array.isArray(data?.posts) ? data.posts : []);
+      if (data?.indexStyle) setBlogIndexStyle(data.indexStyle);
+      if (Array.isArray(data?.categories)) setBlogCategories(data.categories);
+    }).catch(() => setBlogError('Failed to load blog posts.')).finally(() => setBlogLoading(false));
+  }, [enabledSections.blog, activeProfile?.username, isOwnSocialContext, isGuestPreview]);
+
+  useEffect(() => {
+    if (!enabledSections.resume) { setResumeData(null); return; }
+    const username = activeProfile?.username;
+    if (!username) return;
+    setResumeLoading(true);
+    resumeAPI.getPublicResume(username).then(({ data }) => {
+      setResumeData(data?.resume || null);
+    }).catch(() => setResumeData(null)).finally(() => setResumeLoading(false));
+  }, [enabledSections.resume, activeProfile?.username]);
+
+  useEffect(() => {
+    const aboutMe = activeProfile?.socialPagePreferences?.aboutMeContent || '';
+    setAboutMeContent(aboutMe);
+  }, [activeProfile?.socialPagePreferences?.aboutMeContent]);
+
   const visibleHeroTabs = useMemo(() => {
     return SOCIAL_HERO_TABS.filter((tab) => {
       if (!tab.optional) return true;
@@ -793,6 +839,56 @@ const Social = () => {
       setEnabledSections(prev);
     }
   }, [isOwnSocialContext, enabledSections, draftSocialPreferences, activeProfile?.socialPagePreferences]);
+
+  const handleBlogSubmit = useCallback(async () => {
+    if (!blogForm.title.trim() || !blogForm.content.trim()) return;
+    setBlogFormBusy(true);
+    try {
+      if (blogEditing) {
+        const { data } = await blogAPI.updatePost(blogEditing, blogForm);
+        setBlogPosts((prev) => prev.map((p) => String(p._id) === String(blogEditing) ? data.post : p));
+      } else {
+        const { data } = await blogAPI.createPost(blogForm);
+        setBlogPosts((prev) => [data.post, ...prev]);
+      }
+      setBlogEditing(null);
+      setBlogForm({ title: '', content: '', excerpt: '', category: 'General', tags: [], audience: 'social', status: 'draft', backgroundImage: '', backgroundColor: '', fontFamily: '', fontSize: 16, fontColor: '' });
+    } catch (error) {
+      setBlogError(error.response?.data?.error || 'Failed to save blog post.');
+    } finally {
+      setBlogFormBusy(false);
+    }
+  }, [blogForm, blogEditing]);
+
+  const handleBlogDelete = useCallback(async (postId) => {
+    if (!window.confirm('Delete this blog post?')) return;
+    try {
+      await blogAPI.deletePost(postId);
+      setBlogPosts((prev) => prev.filter((p) => String(p._id) !== String(postId)));
+    } catch (error) {
+      setBlogError('Failed to delete post.');
+    }
+  }, []);
+
+  const handleBlogReact = useCallback(async (postId, reaction) => {
+    try {
+      const { data } = await blogAPI.reactToPost(postId, reaction);
+      setBlogPosts((prev) => prev.map((p) => String(p._id) === String(postId) ? { ...p, reactionCounts: data.reactions } : p));
+    } catch (error) { /* ignore */ }
+  }, []);
+
+  const handleAboutMeSave = useCallback(async () => {
+    if (!isOwnSocialContext) return;
+    setAboutMeSaving(true);
+    try {
+      const currentPrefs = draftSocialPreferences || activeProfile?.socialPagePreferences || {};
+      await socialPageAPI.savePreferences({ ...currentPrefs, aboutMeContent });
+      setCurrentUser((prev) => prev ? { ...prev, socialPagePreferences: { ...prev.socialPagePreferences, aboutMeContent } } : prev);
+      setAboutMeEditing(false);
+    } catch (error) { /* ignore */ } finally {
+      setAboutMeSaving(false);
+    }
+  }, [isOwnSocialContext, aboutMeContent, draftSocialPreferences, activeProfile?.socialPagePreferences]);
 
   const isSectionVisible = useCallback(
     (sectionId) => socialPreferences.effective?.panels?.[sectionId]?.visible !== false,
@@ -4032,24 +4128,280 @@ const Social = () => {
             ) : null}
           </div>
         );
-      case 'blog_panel':
+      case 'blog_panel': {
+        const isOwnerBlogView = isOwnSocialContext && !isGuestPreview;
+        if (blogLoading) return <div className="p-6 text-center text-sm text-slate-500">Loading blog…</div>;
+        if (blogError) return <div className="p-6 text-center text-sm text-red-400">{blogError}</div>;
+
+        if (isOwnerBlogView && (blogEditing !== null || blogPosts.length === 0)) {
+          // Blog editor form
+          return (
+            <div className="space-y-4 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-300">{blogEditing ? 'Edit Post' : 'New Blog Post'}</h3>
+                {blogEditing ? <button type="button" onClick={() => { setBlogEditing(null); setBlogForm({ title: '', content: '', excerpt: '', category: 'General', tags: [], audience: 'social', status: 'draft', backgroundImage: '', backgroundColor: '', fontFamily: '', fontSize: 16, fontColor: '' }); }} className="text-xs text-slate-400 hover:text-white">Cancel</button> : null}
+              </div>
+              <input type="text" value={blogForm.title} onChange={(e) => setBlogForm(f => ({ ...f, title: e.target.value }))} placeholder="Post title" maxLength={200} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1" style={{ '--tw-ring-color': accentColor }} />
+              <textarea value={blogForm.content} onChange={(e) => setBlogForm(f => ({ ...f, content: e.target.value }))} placeholder="Write your blog post content… (supports rich text formatting)" rows={8} maxLength={50000} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 resize-y" style={{ '--tw-ring-color': accentColor }} />
+              <div className="grid grid-cols-2 gap-3">
+                <input type="text" value={blogForm.excerpt} onChange={(e) => setBlogForm(f => ({ ...f, excerpt: e.target.value }))} placeholder="Excerpt (optional)" maxLength={500} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                <input type="text" value={blogForm.category} onChange={(e) => setBlogForm(f => ({ ...f, category: e.target.value }))} placeholder="Category" maxLength={100} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+              </div>
+              {/* Appearance controls */}
+              <details className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <summary className="cursor-pointer text-xs font-semibold text-slate-400">Appearance Settings</summary>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Background Image URL</label>
+                    <input type="text" value={blogForm.backgroundImage} onChange={(e) => setBlogForm(f => ({ ...f, backgroundImage: e.target.value }))} placeholder="https://..." maxLength={2048} className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Background Color</label>
+                    <input type="text" value={blogForm.backgroundColor} onChange={(e) => setBlogForm(f => ({ ...f, backgroundColor: e.target.value }))} placeholder="#1e293b" maxLength={20} className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Font Family</label>
+                    <input type="text" value={blogForm.fontFamily} onChange={(e) => setBlogForm(f => ({ ...f, fontFamily: e.target.value }))} placeholder="Inter" maxLength={60} className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Font Size ({blogForm.fontSize}px)</label>
+                    <input type="range" min={12} max={32} value={blogForm.fontSize} onChange={(e) => setBlogForm(f => ({ ...f, fontSize: Number(e.target.value) }))} className="w-full" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Font Color</label>
+                    <input type="text" value={blogForm.fontColor} onChange={(e) => setBlogForm(f => ({ ...f, fontColor: e.target.value }))} placeholder="#e2e8f0" maxLength={20} className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                  </div>
+                </div>
+              </details>
+              {/* Audience and status */}
+              <div className="flex flex-wrap items-center gap-3">
+                <select value={blogForm.audience} onChange={(e) => setBlogForm(f => ({ ...f, audience: e.target.value }))} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white focus:outline-none">
+                  <option value="social">Social</option>
+                  <option value="secure">Secure</option>
+                </select>
+                <select value={blogForm.status} onChange={(e) => setBlogForm(f => ({ ...f, status: e.target.value }))} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white focus:outline-none">
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                </select>
+                <button type="button" onClick={handleBlogSubmit} disabled={blogFormBusy || !blogForm.title.trim() || !blogForm.content.trim()} className="ml-auto rounded-xl px-5 py-2 text-xs font-semibold text-white transition disabled:opacity-50" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                  {blogFormBusy ? 'Saving…' : (blogEditing ? 'Update' : 'Create Post')}
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        // Blog list/viewer
+        if (blogViewingPost) {
+          const post = blogPosts.find(p => String(p._id) === String(blogViewingPost)) || null;
+          if (!post) { setBlogViewingPost(null); return null; }
+          const postStyle = {
+            ...(post.backgroundImage ? { backgroundImage: `url(${post.backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+            ...(post.backgroundColor ? { backgroundColor: post.backgroundColor } : {}),
+            ...(post.fontFamily ? { fontFamily: post.fontFamily } : {}),
+            ...(post.fontSize ? { fontSize: `${Math.max(12, Math.min(32, post.fontSize))}px` } : {}),
+            ...(post.fontColor ? { color: post.fontColor } : {})
+          };
+          const counts = post.reactionCounts || { like: post.reactions?.like?.length || 0, love: post.reactions?.love?.length || 0, insightful: post.reactions?.insightful?.length || 0 };
+          return (
+            <div className="space-y-4 p-4">
+              <button type="button" onClick={() => setBlogViewingPost(null)} className="text-xs text-slate-400 hover:text-white">← Back to posts</button>
+              <article className="rounded-2xl border border-white/10 p-6" style={postStyle}>
+                {post.backgroundImage ? <div className="absolute inset-0 rounded-2xl bg-black/50" /> : null}
+                <div className="relative">
+                  <h2 className="text-xl font-bold text-white">{post.title}</h2>
+                  <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
+                    {post.category ? <span className="rounded-full bg-white/10 px-2 py-0.5">{post.category}</span> : null}
+                    <span className={`rounded-full px-2 py-0.5 ${post.audience === 'secure' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>{post.audience === 'secure' ? 'Secure' : 'Social'}</span>
+                    {post.publishedAt ? <span>{new Date(post.publishedAt).toLocaleDateString()}</span> : null}
+                  </div>
+                  <div className="mt-4 whitespace-pre-wrap text-sm leading-relaxed">{post.content}</div>
+                </div>
+              </article>
+              {/* Reactions */}
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => handleBlogReact(post._id, 'like')} className="flex items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs transition hover:bg-white/5">👍 {counts.like}</button>
+                <button type="button" onClick={() => handleBlogReact(post._id, 'love')} className="flex items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs transition hover:bg-white/5">❤️ {counts.love}</button>
+                <button type="button" onClick={() => handleBlogReact(post._id, 'insightful')} className="flex items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs transition hover:bg-white/5">💡 {counts.insightful}</button>
+              </div>
+            </div>
+          );
+        }
+
+        // Blog post list with sidebar index
+        const publishedPosts = blogPosts.filter(p => p.status === 'published' || isOwnerBlogView);
+        const sortedPosts = blogIndexStyle === 'abc'
+          ? [...publishedPosts].sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+          : blogIndexStyle === 'category'
+            ? [...publishedPosts].sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.title || '').localeCompare(b.title || ''))
+            : [...publishedPosts].sort((a, b) => new Date(b.publishedAt || b.createdAt) - new Date(a.publishedAt || a.createdAt));
+
+        const uniqueCategories = [...new Set(sortedPosts.map(p => p.category || 'General'))];
+
         return (
-          <div className="space-y-4 p-4">
-            <p className="text-sm text-slate-400">Blog content will appear here.</p>
+          <div className="flex gap-4 p-4">
+            {/* Sidebar index */}
+            <div className="hidden w-40 shrink-0 space-y-1 border-r border-white/10 pr-3 sm:block">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">{blogIndexStyle === 'category' ? 'Categories' : 'Posts'}</p>
+              {blogIndexStyle === 'category' ? (
+                uniqueCategories.map(cat => (
+                  <p key={cat} className="truncate text-xs text-slate-400">{cat} ({sortedPosts.filter(p => p.category === cat).length})</p>
+                ))
+              ) : (
+                sortedPosts.slice(0, 20).map(post => (
+                  <button key={post._id} type="button" onClick={() => setBlogViewingPost(post._id)} className="block w-full truncate text-left text-xs text-slate-400 hover:text-white">{post.title}</button>
+                ))
+              )}
+            </div>
+            {/* Post cards */}
+            <div className="min-w-0 flex-1 space-y-3">
+              {isOwnerBlogView ? (
+                <button type="button" onClick={() => { setBlogEditing('new'); setBlogForm({ title: '', content: '', excerpt: '', category: 'General', tags: [], audience: 'social', status: 'draft', backgroundImage: '', backgroundColor: '', fontFamily: '', fontSize: 16, fontColor: '' }); }} className="flex w-full items-center gap-2 rounded-xl border border-dashed border-white/10 p-3 text-xs text-slate-400 transition hover:border-white/20 hover:text-white">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>+</span>
+                  New blog post
+                </button>
+              ) : null}
+              {sortedPosts.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-500">No blog posts yet.</p>
+              ) : sortedPosts.map(post => {
+                const counts = post.reactionCounts || { like: post.reactions?.like?.length || 0, love: post.reactions?.love?.length || 0, insightful: post.reactions?.insightful?.length || 0 };
+                return (
+                  <div key={post._id} className="rounded-xl border border-white/10 p-4 transition hover:bg-white/[0.02]" style={post.backgroundColor ? { backgroundColor: post.backgroundColor } : {}}>
+                    <div className="flex items-start justify-between gap-2">
+                      <button type="button" onClick={() => setBlogViewingPost(post._id)} className="min-w-0 flex-1 text-left">
+                        <h4 className="font-semibold text-white">{post.title}</h4>
+                        <p className="mt-1 line-clamp-2 text-xs text-slate-400">{post.excerpt || post.content?.substring(0, 200)}</p>
+                      </button>
+                      {isOwnerBlogView ? (
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button type="button" onClick={() => { setBlogEditing(post._id); setBlogForm({ title: post.title, content: post.content || '', excerpt: post.excerpt || '', category: post.category || 'General', tags: post.tags || [], audience: post.audience || 'social', status: post.status || 'draft', backgroundImage: post.backgroundImage || '', backgroundColor: post.backgroundColor || '', fontFamily: post.fontFamily || '', fontSize: post.fontSize || 16, fontColor: post.fontColor || '' }); }} className="rounded border border-white/10 px-2 py-1 text-[10px] text-slate-400 hover:text-white">Edit</button>
+                          <button type="button" onClick={() => handleBlogDelete(post._id)} className="rounded border border-red-500/20 px-2 py-1 text-[10px] text-red-400 hover:bg-red-500/10">Del</button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-500">
+                      {post.category ? <span className="rounded-full bg-white/10 px-2 py-0.5">{post.category}</span> : null}
+                      <span className={`rounded-full px-2 py-0.5 ${post.audience === 'secure' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>{post.audience === 'secure' ? 'Secure' : 'Social'}</span>
+                      {post.status === 'draft' ? <span className="rounded-full bg-slate-500/20 px-2 py-0.5 text-slate-400">Draft</span> : null}
+                      {post.publishedAt ? <span>{new Date(post.publishedAt).toLocaleDateString()}</span> : null}
+                      <span className="ml-auto flex gap-2">👍 {counts.like} ❤️ {counts.love} 💡 {counts.insightful}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         );
-      case 'resume_panel':
+      }
+      case 'resume_panel': {
+        if (resumeLoading) return <div className="p-6 text-center text-sm text-slate-500">Loading resume…</div>;
+        if (!resumeData) {
+          return (
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <p className="text-sm text-slate-500">No resume available yet.</p>
+              {isOwnSocialContext && !isGuestPreview ? (
+                <Link to="/settings" className="mt-3 rounded-xl px-5 py-2 text-xs font-semibold text-white transition" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                  Build your resume
+                </Link>
+              ) : null}
+            </div>
+          );
+        }
+        const basics = resumeData.basics || {};
         return (
-          <div className="space-y-4 p-4">
-            <p className="text-sm text-slate-400">Resume content will appear here.</p>
+          <div className="space-y-4 p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">{basics.fullName || activeProfile?.realName || activeProfile?.username}</h2>
+                {basics.headline ? <p className="text-sm text-slate-400">{basics.headline}</p> : null}
+                <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                  {basics.email ? <span>{basics.email}</span> : null}
+                  {basics.phone ? <span>· {basics.phone}</span> : null}
+                  {basics.city || basics.state ? <span>· {[basics.city, basics.state].filter(Boolean).join(', ')}</span> : null}
+                </div>
+              </div>
+              {isOwnSocialContext && !isGuestPreview ? (
+                <Link to="/settings" className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 hover:text-white" title="Edit resume in settings">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                </Link>
+              ) : null}
+            </div>
+            {resumeData.summary ? (
+              <div className="rounded-xl border border-white/10 p-4">
+                <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">Summary</h3>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{resumeData.summary}</p>
+              </div>
+            ) : null}
+            {Array.isArray(resumeData.experience) && resumeData.experience.length > 0 ? (
+              <div className="rounded-xl border border-white/10 p-4">
+                <h3 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">Experience</h3>
+                <div className="space-y-3">
+                  {resumeData.experience.map((exp, i) => (
+                    <div key={i} className="border-l-2 border-white/10 pl-3">
+                      <p className="font-semibold text-sm text-white">{exp.title}</p>
+                      <p className="text-xs text-slate-400">{exp.employer}{exp.location ? ` · ${exp.location}` : ''}</p>
+                      <p className="text-[10px] text-slate-500">{exp.startDate ? new Date(exp.startDate).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : ''} – {exp.isCurrent ? 'Present' : (exp.endDate ? new Date(exp.endDate).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '')}</p>
+                      {Array.isArray(exp.bullets) ? exp.bullets.map((b, j) => <p key={j} className="mt-1 text-xs text-slate-400">• {b}</p>) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {Array.isArray(resumeData.education) && resumeData.education.length > 0 ? (
+              <div className="rounded-xl border border-white/10 p-4">
+                <h3 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">Education</h3>
+                <div className="space-y-2">
+                  {resumeData.education.map((edu, i) => (
+                    <div key={i} className="border-l-2 border-white/10 pl-3">
+                      <p className="font-semibold text-sm text-white">{edu.institution}</p>
+                      <p className="text-xs text-slate-400">{edu.degree}{edu.fieldOfStudy ? ` in ${edu.fieldOfStudy}` : ''}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {Array.isArray(resumeData.skills) && resumeData.skills.length > 0 ? (
+              <div className="rounded-xl border border-white/10 p-4">
+                <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">Skills</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {resumeData.skills.map((skill, i) => (
+                    <span key={i} className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-slate-300">{skill}</span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         );
-      case 'aboutme_panel':
+      }
+      case 'aboutme_panel': {
+        const isOwnerView = isOwnSocialContext && !isGuestPreview;
         return (
-          <div className="space-y-4 p-4">
-            <p className="text-sm text-slate-400">About me content will appear here.</p>
+          <div className="space-y-4 p-5">
+            {isOwnerView && aboutMeEditing ? (
+              <>
+                <textarea value={aboutMeContent} onChange={(e) => setAboutMeContent(e.target.value)} placeholder="Tell visitors about yourself…" rows={8} maxLength={5000} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 resize-y" style={{ '--tw-ring-color': accentColor }} />
+                <div className="flex gap-2">
+                  <button type="button" onClick={handleAboutMeSave} disabled={aboutMeSaving} className="rounded-xl px-5 py-2 text-xs font-semibold text-white transition disabled:opacity-50" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>{aboutMeSaving ? 'Saving…' : 'Save'}</button>
+                  <button type="button" onClick={() => { setAboutMeEditing(false); setAboutMeContent(activeProfile?.socialPagePreferences?.aboutMeContent || ''); }} className="rounded-xl border border-white/10 px-4 py-2 text-xs text-slate-400 hover:text-white">Cancel</button>
+                </div>
+              </>
+            ) : (
+              <>
+                {aboutMeContent ? (
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{aboutMeContent}</div>
+                ) : (
+                  <p className="py-8 text-center text-sm text-slate-500">{isOwnerView ? 'Click edit to add your about me content.' : 'No about me content shared yet.'}</p>
+                )}
+                {isOwnerView ? (
+                  <button type="button" onClick={() => setAboutMeEditing(true)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 hover:text-white">
+                    {aboutMeContent ? 'Edit' : 'Write About Me'}
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         );
+      }
       default:
         return <div className="text-sm text-slate-500">{SOCIAL_PANEL_LABELS[panelId] || panelId}</div>;
     }
