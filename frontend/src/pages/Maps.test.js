@@ -3,10 +3,12 @@ import { createRoot } from 'react-dom/client';
 import Maps, {
   FRIENDS_REFRESH_INTERVAL_MS,
   HEATMAP_CIRCLE_RADIUS_METERS,
+  HEATMAP_VISIBILITY_RADIUS_METERS,
   LOCATION_PUBLISH_INTERVAL_MS,
   clearMapsClientCaches,
   configureLeafletMarkerAssets,
   createMapDataCacheKey,
+  haversineDistance,
   resolveMapHeatmapData,
   resolveLeafletModule,
   sortFriendsByStatusAndActivity,
@@ -117,17 +119,17 @@ describe('withDataFallback', () => {
 });
 
 describe('resolveMapHeatmapData', () => {
-  it('prefers the selected map endpoint heatmap over the generic fallback heatmap response', () => {
+  it('prefers the standalone heatmap response over the map endpoint heatmap', () => {
     const mapHeatmap = [{ lat: 30.2672, lng: -97.7431, intensity: 0.9, userCount: 4 }];
     const fallbackHeatmap = [{ lat: 40.7128, lng: -74.006, intensity: 0.2, userCount: 1 }];
 
-    expect(resolveMapHeatmapData({ heatmap: mapHeatmap }, { heatmap: fallbackHeatmap })).toBe(mapHeatmap);
+    expect(resolveMapHeatmapData({ heatmap: mapHeatmap }, { heatmap: fallbackHeatmap })).toBe(fallbackHeatmap);
   });
 
-  it('falls back to the generic heatmap response when the selected map endpoint has no heatmap', () => {
-    const fallbackHeatmap = [{ lat: 40.7128, lng: -74.006, intensity: 0.2, userCount: 1 }];
+  it('falls back to the map endpoint heatmap when the standalone response has no heatmap', () => {
+    const mapHeatmap = [{ lat: 40.7128, lng: -74.006, intensity: 0.2, userCount: 1 }];
 
-    expect(resolveMapHeatmapData({ spotlights: [] }, { heatmap: fallbackHeatmap })).toBe(fallbackHeatmap);
+    expect(resolveMapHeatmapData({ heatmap: mapHeatmap }, {})).toBe(mapHeatmap);
   });
 });
 
@@ -180,8 +182,25 @@ describe('map polling intervals', () => {
     expect(FRIENDS_REFRESH_INTERVAL_MS).toBe(10000);
   });
 
-  it('renders heatmap circles at a 200 foot radius', () => {
-    expect(HEATMAP_CIRCLE_RADIUS_METERS).toBeCloseTo(60.96, 2);
+  it('renders heatmap circles at a 200 foot diameter (100 foot radius)', () => {
+    expect(HEATMAP_CIRCLE_RADIUS_METERS).toBeCloseTo(30.48, 2);
+  });
+
+  it('limits heatmap visibility to a 2000 foot radius', () => {
+    expect(HEATMAP_VISIBILITY_RADIUS_METERS).toBeCloseTo(609.6, 1);
+  });
+});
+
+describe('haversineDistance', () => {
+  it('returns zero for identical points', () => {
+    expect(haversineDistance(40.7128, -74.006, 40.7128, -74.006)).toBe(0);
+  });
+
+  it('computes roughly correct distance between two known points', () => {
+    // Approx 1.1 km between these two NYC points
+    const distance = haversineDistance(40.7128, -74.006, 40.7228, -74.006);
+    expect(distance).toBeGreaterThan(1000);
+    expect(distance).toBeLessThan(1200);
   });
 });
 
