@@ -504,6 +504,8 @@ export const friendsAPI = {
   // Get relationship status
   getRelationship: (userId) => api.get(`/friends/relationship/${userId}`),
   getPublicCircles: (userIdOrUsername) => api.get(`/public/users/${encodeURIComponent(userIdOrUsername)}/friends/circles`),
+  // Get lightweight online/offline presence summary
+  getPresenceSummary: () => api.get('/friends/presence-summary'),
 };
 
 export const circlesAPI = {

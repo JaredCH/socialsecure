@@ -964,4 +964,38 @@ router.get('/relationship/:userId', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/friends/presence-summary - Lightweight online/offline counts for nav display
+router.get('/presence-summary', friendReadLimiter, authenticateToken, async (req, res) => {
+  try {
+    const friends = await Friendship.getFriends(req.user._id);
+    const friendIds = friends.map((f) => f._id);
+    if (friendIds.length === 0) {
+      return res.json({ success: true, online: 0, offline: friendIds.length, total: friendIds.length });
+    }
+
+    const [presenceMap, friendUsers] = await Promise.all([
+      getPresenceMapForUsers(friendIds),
+      User.find({ _id: { $in: friendIds } }).select('_id realtimePreferences').lean()
+    ]);
+    const friendUserMap = new Map(friendUsers.map((u) => [String(u._id), u]));
+
+    let online = 0;
+    for (const friendId of friendIds) {
+      const payload = buildPresencePayload(
+        friendId,
+        presenceMap.get(String(friendId)),
+        friendUserMap.get(String(friendId))?.realtimePreferences
+      );
+      if (payload.status === 'online' || payload.status === 'inactive') {
+        online++;
+      }
+    }
+
+    res.json({ success: true, online, offline: friendIds.length - online, total: friendIds.length });
+  } catch (error) {
+    console.error('Error getting presence summary:', error);
+    res.status(500).json({ error: 'Failed to get presence summary' });
+  }
+});
+
 module.exports = router;
