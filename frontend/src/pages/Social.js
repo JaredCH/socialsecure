@@ -424,6 +424,29 @@ const buildCalendarPreviewMonthGrid = (anchorDate) => {
   });
 };
 
+const buildCalendarWeekDays = (anchorDate) => {
+  const weekStart = getCalendarWeekStart(anchorDate);
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(weekStart);
+    day.setDate(weekStart.getDate() + index);
+    return day;
+  });
+};
+
+const CALENDAR_HOUR_LABELS = Array.from({ length: 24 }, (_, index) => {
+  const hour = index % 12 || 12;
+  const period = index < 12 ? 'AM' : 'PM';
+  return `${hour}:00 ${period}`;
+});
+
+const MINI_CHAT_MESSAGE_GROUP_THRESHOLD_MS = 5 * 60 * 1000;
+
+const toCalendarDateTimeLocalString = (date) => {
+  const d = new Date(date);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const formatCalendarDayKey = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -686,6 +709,9 @@ const Social = () => {
     now.setHours(0, 0, 0, 0);
     return now;
   });
+  const [calendarViewType, setCalendarViewType] = useState('monthly');
+  const [calendarEventModal, setCalendarEventModal] = useState(null);
+  const [calendarEventBusy, setCalendarEventBusy] = useState(false);
   const [partnerActionBusyFriendshipId, setPartnerActionBusyFriendshipId] = useState('');
   const [partnerActionError, setPartnerActionError] = useState('');
   const [personalInfoModalOpen, setPersonalInfoModalOpen] = useState(false);
@@ -3726,9 +3752,17 @@ const Social = () => {
         {
           const canPostToProfileThread = isAuthenticated && profileChatPermissions.canWrite;
           return (
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-600 shadow-sm">
-                <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-0 overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900 shadow-[0_16px_40px_rgba(15,23,42,0.35)]">
+              {/* Chat header – mirrors main Chat header style */}
+              <div className="flex items-center justify-between border-b border-slate-700 bg-slate-900/98 px-3 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                  <span className="truncate text-[12px] font-semibold text-slate-100">
+                    {activeProfile?.username ? `@${activeProfile.username}` : 'Profile'} room
+                  </span>
+                  <span className="hidden shrink-0 rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300 sm:inline">Live</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Thread Access</span>
                   {profileChatPermissions.isOwner ? (
                     <button
@@ -3736,142 +3770,176 @@ const Social = () => {
                       onClick={() => setProfileChatControlsExpanded((open) => !open)}
                       aria-expanded={profileChatControlsExpanded}
                       aria-label="Toggle chat access controls"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-sm text-slate-600 hover:bg-slate-100"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-sm text-slate-300 hover:bg-slate-700"
                     >
                       <span aria-hidden="true">⚙️</span>
                     </button>
                   ) : null}
-                </div>
-                <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5"><span className="font-semibold text-slate-700">Read:</span> {profileChatAccessSummary.read}</p>
-                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5"><span className="font-semibold text-slate-700">Write:</span> {profileChatAccessSummary.write}</p>
+                  <Link
+                    to={socialChatPath}
+                    className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-300 hover:bg-slate-700"
+                  >
+                    {socialChatLabel}
+                  </Link>
                 </div>
               </div>
+
+              {/* Access summary row */}
+              <div className="flex gap-3 border-b border-slate-800 bg-slate-900/90 px-3 py-1.5 text-[11px] text-slate-400">
+                <span><span className="font-semibold text-slate-300">Read:</span> {profileChatAccessSummary.read}</span>
+                <span><span className="font-semibold text-slate-300">Write:</span> {profileChatAccessSummary.write}</span>
+              </div>
+
+              {/* Message viewport */}
               {profileChatLoading ? (
-                <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">Loading chat room…</div>
+                <div className="px-3 py-4 text-[12px] text-slate-400">Loading chat room…</div>
               ) : profileChatPermissions.canRead ? (
                 <>
-                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-900/95 px-3 py-2 text-[11px] font-semibold text-slate-100">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                        {activeProfile?.username ? `@${activeProfile.username}` : 'Profile'} room
-                      </span>
-                      <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">Live</span>
-                    </div>
-                    <div data-testid="social-mini-chat-viewport" className="max-h-72 space-y-2 overflow-y-auto px-3 py-3 [scrollbar-gutter:stable]">
-                      {profileChatMessages.length === 0 ? (
-                        <div className="flex flex-col items-center py-6 text-center">
-                          <svg className="mb-2 h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" /></svg>
-                          <p className="text-sm font-medium text-slate-500">No messages yet</p>
-                          <p className="mt-0.5 text-xs text-slate-400">Start the conversation below.</p>
-                        </div>
-                      ) : profileChatMessages.map((message) => {
-                        const isOwnMessage = isProfileChatOwnMessage(message);
-                        return (
+                  <div data-testid="social-mini-chat-viewport" className="max-h-72 space-y-1.5 overflow-y-auto bg-slate-950/60 px-3 py-3 [scrollbar-gutter:stable]">
+                    {profileChatMessages.length === 0 ? (
+                      <div className="flex flex-col items-center py-6 text-center">
+                        <svg className="mb-2 h-8 w-8 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" /></svg>
+                        <p className="text-sm font-medium text-slate-500">No messages yet</p>
+                        <p className="mt-0.5 text-xs text-slate-600">Start the conversation below.</p>
+                      </div>
+                    ) : profileChatMessages.map((message, msgIndex) => {
+                      const isOwnMessage = isProfileChatOwnMessage(message);
+                      const prevMessage = profileChatMessages[msgIndex - 1];
+                      const groupedWithPrev = Boolean(
+                        prevMessage
+                        && String(prevMessage?.userId?._id || '') === String(message?.userId?._id || '')
+                        && (new Date(message?.createdAt || 0).getTime() - new Date(prevMessage?.createdAt || 0).getTime()) < MINI_CHAT_MESSAGE_GROUP_THRESHOLD_MS
+                      );
+                      return (
                         <div
                           key={message._id}
-                          className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                          className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} ${groupedWithPrev ? 'mt-0.5' : 'mt-2'}`}
                         >
                           <div
                             data-testid="social-mini-chat-bubble"
                             className={`max-w-[88%] rounded-2xl border px-2.5 py-2 shadow-sm ${
                               isOwnMessage
-                                ? 'border-blue-500 bg-blue-600 text-white'
-                                : 'border-slate-200 bg-white text-slate-800'
-                            }`}
+                                ? 'border-blue-500/70 bg-blue-600 text-white'
+                                : 'border-slate-700 bg-slate-800 text-slate-100'
+                            } ${groupedWithPrev ? (isOwnMessage ? 'rounded-tr-md' : 'rounded-tl-md') : ''}`}
                           >
-                            <p className={`text-[10px] font-semibold uppercase tracking-wide ${
-                              isOwnMessage
-                                ? 'text-blue-100'
-                                : 'text-slate-500'
-                            }`}
-                            >
-                              {isOwnMessage
-                                ? 'You'
-                                : `@${message?.userId?.username || 'user'}`}
-                            </p>
+                            {!groupedWithPrev ? (
+                              <p className={`mb-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                isOwnMessage ? 'text-blue-200' : 'text-slate-400'
+                              }`}>
+                                {isOwnMessage ? 'You' : `@${message?.userId?.username || 'user'}`}
+                              </p>
+                            ) : null}
                             <p data-testid="social-mini-chat-message-content" className="whitespace-pre-wrap break-words text-[13px] leading-5">{message?.content || ''}</p>
+                            {message?.createdAt ? (
+                              <p className={`mt-0.5 text-right text-[10px] opacity-60 ${isOwnMessage ? 'text-blue-100' : 'text-slate-400'}`}>
+                                {new Date(message.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                              </p>
+                            ) : null}
                           </div>
                         </div>
-                        );
-                      })}
-                    </div>
+                      );
+                    })}
                   </div>
-                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-white/85 p-2 shadow-sm">
-                    <textarea
-                      value={profileChatInput}
-                      onChange={(event) => setProfileChatInput(event.target.value)}
-                      aria-label="Profile chat message"
-                      placeholder={canPostToProfileThread ? 'Write a message…' : (isAuthenticated ? 'You do not have write access' : 'Sign in to send messages')}
-                      disabled={!canPostToProfileThread || profileChatSending}
-                      rows={3}
-                      className="max-h-36 min-h-[40px] w-full resize-none rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-sm leading-5 shadow-inner disabled:bg-slate-200"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSendProfileChatMessage}
-                      disabled={!canPostToProfileThread || profileChatSending || !profileChatInput.trim()}
-                      className="w-full rounded-xl bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition duration-150 hover:bg-slate-800 disabled:opacity-60"
-                    >
-                      {profileChatSending ? 'Sending…' : 'Send'}
-                    </button>
+
+                  {/* Composer – matches ChatComposerBar styling */}
+                  <div className="border-t border-slate-800 bg-slate-900/95 p-2">
+                    <div className="relative rounded-xl border border-slate-700 bg-slate-800/90 p-1 shadow-sm">
+                      <div className="flex items-end gap-1.5">
+                        <button
+                          type="button"
+                          disabled={!canPostToProfileThread || profileChatSending}
+                          onClick={() => {
+                            const emoji = '😊';
+                            if (canPostToProfileThread) setProfileChatInput((prev) => `${prev}${emoji}`);
+                          }}
+                          className="rounded border border-slate-700 px-2 py-1.5 text-sm text-slate-400 transition hover:border-slate-600 hover:bg-slate-700 disabled:opacity-40"
+                          aria-label="Insert emoji"
+                        >
+                          😊
+                        </button>
+                        <textarea
+                          value={profileChatInput}
+                          onChange={(event) => setProfileChatInput(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey && canPostToProfileThread && !profileChatSending && profileChatInput.trim()) {
+                              event.preventDefault();
+                              handleSendProfileChatMessage();
+                            }
+                          }}
+                          aria-label="Profile chat message"
+                          placeholder={canPostToProfileThread ? 'Type your message' : (isAuthenticated ? 'You do not have write access' : 'Sign in to send messages')}
+                          disabled={!canPostToProfileThread || profileChatSending}
+                          rows={1}
+                          className="max-h-36 min-h-[40px] flex-1 resize-none rounded border border-slate-700 bg-slate-900/80 px-2.5 py-1.5 text-sm leading-5 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSendProfileChatMessage}
+                          disabled={!canPostToProfileThread || profileChatSending || !profileChatInput.trim()}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-blue-500 active:scale-95 disabled:opacity-50"
+                        >
+                          {profileChatSending ? '…' : 'Send'}
+                        </button>
+                      </div>
+                    </div>
                     {!isAuthenticated ? (
-                      <p className="text-xs text-slate-600">Sign in to post in this chat room.</p>
+                      <p className="mt-1.5 text-center text-[11px] text-slate-500">Sign in to post in this chat room.</p>
                     ) : null}
                   </div>
                 </>
               ) : (
-                <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-600">
+                <div className="px-3 py-4 text-sm text-slate-500">
                   This profile chat room is limited by the owner&apos;s access settings.
                 </div>
               )}
-            {profileChatPermissions.isOwner && profileChatControlsExpanded ? (
-              <div className="space-y-2 rounded-xl border bg-slate-50 p-2.5">
-                {[
-                  { field: 'readRoles', label: 'Read access' },
-                  { field: 'writeRoles', label: 'Write access' }
-                ].map((accessConfig) => (
-                  <div key={accessConfig.field} className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{accessConfig.label}</p>
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                      {PROFILE_CHAT_ROLE_OPTIONS.map((option) => {
-                        const isSelected = profileChatAccessDraft[accessConfig.field].includes(option.value);
-                        return (
-                          <button
-                            key={`${accessConfig.field}-${option.value}`}
-                            type="button"
-                            onClick={() => toggleProfileChatRole(accessConfig.field, option.value)}
-                            aria-label={`${accessConfig.label}: ${option.label}`}
-                            aria-pressed={isSelected}
-                            title={option.label}
-                            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border text-sm transition ${
-                              isSelected
-                                ? 'border-blue-400 bg-blue-100 text-blue-700'
-                                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
-                            }`}
-                          >
-                            <span aria-hidden="true">{PROFILE_CHAT_ROLE_ICONS[option.value] || '•'}</span>
-                            <span className="sr-only">{option.label}</span>
-                          </button>
-                        );
-                      })}
+
+              {/* Owner access controls (expanded) */}
+              {profileChatPermissions.isOwner && profileChatControlsExpanded ? (
+                <div className="border-t border-slate-800 bg-slate-900/90 space-y-2 p-2.5">
+                  {[
+                    { field: 'readRoles', label: 'Read access' },
+                    { field: 'writeRoles', label: 'Write access' }
+                  ].map((accessConfig) => (
+                    <div key={accessConfig.field} className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{accessConfig.label}</p>
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        {PROFILE_CHAT_ROLE_OPTIONS.map((option) => {
+                          const isSelected = profileChatAccessDraft[accessConfig.field].includes(option.value);
+                          return (
+                            <button
+                              key={`${accessConfig.field}-${option.value}`}
+                              type="button"
+                              onClick={() => toggleProfileChatRole(accessConfig.field, option.value)}
+                              aria-label={`${accessConfig.label}: ${option.label}`}
+                              aria-pressed={isSelected}
+                              title={option.label}
+                              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border text-sm transition ${
+                                isSelected
+                                  ? 'border-blue-500 bg-blue-900/70 text-blue-300'
+                                  : 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700'
+                              }`}
+                            >
+                              <span aria-hidden="true">{PROFILE_CHAT_ROLE_ICONS[option.value] || '•'}</span>
+                              <span className="sr-only">{option.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={handleSaveProfileChatAccess}
-                  disabled={profileChatSavingAccess}
-                  title="Save chat access"
-                  className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white disabled:opacity-60"
-                >
-                  {profileChatSavingAccess ? 'Saving…' : '💾 Save'}
-                </button>
-              </div>
-            ) : null}
-            {profileChatError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{profileChatError}</div> : null}
-            <Link to={socialChatPath} className="inline-flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800">{socialChatLabel}</Link>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleSaveProfileChatAccess}
+                    disabled={profileChatSavingAccess}
+                    title="Save chat access"
+                    className="inline-flex w-full items-center justify-center rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-60"
+                  >
+                    {profileChatSavingAccess ? 'Saving…' : '💾 Save'}
+                  </button>
+                </div>
+              ) : null}
+              {profileChatError ? <div className="mx-2 mb-2 rounded-xl border border-red-900 bg-red-950/80 px-3 py-2 text-sm text-red-300">{profileChatError}</div> : null}
             </div>
           );
         }
@@ -4001,6 +4069,10 @@ const Social = () => {
     () => buildCalendarPreviewMonthGrid(calendarPreviewAnchorDate),
     [calendarPreviewAnchorDate]
   );
+  const calendarWeekDays = useMemo(
+    () => buildCalendarWeekDays(calendarPreviewAnchorDate),
+    [calendarPreviewAnchorDate]
+  );
   const calendarPreviewYears = useMemo(
     () => Array.from(new Set(calendarPreviewMonthDays.map((day) => day.getFullYear()))),
     [calendarPreviewMonthDays]
@@ -4077,6 +4149,74 @@ const Social = () => {
   const navigateCalendarPreviewMonth = useCallback((monthOffset) => {
     setCalendarPreviewAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + monthOffset, 1));
   }, []);
+
+  const navigateCalendarPreviewWeek = useCallback((weekOffset) => {
+    setCalendarPreviewAnchorDate((prev) => {
+      const next = new Date(prev);
+      next.setDate(next.getDate() + weekOffset * 7);
+      return next;
+    });
+  }, []);
+
+  const navigateCalendarPreviewDay = useCallback((dayOffset) => {
+    setCalendarPreviewAnchorDate((prev) => {
+      const next = new Date(prev);
+      next.setDate(next.getDate() + dayOffset);
+      return next;
+    });
+  }, []);
+
+  const openCalendarCreateModal = useCallback((defaults = {}) => {
+    const now = new Date();
+    setCalendarEventModal({
+      mode: 'create',
+      title: '',
+      startAt: toCalendarDateTimeLocalString(defaults.startAt || now),
+      endAt: toCalendarDateTimeLocalString(defaults.endAt || new Date(now.getTime() + 60 * 60 * 1000)),
+      location: ''
+    });
+  }, []);
+
+  const openCalendarEditModal = useCallback((event) => {
+    setCalendarEventModal({
+      mode: 'edit',
+      eventId: String(event._id),
+      title: event.title || '',
+      startAt: toCalendarDateTimeLocalString(event.startAt),
+      endAt: toCalendarDateTimeLocalString(event.endAt || event.startAt),
+      location: event.location || ''
+    });
+  }, []);
+
+  const handleCalendarEventModalSave = async () => {
+    if (!calendarEventModal) return;
+    const { mode, eventId, title, startAt, endAt, location } = calendarEventModal;
+    if (!title.trim()) return;
+    setCalendarEventBusy(true);
+    setCalendarPreviewError('');
+    try {
+      const payload = {
+        title: title.trim(),
+        startAt: new Date(startAt).toISOString(),
+        endAt: new Date(endAt).toISOString(),
+        location: location.trim() || undefined
+      };
+      if (mode === 'create') {
+        const { data } = await calendarAPI.createEvent(payload);
+        if (data?.event) setCalendarPreviewEvents((prev) => [...prev, data.event]);
+      } else if (mode === 'edit') {
+        const { data } = await calendarAPI.updateEvent(eventId, payload);
+        if (data?.event) {
+          setCalendarPreviewEvents((prev) => prev.map((ev) => (String(ev._id) === eventId ? data.event : ev)));
+        }
+      }
+      setCalendarEventModal(null);
+    } catch (error) {
+      setCalendarPreviewError(error.response?.data?.error || 'Failed to save event.');
+    } finally {
+      setCalendarEventBusy(false);
+    }
+  };
 
   const renderGlassPanel = (title, body, options = {}) => (
     <section
@@ -4184,84 +4324,374 @@ const Social = () => {
         return renderGlassPanel(
           'Calendar',
           <div data-testid="social-calendar-preview-shell" className="mx-auto w-full max-w-3xl space-y-4 overflow-y-auto pr-1 text-sm text-slate-700 [scrollbar-gutter:stable] sm:max-h-[44rem]">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/55 px-4 py-4">
-              <div>
-                <p className="font-semibold text-slate-900">Coordinate upcoming events</p>
-                <p className="mt-1 text-slate-500">Open the full calendar to manage events, reminders, and shared plans.</p>
-              </div>
-              <Link to={socialCalendarPath} className="rounded-2xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700">Open calendar</Link>
-            </div>
-            <div className="rounded-2xl bg-white/55 p-3">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => navigateCalendarPreviewMonth(-1)}
-                    className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
-                    aria-label="Previous month"
-                  >
-                    ←
-                  </button>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {calendarPreviewAnchorDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => navigateCalendarPreviewMonth(1)}
-                    className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
-                    aria-label="Next month"
-                  >
-                    →
-                  </button>
-                </div>
-                <span role="status" aria-live="polite" className="text-xs text-slate-500">
-                  {calendarPreviewLoading ? 'Loading…' : 'Live'}
-                </span>
-              </div>
-              {!isOwnSocialContext && !calendarPreviewShowsOwnerEvents ? (
-                <div className="mb-3 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">
-                  Owner setting: {calendarPreviewOwnerVisibility === 'friends_readonly' ? 'Friends only' : 'Private'}.
-                </div>
-              ) : null}
-              {calendarPreviewError ? (
-                <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{calendarPreviewError}</div>
-              ) : null}
-              <div data-testid="social-calendar-preview-grid" className="mt-3">
-                <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {CALENDAR_PREVIEW_WEEKDAY_LABELS.map((label) => (
-                    <span key={label}>{label}</span>
+            {/* Header bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/55 px-4 py-3">
+              <div className="flex items-center gap-2">
+                {/* View type toggles */}
+                <div className="flex rounded-xl border border-slate-200 bg-white/80 p-0.5">
+                  {[
+                    { key: 'monthly', label: 'Month' },
+                    { key: 'weekly', label: 'Week' },
+                    { key: 'hourly', label: 'Day' }
+                  ].map((view) => (
+                    <button
+                      key={view.key}
+                      type="button"
+                      onClick={() => setCalendarViewType(view.key)}
+                      className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                        calendarViewType === view.key
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {view.label}
+                    </button>
                   ))}
                 </div>
-                <div className="mt-1 grid grid-cols-7 gap-1">
-                  {calendarPreviewMonthDays.map((day) => {
-                    const inMonth = day.getMonth() === calendarPreviewAnchorDate.getMonth();
+              </div>
+              <div className="flex items-center gap-2">
+                {isOwnSocialContext && !isGuestPreview ? (
+                  <button
+                    type="button"
+                    onClick={() => openCalendarCreateModal()}
+                    className="rounded-2xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    + New event
+                  </button>
+                ) : null}
+                <Link to={socialCalendarPath} className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white">
+                  Full calendar
+                </Link>
+              </div>
+            </div>
+
+            {/* Event create/edit modal */}
+            {calendarEventModal && isOwnSocialContext && !isGuestPreview ? (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-900">{calendarEventModal.mode === 'create' ? 'New event' : 'Edit event'}</p>
+                  <button
+                    type="button"
+                    onClick={() => setCalendarEventModal(null)}
+                    className="rounded-full border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:bg-white"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={calendarEventModal.title}
+                    onChange={(event) => setCalendarEventModal((prev) => ({ ...prev, title: event.target.value }))}
+                    placeholder="Event title *"
+                    maxLength={200}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Start</label>
+                      <input
+                        type="datetime-local"
+                        value={calendarEventModal.startAt}
+                        onChange={(event) => setCalendarEventModal((prev) => ({ ...prev, startAt: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">End</label>
+                      <input
+                        type="datetime-local"
+                        value={calendarEventModal.endAt}
+                        onChange={(event) => setCalendarEventModal((prev) => ({ ...prev, endAt: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                  </div>
+                  <input
+                    type="text"
+                    value={calendarEventModal.location}
+                    onChange={(event) => setCalendarEventModal((prev) => ({ ...prev, location: event.target.value }))}
+                    placeholder="Location (optional)"
+                    maxLength={200}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCalendarEventModalSave}
+                  disabled={calendarEventBusy || !calendarEventModal.title.trim()}
+                  className="mt-3 w-full rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {calendarEventBusy ? 'Saving…' : (calendarEventModal.mode === 'create' ? 'Create event' : 'Save changes')}
+                </button>
+              </div>
+            ) : null}
+
+            {calendarPreviewError ? (
+              <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{calendarPreviewError}</div>
+            ) : null}
+
+            {/* Monthly view */}
+            {calendarViewType === 'monthly' ? (
+              <div className="rounded-2xl bg-white/55 p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigateCalendarPreviewMonth(-1)}
+                      className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
+                      aria-label="Previous month"
+                    >
+                      ←
+                    </button>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {calendarPreviewAnchorDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigateCalendarPreviewMonth(1)}
+                      className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
+                      aria-label="Next month"
+                    >
+                      →
+                    </button>
+                  </div>
+                  <span role="status" aria-live="polite" className="text-xs text-slate-500">
+                    {calendarPreviewLoading ? 'Loading…' : 'Live'}
+                  </span>
+                </div>
+                {!isOwnSocialContext && !calendarPreviewShowsOwnerEvents ? (
+                  <div className="mb-3 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">
+                    Owner setting: {calendarPreviewOwnerVisibility === 'friends_readonly' ? 'Friends only' : 'Private'}.
+                  </div>
+                ) : null}
+                <div data-testid="social-calendar-preview-grid" className="mt-3">
+                  <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    {CALENDAR_PREVIEW_WEEKDAY_LABELS.map((label) => (
+                      <span key={label}>{label}</span>
+                    ))}
+                  </div>
+                  <div className="mt-1 grid grid-cols-7 gap-1">
+                    {calendarPreviewMonthDays.map((day) => {
+                      const inMonth = day.getMonth() === calendarPreviewAnchorDate.getMonth();
+                      const dayKey = formatCalendarDayKey(day);
+                      const eventCount = calendarPreviewEventCountByDay.get(dayKey) || 0;
+                      const holidays = calendarPreviewHolidaysByDay.get(dayKey) || [];
+                      const isToday = formatCalendarDayKey(day) === formatCalendarDayKey(new Date());
+                      return (
+                        <button
+                          key={dayKey}
+                          type="button"
+                          onClick={() => {
+                            if (isOwnSocialContext && !isGuestPreview) {
+                              const start = new Date(day);
+                              start.setHours(9, 0, 0, 0);
+                              openCalendarCreateModal({ startAt: start, endAt: new Date(start.getTime() + 60 * 60 * 1000) });
+                            }
+                          }}
+                          className={`rounded-lg border px-1 py-1 text-center text-xs transition ${
+                            isToday
+                              ? 'border-blue-400 bg-blue-50 font-bold text-blue-700'
+                              : inMonth
+                                ? 'border-slate-200 bg-white/80 text-slate-800 hover:border-blue-200 hover:bg-blue-50/50'
+                                : 'border-slate-100 bg-white/40 text-slate-400'
+                          }`}
+                          title={holidays.map((holiday) => holiday.name).join(', ')}
+                        >
+                          <p>{day.getDate()}</p>
+                          {eventCount > 0 ? (
+                            <p className="mt-0.5 text-[10px] font-semibold" style={{ color: accentColor }}>
+                              {eventCount}
+                            </p>
+                          ) : holidays.length > 0 ? (
+                            <p className="mt-0.5 text-[10px] font-semibold text-rose-600">
+                              ★
+                            </p>
+                          ) : (
+                            <span className="mt-0.5 block h-[12px]" aria-hidden="true" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Weekly view */}
+            {calendarViewType === 'weekly' ? (
+              <div className="rounded-2xl bg-white/55 p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigateCalendarPreviewWeek(-1)}
+                      className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
+                      aria-label="Previous week"
+                    >
+                      ←
+                    </button>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {calendarWeekDays[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      {' – '}
+                      {calendarWeekDays[6].toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigateCalendarPreviewWeek(1)}
+                      className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
+                      aria-label="Next week"
+                    >
+                      →
+                    </button>
+                  </div>
+                  <span role="status" aria-live="polite" className="text-xs text-slate-500">
+                    {calendarPreviewLoading ? 'Loading…' : 'Live'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {calendarWeekDays.map((day) => {
                     const dayKey = formatCalendarDayKey(day);
-                    const eventCount = calendarPreviewEventCountByDay.get(dayKey) || 0;
+                    const isToday = dayKey === formatCalendarDayKey(new Date());
+                    const dayEvents = calendarPreviewEvents.filter((ev) => {
+                      const evStart = new Date(ev?.startAt);
+                      const evEnd = new Date(ev?.endAt || ev?.startAt);
+                      const dayStart = new Date(day); dayStart.setHours(0, 0, 0, 0);
+                      const dayEnd = new Date(day); dayEnd.setHours(23, 59, 59, 999);
+                      return !Number.isNaN(evStart.getTime()) && evStart <= dayEnd && evEnd >= dayStart;
+                    });
                     const holidays = calendarPreviewHolidaysByDay.get(dayKey) || [];
                     return (
-                      <div
-                        key={dayKey}
-                        className={`rounded-lg border px-1 py-1 text-center text-xs ${inMonth ? 'border-slate-200 bg-white/80 text-slate-800' : 'border-slate-100 bg-white/40 text-slate-400'}`}
-                        title={holidays.map((holiday) => holiday.name).join(', ')}
-                      >
-                        <p>{day.getDate()}</p>
-                        {eventCount > 0 ? (
-                          <p className="mt-0.5 text-[10px] font-semibold" style={{ color: accentColor }}>
-                            {eventCount}
-                          </p>
-                        ) : holidays.length > 0 ? (
-                          <p className="mt-0.5 text-[10px] font-semibold text-rose-600">
-                            ★
-                          </p>
-                        ) : (
-                          <span className="mt-0.5 block h-[12px]" aria-hidden="true" />
-                        )}
+                      <div key={dayKey} className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isOwnSocialContext && !isGuestPreview) {
+                              const start = new Date(day);
+                              start.setHours(9, 0, 0, 0);
+                              openCalendarCreateModal({ startAt: start, endAt: new Date(start.getTime() + 60 * 60 * 1000) });
+                            }
+                          }}
+                          className={`rounded-lg border px-1 py-1.5 text-center text-xs font-semibold transition ${
+                            isToday
+                              ? 'border-blue-400 bg-blue-600 text-white'
+                              : 'border-slate-200 bg-white/80 text-slate-700 hover:border-blue-200 hover:bg-blue-50/60'
+                          }`}
+                        >
+                          <p className="text-[10px] uppercase tracking-wide">{CALENDAR_PREVIEW_WEEKDAY_LABELS[day.getDay()]}</p>
+                          <p>{day.getDate()}</p>
+                        </button>
+                        <div className="space-y-0.5 overflow-hidden">
+                          {holidays.slice(0, 1).map((holiday) => (
+                            <div key={holiday.id} className="truncate rounded-md bg-rose-100 px-1 py-0.5 text-[10px] font-semibold text-rose-700">
+                              {holiday.name.replace(/^US:\s*/, '')}
+                            </div>
+                          ))}
+                          {dayEvents.slice(0, 3).map((ev) => (
+                            <button
+                              key={String(ev._id)}
+                              type="button"
+                              onClick={() => isOwnSocialContext && !isGuestPreview && openCalendarEditModal(ev)}
+                              className="w-full truncate rounded-md px-1 py-0.5 text-left text-[10px] font-semibold text-white transition hover:opacity-80"
+                              style={{ backgroundColor: accentColor }}
+                            >
+                              {ev.title}
+                            </button>
+                          ))}
+                          {dayEvents.length > 3 ? (
+                            <p className="text-center text-[10px] text-slate-500">+{dayEvents.length - 3}</p>
+                          ) : null}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
-              <div className="mt-3 space-y-2 rounded-xl bg-white/70 px-3 py-3">
+            ) : null}
+
+            {/* Hourly / Day view */}
+            {calendarViewType === 'hourly' ? (
+              <div className="rounded-2xl bg-white/55 p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigateCalendarPreviewDay(-1)}
+                      className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
+                      aria-label="Previous day"
+                    >
+                      ←
+                    </button>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {calendarPreviewAnchorDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigateCalendarPreviewDay(1)}
+                      className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-white/80"
+                      aria-label="Next day"
+                    >
+                      →
+                    </button>
+                  </div>
+                  <span role="status" aria-live="polite" className="text-xs text-slate-500">
+                    {calendarPreviewLoading ? 'Loading…' : 'Live'}
+                  </span>
+                </div>
+                <div className="max-h-[26rem] space-y-0.5 overflow-y-auto [scrollbar-gutter:stable]">
+                  {CALENDAR_HOUR_LABELS.map((hourLabel, hourIndex) => {
+                    const hourStart = new Date(calendarPreviewAnchorDate);
+                    hourStart.setHours(hourIndex, 0, 0, 0);
+                    const hourEnd = new Date(calendarPreviewAnchorDate);
+                    hourEnd.setHours(hourIndex, 59, 59, 999);
+                    const hourEvents = calendarPreviewEvents.filter((ev) => {
+                      const evStart = new Date(ev?.startAt);
+                      const evEnd = new Date(ev?.endAt || ev?.startAt);
+                      return !Number.isNaN(evStart.getTime()) && evStart <= hourEnd && evEnd >= hourStart;
+                    });
+                    const isCurrentHour = new Date().getHours() === hourIndex
+                      && formatCalendarDayKey(calendarPreviewAnchorDate) === formatCalendarDayKey(new Date());
+                    return (
+                      <button
+                        key={hourLabel}
+                        type="button"
+                        onClick={() => {
+                          if (isOwnSocialContext && !isGuestPreview) {
+                            openCalendarCreateModal({ startAt: hourStart, endAt: new Date(hourStart.getTime() + 60 * 60 * 1000) });
+                          }
+                        }}
+                        className={`flex w-full items-start gap-3 rounded-lg border px-2 py-1.5 text-left transition ${
+                          isCurrentHour
+                            ? 'border-blue-300 bg-blue-50'
+                            : hourEvents.length > 0
+                              ? 'border-slate-200 bg-white/90 hover:bg-white'
+                              : 'border-transparent bg-white/30 hover:bg-white/60'
+                        }`}
+                      >
+                        <span className="w-14 shrink-0 text-[11px] font-semibold text-slate-400">{hourLabel}</span>
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          {hourEvents.map((ev) => (
+                            <div
+                              key={String(ev._id)}
+                              onClick={(e) => { e.stopPropagation(); if (isOwnSocialContext && !isGuestPreview) openCalendarEditModal(ev); }}
+                              className="flex items-center justify-between gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-white"
+                              style={{ backgroundColor: accentColor }}
+                            >
+                              <span className="truncate">{ev.title}</span>
+                              {ev.location ? <span className="shrink-0 text-[10px] opacity-80">📍</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Upcoming events list (monthly view only) */}
+            {calendarViewType === 'monthly' ? (
+              <div className="space-y-2 rounded-xl bg-white/70 px-3 py-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Upcoming</p>
                 {upcomingCalendarItems.length === 0 ? (
                   <div className="flex flex-col items-center py-4 text-center">
@@ -4273,32 +4703,41 @@ const Social = () => {
                     {upcomingCalendarItems.map((item) => (
                       <li key={item.id}>
                         {item.type === 'event' ? (
-                          <Link
-                            to={socialCalendarPath}
-                            data-testid={`social-upcoming-${item.id}`}
-                            className="group flex items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-gradient-to-r from-white to-blue-50/80 px-3 py-2 text-xs text-slate-700 transition hover:border-blue-200 hover:from-blue-50 hover:to-blue-100/70"
-                          >
-                            <div className="min-w-0 flex-1">
+                          <div className="group flex items-center gap-2 rounded-2xl border border-blue-100 bg-gradient-to-r from-white to-blue-50/80 px-3 py-2 text-xs text-slate-700 transition hover:border-blue-200 hover:from-blue-50 hover:to-blue-100/70">
+                            <Link
+                              to={socialCalendarPath}
+                              data-testid={`social-upcoming-${item.id}`}
+                              className="min-w-0 flex-1"
+                            >
                               <p className="truncate font-semibold text-slate-900">{item.title}</p>
                               <p className="mt-0.5 truncate text-[11px] text-slate-500">{item.dateLabel} • {item.timeLabel}</p>
                               {item.location ? <p className="mt-0.5 truncate text-[11px] text-slate-500">📍 {item.location}</p> : null}
-                            </div>
+                            </Link>
                             <div className="flex shrink-0 items-center gap-1">
                               <span className="rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-700">Event</span>
                               {isOwnSocialContext && !isGuestPreview && item.eventId ? (
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.preventDefault();
-                                    handleDeleteCalendarEvent(item.eventId);
-                                  }}
-                                  className="rounded-full border border-red-200 px-2 py-0.5 font-semibold text-red-700 hover:bg-red-50"
-                                >
-                                  Delete
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const ev = calendarPreviewEvents.find((e) => String(e._id) === item.eventId);
+                                      if (ev) openCalendarEditModal(ev);
+                                    }}
+                                    className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold text-slate-600 hover:bg-slate-100"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCalendarEvent(item.eventId)}
+                                    className="rounded-full border border-red-200 px-2 py-0.5 font-semibold text-red-700 hover:bg-red-50"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
                               ) : null}
                             </div>
-                          </Link>
+                          </div>
                         ) : (
                           <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-100 bg-gradient-to-r from-white to-rose-50/70 px-3 py-2 text-xs text-slate-700">
                             <div className="min-w-0 flex-1">
@@ -4313,24 +4752,9 @@ const Social = () => {
                   </ul>
                 )}
               </div>
-            </div>
-            {calendarCountdowns.length === 0 ? (
-              <div className="flex flex-col items-center rounded-2xl bg-white/50 px-4 py-6 text-center">
-                <svg className="mb-2 h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
-                <p className="text-sm font-medium text-slate-500">No countdowns yet</p>
-                <p className="mt-0.5 text-xs text-slate-400">Create a countdown post to track upcoming moments.</p>
-              </div>
-            ) : (
-              calendarCountdowns.map((post) => (
-                <div key={post._id} className="rounded-2xl bg-white/55 px-4 py-4">
-                  <p className="font-semibold text-slate-900">{post.interaction?.countdown?.label || 'Countdown event'}</p>
-                  <p className="mt-1 text-xs text-slate-500">{formatDate(post.interaction?.countdown?.targetAt)}</p>
-                  <p className="mt-3 text-lg font-semibold" style={{ color: accentColor }}>{formatRemainingTime(post.interaction?.countdown?.targetAt, nowMs)}</p>
-                </div>
-              ))
-            )}
+            ) : null}
           </div>,
-          { subtitle: 'Schedules and countdown-driven moments' }
+          { subtitle: null }
         );
       case 'main':
       default:
