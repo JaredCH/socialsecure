@@ -826,15 +826,29 @@ const Social = () => {
     });
   }, [isOwnSocialContext, isGuestPreview, enabledSections]);
 
-  const handleToggleSection = useCallback(async (sectionId) => {
+  const handleToggleSection = useCallback(async (sectionId, options = {}) => {
     if (!isOwnSocialContext) return;
+    const enabling = !enabledSections[sectionId];
+    let audienceChoice = options.audience || null;
+
+    // Ask for Social/Secure audience when enabling resume
+    if (enabling && sectionId === 'resume' && !audienceChoice) {
+      const choice = window.prompt('Should your resume be visible under Social or Secure?\n\nType "social" or "secure":', 'social');
+      if (!choice) return;
+      audienceChoice = choice.trim().toLowerCase() === 'secure' ? 'secure' : 'social';
+    }
+
     const prev = { ...enabledSections };
-    const next = { ...enabledSections, [sectionId]: !enabledSections[sectionId] };
+    const next = { ...enabledSections, [sectionId]: enabling };
     setEnabledSections(next);
     try {
       const currentPrefs = draftSocialPreferences || activeProfile?.socialPagePreferences || {};
-      await socialPageAPI.savePreferences({ ...currentPrefs, enabledSections: next });
-      setCurrentUser((prev) => prev ? { ...prev, socialPagePreferences: { ...prev.socialPagePreferences, enabledSections: next } } : prev);
+      const updates = { ...currentPrefs, enabledSections: next };
+      if (audienceChoice) {
+        updates.sectionAudience = { ...(currentPrefs.sectionAudience || {}), [sectionId]: audienceChoice };
+      }
+      await socialPageAPI.savePreferences(updates);
+      setCurrentUser((prev) => prev ? { ...prev, socialPagePreferences: { ...prev.socialPagePreferences, enabledSections: next, ...(audienceChoice ? { sectionAudience: { ...prev.socialPagePreferences?.sectionAudience, [sectionId]: audienceChoice } } : {}) } } : prev);
     } catch (error) {
       setEnabledSections(prev);
     }
