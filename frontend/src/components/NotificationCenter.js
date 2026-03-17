@@ -9,7 +9,16 @@ const isResolvedFriendRequestNotification = (notification) => (
   notification?.type === 'follow' && notification?.isRead
 );
 
-const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNotification, userDisplayName = 'Account', navLinks = [] }) => {
+const NotificationCenter = ({
+  unreadCount = 0,
+  onUnreadCountChange,
+  incomingNotification,
+  userDisplayName = 'Account',
+  navLinks = [],
+  onLogout = null,
+  containerClassName = '',
+  buttonClassName = ''
+}) => {
   const navigate = useNavigate();
   const panelRef = useRef(null);
   const closeTimerRef = useRef(null);
@@ -245,7 +254,7 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
 
   return (
     <div
-      className="relative"
+      className={`relative ${containerClassName}`.trim()}
       ref={panelRef}
       onMouseEnter={openPanel}
       onMouseLeave={scheduleClosePanel}
@@ -263,7 +272,7 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="relative inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/80 hover:text-blue-700"
+        className={`relative inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/80 hover:text-blue-700 ${buttonClassName}`.trim()}
         aria-label="Notifications"
         aria-expanded={open}
       >
@@ -321,6 +330,21 @@ const NotificationCenter = ({ unreadCount = 0, onUnreadCountChange, incomingNoti
             ))}
             {loading ? <div className="p-3 text-xs text-gray-500">Loading...</div> : null}
           </div>
+          {typeof onLogout === 'function' ? (
+            <div className="border-t p-2">
+              <button
+                type="button"
+                data-testid="notification-dropdown-logout"
+                className="w-full rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                onClick={() => {
+                  setOpen(false);
+                  onLogout();
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

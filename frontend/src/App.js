@@ -502,12 +502,12 @@ function App() {
     <Router>
       <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
         <nav className="relative z-[1200] shrink-0 border-b border-blue-100 bg-gradient-to-r from-white via-slate-50 to-blue-50/60 p-3 shadow-md">
-          <div className="container relative mx-auto">
-            <div className="flex items-center gap-4">
+          <div className="relative mx-auto w-full px-2 md:px-4">
+            <div className="flex items-stretch gap-4">
               <h1 className="text-3xl font-black tracking-tight text-blue-700 shrink-0">SocialSecure</h1>
               <div
                 id="main-nav-menu"
-                className={`${isMobileMenuOpen ? 'flex' : 'hidden'} absolute right-0 top-full z-[1300] mt-2 w-64 flex-col gap-2 overflow-visible rounded-2xl border border-slate-200 bg-white p-2 shadow-lg md:static md:z-auto md:flex md:w-auto md:flex-1 md:flex-row md:flex-wrap md:items-center md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
+                className={`${isMobileMenuOpen ? 'flex' : 'hidden'} absolute right-0 top-full z-[1300] mt-2 w-64 flex-col gap-2 overflow-visible rounded-2xl border border-slate-200 bg-white p-2 shadow-lg md:static md:z-auto md:flex md:w-auto md:flex-1 md:flex-row md:flex-wrap md:items-center md:justify-end md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none`}
               >
                 {!encryptionPasswordRequired && <Link to="/" onClick={closeNavMenus} className={navLinkClass}>Home</Link>}
                 {canUseProtectedFeatures && <Link to={socialProfilePath} onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
@@ -517,7 +517,7 @@ function App() {
                 {canUseProtectedFeatures && <Link to="/maps" onClick={closeNavMenus} className={navLinkClass}>Maps</Link>}
                 {isAuthenticated && onboardingRequired && <Link to="/onboarding" onClick={closeNavMenus} className={navEmphasisLinkClass}>Onboarding</Link>}
                 {isAuthenticated ? (
-                  <button onClick={handleLogout} className={navDangerButtonClass}>Logout</button>
+                  !canUseProtectedFeatures && <button onClick={handleLogout} className={navDangerButtonClass}>Logout</button>
                 ) : (
                   <>
                     <Link to="/login" onClick={closeNavMenus} className={navEmphasisLinkClass}>Login</Link>
@@ -525,7 +525,7 @@ function App() {
                   </>
                 )}
               </div>
-              <div className="flex items-center gap-2 ml-auto shrink-0">
+              <div className="ml-auto flex shrink-0 items-stretch gap-2">
                 {canUseProtectedFeatures && (
                   <NotificationCenter
                     unreadCount={unreadNotificationCount}
@@ -540,6 +540,9 @@ function App() {
                       { to: '/settings', label: 'User Settings' },
                       { to: '/refer', label: 'Refer Friend' },
                     ]}
+                    onLogout={handleLogout}
+                    containerClassName="h-full"
+                    buttonClassName="md:h-full md:min-h-[44px]"
                   />
                 )}
                 <button

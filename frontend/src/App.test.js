@@ -210,6 +210,17 @@ describe('App navbar features dropdown', () => {
     expect(navItems.indexOf('Maps')).toBeGreaterThan(navItems.indexOf('Market'));
   });
 
+  it('right-aligns desktop core links and removes logout from the primary link row', async () => {
+    localStorage.setItem('token', 'token');
+
+    await renderApp();
+
+    const mainNav = container.querySelector('#main-nav-menu');
+    expect(mainNav).not.toBeNull();
+    expect(mainNav.className).toContain('md:justify-end');
+    expect(mainNav.textContent).not.toContain('Logout');
+  });
+
   it('uses full-width main layout on the social route', async () => {
     localStorage.setItem('token', 'token');
     window.history.pushState({}, '', '/social');
