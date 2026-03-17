@@ -215,6 +215,8 @@ const isRenderableMediaUrl = (value) => {
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > MEDIA_URL_MAX_LENGTH) return false;
 
+  if (/^\/uploads\/\S+/i.test(trimmed)) return true;
+
   try {
     const parsed = new URL(trimmed);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';

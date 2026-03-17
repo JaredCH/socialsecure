@@ -22,7 +22,7 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
-const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
+const HTTP_URL_REGEX = /^(https?:\/\/\S+|\/uploads\/\S+)$/i;
 const sanitizeSourceParam = (value) => {
   if (typeof value !== 'string') return 'unknown';
   const trimmed = value.trim().slice(0, 120);

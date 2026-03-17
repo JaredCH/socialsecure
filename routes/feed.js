@@ -25,7 +25,7 @@ const {
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
-const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
+const HTTP_URL_REGEX = /^(https?:\/\/\S+|\/uploads\/\S+)$/i;
 const VALID_VISIBILITY = ['public', 'friends', 'circles', 'specific_users', 'private'];
 const VALID_INTERACTION_TYPES = ['poll', 'quiz', 'countdown'];
 const VALID_INTERACTION_STATUS = ['active', 'closed', 'expired'];
@@ -183,7 +183,7 @@ const sanitizeAndValidateMediaUrls = (mediaUrlsInput) => {
     if (!HTTP_URL_REGEX.test(normalizedUrl)) {
       return {
         ok: false,
-        error: `Invalid "mediaUrls[${i}]": URL must begin with http:// or https://`
+        error: `Invalid "mediaUrls[${i}]": URL must begin with http://, https://, or /uploads/`
       };
     }
 
