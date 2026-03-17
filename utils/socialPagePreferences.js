@@ -29,7 +29,8 @@ const SOCIAL_PREFERENCES_VERSION = 2;
 const LAYOUT_GRID_COLUMNS = 12;
 const LAYOUT_GRID_ROWS = 20;
 const MEDIA_URL_MAX_LENGTH = 2048;
-const BODY_BG_DATA_URL_MAX_LENGTH = 6 * 1024 * 1024;
+// 3MB upload limit * 4/3 base64 overhead + small prefix/padding allowance.
+const BODY_BG_DATA_URL_MAX_LENGTH = Math.ceil((3 * 1024 * 1024) * 4 / 3) + 64;
 const HERO_IMAGE_HISTORY_LIMIT = 3;
 
 const LEGACY_SECTION_ID_ALIASES = {

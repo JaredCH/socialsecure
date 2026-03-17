@@ -9,7 +9,8 @@ export const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'se
 export const SOCIAL_PANEL_SHAPES = ['rectangle', 'square', 'wide', 'tall', 'l-shape', 't-shape', 'z-shape'];
 export const BODY_BG_DISPLAY_MODES = ['cover', 'repeat', 'fixed'];
 export const BODY_BG_OVERLAY_ANIMATIONS = ['none', 'snow', 'easter-eggs', 'halloween-ghosts', 'valentines-hearts', 'fireworks'];
-const BODY_BG_DATA_URL_MAX_LENGTH = 6 * 1024 * 1024;
+// 3MB upload limit * 4/3 base64 overhead + small prefix/padding allowance.
+const BODY_BG_DATA_URL_MAX_LENGTH = Math.ceil((3 * 1024 * 1024) * 4 / 3) + 64;
 export const SOCIAL_PANEL_SHAPE_MASKS = {
   rectangle: [[1, 1], [1, 1]],
   square: [[1, 1], [1, 1]],
