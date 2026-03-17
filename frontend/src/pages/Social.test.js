@@ -604,6 +604,8 @@ describe('Social page hero background rendering', () => {
 
     const closeButton = Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'Close gallery viewer');
     expect(closeButton).toBeTruthy();
+    expect(container.contains(closeButton)).toBe(false);
+    expect(document.body.contains(closeButton)).toBe(true);
     expect(closeButton?.className).toContain('absolute');
     expect(closeButton?.className).toContain('right-4');
     expect(closeButton?.className).toContain('top-4');

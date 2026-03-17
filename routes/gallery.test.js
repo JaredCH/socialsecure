@@ -74,8 +74,9 @@ describe('Gallery routes', () => {
       getViewerReaction: jest.fn().mockReturnValue(null)
     };
 
+    const populateMock = jest.fn().mockReturnThis();
     mockGalleryImage.find.mockReturnValue({
-      populate: jest.fn().mockReturnThis(),
+      populate: populateMock,
       sort: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([imageDoc])
@@ -97,6 +98,7 @@ describe('Gallery routes', () => {
       username: 'viewer',
       content: 'Nice shot'
     });
+    expect(populateMock).toHaveBeenCalledWith('comments.userId', 'username');
   });
 
   it('rejects create when requester is not owner', async () => {

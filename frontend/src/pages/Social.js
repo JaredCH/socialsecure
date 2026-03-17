@@ -3385,6 +3385,25 @@ const Social = () => {
   const handleCloseGalleryImage = () => {
     setActiveGalleryImageId(null);
   };
+  const getGalleryCommentUsername = (comment) => {
+    const explicitUsername = typeof comment?.username === 'string' ? comment.username.trim() : '';
+    if (explicitUsername) return explicitUsername;
+    const userObjectUsername = typeof comment?.userId === 'object' && typeof comment.userId?.username === 'string'
+      ? comment.userId.username.trim()
+      : '';
+    if (userObjectUsername) return userObjectUsername;
+    const commentUserId = typeof comment?.userId === 'string'
+      ? comment.userId
+      : String(comment?.userId?._id || '');
+    if (
+      commentUserId
+      && normalizedCurrentUserId
+      && String(commentUserId).trim().toLowerCase() === String(normalizedCurrentUserId).trim().toLowerCase()
+    ) {
+      return String(currentUser?.username || '').trim();
+    }
+    return '';
+  };
   const handleGalleryCommentInputChange = (imageId, value) => {
     setGalleryCommentInputs((prev) => ({
       ...prev,
@@ -3404,13 +3423,7 @@ const Social = () => {
       const normalizedComment = comment
         ? {
           ...comment,
-          username: comment.username
-            || (
-              normalizedCurrentUserId
-              && String(comment.userId || '').trim().toLowerCase() === normalizedCurrentUserId
-              ? (currentUser?.username || null)
-              : null
-            )
+          username: getGalleryCommentUsername(comment) || null
         }
         : null;
       const commentsCount = typeof response.data?.commentsCount === 'number' ? response.data.commentsCount : null;
@@ -3433,25 +3446,6 @@ const Social = () => {
   };
 
   const ownerEditingEnabled = isOwnSocialContext && !isGuestPreview;
-  const getGalleryCommentUsername = (comment) => {
-    const explicitUsername = typeof comment?.username === 'string' ? comment.username.trim() : '';
-    if (explicitUsername) return explicitUsername;
-    const userObjectUsername = typeof comment?.userId === 'object' && typeof comment.userId?.username === 'string'
-      ? comment.userId.username.trim()
-      : '';
-    if (userObjectUsername) return userObjectUsername;
-    const commentUserId = typeof comment?.userId === 'string'
-      ? comment.userId
-      : String(comment?.userId?._id || '');
-    if (
-      commentUserId
-      && normalizedCurrentUserId
-      && String(commentUserId).trim().toLowerCase() === normalizedCurrentUserId
-    ) {
-      return String(currentUser?.username || '').trim();
-    }
-    return '';
-  };
 
   const GALLERY_UPLOAD_MAX_FILES = 6;
 
