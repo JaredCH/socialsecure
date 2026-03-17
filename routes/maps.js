@@ -25,6 +25,7 @@ const FRIENDS_LIVE_WINDOW_MS = 60 * 1000;
 const FEET_TO_METERS = 0.3048;
 const HEATMAP_LOCATION_JITTER_RADIUS_METERS = 200 * FEET_TO_METERS;
 const HEATMAP_TIME_JITTER_MAX_MS = 30 * 60 * 1000;
+const HEATMAP_QUERY_MAX_RADIUS_METERS = 2000 * FEET_TO_METERS;
 const EARTH_RADIUS_METERS = 6378137;
 const favoriteLocationLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -562,62 +563,42 @@ router.delete('/spotlight/:id', authenticateToken, async (req, res) => {
 
 /**
  * GET /api/maps/heatmap
- * Get heatmap data for a region
+ * Get anonymized user-presence circles within 2000 ft of the requested center.
+ * Each returned point represents a single user's jittered location.
  */
 router.get('/heatmap', optionalAuth, async (req, res) => {
   try {
-    const { north, south, east, west, precision = 5 } = req.query;
+    const { lat, lng } = req.query;
 
-    const parsedNorth = parseCoordinate(north);
-    const parsedSouth = parseCoordinate(south);
-    const parsedEast = parseCoordinate(east);
-    const parsedWest = parseCoordinate(west);
-    const parsedPrecision = parsePositiveInteger(precision, 5);
-    
-    if (
-      parsedNorth === null ||
-      parsedSouth === null ||
-      parsedEast === null ||
-      parsedWest === null
-    ) {
-      return res.status(400).json({ error: 'Bounding box coordinates required (north, south, east, west)' });
-    }
-    
-    const bounds = {
-      north: parsedNorth,
-      south: parsedSouth,
-      east: parsedEast,
-      west: parsedWest
-    };
-    
-    // Try to get cached aggregation first
-    let tiles = await HeatmapAggregation.getTiles(bounds, parsedPrecision);
-    
-    // If no cached data, compute on-the-fly
-    if (tiles.length === 0) {
-      await HeatmapAggregation.recomputeRegion(bounds, parsedPrecision);
-      tiles = await HeatmapAggregation.getTiles(bounds, parsedPrecision);
-    }
-    
-    // Format response - anonymized, no user IDs
-    const heatmapData = tiles.map(tile => {
-      const jitteredLocation = jitterCoordinates(tile.center.lat, tile.center.lng);
-      const baseTimestamp = tile.computedAt instanceof Date ? tile.computedAt : new Date();
-      const jitteredTimestamp = new Date(
-        baseTimestamp.getTime() + ((Math.random() * 2 - 1) * HEATMAP_TIME_JITTER_MAX_MS)
-      );
+    const parsedLat = parseCoordinate(lat);
+    const parsedLng = parseCoordinate(lng);
 
-      return {
-        lat: jitteredLocation.lat,
-        lng: jitteredLocation.lng,
-        intensity: Math.min(tile.data.userCount / 10, 1), // Normalize 0-1
-        userCount: tile.data.userCount,
-        spotlightCount: tile.data.spotlightCount,
-        jitteredAt: jitteredTimestamp.toISOString()
-      };
+    if (parsedLat === null || parsedLng === null) {
+      return res.status(400).json({ error: 'Center coordinates required (lat, lng)' });
+    }
+
+    // Query individual active presences within the hard-capped 2000 ft radius.
+    const presences = await LocationPresence.find({
+      isActive: true,
+      includedInHeatmap: true,
+      location: {
+        $geoWithin: {
+          $centerSphere: [
+            [parsedLng, parsedLat],
+            HEATMAP_QUERY_MAX_RADIUS_METERS / EARTH_RADIUS_METERS
+          ]
+        }
+      }
+    }).select('location').lean();
+
+    // Return one anonymized point per user – no IDs, no counts, jittered coords.
+    const heatmap = presences.map(presence => {
+      const [pLng, pLat] = presence.location.coordinates;
+      const jittered = jitterCoordinates(pLat, pLng);
+      return { lat: jittered.lat, lng: jittered.lng, intensity: 1 };
     });
-    
-    res.json({ heatmap: heatmapData });
+
+    res.json({ heatmap });
   } catch (error) {
     console.error('Error getting heatmap:', error);
     res.status(500).json({ error: 'Failed to get heatmap data' });

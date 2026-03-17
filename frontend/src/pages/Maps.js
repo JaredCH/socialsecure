@@ -20,7 +20,8 @@ const STATE_ICONS = {
 };
 const GEOLOCATION_OPTIONS_TIMEOUT_MS = 8000;
 const GEOLOCATION_OPTIONS_MAX_AGE_MS = 60000;
-export const HEATMAP_CIRCLE_RADIUS_METERS = 200 * 0.3048;
+export const HEATMAP_CIRCLE_RADIUS_METERS = 100 * 0.3048;
+export const HEATMAP_VISIBILITY_RADIUS_METERS = 2000 * 0.3048;
 export const LOCATION_PUBLISH_INTERVAL_MS = 30 * 1000;
 export const FRIENDS_REFRESH_INTERVAL_MS = 10 * 1000;
 const MAP_REFRESH_INTERVAL_MS = 60 * 1000;
@@ -28,11 +29,7 @@ const MAP_DATA_CACHE_TTL_MS = 90 * 1000;
 const MAP_DATA_CACHE_MAX_ENTRIES = 6;
 const MAP_DATA_CACHE_COORDINATE_PRECISION = 2;
 const FAVORITES_CACHE_TTL_MS = 5 * 60 * 1000;
-const HEATMAP_USERS_PER_LAYER = 3;
-const HEATMAP_MAX_STACK_LAYERS = 6;
-const HEATMAP_BASE_FILL_OPACITY = 0.08;
-const HEATMAP_INTENSITY_OPACITY_FACTOR = 0.14;
-const HEATMAP_MAX_FILL_OPACITY = 0.34;
+const HEATMAP_FILL_OPACITY = 0.25;
 const MAP_FRIEND_FOCUS_ZOOM_LEVEL = 15;
 const MAP_SELF_FOCUS_ZOOM_LEVEL = 14;
 const createFallbackResponse = (data) => ({ data });
@@ -42,8 +39,25 @@ let favoriteLocationsCacheEntry = null;
 export const withDataFallback = (request, fallbackData) =>
   request.catch(() => createFallbackResponse(fallbackData));
 
+// Prefer the standalone /heatmap endpoint data (individual presence points)
+// over the map-endpoint heatmap (aggregated tiles) so each circle maps to one user.
 export const resolveMapHeatmapData = (mapData, heatmapData) =>
-  mapData?.heatmap || heatmapData?.heatmap || [];
+  heatmapData?.heatmap || mapData?.heatmap || [];
+
+const EARTH_RADIUS_METERS = 6378137;
+
+/**
+ * Haversine distance in meters between two [lat, lng] positions.
+ */
+export const haversineDistance = (lat1, lng1, lat2, lng2) => {
+  const toRad = (v) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return EARTH_RADIUS_METERS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
 
 export const resolveLeafletModule = (leafletModule) => {
   const resolvedModule = leafletModule?.default && typeof leafletModule.default.map === 'function'
@@ -319,7 +333,7 @@ function Maps() {
     if (!layers.friends) {
       setFriendsLocations([]);
     }
-  }, [userLocation, viewMode, layers.friends, layers.heatmap]);
+  }, [userLocation, viewMode, layers.friends]);
 
   useEffect(() => {
     if (!userLocation) return undefined;
@@ -331,7 +345,7 @@ function Maps() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [userLocation, viewMode, layers.heatmap]);
+  }, [userLocation, viewMode]);
 
   useEffect(() => {
     if (!userLocation || !layers.friends) return undefined;
@@ -359,7 +373,7 @@ function Maps() {
         lat,
         lng,
         viewMode,
-        includeHeatmap: layers.heatmap
+        includeHeatmap: true
       });
 
       if (!forceRefresh) {
@@ -383,14 +397,10 @@ function Maps() {
           mapsAPI[mapEndpoint]({ lat, lng, radius: viewMode === 'local' ? 50000 : 200000 }),
           { spotlights: [], heatmap: [] }
         ),
-        layers.heatmap
-          ? withDataFallback(
-            mapsAPI.getHeatmap({
-              north: lat + 1, south: lat - 1, east: lng + 1, west: lng - 1
-            }),
-            { heatmap: [] }
-          )
-          : Promise.resolve(createFallbackResponse({ heatmap: [] }))
+        withDataFallback(
+          mapsAPI.getHeatmap({ lat, lng }),
+          { heatmap: [] }
+        )
       ]);
       
       const nextMapData = {
@@ -723,32 +733,21 @@ function Maps() {
       });
     }
     
-    // Render heatmap overlay as colored circles
-    if (layers.heatmap && heatmapData.length > 0) {
+    // Render heatmap overlay – one partially transparent red circle per user
+    if (heatmapData.length > 0 && userLocation) {
+      const [uLat, uLng] = userLocation;
       heatmapData.forEach(point => {
-        if (point.lat != null && point.lng != null && point.intensity > 0) {
-          const intensity = Math.max(0, Math.min(point.intensity, 1));
-          const stackLayers = Math.max(
-            1,
-            Math.min(HEATMAP_MAX_STACK_LAYERS, Math.ceil((point.userCount || 1) / HEATMAP_USERS_PER_LAYER))
-          );
+        if (point.lat == null || point.lng == null) return;
+        // Client-side 2000 ft radius guard (defense in depth)
+        if (haversineDistance(uLat, uLng, point.lat, point.lng) > HEATMAP_VISIBILITY_RADIUS_METERS) return;
 
-          for (let index = 0; index < stackLayers; index += 1) {
-            // Keep outer circles softer so overlapping layers read as glow instead of an opaque block.
-            const layerWeight = 1 - (index / (stackLayers + 1));
-
-            L.circle([point.lat, point.lng], {
-              radius: HEATMAP_CIRCLE_RADIUS_METERS,
-              color: 'transparent',
-              fillColor: '#ef4444',
-              fillOpacity: Math.min(
-                HEATMAP_BASE_FILL_OPACITY + (intensity * HEATMAP_INTENSITY_OPACITY_FACTOR * layerWeight),
-                HEATMAP_MAX_FILL_OPACITY
-              ),
-              interactive: false
-            }).addTo(map);
-          }
-        }
+        L.circle([point.lat, point.lng], {
+          radius: HEATMAP_CIRCLE_RADIUS_METERS,
+          color: 'transparent',
+          fillColor: '#ef4444',
+          fillOpacity: HEATMAP_FILL_OPACITY,
+          interactive: false
+        }).addTo(map);
       });
     }
     
@@ -898,15 +897,6 @@ function Maps() {
                   className="rounded text-blue-600 focus:ring-blue-500"
                 />
                 <span>✨ Spotlights</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={layers.heatmap}
-                  onChange={() => toggleLayer('heatmap')}
-                  className="rounded text-blue-600 focus:ring-blue-500"
-                />
-                <span>🔥 Heatmap</span>
               </label>
             </div>
           </div>
@@ -1169,15 +1159,6 @@ function Maps() {
                       className="rounded text-blue-600 focus:ring-blue-500"
                     />
                     <span>✨ Spotlights</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={layers.heatmap}
-                      onChange={() => toggleLayer('heatmap')}
-                      className="rounded text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>🔥 Heatmap</span>
                   </label>
                 </div>
               </div>

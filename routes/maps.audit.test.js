@@ -9,7 +9,8 @@ const mockLocationPresence = {
   updatePresence: jest.fn(),
   findOne: jest.fn(),
   findOneAndUpdate: jest.fn(),
-  getFriendsLocations: jest.fn()
+  getFriendsLocations: jest.fn(),
+  find: jest.fn()
 };
 
 const mockSpotlight = {
@@ -62,6 +63,9 @@ describe('Maps route audit fixes', () => {
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'user-1' }));
 
     mockLocationPresence.updatePresence.mockResolvedValue({ _id: 'presence-1' });
+    mockLocationPresence.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) })
+    });
     mockSpotlight.getByLocation.mockResolvedValue([]);
     mockHeatmapAggregation.getTiles.mockResolvedValue([]);
     mockHeatmapAggregation.recomputeRegion.mockResolvedValue();
@@ -137,22 +141,28 @@ describe('Maps route audit fixes', () => {
     );
   });
 
-  it('accepts zero-valued map bounds for heatmap retrieval', async () => {
+  it('returns individual presence points within 2000 ft of the requested center', async () => {
     const app = buildApp();
+    mockLocationPresence.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          { location: { coordinates: [-73.9857, 40.7484] } }
+        ])
+      })
+    });
 
     const response = await request(app)
       .get('/api/maps/heatmap')
-      .query({
-        north: 1,
-        south: 0,
-        east: 0,
-        west: -1
-      });
+      .query({ lat: 40.7484, lng: -73.9857 });
 
     expect(response.status).toBe(200);
-    expect(mockHeatmapAggregation.getTiles).toHaveBeenCalledWith(
-      { north: 1, south: 0, east: 0, west: -1 },
-      5
+    expect(response.body.heatmap).toHaveLength(1);
+    expect(response.body.heatmap[0].intensity).toBe(1);
+    expect(mockLocationPresence.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isActive: true,
+        includedInHeatmap: true
+      })
     );
   });
 
@@ -221,43 +231,28 @@ describe('Maps route audit fixes', () => {
     );
   });
 
-  it('jitter heatmap coordinates and timestamps for privacy', async () => {
+  it('jitters heatmap coordinates for privacy', async () => {
     const app = buildApp();
-    const computedAt = new Date('2026-01-01T12:00:00.000Z');
-    mockHeatmapAggregation.getTiles
-      .mockResolvedValueOnce([
-        {
-          center: { lat: 40.7484, lng: -73.9857 },
-          data: { userCount: 8, spotlightCount: 2 },
-          computedAt
-        }
-      ]);
+    mockLocationPresence.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          { location: { coordinates: [-73.9857, 40.7484] } }
+        ])
+      })
+    });
 
     const randomSpy = jest.spyOn(Math, 'random')
       .mockReturnValueOnce(0.25)
-      .mockReturnValueOnce(0.5)
-      .mockReturnValueOnce(1);
+      .mockReturnValueOnce(0.5);
 
     try {
       const response = await request(app)
         .get('/api/maps/heatmap')
-        .query({
-          north: 41,
-          south: 40,
-          east: -73,
-          west: -74
-        });
+        .query({ lat: 40.7484, lng: -73.9857 });
 
       expect(response.status).toBe(200);
       expect(response.body.heatmap).toHaveLength(1);
-      expect(response.body.heatmap[0]).toEqual(
-        expect.objectContaining({
-          intensity: 0.8,
-          userCount: 8,
-          spotlightCount: 2,
-          jitteredAt: '2026-01-01T12:30:00.000Z'
-        })
-      );
+      expect(response.body.heatmap[0].intensity).toBe(1);
       expect(response.body.heatmap[0].lat).not.toBe(40.7484);
     } finally {
       randomSpy.mockRestore();
