@@ -197,6 +197,51 @@ describe('Feed interaction routes', () => {
     expect(Post).not.toHaveBeenCalled();
   });
 
+  it('accepts server-relative /uploads/ URLs as media URLs', async () => {
+    const app = buildApp();
+    const savedDoc = {
+      _id: 'post-upload',
+      save: jest.fn().mockResolvedValue(true),
+      populate: jest.fn().mockResolvedValue(true)
+    };
+    Post.mockImplementation((payload) => ({
+      ...savedDoc,
+      ...payload
+    }));
+
+    const response = await request(app)
+      .post('/api/feed/post')
+      .set('Authorization', 'Bearer token')
+      .send({
+        targetFeedId: AUTHOR_ID,
+        content: 'Post with uploaded image',
+        mediaUrls: ['/uploads/gallery/507f1f77bcf86cd799439011/1710000000-abc12345.jpg']
+      });
+
+    expect(response.status).toBe(201);
+    expect(Post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mediaUrls: ['/uploads/gallery/507f1f77bcf86cd799439011/1710000000-abc12345.jpg']
+      })
+    );
+  });
+
+  it('still rejects invalid media URLs that are not http/https or /uploads/', async () => {
+    const app = buildApp();
+
+    const response = await request(app)
+      .post('/api/feed/post')
+      .set('Authorization', 'Bearer token')
+      .send({
+        targetFeedId: AUTHOR_ID,
+        content: 'Post with bad media',
+        mediaUrls: ['ftp://evil.com/file.jpg']
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.field).toBe('mediaUrls');
+  });
+
   it('deduplicates poll vote submissions by user', async () => {
     const app = buildApp();
     const postDoc = {
