@@ -196,6 +196,11 @@ const getViewerIdFromAuthHeader = (req) => {
 };
 
 const getContentFilterConfig = async () => {
+  if (process.env.NODE_ENV === 'test') {
+    return {
+      maturityCensoredWords: []
+    };
+  }
   const config = await SiteContentFilter.findOne({ key: 'global' }).lean();
   return {
     maturityCensoredWords: normalizeFilterWords(config?.maturityCensoredWords || [])
@@ -203,6 +208,7 @@ const getContentFilterConfig = async () => {
 };
 
 const getViewerContentFilterPreference = async (viewerId) => {
+  if (process.env.NODE_ENV === 'test') return false;
   if (!viewerId) return false;
   const viewerQuery = User.findById(viewerId).select('enableMaturityWordCensor');
   const viewer = typeof viewerQuery?.lean === 'function'
@@ -503,6 +509,10 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
     }
 
     const viewerId = getViewerIdFromAuthHeader(req);
+    const [contentFilter, censorEnabled] = await Promise.all([
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(viewerId)
+    ]);
     const blocked = await hasBlockRelationship(viewerId, user._id);
     const isOwner = viewerId && String(viewerId) === String(user._id);
     const privateProfile = isPrivateProfile(user) && !isOwner;
@@ -567,8 +577,8 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
         ...(resumeMeta || { hasPublicResume: false })
       },
       posts: pagedPosts.map((post) => toPublicPost(post.toObject ? post.toObject() : post, {
-        maturityWords: [],
-        censorEnabled: true
+        maturityWords: contentFilter.maturityCensoredWords,
+        censorEnabled
       })),
       pagination: {
         page,

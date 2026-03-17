@@ -730,10 +730,7 @@ router.post('/post', [
       : [];
     const normalizedVisibleToUsers = normalizeObjectIdArray(visibleToUsers).slice(0, 200);
     const normalizedExcludeUsers = normalizeObjectIdArray(excludeUsers).slice(0, 200);
-    let normalizedRelationshipAudience = normalizeRelationshipAudience(relationshipAudience);
-    if (visibility === 'public') {
-      normalizedRelationshipAudience = 'public';
-    }
+    const normalizedRelationshipAudience = normalizeRelationshipAudience(relationshipAudience);
 
     if (
       normalizedRelationshipAudience === 'secure'
@@ -749,6 +746,14 @@ router.post('/post', [
     ) {
       return res.status(400).json({
         error: 'Public audience currently supports only public visibility'
+      });
+    }
+    if (
+      visibility === 'public'
+      && normalizedRelationshipAudience !== 'public'
+    ) {
+      return res.status(400).json({
+        error: 'Public visibility currently supports only public audience'
       });
     }
 

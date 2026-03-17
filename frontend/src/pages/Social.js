@@ -2657,12 +2657,16 @@ const Social = () => {
         };
       }
       if (field === 'visibility') {
+        let relationshipAudience = prev.relationshipAudience;
+        if (value === 'public') {
+          relationshipAudience = 'public';
+        } else if (value === 'friends' && prev.relationshipAudience === 'public') {
+          relationshipAudience = 'social';
+        }
         return {
           ...prev,
           visibility: value,
-          relationshipAudience: value === 'public'
-            ? 'public'
-            : (value === 'friends' && prev.relationshipAudience === 'public' ? 'social' : prev.relationshipAudience),
+          relationshipAudience,
         };
       }
       return { ...prev, [field]: value };
