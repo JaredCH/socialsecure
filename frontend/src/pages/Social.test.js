@@ -574,6 +574,41 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).toContain('0/24');
   });
 
+  it('pins gallery viewer close button to the popup top-right corner', async () => {
+    galleryAPI.getGallery.mockResolvedValue({
+      data: {
+        items: [
+          {
+            _id: 'img-1',
+            mediaUrl: 'https://example.com/gallery-image.jpg',
+            title: 'Gallery image',
+            caption: '',
+            likesCount: 0,
+            dislikesCount: 0,
+            comments: []
+          }
+        ]
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+    await switchToTab('Gallery');
+
+    const galleryImage = Array.from(container.querySelectorAll('img')).find((image) => image.getAttribute('alt') === 'Gallery item');
+    expect(galleryImage).toBeTruthy();
+    await act(async () => {
+      galleryImage?.closest('button')?.click();
+    });
+
+    const closeButton = Array.from(container.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'Close gallery viewer');
+    expect(closeButton).toBeTruthy();
+    expect(closeButton?.className).toContain('absolute');
+    expect(closeButton?.className).toContain('right-4');
+    expect(closeButton?.className).toContain('top-4');
+    expect(closeButton?.className).toContain('sm:right-6');
+    expect(closeButton?.className).toContain('sm:top-6');
+  });
+
   it('loads profile chat thread/messages for guest viewers when read access allows guests', async () => {
     localStorage.clear();
     require('../utils/api').getAuthToken.mockReturnValue(null);
