@@ -191,6 +191,59 @@ describe('Friends category and top5 routes', () => {
     }));
   });
 
+  it('creates a requester notification when a pending request is declined', async () => {
+    const friendshipDoc = {
+      _id: '507f1f77bcf86cd799439099',
+      requester: { toString: () => '507f1f77bcf86cd799439022' },
+      recipient: { toString: () => '507f1f77bcf86cd799439011' },
+      status: 'pending',
+      declinedAt: null,
+      save: jest.fn().mockResolvedValue(true)
+    };
+    mockFriendship.findById.mockResolvedValue(friendshipDoc);
+
+    const app = buildApp();
+    const response = await request(app)
+      .post('/api/friends/507f1f77bcf86cd799439099/decline')
+      .set('Authorization', 'Bearer token')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(friendshipDoc.status).toBe('declined');
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      recipientId: friendshipDoc.requester,
+      senderId: friendshipDoc.recipient,
+      type: 'system',
+      title: 'Friend request declined'
+    }));
+  });
+
+  it('allows requester to cancel an outgoing pending request and notifies recipient', async () => {
+    const friendshipDoc = {
+      _id: '507f1f77bcf86cd799439099',
+      requester: { toString: () => '507f1f77bcf86cd799439011' },
+      recipient: { toString: () => '507f1f77bcf86cd799439022' },
+      status: 'pending',
+      save: jest.fn().mockResolvedValue(true)
+    };
+    mockFriendship.findById.mockResolvedValue(friendshipDoc);
+
+    const app = buildApp();
+    const response = await request(app)
+      .delete('/api/friends/507f1f77bcf86cd799439099')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(friendshipDoc.status).toBe('removed');
+    expect(response.body.message).toMatch(/request canceled/i);
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      recipientId: friendshipDoc.recipient,
+      senderId: friendshipDoc.requester,
+      type: 'system',
+      title: 'Friend request canceled'
+    }));
+  });
+
   it('returns backend top5 validation errors from update route', async () => {
     const error = new Error('Cannot have more than 5 top friends');
     error.status = 400;

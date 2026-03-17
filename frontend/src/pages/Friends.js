@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { friendsAPI, circlesAPI, userAPI, getAuthToken } from '../utils/api';
+import { Link } from 'react-router-dom';
+import { friendsAPI, circlesAPI, discoveryAPI, getAuthToken } from '../utils/api';
 import { getRealtimeSocket, onFriendPresence } from '../utils/realtime';
 import { resolvePresenceStatus } from '../utils/presence';
 import toast from 'react-hot-toast';
@@ -21,6 +22,25 @@ const PresenceDot = ({ presence }) => {
 const Avatar = ({ url, size = 'w-10 h-10' }) => (
   <div className={`${size} shrink-0 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden`}>
     {url ? <img src={url} alt="" className={`${size} rounded-full object-cover`} /> : <span className="text-lg">👤</span>}
+  </div>
+);
+
+const AudienceToggle = ({ value = 'social', onChange, ariaLabel }) => (
+  <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5" role="group" aria-label={ariaLabel}>
+    <button
+      type="button"
+      onClick={() => onChange('social')}
+      className={`rounded px-2 py-1 text-xs font-medium ${value === 'social' ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+    >
+      Social
+    </button>
+    <button
+      type="button"
+      onClick={() => onChange('secure')}
+      className={`rounded px-2 py-1 text-xs font-medium ${value === 'secure' ? 'bg-purple-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+    >
+      Secure
+    </button>
   </div>
 );
 
@@ -137,6 +157,16 @@ export default function Friends({ user }) {
     }
   };
 
+  const cancelOutgoingRequest = async (id) => {
+    try {
+      await friendsAPI.removeFriend(id);
+      toast.success('Request cancelled');
+      loadFriends();
+    } catch {
+      toast.error('Failed to cancel request');
+    }
+  };
+
   const updateCategory = async (friendshipId, category) => {
     try {
       await friendsAPI.updateFriendCategory(friendshipId, category);
@@ -174,10 +204,9 @@ export default function Friends({ user }) {
   // ─── User search ──────────────────────────────────────────────────────────
   const searchUsers = async () => {
     const q = userSearchQuery.trim();
-    if (!q) return;
     setUserSearching(true);
     try {
-      const res = await userAPI.search(q);
+      const res = await discoveryAPI.getUsers(q, 1, 25);
       setUserSearchResults(res.data.users || []);
     } catch {
       toast.error('Search failed');
@@ -269,7 +298,8 @@ export default function Friends({ user }) {
   const offlineCount = friends.length - onlineCount;
 
   const friendIdSet = new Set(friends.map((f) => String(f._id)));
-  const outgoingIdSet = new Set(outgoingRequests.map((r) => String(r.user?._id)));
+  const outgoingRequestByUserId = new Map(outgoingRequests.map((r) => [String(r.user?._id), r]));
+  const incomingRequestByUserId = new Map(incomingRequests.map((r) => [String(r.user?._id), r]));
 
   const tabs = [
     { id: 'friends', label: `Friends (${friends.length})` },
@@ -336,7 +366,9 @@ export default function Friends({ user }) {
                       <span className="absolute -bottom-0.5 -right-0.5"><PresenceDot presence={f.presence} /></span>
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">@{f.username}</p>
+                      <Link to={`/social?user=${encodeURIComponent(f.username)}`} className="text-sm font-semibold text-slate-900 hover:text-blue-700">
+                        @{f.username}
+                      </Link>
                       {f.realName && <p className="text-xs text-slate-500">{f.realName}</p>}
                       <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${f.category === 'secure' ? 'bg-purple-100 text-purple-700' : 'bg-sky-100 text-sky-700'}`}>
                         {f.category === 'secure' ? 'Secure' : 'Social'}
@@ -344,15 +376,11 @@ export default function Friends({ user }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <select
+                    <AudienceToggle
                       value={f.category || 'social'}
-                      onChange={(e) => updateCategory(f.friendshipId, e.target.value)}
-                      className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
-                      aria-label={`Category for ${f.username}`}
-                    >
-                      <option value="social">Social</option>
-                      <option value="secure">Secure</option>
-                    </select>
+                      onChange={(category) => updateCategory(f.friendshipId, category)}
+                      ariaLabel={`Category for ${f.username}`}
+                    />
                     {!topFriends.some((tf) => tf._id === f._id) && topFriends.length < TOP_FRIENDS_LIMIT && (
                       <button onClick={() => addToTop(f)} className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">⭐ Top</button>
                     )}
@@ -379,7 +407,9 @@ export default function Friends({ user }) {
                     <span className="text-lg font-bold text-blue-400">#{idx + 1}</span>
                     <Avatar url={tf.avatarUrl} size="w-9 h-9" />
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">@{tf.username}</p>
+                      <Link to={`/social?user=${encodeURIComponent(tf.username)}`} className="text-sm font-semibold text-slate-900 hover:text-blue-700">
+                        @{tf.username}
+                      </Link>
                       {tf.realName && <p className="text-xs text-slate-500">{tf.realName}</p>}
                     </div>
                   </div>
@@ -407,7 +437,9 @@ export default function Friends({ user }) {
                 <div className="flex items-center gap-3">
                   <Avatar url={req.user?.avatarUrl} size="w-9 h-9" />
                   <div>
-                    <p className="text-sm font-semibold">@{req.user?.username}</p>
+                    <Link to={`/social?user=${encodeURIComponent(req.user?.username || '')}`} className="text-sm font-semibold text-slate-900 hover:text-blue-700">
+                      @{req.user?.username}
+                    </Link>
                     {req.message && <p className="text-xs text-slate-500 italic">&ldquo;{req.message}&rdquo;</p>}
                   </div>
                 </div>
@@ -423,12 +455,19 @@ export default function Friends({ user }) {
             {outgoingRequests.length === 0 ? (
               <p className="text-sm text-slate-400">No sent requests.</p>
             ) : outgoingRequests.map((req) => (
-              <div key={req._id} className="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                <Avatar url={req.user?.avatarUrl} size="w-9 h-9" />
-                <div>
-                  <p className="text-sm font-semibold">@{req.user?.username}</p>
-                  <p className="text-xs text-amber-600">Pending…</p>
+              <div key={req._id} className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                <div className="flex items-center gap-3">
+                  <Avatar url={req.user?.avatarUrl} size="w-9 h-9" />
+                  <div>
+                    <Link to={`/social?user=${encodeURIComponent(req.user?.username || '')}`} className="text-sm font-semibold text-slate-900 hover:text-blue-700">
+                      @{req.user?.username}
+                    </Link>
+                    <p className="text-xs text-amber-600">Pending…</p>
+                  </div>
                 </div>
+                <button onClick={() => cancelOutgoingRequest(req._id)} className="rounded bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200">
+                  Cancel
+                </button>
               </div>
             ))}
           </div>
@@ -456,13 +495,18 @@ export default function Friends({ user }) {
               {userSearchResults.map((u) => {
                 const isSelf = String(u._id) === String(user?._id);
                 const isFriend = friendIdSet.has(String(u._id));
-                const isPending = outgoingIdSet.has(String(u._id));
+                const outgoingReq = outgoingRequestByUserId.get(String(u._id));
+                const incomingReq = incomingRequestByUserId.get(String(u._id));
+                const isOutgoingPending = (u.relationship === 'pending' && u.requestDirection === 'outgoing') || !!outgoingReq;
+                const isIncomingPending = (u.relationship === 'pending' && u.requestDirection === 'incoming') || !!incomingReq;
                 return (
                   <div key={u._id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
                     <div className="flex items-center gap-3">
                       <Avatar url={u.avatarUrl} size="w-9 h-9" />
                       <div>
-                        <p className="text-sm font-semibold">@{u.username}</p>
+                        <Link to={`/social?user=${encodeURIComponent(u.username)}`} className="text-sm font-semibold text-slate-900 hover:text-blue-700">
+                          @{u.username}
+                        </Link>
                         {u.realName && <p className="text-xs text-slate-500">{u.realName}</p>}
                       </div>
                     </div>
@@ -470,8 +514,23 @@ export default function Friends({ user }) {
                       <span className="text-xs text-slate-400">You</span>
                     ) : isFriend ? (
                       <span className="text-xs text-emerald-600 font-medium">Already friends</span>
-                    ) : isPending ? (
-                      <span className="text-xs text-amber-600 font-medium">Request sent</span>
+                    ) : isIncomingPending ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 font-medium">Requested you</span>
+                        {incomingReq && (
+                          <>
+                            <button onClick={() => acceptRequest(incomingReq._id)} className="rounded bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100">Accept</button>
+                            <button onClick={() => declineRequest(incomingReq._id)} className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200">Decline</button>
+                          </>
+                        )}
+                      </div>
+                    ) : isOutgoingPending ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-amber-600 font-medium">Request sent</span>
+                        {outgoingReq && (
+                          <button onClick={() => cancelOutgoingRequest(outgoingReq._id)} className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200">Cancel</button>
+                        )}
+                      </div>
                     ) : (
                       <button onClick={() => sendRequest(u._id)} className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700">Add Friend</button>
                     )}
@@ -511,14 +570,11 @@ export default function Friends({ user }) {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-600">Tag</label>
-                  <select
+                  <AudienceToggle
                     value={newCircle.relationshipAudience}
-                    onChange={(e) => setNewCircle({ ...newCircle, relationshipAudience: e.target.value })}
-                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  >
-                    <option value="social">Social</option>
-                    <option value="secure">Secure</option>
-                  </select>
+                    onChange={(relationshipAudience) => setNewCircle({ ...newCircle, relationshipAudience })}
+                    ariaLabel="Circle audience"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-600">Color</label>
@@ -600,10 +656,11 @@ export default function Friends({ user }) {
                           </div>
                           <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">Tag</label>
-                            <select value={editingCircle.relationshipAudience} onChange={(e) => setEditingCircle({ ...editingCircle, relationshipAudience: e.target.value })} className="w-full rounded border border-slate-200 px-3 py-2 text-sm">
-                              <option value="social">Social</option>
-                              <option value="secure">Secure</option>
-                            </select>
+                            <AudienceToggle
+                              value={editingCircle.relationshipAudience}
+                              onChange={(relationshipAudience) => setEditingCircle({ ...editingCircle, relationshipAudience })}
+                              ariaLabel="Edit circle audience"
+                            />
                           </div>
                           <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">Color</label>
@@ -650,7 +707,9 @@ export default function Friends({ user }) {
                           {circle.members.map((m) => (
                             <div key={m._id} className="flex items-center gap-1.5 rounded-full bg-slate-100 py-1 pl-1.5 pr-2 text-xs">
                               <Avatar url={m.avatarUrl} size="w-5 h-5" />
-                              <span>@{m.username}</span>
+                              <Link to={`/social?user=${encodeURIComponent(m.username)}`} className="hover:text-blue-700">
+                                @{m.username}
+                              </Link>
                               <button onClick={() => removeCircleMember(circle.name, m._id)} className="ml-1 text-red-400 hover:text-red-600" aria-label={`Remove ${m.username}`}>✕</button>
                             </div>
                           ))}
