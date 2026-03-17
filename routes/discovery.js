@@ -112,11 +112,45 @@ const recencyScore = (dateValue, maxDays = 90) => {
   return Math.max(0, 1 - (ageDays / maxDays));
 };
 
+const normalizeDiscoveryMetadata = (metadata) => {
+  const seen = new WeakSet();
+  const normalize = (value, depth = 0) => {
+    if (depth > 6) return null;
+    if (value == null) return null;
+    if (typeof value === 'number') {
+      if (Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER) {
+        return value;
+      }
+      return String(value);
+    }
+    if (typeof value === 'string' || typeof value === 'boolean') return value;
+    if (value instanceof Date) return value.toISOString();
+    if (Array.isArray(value)) return value.slice(0, 50).map((item) => normalize(item, depth + 1));
+    if (typeof value !== 'object') return String(value);
+    if (seen.has(value)) return '[circular]';
+    seen.add(value);
+    const output = {};
+    Object.entries(value).slice(0, 50).forEach(([key, nestedValue]) => {
+      const normalizedKey = String(key || '').trim();
+      if (!normalizedKey) return;
+      output[normalizedKey] = normalize(nestedValue, depth + 1);
+    });
+    seen.delete(value);
+    return output;
+  };
+
+  const normalized = normalize(metadata, 0);
+  return normalized && typeof normalized === 'object' && !Array.isArray(normalized)
+    ? normalized
+    : {};
+};
+
 const logDiscoveryEvent = ({ userId, eventType, metadata = {}, req }) => {
+  const normalizedMetadata = normalizeDiscoveryMetadata(metadata);
   const payload = {
     eventType,
     userId,
-    metadata,
+    metadata: normalizedMetadata,
     ipAddress: req.ip,
     userAgent: req.get('user-agent') || null,
     createdAt: new Date().toISOString()
@@ -454,7 +488,7 @@ router.post('/events', authenticateToken, discoveryLimiter, async (req, res) => 
     }
 
     const metadata = typeof req.body?.metadata === 'object' && req.body.metadata
-      ? req.body.metadata
+      ? normalizeDiscoveryMetadata(req.body.metadata)
       : {};
 
     logDiscoveryEvent({
