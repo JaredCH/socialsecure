@@ -4770,6 +4770,16 @@ const Social = () => {
                 )
               })
             ) : null}
+            {ownerEditingEnabled && !isGuestPreview && !composerVisible ? (
+              <button
+                type="button"
+                onClick={() => setComposerVisible(true)}
+                className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-white/10 px-4 py-3 text-sm text-slate-400 transition-all hover:border-white/20 hover:bg-white/[0.03] hover:text-slate-300"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>+</span>
+                <span className="font-medium">Compose a new post</span>
+              </button>
+            ) : null}
             {renderGlassPanel('Feed', renderPanelBody('timeline'))}
             {renderGlassPanel('Gallery', renderPanelBody('gallery'))}
           </div>
@@ -4882,7 +4892,6 @@ const Social = () => {
         </>
       ) : null}
       <div className="relative z-10">
-    >
       {/* Guest Preview Notice */}
       {isGuestPreview ? (
         <GuestPreviewNotice
@@ -4949,29 +4958,21 @@ const Social = () => {
             ))}
           </div>
           {ownerEditingEnabled ? (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                {isGuestPreview ? 'Owner View' : 'Guest View'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setComposerVisible((prev) => !prev)}
-                className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
-              >
-                {composerVisible ? 'Hide Compose' : 'Compose'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDesignStudioOpen(true)}
-                className="rounded-full border border-slate-300 bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
-              >
-                Stage Settings
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
+              className={`relative flex items-center gap-2 rounded-full px-1 py-1 text-xs font-semibold transition-all duration-300 ${isGuestPreview ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40' : 'bg-white/10 text-slate-300 ring-1 ring-white/10 hover:bg-white/15'}`}
+              title={isGuestPreview ? 'Switch to Owner View' : 'Preview as Guest'}
+            >
+              <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all duration-300 ${!isGuestPreview ? 'bg-white/15 text-white shadow-sm' : 'text-slate-400'}`}>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                Owner
+              </span>
+              <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all duration-300 ${isGuestPreview ? 'bg-amber-500/25 text-amber-200 shadow-sm' : 'text-slate-400'}`}>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-.274.886-.672 1.72-1.18 2.478m-2.14 2.584A9.956 9.956 0 0112 19c-4.478 0-8.268-2.943-9.542-7a10.025 10.025 0 012.32-3.78" /></svg>
+                Guest
+              </span>
+            </button>
           ) : null}
         </div>
       </div>
