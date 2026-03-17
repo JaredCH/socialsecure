@@ -577,7 +577,7 @@ router.get('/heatmap', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'Center coordinates required (lat, lng)' });
     }
 
-    // Query individual active presences within the hard-capped 2 000 ft radius.
+    // Query individual active presences within the hard-capped 2000 ft radius.
     const presences = await LocationPresence.find({
       isActive: true,
       includedInHeatmap: true,

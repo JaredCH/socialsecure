@@ -39,6 +39,8 @@ let favoriteLocationsCacheEntry = null;
 export const withDataFallback = (request, fallbackData) =>
   request.catch(() => createFallbackResponse(fallbackData));
 
+// Prefer the standalone /heatmap endpoint data (individual presence points)
+// over the map-endpoint heatmap (aggregated tiles) so each circle maps to one user.
 export const resolveMapHeatmapData = (mapData, heatmapData) =>
   heatmapData?.heatmap || mapData?.heatmap || [];
 
