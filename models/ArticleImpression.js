@@ -2,17 +2,6 @@
 
 const mongoose = require('mongoose');
 
-/**
- * ArticleImpression — tracks how many times a user has been served a given article.
- *
- * An impression is counted in two ways:
- *   scroll — the article scrolled ≥70% into the viewport (IntersectionObserver)
- *   click  — the user opened/read the article
- *
- * Both kinds increment their respective counters.
- * `totalCount = scrollCount + clickCount` is used by the feed builder to
- * deprioritise articles the user has already seen twice or more.
- */
 const articleImpressionSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -20,9 +9,22 @@ const articleImpressionSchema = new mongoose.Schema({
     required: true
   },
   article: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Article',
-    required: true
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+  articleKey: {
+    type: String,
+    required: true,
+    index: true
+  },
+  articleLink: {
+    type: String,
+    default: null
+  },
+  locationKey: {
+    type: String,
+    default: null,
+    index: true
   },
   scrollCount: {
     type: Number,
@@ -42,46 +44,46 @@ const articleImpressionSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Compound unique index — one doc per (user, article) pair
-articleImpressionSchema.index({ user: 1, article: 1 }, { unique: true });
-
-// Index for fast feed-builder lookups (all article IDs seen by a user)
+articleImpressionSchema.index({ user: 1, articleKey: 1 }, { unique: true });
 articleImpressionSchema.index({ user: 1, lastSeenAt: -1 });
+articleImpressionSchema.index({ locationKey: 1, articleLink: 1, clickCount: -1 });
 
-/**
- * Upsert an impression record for the given user/article pair.
- *
- * @param {string|ObjectId} userId
- * @param {string|ObjectId} articleId
- * @param {'scroll'|'click'} type
- */
-articleImpressionSchema.statics.upsertImpression = async function (userId, articleId, type) {
+articleImpressionSchema.statics.upsertImpression = async function upsertImpression(userId, articleRef, type, options = {}) {
   const field = type === 'click' ? 'clickCount' : 'scrollCount';
+  const articleKey = String(options.articleLink || articleRef || '').trim();
+  if (!articleKey) return null;
+
   return this.findOneAndUpdate(
-    { user: userId, article: articleId },
+    { user: userId, articleKey },
     {
       $inc: { [field]: 1 },
-      $set: { lastSeenAt: new Date() }
+      $set: {
+        article: options.articleId || (!options.articleLink ? articleRef : null),
+        articleKey,
+        articleLink: options.articleLink || (typeof articleRef === 'string' ? articleRef : null),
+        locationKey: options.locationKey || null,
+        lastSeenAt: new Date()
+      }
     },
     { upsert: true, new: true }
   );
 };
 
-/**
- * Return the set of article IDs that the user has seen totalCount ≥ threshold times.
- * Used by the feed builder to deprioritise stale content.
- *
- * @param {string|ObjectId} userId
- * @param {number} threshold   default: 2
- * @returns {ObjectId[]}
- */
-articleImpressionSchema.statics.getDeprioritisedArticleIds = async function (userId, threshold = 2) {
+articleImpressionSchema.statics.getDeprioritisedArticleIds = async function getDeprioritisedArticleIds(userId, threshold = 2) {
   const docs = await this.find({
     user: userId,
     $expr: { $gte: [{ $add: ['$scrollCount', '$clickCount'] }, threshold] }
-  }).select('article').lean();
-  return docs.map((d) => d.article);
+  }).select('article articleKey').lean();
+  return docs.map((doc) => doc.article || doc.articleKey).filter(Boolean);
 };
 
-const ArticleImpression = mongoose.model('ArticleImpression', articleImpressionSchema);
-module.exports = ArticleImpression;
+articleImpressionSchema.statics.getTopClickedLinksForLocation = async function getTopClickedLinksForLocation(locationKey, limit = 20) {
+  return this.aggregate([
+    { $match: { locationKey, articleLink: { $ne: null } } },
+    { $group: { _id: '$articleLink', clicks: { $sum: '$clickCount' }, scrolls: { $sum: '$scrollCount' } } },
+    { $sort: { clicks: -1, scrolls: -1, _id: 1 } },
+    { $limit: Math.max(1, Math.min(Number(limit) || 20, 100)) }
+  ]);
+};
+
+module.exports = mongoose.models.ArticleImpression || mongoose.model('ArticleImpression', articleImpressionSchema);

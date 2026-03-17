@@ -63,7 +63,7 @@ export default function AlgorithmicFeed({
   const [hasMore, setHasMore]               = useState(true);
   const [showIngestBanner, setShowIngestBanner] = useState(false);
 
-  // Impression buffer: { articleId, type: 'scroll'|'click' }
+  // Impression buffer: { articleId?, articleLink?, locationKey?, type: 'scroll'|'click' }
   const impressionBuffer = useRef([]);
   const flushTimerRef    = useRef(null);
   const retryTimerRef    = useRef(null);
@@ -94,8 +94,14 @@ export default function AlgorithmicFeed({
   }, []);
 
   // Buffer an impression; flush if threshold hit
-  const bufferImpression = useCallback((articleId, type) => {
-    impressionBuffer.current.push({ articleId, type });
+  const bufferImpression = useCallback((article, type) => {
+    if (!article) return;
+    impressionBuffer.current.push({
+      articleId: article._id,
+      articleLink: article.link || article.url || '',
+      locationKey: article.locationKey || '',
+      type
+    });
     if (impressionBuffer.current.length >= IMPRESSION_FLUSH_COUNT) flushImpressions();
   }, [flushImpressions]);
 
@@ -139,8 +145,9 @@ export default function AlgorithmicFeed({
         const res = await newsAPI.getFeed(buildFeedParams(1));
         if (cancelled) return;
 
-        const { sections, feed, triggeredIngest } = res.data || {};
-        const ordered = buildAlgorithmicSequence(sections || {}, feed || [], categories);
+        const { sections, feed, articles: pageArticles, triggeredIngest } = res.data || {};
+        const initialArticles = Array.isArray(pageArticles) && pageArticles.length > 0 ? pageArticles : (feed || []);
+        const ordered = buildAlgorithmicSequence(sections || {}, initialArticles, categories);
         setArticles(ordered);
 
         if (ordered.length > 0) {
@@ -193,13 +200,14 @@ export default function AlgorithmicFeed({
         setLoadingMore(true);
         try {
           const res = await newsAPI.getFeed(buildFeedParams(nextPage));
-          const { feed } = res.data || {};
-          if (!feed || feed.length === 0) {
+          const { feed, articles: pageArticles } = res.data || {};
+          const batchSource = Array.isArray(pageArticles) && pageArticles.length > 0 ? pageArticles : (feed || []);
+          if (!batchSource || batchSource.length === 0) {
             setHasMore(false);
             return;
           }
           const seen = new Set(articles.map((a) => a._id));
-          const batch = buildInfiniteScrollBatch(feed, categories, seen);
+          const batch = buildInfiniteScrollBatch(batchSource, categories, seen);
           if (batch.length === 0) {
             setHasMore(false);
           } else {
