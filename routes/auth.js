@@ -1483,8 +1483,9 @@ router.put('/profile', [
     .trim()
     .isLength({ max: 30 })
     .withMessage('Phone must be at most 30 characters')
-    .matches(/^(?:\+1\d{10}|\+1[\s.-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})$/)
+    .matches(/^(?:(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})$/)
     .withMessage('Phone number format is invalid'),
+  body('worksAt').optional({ nullable: true }).isString().trim().isLength({ max: 120 }).withMessage('Place of employment must be at most 120 characters'),
   body('streetAddress').optional({ nullable: true }).isString().trim().isLength({ max: 200 }).withMessage('Home address must be at most 200 characters'),
   body('hobbies').optional({ nullable: true }).isArray({ max: 10 }).withMessage('Hobbies must be an array with at most 10 entries'),
   body('hobbies.*').optional({ nullable: true }).isString().trim().isLength({ max: 60 }).withMessage('Each hobby must be at most 60 characters'),
@@ -1648,6 +1649,7 @@ router.put('/profile', [
     const {
       realName,
       phone,
+      worksAt,
       streetAddress,
       hobbies,
       ageGroup,
@@ -1729,6 +1731,9 @@ router.put('/profile', [
     if (realName) user.realName = realName;
     if (Object.prototype.hasOwnProperty.call(req.body, 'phone')) {
       user.phone = normalizeProfileOptionalValue(phone);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'worksAt')) {
+      user.worksAt = normalizeProfileOptionalValue(worksAt);
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'streetAddress')) {
       const requestedAddress = normalizeProfileOptionalValue(streetAddress);

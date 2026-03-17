@@ -1191,12 +1191,7 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
           })
         )
         : Promise.resolve(null),
-      normalizedZipCode
-        ? runChatBestEffort(
-          'Failed to resolve quick-access zip conversation',
-          () => resolveLeanDoc(ChatConversation.findOne({ type: 'zip-room', zipCode: normalizedZipCode }))
-        )
-        : Promise.resolve(null)
+      Promise.resolve(null)
     ]);
 
     let nearbyCities = [];
@@ -3020,18 +3015,7 @@ router.get('/conversations', unifiedChatLimiter, authenticateToken, async (req, 
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const normalizedZipCode = normalizeZipCode(user.zipCode);
-    let currentZipConversation = null;
-    if (normalizedZipCode) {
-      currentZipConversation = await ChatConversation.findOneAndUpdate(
-        { type: 'zip-room', zipCode: normalizedZipCode },
-        { $setOnInsert: { title: `Zip ${normalizedZipCode}`, zipCode: normalizedZipCode, participants: [] } },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      ).lean();
-    }
-
-    const [nearbyZipConversations, dmConversations, profileConversations] = await Promise.all([
-      getNearbyActiveZipRooms(normalizedZipCode),
+    const [dmConversations, profileConversations] = await Promise.all([
       ChatConversation.find({ type: 'dm', participants: userId }).sort({ lastMessageAt: -1 }).lean(),
       ChatConversation.find({ type: 'profile-thread', participants: userId }).sort({ lastMessageAt: -1 }).lean()
     ]);
@@ -3055,12 +3039,7 @@ router.get('/conversations', unifiedChatLimiter, authenticateToken, async (req, 
     return res.json({
       success: true,
       conversations: {
-        zip: {
-          current: currentZipConversation
-            ? formatConversationSummary(currentZipConversation, usersById, userId, presenceMap)
-            : null,
-          nearby: nearbyZipConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId, presenceMap))
-        },
+        zip: { current: null, nearby: [] },
         dm: dmConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId, presenceMap)),
         profile: profileConversations.map((conversation) => formatConversationSummary(conversation, usersById, userId, presenceMap))
       }

@@ -48,7 +48,9 @@ jest.mock('../utils/e2ee', () => ({
 jest.mock('../utils/realtime', () => ({
   joinRealtimeRoom: jest.fn(),
   leaveRealtimeRoom: jest.fn(),
-  onChatMessage: jest.fn(() => () => {})
+  onChatMessage: jest.fn(() => () => {}),
+  onFriendPresence: jest.fn(() => () => {}),
+  onPresenceUpdate: jest.fn(() => () => {})
 }));
 
 describe('Chat DM decrypt fallback when visible ids are unavailable', () => {

@@ -136,6 +136,7 @@ describe('Auth profile location update cooldown', () => {
     const user = buildUserDoc({
       email: 'old@example.com',
       phone: '',
+      worksAt: '',
       streetAddress: '',
       hobbies: [],
       ageGroup: '',
@@ -144,6 +145,7 @@ describe('Auth profile location update cooldown', () => {
       profileFieldVisibility: {
         streetAddress: 'social',
         phone: 'social',
+        worksAt: 'social',
         email: 'social',
         ageGroup: 'social',
         sex: 'social',
@@ -158,7 +160,8 @@ describe('Auth profile location update cooldown', () => {
       .set('Authorization', 'Bearer token')
       .send({
         streetAddress: '123 Main St',
-        phone: '+15551112222',
+        phone: '225-614-6012',
+        worksAt: 'Epic Piping',
         ageGroup: '25-34',
         sex: 'Female',
         race: 'Asian',
@@ -166,6 +169,7 @@ describe('Auth profile location update cooldown', () => {
         profileFieldVisibility: {
           streetAddress: 'secure',
           phone: 'secure',
+          worksAt: 'secure',
           email: 'secure',
           ageGroup: 'social',
           sex: 'secure',
@@ -177,12 +181,14 @@ describe('Auth profile location update cooldown', () => {
     expect(response.status).toBe(200);
     expect(user.save).toHaveBeenCalled();
     expect(user.streetAddress).toBe('123 Main St');
-    expect(user.phone).toBe('+15551112222');
+    expect(user.phone).toBe('225-614-6012');
+    expect(user.worksAt).toBe('Epic Piping');
     expect(user.email).toBe('old@example.com');
     expect(user.hobbies).toEqual(['Music', 'Travel']);
     expect(user.profileFieldVisibility).toEqual(expect.objectContaining({
       streetAddress: 'secure',
       phone: 'secure',
+      worksAt: 'secure',
       email: 'secure',
       ageGroup: 'social',
       sex: 'secure',

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { authAPI } from '../utils/api';
 import toast from 'react-hot-toast';
+import PasswordField from './PasswordField';
 
 function EncryptionUnlockModal({ isOpen, onUnlock, onClose, showCloseButton = true }) {
   const durationOptions = [
@@ -84,8 +85,7 @@ function EncryptionUnlockModal({ isOpen, onUnlock, onClose, showCloseButton = tr
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <input
-              type="password"
+            <PasswordField
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
