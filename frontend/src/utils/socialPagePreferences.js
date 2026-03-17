@@ -37,7 +37,10 @@ export const SOCIAL_HERO_TABS = [
   { id: 'gallery', label: 'Gallery', icon: 'photo' },
   { id: 'friends', label: 'Friends', icon: 'users' },
   { id: 'chat', label: 'Chat', icon: 'chat' },
-  { id: 'calendar', label: 'Calendar', icon: 'calendar' }
+  { id: 'calendar', label: 'Calendar', icon: 'calendar' },
+  { id: 'blog', label: 'Blog', icon: 'blog', optional: true },
+  { id: 'resume', label: 'Resume', icon: 'resume', optional: true },
+  { id: 'aboutme', label: 'About Me', icon: 'aboutme', optional: true }
 ];
 
 export const SOCIAL_HERO_TAB_LABELS = {
@@ -45,7 +48,10 @@ export const SOCIAL_HERO_TAB_LABELS = {
   friends: 'Friends',
   gallery: 'Gallery',
   chat: 'Chat',
-  calendar: 'Calendar'
+  calendar: 'Calendar',
+  blog: 'Blog',
+  resume: 'Resume',
+  aboutme: 'About Me'
 };
 
 export const SOCIAL_PANEL_LABELS = {

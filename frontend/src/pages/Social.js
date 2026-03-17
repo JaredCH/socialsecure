@@ -724,6 +724,7 @@ const Social = () => {
   const [composerVisible, setComposerVisible] = useState(false);
   const [showProfileCompletionHint, setShowProfileCompletionHint] = useState(false);
   const [showSlimHeader, setShowSlimHeader] = useState(false);
+  const [enabledSections, setEnabledSections] = useState({ blog: false, resume: false, aboutme: false });
   const localTypingTimeoutsRef = useRef({});
   const remoteTypingTimeoutsRef = useRef({});
   const designDirtyRef = useRef(false);
@@ -757,6 +758,42 @@ const Social = () => {
     ),
     [draftSocialPreferences, activeProfile?.socialPagePreferences, activeProfile?.profileTheme, activeLayoutMode]
   );
+
+  useEffect(() => {
+    const sections = activeProfile?.socialPagePreferences?.enabledSections;
+    if (sections && typeof sections === 'object') {
+      setEnabledSections({
+        blog: Boolean(sections.blog),
+        resume: Boolean(sections.resume),
+        aboutme: Boolean(sections.aboutme)
+      });
+    } else {
+      setEnabledSections({ blog: false, resume: false, aboutme: false });
+    }
+  }, [activeProfile?.socialPagePreferences?.enabledSections]);
+
+  const visibleHeroTabs = useMemo(() => {
+    return SOCIAL_HERO_TABS.filter((tab) => {
+      if (!tab.optional) return true;
+      if (isOwnSocialContext && !isGuestPreview) return true; // Owner sees all tabs
+      return enabledSections[tab.id] === true; // Guest only sees enabled tabs
+    });
+  }, [isOwnSocialContext, isGuestPreview, enabledSections]);
+
+  const handleToggleSection = useCallback(async (sectionId) => {
+    if (!isOwnSocialContext) return;
+    const prev = { ...enabledSections };
+    const next = { ...enabledSections, [sectionId]: !enabledSections[sectionId] };
+    setEnabledSections(next);
+    try {
+      const currentPrefs = draftSocialPreferences || activeProfile?.socialPagePreferences || {};
+      await socialPageAPI.savePreferences({ ...currentPrefs, enabledSections: next });
+      setCurrentUser((prev) => prev ? { ...prev, socialPagePreferences: { ...prev.socialPagePreferences, enabledSections: next } } : prev);
+    } catch (error) {
+      setEnabledSections(prev);
+    }
+  }, [isOwnSocialContext, enabledSections, draftSocialPreferences, activeProfile?.socialPagePreferences]);
+
   const isSectionVisible = useCallback(
     (sectionId) => socialPreferences.effective?.panels?.[sectionId]?.visible !== false,
     [socialPreferences]
@@ -3995,6 +4032,24 @@ const Social = () => {
             ) : null}
           </div>
         );
+      case 'blog_panel':
+        return (
+          <div className="space-y-4 p-4">
+            <p className="text-sm text-slate-400">Blog content will appear here.</p>
+          </div>
+        );
+      case 'resume_panel':
+        return (
+          <div className="space-y-4 p-4">
+            <p className="text-sm text-slate-400">Resume content will appear here.</p>
+          </div>
+        );
+      case 'aboutme_panel':
+        return (
+          <div className="space-y-4 p-4">
+            <p className="text-sm text-slate-400">About me content will appear here.</p>
+          </div>
+        );
       default:
         return <div className="text-sm text-slate-500">{SOCIAL_PANEL_LABELS[panelId] || panelId}</div>;
     }
@@ -4781,6 +4836,63 @@ const Social = () => {
           </div>,
           { subtitle: null }
         );
+      case 'blog': {
+        const isBlogEnabled = enabledSections.blog;
+        if (!isBlogEnabled && isOwnSocialContext && !isGuestPreview) {
+          return renderGlassPanel('Blog', (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5">
+                <svg className="h-8 w-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
+              </div>
+              <h3 className="text-lg font-semibold text-slate-300">Blog</h3>
+              <p className="mt-1 text-sm text-slate-500">Create and share blog posts with your visitors.</p>
+              <button type="button" onClick={() => handleToggleSection('blog')} className="mt-4 rounded-xl px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                Enable Blog
+              </button>
+            </div>
+          ), { subtitle: 'Not yet enabled' });
+        }
+        if (!isBlogEnabled) return null;
+        return renderGlassPanel('Blog', renderPanelBody('blog_panel'), { subtitle: 'Posts and articles' });
+      }
+      case 'resume': {
+        const isResumeEnabled = enabledSections.resume;
+        if (!isResumeEnabled && isOwnSocialContext && !isGuestPreview) {
+          return renderGlassPanel('Resume', (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5">
+                <svg className="h-8 w-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              </div>
+              <h3 className="text-lg font-semibold text-slate-300">Resume</h3>
+              <p className="mt-1 text-sm text-slate-500">Show your professional resume to visitors.</p>
+              <button type="button" onClick={() => handleToggleSection('resume')} className="mt-4 rounded-xl px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                Enable Resume
+              </button>
+            </div>
+          ), { subtitle: 'Not yet enabled' });
+        }
+        if (!isResumeEnabled) return null;
+        return renderGlassPanel('Resume', renderPanelBody('resume_panel'), { subtitle: 'Professional profile' });
+      }
+      case 'aboutme': {
+        const isAboutMeEnabled = enabledSections.aboutme;
+        if (!isAboutMeEnabled && isOwnSocialContext && !isGuestPreview) {
+          return renderGlassPanel('About Me', (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5">
+                <svg className="h-8 w-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+              </div>
+              <h3 className="text-lg font-semibold text-slate-300">About Me</h3>
+              <p className="mt-1 text-sm text-slate-500">Share more about yourself with your visitors.</p>
+              <button type="button" onClick={() => handleToggleSection('aboutme')} className="mt-4 rounded-xl px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                Enable About Me
+              </button>
+            </div>
+          ), { subtitle: 'Not yet enabled' });
+        }
+        if (!isAboutMeEnabled) return null;
+        return renderGlassPanel('About Me', renderPanelBody('aboutme_panel'), { subtitle: 'Personal introduction' });
+      }
       case 'main':
       default:
         return (
@@ -4938,7 +5050,7 @@ const Social = () => {
             <div className="flex items-center justify-between gap-4 rounded-b-2xl border border-white/10 px-4 py-3 text-white shadow-lg" style={{ background: 'rgba(13,13,20,0.92)', backdropFilter: 'blur(20px)' }}>
               <p className="truncate text-sm font-semibold">{heroProfile?.name || activeProfile?.realName || activeProfile?.username || 'Social'}</p>
               <div className="flex items-center gap-1">
-                {SOCIAL_HERO_TABS.map((tab) => (
+                {visibleHeroTabs.map((tab) => (
                   <button
                     key={`slim-tab-${tab.id}`}
                     type="button"
@@ -4975,17 +5087,27 @@ const Social = () => {
       <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 p-1.5" style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}>
           <div className="flex flex-wrap gap-1.5">
-            {SOCIAL_HERO_TABS.map((tab) => (
-              <button
-                key={`pill-tab-${tab.id}`}
-                type="button"
-                onClick={() => handleHeroTabChange(tab.id)}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${activeHeroTab === tab.id ? 'text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
-                style={activeHeroTab === tab.id ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {visibleHeroTabs.map((tab) => {
+              const isDisabled = tab.optional && !enabledSections[tab.id] && isOwnSocialContext && !isGuestPreview;
+              return (
+                <div key={`pill-tab-${tab.id}`} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => handleHeroTabChange(tab.id)}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${isDisabled ? 'opacity-40 hover:opacity-60' : ''} ${activeHeroTab === tab.id && !isDisabled ? 'text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
+                    style={activeHeroTab === tab.id && !isDisabled ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
+                    title={isDisabled ? 'Click to enable and setup!' : tab.label}
+                  >
+                    {tab.label}
+                  </button>
+                  {isDisabled ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-600 text-[8px] text-slate-300" title="Click to enable and setup!">
+                      <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
           {ownerEditingEnabled ? (
             <button
