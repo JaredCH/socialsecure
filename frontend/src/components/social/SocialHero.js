@@ -160,7 +160,11 @@ const SocialHero = ({
   onEditClick,
   activitySummary = {},
   onMobileMenuToggle,
-  enableMobileLauncher = true
+  enableMobileLauncher = true,
+  visibleTabs,
+  enabledSections = {},
+  isGuestPreview = false,
+  onGuestPreviewToggle
 }) => {
   const {
     name = 'User Name',
@@ -200,6 +204,11 @@ const SocialHero = ({
   const presenceMeta = useMemo(
     () => getPresenceMeta(resolvedPresence, presenceReferenceTime),
     [resolvedPresence, presenceReferenceTime]
+  );
+
+  const resolvedTabs = useMemo(
+    () => (Array.isArray(visibleTabs) && visibleTabs.length > 0 ? visibleTabs : SOCIAL_HERO_TABS),
+    [visibleTabs]
   );
 
   const socialMenuItems = useMemo(
@@ -462,21 +471,58 @@ const SocialHero = ({
 
         {/* Navigation Menu - Desktop */}
         {showNavigation && !isMobile && (
-          <nav className="flex items-center gap-2 rounded-2xl border border-white/15 bg-slate-950/35 p-2 backdrop-blur-xl">
-            {SOCIAL_HERO_TABS.map((tab) => (
+          <nav className="flex items-center gap-1 rounded-2xl border border-white/15 bg-slate-950/35 px-2 py-1.5 backdrop-blur-xl" style={{ flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+            {resolvedTabs.map((tab) => {
+              const isDisabled = tab.optional && !enabledSections[tab.id] && isEditing && !isGuestPreview;
+              const tabFontSize = resolvedTabs.length > 6 ? 'clamp(0.6rem, 0.9vw, 0.8rem)' : 'clamp(0.7rem, 1vw, 0.875rem)';
+              return (
+                <div key={tab.id} className="relative flex-shrink-0">
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => onTabChange?.(tab.id)}
+                    className={`
+                      flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition-all duration-200
+                      ${isDisabled ? 'opacity-40 hover:opacity-60' : ''}
+                      ${activeTab === tab.id && !isDisabled
+                        ? 'bg-white/10 font-medium'
+                        : 'hover:bg-white/5'
+                      }
+                    `}
+                    style={{
+                      color: activeTab === tab.id && !isDisabled ? menuActiveColor : menuTextColor,
+                      fontSize: tabFontSize,
+                    }}
+                    title={isDisabled ? 'Click to enable and setup!' : undefined}
+                  >
+                    <TabIcon icon={tab.icon} className="h-4 w-4 flex-shrink-0" />
+                    <span className="leading-none">{SOCIAL_HERO_TAB_LABELS[tab.id]}</span>
+                  </button>
+                  {isDisabled ? (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-600 text-[7px] text-slate-300" title="Click to enable and setup!">
+                      <svg className="h-2 w-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
+            {isEditing && onGuestPreviewToggle ? (
               <button
-                key={tab.id}
                 type="button"
-                onClick={() => onTabChange?.(tab.id)}
-                className={getNavItemClasses(tab.id)}
-                style={{ 
-                  color: activeTab === tab.id ? menuActiveColor : menuTextColor 
-                }}
+                onClick={() => onGuestPreviewToggle(!isGuestPreview)}
+                className={`relative ml-1.5 flex flex-shrink-0 items-center gap-1.5 rounded-full px-0.5 py-0.5 text-xs font-semibold transition-all duration-300 ${isGuestPreview ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40' : 'bg-white/10 text-slate-300 ring-1 ring-white/10 hover:bg-white/15'}`}
+                title={isGuestPreview ? 'Switch to Owner View' : 'Preview as Guest'}
               >
-                <TabIcon icon={tab.icon} className="w-5 h-5" />
-                <span className="text-sm">{SOCIAL_HERO_TAB_LABELS[tab.id]}</span>
+                <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 transition-all duration-300 ${!isGuestPreview ? 'bg-white/15 text-white shadow-sm' : 'text-slate-400'}`} style={{ fontSize: 'clamp(0.55rem, 0.7vw, 0.7rem)' }}>
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  Owner
+                </span>
+                <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 transition-all duration-300 ${isGuestPreview ? 'bg-amber-500/25 text-amber-200 shadow-sm' : 'text-slate-400'}`} style={{ fontSize: 'clamp(0.55rem, 0.7vw, 0.7rem)' }}>
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-.274.886-.672 1.72-1.18 2.478m-2.14 2.584A9.956 9.956 0 0112 19c-4.478 0-8.268-2.943-9.542-7a10.025 10.025 0 012.32-3.78" /></svg>
+                  Guest
+                </span>
               </button>
-            ))}
+            ) : null}
           </nav>
         )}
         </div>

@@ -2881,6 +2881,14 @@ const Social = () => {
       setFeedError('Secure audience currently supports only Friends visibility.');
       return;
     }
+    if (postForm.relationshipAudience === 'public' && postForm.visibility !== 'public') {
+      setFeedError('Public audience currently supports only Public visibility.');
+      return;
+    }
+    if (postForm.visibility === 'public' && postForm.relationshipAudience !== 'public') {
+      setFeedError('Public visibility currently supports only Public audience.');
+      return;
+    }
 
     if (contentType === 'poll') {
       const poll = postForm.interaction.poll;
@@ -3824,6 +3832,11 @@ const Social = () => {
 
               {/* ── Footer: submit ── */}
               <div className="px-3 py-2.5" style={{ borderTop: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)', background: 'var(--social-surface-muted)' }}>
+                {feedError ? (
+                  <div className="mb-2.5 rounded-xl border px-3 py-2 text-sm" style={{ borderColor: 'color-mix(in srgb, #ef4444 40%, transparent)', background: 'color-mix(in srgb, #ef4444 10%, var(--bg-panel))', color: '#ef4444' }}>
+                    {feedError}
+                  </div>
+                ) : null}
                 <button
                   type="submit"
                   disabled={submittingPost || composerImageUploading}
@@ -3903,12 +3916,12 @@ const Social = () => {
         return (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-slate-500">Timeline</p>
-              <button type="button" onClick={loadFeed} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" disabled={loadingFeed}>{loadingFeed ? 'Refreshing…' : 'Refresh'}</button>
+              <p className="text-sm" style={{ color: 'var(--social-text-muted)' }}>Timeline</p>
+              <button type="button" onClick={loadFeed} className="rounded-xl border px-3 py-2 text-sm transition-colors" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', color: 'var(--social-text-secondary)', background: 'transparent' }} disabled={loadingFeed}>{loadingFeed ? 'Refreshing…' : 'Refresh'}</button>
             </div>
-            {feedError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">{feedError}</div> : null}
-            {isAuthenticated && !realtimeEnabled ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Real-time social updates are disabled for this account. Periodic refresh remains active.</div> : null}
-            {loadingFeed ? <div className="rounded-xl border bg-slate-50 p-6 text-slate-500">Loading feed…</div> : posts.length === 0 ? renderSoftEmptyState({
+            {feedError ? <div className="rounded-xl border px-3 py-2.5 text-sm" style={{ borderColor: 'color-mix(in srgb, #ef4444 40%, transparent)', background: 'color-mix(in srgb, #ef4444 10%, var(--bg-panel))', color: '#ef4444' }}>{feedError}</div> : null}
+            {isAuthenticated && !realtimeEnabled ? <div className="rounded-xl border px-3 py-2.5 text-sm" style={{ borderColor: 'color-mix(in srgb, #d97706 30%, transparent)', background: 'color-mix(in srgb, #d97706 8%, var(--bg-panel))', color: 'color-mix(in srgb, #d97706 85%, var(--social-text-primary))' }}>Real-time social updates are disabled for this account. Periodic refresh remains active.</div> : null}
+            {loadingFeed ? <div className="rounded-xl border p-6" style={{ background: 'var(--social-surface-soft)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 15%, transparent)', color: 'var(--social-text-muted)' }}>Loading feed…</div> : posts.length === 0 ? renderSoftEmptyState({
               iconType: 'compose',
               title: isOwnSocialContext ? 'Your timeline is empty' : 'Nothing here yet',
               description: isOwnSocialContext
@@ -4829,8 +4842,8 @@ const Social = () => {
       <div className="border-b border-white/30 px-4 py-3.5 sm:px-5 sm:py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">{title}</h2>
-            {options.subtitle ? <p className="mt-1 text-sm text-slate-500">{options.subtitle}</p> : null}
+            <h2 className="text-sm font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--social-text-muted)' }}>{title}</h2>
+            {options.subtitle ? <p className="mt-1 text-sm" style={{ color: 'var(--social-text-muted)' }}>{options.subtitle}</p> : null}
           </div>
           {options.action}
         </div>
@@ -4850,14 +4863,14 @@ const Social = () => {
     const path = iconPaths[iconType] || iconPaths.default;
 
     return (
-      <div className="flex flex-col items-center rounded-[1.5rem] border bg-white/95 px-6 py-10 text-center">
+      <div className="flex flex-col items-center rounded-[1.5rem] border px-6 py-10 text-center" style={{ background: 'var(--bg-panel)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)' }}>
         <div className={`mb-4 flex h-16 w-16 items-center justify-center rounded-full ${toneStyle.iconBg}`}>
           <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke={toneStyle.iconStroke} strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d={path} />
           </svg>
         </div>
-        <p className="text-lg font-semibold text-slate-900">{title}</p>
-        <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">{description}</p>
+        <p className="text-lg font-semibold" style={{ color: 'var(--social-text-primary)' }}>{title}</p>
+        <p className="mt-2 max-w-sm text-sm leading-relaxed" style={{ color: 'var(--social-text-muted)' }}>{description}</p>
         {actionLabel && onAction ? (
           <button
             type="button"
@@ -5654,53 +5667,11 @@ const Social = () => {
           activitySummary={heroOverlayActivity}
           onMobileMenuToggle={setHeroOverlayOpen}
           enableMobileLauncher={false}
+          visibleTabs={visibleHeroTabs}
+          enabledSections={enabledSections}
+          isGuestPreview={isGuestPreview}
+          onGuestPreviewToggle={ownerEditingEnabled ? handleGuestPreviewToggle : undefined}
         />
-      </div>
-
-      {/* Tab Bar (pill-style) */}
-      <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 p-1.5" style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}>
-          <div className="flex flex-wrap gap-1.5">
-            {visibleHeroTabs.map((tab) => {
-              const isDisabled = tab.optional && !enabledSections[tab.id] && isOwnSocialContext && !isGuestPreview;
-              return (
-                <div key={`pill-tab-${tab.id}`} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => handleHeroTabChange(tab.id)}
-                    className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${isDisabled ? 'opacity-40 hover:opacity-60' : ''} ${activeHeroTab === tab.id && !isDisabled ? 'text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
-                    style={activeHeroTab === tab.id && !isDisabled ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
-                    title={isDisabled ? 'Click to enable and setup!' : undefined}
-                  >
-                    {tab.label}
-                  </button>
-                  {isDisabled ? (
-                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-600 text-[8px] text-slate-300" title="Click to enable and setup!">
-                      <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </span>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          {ownerEditingEnabled ? (
-            <button
-              type="button"
-              onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
-              className={`relative flex items-center gap-2 rounded-full px-1 py-1 text-xs font-semibold transition-all duration-300 ${isGuestPreview ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40' : 'bg-white/10 text-slate-300 ring-1 ring-white/10 hover:bg-white/15'}`}
-              title={isGuestPreview ? 'Switch to Owner View' : 'Preview as Guest'}
-            >
-              <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all duration-300 ${!isGuestPreview ? 'bg-white/15 text-white shadow-sm' : 'text-slate-400'}`}>
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                Owner
-              </span>
-              <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all duration-300 ${isGuestPreview ? 'bg-amber-500/25 text-amber-200 shadow-sm' : 'text-slate-400'}`}>
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-.274.886-.672 1.72-1.18 2.478m-2.14 2.584A9.956 9.956 0 0112 19c-4.478 0-8.268-2.943-9.542-7a10.025 10.025 0 012.32-3.78" /></svg>
-                Guest
-              </span>
-            </button>
-          ) : null}
-        </div>
       </div>
 
       {/* Main Two-Column Layout */}
