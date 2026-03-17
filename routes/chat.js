@@ -264,6 +264,7 @@ const DISCOVERY_ROOM_FILTER = {
   discoverable: { $ne: false },
   $or: [
     { type: 'state' },
+    { type: 'county' },
     { type: 'topic' },
     { parentRoomId: { $ne: null } },
     { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
