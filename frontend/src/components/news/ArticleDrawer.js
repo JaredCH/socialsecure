@@ -15,8 +15,7 @@ const ArticleDrawer = ({ article, onClose, variant = 'drawer', anchorPosition = 
   const popupRef = useRef(null);
 
   useEffect(() => {
-    if (!article) return undefined;
-    if (isPopup) return undefined;
+    if (!article || isPopup) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
@@ -33,8 +32,7 @@ const ArticleDrawer = ({ article, onClose, variant = 'drawer', anchorPosition = 
   }, [isPopup, onClose]);
 
   useEffect(() => {
-    if (!article) return undefined;
-    if (!isPopup) return undefined;
+    if (!article || !isPopup) return;
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') onClose?.();
     };
@@ -152,7 +150,7 @@ const ArticleDrawer = ({ article, onClose, variant = 'drawer', anchorPosition = 
         ref={popupRef}
         data-testid="article-popup-preview"
         role="dialog"
-        aria-modal="false"
+        aria-modal="true"
         aria-label="Article Detail"
         className="absolute w-[360px] max-w-[calc(100vw-2rem)] pointer-events-auto overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
         style={popupPosition}

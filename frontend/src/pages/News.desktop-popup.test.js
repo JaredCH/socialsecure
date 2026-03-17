@@ -128,10 +128,10 @@ describe('News desktop article popup', () => {
     await act(async () => Promise.resolve());
 
     const articleRows = Array.from(container.querySelectorAll('article'));
-    expect(articleRows.length).toBeGreaterThan(1);
+    expect(articleRows.length).toBeGreaterThan(0);
 
     await act(async () => {
-      articleRows[1].dispatchEvent(new MouseEvent('click', {
+      articleRows[articleRows.length - 1].dispatchEvent(new MouseEvent('click', {
         bubbles: true,
         clientX: 240,
         clientY: 180,

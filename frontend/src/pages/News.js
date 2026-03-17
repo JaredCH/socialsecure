@@ -149,7 +149,13 @@ function News() {
     return () => window.cancelAnimationFrame(id);
   }, []);
 
+  const handleMobileArticleSelect = useCallback((article) => {
+    setDesktopArticlePreview(null);
+    setSelectedArticle(article);
+  }, []);
+
   const handleDesktopArticleSelect = useCallback((article, anchorPosition) => {
+    setSelectedArticle(null);
     setDesktopArticlePreview({ article, anchorPosition });
   }, []);
 
@@ -305,7 +311,7 @@ function News() {
               activeRegion={activeRegion}
               activeDate={activeDate}
               searchQuery={searchQuery}
-              onArticle={setSelectedArticle}
+              onArticle={handleMobileArticleSelect}
               prefetchedFeed={prefetchedFeed}
             />
           </div>
