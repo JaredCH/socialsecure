@@ -3423,19 +3423,19 @@ const Social = () => {
       case 'guest_lookup':
         return !isAuthenticated ? (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">Enter a username or user ID to load a public feed.</p>
+            <p className="text-sm" style={{ color: 'var(--social-text-secondary)' }}>Enter a username or user ID to load a public feed.</p>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <input type="text" value={guestUser} onChange={(event) => setGuestUser(event.target.value)} placeholder="username or user ID" className="flex-1 rounded-xl border px-3 py-2" />
-              <button type="button" onClick={loadFeed} className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700" disabled={loadingFeed}>{loadingFeed ? 'Loading…' : 'Load profile'}</button>
+              <input type="text" value={guestUser} onChange={(event) => setGuestUser(event.target.value)} placeholder="username or user ID" className="flex-1 rounded-xl border px-3 py-2" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-primary)' }} />
+              <button type="button" onClick={loadFeed} className="rounded-xl px-4 py-2 text-white" style={{ background: 'var(--accent)' }} disabled={loadingFeed}>{loadingFeed ? 'Loading…' : 'Load profile'}</button>
             </div>
             {guestProfile ? (
-              <div className="text-sm text-slate-600">
+              <div className="text-sm" style={{ color: 'var(--social-text-secondary)' }}>
                 Viewing public posts for <span className="font-semibold">@{guestProfile.username}</span>
               </div>
             ) : null}
           </div>
         ) : (
-          <div className="text-sm text-slate-500">Guest lookup is hidden for signed-in owners and guest profile viewers.</div>
+          <div className="text-sm" style={{ color: 'var(--social-text-muted)' }}>Guest lookup is hidden for signed-in owners and guest profile viewers.</div>
         );
       case 'composer':
         return isOwnSocialContext && !isGuestPreview ? (
@@ -3948,64 +3948,64 @@ const Social = () => {
               const interactionStatus = getInteractionStatus(interaction);
 
               return (
-                <article key={post._id} className="space-y-3 rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+                <article key={post._id} className="space-y-3 rounded-2xl border p-5 shadow-sm" style={{ background: 'var(--bg-panel)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)' }}>
                   <header className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-gray-900">@{postAuthor} {'→'} @{postTarget}</p>
-                      <p className="text-xs text-gray-500">{formatDate(post.createdAt)}</p>
+                      <p className="font-medium" style={{ color: 'var(--social-text-primary)' }}>@{postAuthor} {'→'} @{postTarget}</p>
+                      <p className="text-xs" style={{ color: 'var(--social-text-muted)' }}>{formatDate(post.createdAt)}</p>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="rounded-full bg-gray-100 px-2 py-1 text-xs uppercase tracking-wide">{PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}</span>
-                      <span className={`rounded-full px-2 py-1 text-xs uppercase tracking-wide ${post.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>{RELATIONSHIP_AUDIENCE_LABELS[post.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</span>
+                      <span className="rounded-full px-2 py-1 text-xs uppercase tracking-wide" style={{ background: 'var(--social-surface-muted)', color: 'var(--social-text-secondary)' }}>{PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}</span>
+                      <span className={`rounded-full px-2 py-1 text-xs uppercase tracking-wide ${post.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : post.relationshipAudience === 'public' ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800'}`}>{RELATIONSHIP_AUDIENCE_LABELS[post.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</span>
                       {isAuthenticated && !isGuestPreview && isPostOwner ? (
-                        <button type="button" onClick={() => handleDeletePost(post._id)} disabled={postBusy} className="rounded-full border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60">
+                        <button type="button" onClick={() => handleDeletePost(post._id)} disabled={postBusy} className="rounded-full border px-2 py-1 text-xs font-semibold disabled:opacity-60" style={{ borderColor: 'color-mix(in srgb, #ef4444 40%, transparent)', color: '#ef4444' }}>
                           Delete
                         </button>
                       ) : null}
                     </div>
                   </header>
-                  <div className="flex flex-wrap gap-2 text-xs text-gray-600">
-                    {Array.isArray(post.visibleToCircles) && post.visibleToCircles.length > 0 ? <span className="rounded-full bg-gray-100 px-2 py-1">Circles: {post.visibleToCircles.join(', ')}</span> : null}
-                    {post.locationRadius ? <span className="rounded-full bg-gray-100 px-2 py-1">Radius: {post.locationRadius} mi</span> : null}
-                    {post.expiresAt ? <span className="rounded-full bg-gray-100 px-2 py-1">Expires: {formatDate(post.expiresAt)}</span> : null}
+                  <div className="flex flex-wrap gap-2 text-xs" style={{ color: 'var(--social-text-secondary)' }}>
+                    {Array.isArray(post.visibleToCircles) && post.visibleToCircles.length > 0 ? <span className="rounded-full px-2 py-1" style={{ background: 'var(--social-surface-muted)' }}>Circles: {post.visibleToCircles.join(', ')}</span> : null}
+                    {post.locationRadius ? <span className="rounded-full px-2 py-1" style={{ background: 'var(--social-surface-muted)' }}>Radius: {post.locationRadius} mi</span> : null}
+                    {post.expiresAt ? <span className="rounded-full px-2 py-1" style={{ background: 'var(--social-surface-muted)' }}>Expires: {formatDate(post.expiresAt)}</span> : null}
                   </div>
-                  {displayContent ? <div className="space-y-1 text-gray-800">{renderFormattedPostContent(displayContent)}</div> : null}
+                  {displayContent ? <div className="space-y-1" style={{ color: 'var(--social-text-primary)' }}>{renderFormattedPostContent(displayContent)}</div> : null}
                   {post.mediaUrls.length > 0 ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{post.mediaUrls.map((url, index) => renderMediaItem(url, `${post._id}-media-${index}`))}</div> : null}
-                  {interaction?.type === 'poll' ? <div className="rounded-xl border bg-slate-50 p-3"><p className="font-medium text-sm">{interaction.poll?.question}</p><p className="text-xs text-gray-500">Poll status: <span className="font-medium">{interactionStatus}</span></p></div> : null}
-                  {interaction?.type === 'quiz' ? <div className="rounded-xl border bg-violet-50/40 p-3"><p className="font-medium text-sm">{interaction.quiz?.question}</p><p className="text-xs text-gray-500">Quiz status: <span className="font-medium">{interactionStatus}</span></p></div> : null}
-                  {interaction?.type === 'countdown' ? <div className="rounded-xl border bg-emerald-50/50 p-3"><p className="font-medium text-sm">{interaction.countdown?.label}</p><p className="text-xs text-gray-600">Timezone: {interaction.countdown?.timezone || 'UTC'} • Status: {interactionStatus}</p><p className="text-lg font-semibold text-emerald-700">{formatRemainingTime(interaction.countdown?.targetAt, nowMs)}</p></div> : null}
-                  <div className="flex items-center gap-4 text-sm text-gray-600"><span>{post.likesCount} like{post.likesCount === 1 ? '' : 's'}</span><span>{post.commentsCount} comment{post.commentsCount === 1 ? '' : 's'}</span></div>
+                  {interaction?.type === 'poll' ? <div className="rounded-xl border p-3" style={{ background: 'var(--social-surface-soft)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 15%, transparent)' }}><p className="text-sm font-medium" style={{ color: 'var(--social-text-primary)' }}>{interaction.poll?.question}</p><p className="text-xs" style={{ color: 'var(--social-text-muted)' }}>Poll status: <span className="font-medium">{interactionStatus}</span></p></div> : null}
+                  {interaction?.type === 'quiz' ? <div className="rounded-xl border p-3" style={{ background: 'color-mix(in srgb, #8b5cf6 5%, var(--bg-panel))', borderColor: 'color-mix(in srgb, #8b5cf6 20%, transparent)' }}><p className="text-sm font-medium" style={{ color: 'var(--social-text-primary)' }}>{interaction.quiz?.question}</p><p className="text-xs" style={{ color: 'var(--social-text-muted)' }}>Quiz status: <span className="font-medium">{interactionStatus}</span></p></div> : null}
+                  {interaction?.type === 'countdown' ? <div className="rounded-xl border p-3" style={{ background: 'color-mix(in srgb, #059669 5%, var(--bg-panel))', borderColor: 'color-mix(in srgb, #059669 20%, transparent)' }}><p className="text-sm font-medium" style={{ color: 'var(--social-text-primary)' }}>{interaction.countdown?.label}</p><p className="text-xs" style={{ color: 'var(--social-text-secondary)' }}>Timezone: {interaction.countdown?.timezone || 'UTC'} • Status: {interactionStatus}</p><p className="text-lg font-semibold" style={{ color: '#059669' }}>{formatRemainingTime(interaction.countdown?.targetAt, nowMs)}</p></div> : null}
+                  <div className="flex items-center gap-4 text-sm" style={{ color: 'var(--social-text-secondary)' }}><span>{post.likesCount} like{post.likesCount === 1 ? '' : 's'}</span><span>{post.commentsCount} comment{post.commentsCount === 1 ? '' : 's'}</span></div>
                   {isAuthenticated && !isGuestPreview && postAuthorId && postAuthorId !== String(currentUser?._id) ? (
                     <div className="flex flex-wrap gap-2">
                       <BlockButton isBlocked={isBlocked} onBlock={(reason) => handleBlockUser(postAuthorId, reason)} onUnblock={() => handleUnblockUser(postAuthorId)} />
-                      <button type="button" onClick={() => handleToggleMuteUser(postAuthorId)} className="rounded-lg border border-gray-400 px-3 py-1.5 text-sm">{isMuted ? 'Unmute User' : 'Mute User'}</button>
-                      <button type="button" onClick={() => openReportModal('post', post._id, postAuthorId)} className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700">Report</button>
+                      <button type="button" onClick={() => handleToggleMuteUser(postAuthorId)} className="rounded-lg border px-3 py-1.5 text-sm" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 35%, transparent)', color: 'var(--social-text-secondary)' }}>{isMuted ? 'Unmute User' : 'Mute User'}</button>
+                      <button type="button" onClick={() => openReportModal('post', post._id, postAuthorId)} className="rounded-lg border px-3 py-1.5 text-sm" style={{ borderColor: 'color-mix(in srgb, #ef4444 35%, transparent)', color: '#ef4444' }}>Report</button>
                     </div>
                   ) : null}
                   {isAuthenticated && !isGuestPreview ? (
                     <div className="space-y-3">
-                      <button type="button" disabled={postBusy} onClick={() => handleToggleLike(post)} className={`rounded-lg border px-3 py-1.5 text-sm ${hasLiked ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 hover:bg-gray-50'}`}>{hasLiked ? 'Unlike' : 'Like'}</button>
+                      <button type="button" disabled={postBusy} onClick={() => handleToggleLike(post)} className="rounded-lg border px-3 py-1.5 text-sm transition-colors" style={hasLiked ? { borderColor: 'var(--accent)', background: 'var(--accent)', color: '#fff' } : { borderColor: 'color-mix(in srgb, var(--social-text-muted) 30%, transparent)', color: 'var(--social-text-secondary)' }}>{hasLiked ? 'Unlike' : 'Like'}</button>
                       <div className="space-y-2">
-                        <h4 className="text-sm font-medium">Comments</h4>
-                        {post.comments.length === 0 ? <p className="text-sm text-gray-500">No comments yet.</p> : (
+                        <h4 className="text-sm font-medium" style={{ color: 'var(--social-text-primary)' }}>Comments</h4>
+                        {post.comments.length === 0 ? <p className="text-sm" style={{ color: 'var(--social-text-muted)' }}>No comments yet.</p> : (
                           <ul className="space-y-2">
                             {post.comments.map((comment, index) => (
-                              <li key={comment._id || `${post._id}-comment-${index}`} className="rounded-xl border bg-gray-50 p-2 text-sm">
-                                <p className="font-medium text-gray-700">@{comment.username || comment.userId || 'user'}</p>
-                                <p className="whitespace-pre-wrap text-gray-800">{comment.content}</p>
-                                <p className="text-xs text-gray-500">{formatDate(comment.createdAt)}</p>
+                              <li key={comment._id || `${post._id}-comment-${index}`} className="rounded-xl border p-2 text-sm" style={{ background: 'var(--social-surface-soft)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 15%, transparent)' }}>
+                                <p className="font-medium" style={{ color: 'var(--social-text-secondary)' }}>@{comment.username || comment.userId || 'user'}</p>
+                                <p className="whitespace-pre-wrap" style={{ color: 'var(--social-text-primary)' }}>{comment.content}</p>
+                                <p className="text-xs" style={{ color: 'var(--social-text-muted)' }}>{formatDate(comment.createdAt)}</p>
                               </li>
                             ))}
                           </ul>
                         )}
                         <div className="flex gap-2">
-                          <input type="text" value={commentInputs[post._id] || ''} onChange={(event) => handleCommentInputChange(post._id, event.target.value)} onBlur={() => emitTypingStop({ scope: 'comment', targetId: post._id })} placeholder="Add a comment..." className="flex-1 rounded-xl border px-3 py-2 text-sm" maxLength={1000} />
-                          <button type="button" onClick={() => handleAddComment(post._id)} disabled={postBusy} className="rounded-xl bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-60">Comment</button>
+                          <input type="text" value={commentInputs[post._id] || ''} onChange={(event) => handleCommentInputChange(post._id, event.target.value)} onBlur={() => emitTypingStop({ scope: 'comment', targetId: post._id })} placeholder="Add a comment..." className="flex-1 rounded-xl border px-3 py-2 text-sm" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-primary)' }} maxLength={1000} />
+                          <button type="button" onClick={() => handleAddComment(post._id)} disabled={postBusy} className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-60" style={{ background: 'var(--accent)' }}>Comment</button>
                         </div>
                         <TypingIndicator labels={Object.values(commentTypingByPostId[post._id] || {})} />
                       </div>
                     </div>
-                  ) : <p className="text-sm text-gray-500">Sign in to like or comment on posts.</p>}
+                  ) : <p className="text-sm" style={{ color: 'var(--social-text-muted)' }}>Sign in to like or comment on posts.</p>}
                 </article>
               );
             })}
@@ -4014,29 +4014,29 @@ const Social = () => {
       case 'moderation_status':
         return isAuthenticated && !isGuestPreview ? (
           <div className="space-y-3">
-            {myReports.length === 0 ? <p className="text-sm text-gray-500">No submitted reports yet.</p> : myReports.slice(0, 10).map((report) => (
-              <div key={report.id} className="rounded-xl border p-2 text-sm">
-                <p className="font-medium text-gray-900">{report.category} • {report.targetType} • {report.status}</p>
-                <p className="text-gray-500">{formatDate(report.createdAt)}</p>
+            {myReports.length === 0 ? <p className="text-sm" style={{ color: 'var(--social-text-muted)' }}>No submitted reports yet.</p> : myReports.slice(0, 10).map((report) => (
+              <div key={report.id} className="rounded-xl border p-2 text-sm" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)' }}>
+                <p className="font-medium" style={{ color: 'var(--social-text-primary)' }}>{report.category} • {report.targetType} • {report.status}</p>
+                <p style={{ color: 'var(--social-text-muted)' }}>{formatDate(report.createdAt)}</p>
               </div>
             ))}
           </div>
-        ) : <p className="text-sm text-slate-500">Moderation status is available only in owner view.</p>;
+        ) : <p className="text-sm" style={{ color: 'var(--social-text-muted)' }}>Moderation status is available only in owner view.</p>;
       case 'gallery':
         return (
           <div className="relative space-y-4 pt-5">
-            <span className="absolute right-0 top-0 text-[11px] font-medium text-slate-400">{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
+            <span className="absolute right-0 top-0 text-[11px] font-medium" style={{ color: 'var(--social-text-muted)' }}>{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
             {!isAuthenticated ? (
-              <div className="space-y-2 rounded-xl border bg-slate-50 p-3">
-                <p className="text-sm text-gray-600">Choose a profile to browse gallery media.</p>
+              <div className="space-y-2 rounded-xl border p-3" style={{ background: 'var(--social-surface-soft)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)' }}>
+                <p className="text-sm" style={{ color: 'var(--social-text-secondary)' }}>Choose a profile to browse gallery media.</p>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <input type="text" value={galleryTargetInput} onChange={(event) => setGalleryTargetInput(event.target.value)} placeholder="username or user ID" className="flex-1 rounded-xl border px-3 py-2" />
-                  <button type="button" onClick={() => setGalleryTarget(galleryTargetInput.trim())} disabled={galleryLoading} className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-100 disabled:opacity-60">Load Gallery</button>
+                  <input type="text" value={galleryTargetInput} onChange={(event) => setGalleryTargetInput(event.target.value)} placeholder="username or user ID" className="flex-1 rounded-xl border px-3 py-2" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)' }} />
+                  <button type="button" onClick={() => setGalleryTarget(galleryTargetInput.trim())} disabled={galleryLoading} className="rounded-xl border px-4 py-2 disabled:opacity-60" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 30%, transparent)', color: 'var(--social-text-secondary)' }}>Load Gallery</button>
                 </div>
               </div>
             ) : null}
-            {galleryError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{galleryError}</div> : null}
-            {galleryLoading ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">Loading gallery…</div> : galleryItems.length === 0 ? renderSoftEmptyState({
+            {galleryError ? <div className="rounded-xl border px-3 py-2.5 text-sm" style={{ borderColor: 'color-mix(in srgb, #ef4444 40%, transparent)', background: 'color-mix(in srgb, #ef4444 10%, var(--bg-panel))', color: '#ef4444' }}>{galleryError}</div> : null}
+            {galleryLoading ? <div className="rounded-xl border p-4 text-sm" style={{ background: 'var(--social-surface-soft)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 15%, transparent)', color: 'var(--social-text-muted)' }}>Loading gallery…</div> : galleryItems.length === 0 ? renderSoftEmptyState({
               iconType: 'image',
               title: isOwnSocialContext ? 'No images yet' : 'Gallery is empty',
               description: isOwnSocialContext
@@ -4052,36 +4052,36 @@ const Social = () => {
                   const imageBusy = Boolean(galleryActionLoadingByImage[image._id]);
                   const editState = galleryEditById[image._id] || null;
                   return (
-                    <article key={image._id} className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white/95 shadow-sm">
+                    <article key={image._id} className="overflow-hidden rounded-[1.5rem] border shadow-sm" style={{ background: 'var(--bg-panel)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)' }}>
                       <img src={image.mediaUrl} alt="Gallery item" className="h-40 w-full object-cover" />
                       <div className="space-y-2.5 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            {image.title ? <p className="truncate text-sm font-semibold text-slate-900">{image.title}</p> : <p className="text-sm font-semibold text-slate-500">Untitled visual</p>}
-                            {image.caption ? <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm text-slate-600">{image.caption}</p> : null}
+                            {image.title ? <p className="truncate text-sm font-semibold" style={{ color: 'var(--social-text-primary)' }}>{image.title}</p> : <p className="text-sm font-semibold" style={{ color: 'var(--social-text-muted)' }}>Untitled visual</p>}
+                            {image.caption ? <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm" style={{ color: 'var(--social-text-secondary)' }}>{image.caption}</p> : null}
                           </div>
-                          <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${image.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
+                          <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${image.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : image.relationshipAudience === 'public' ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800'}`}>
                             {RELATIONSHIP_AUDIENCE_LABELS[image.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-sm">
-                          <button type="button" onClick={() => handleGalleryReaction(image._id, 'like')} disabled={!viewerCanReact || imageBusy} className={`rounded-lg border px-2 py-1 ${viewerReaction === 'like' ? 'border-green-600 bg-green-600 text-white' : 'border-gray-300 hover:bg-gray-50'}`}>👍 {image.likesCount || 0}</button>
-                          <button type="button" onClick={() => handleGalleryReaction(image._id, 'dislike')} disabled={!viewerCanReact || imageBusy} className={`rounded-lg border px-2 py-1 ${viewerReaction === 'dislike' ? 'border-red-600 bg-red-600 text-white' : 'border-gray-300 hover:bg-gray-50'}`}>👎 {image.dislikesCount || 0}</button>
+                          <button type="button" onClick={() => handleGalleryReaction(image._id, 'like')} disabled={!viewerCanReact || imageBusy} className="rounded-lg border px-2 py-1 transition-colors" style={viewerReaction === 'like' ? { borderColor: '#16a34a', background: '#16a34a', color: '#fff' } : { borderColor: 'color-mix(in srgb, var(--social-text-muted) 30%, transparent)', color: 'var(--social-text-secondary)' }}>👍 {image.likesCount || 0}</button>
+                          <button type="button" onClick={() => handleGalleryReaction(image._id, 'dislike')} disabled={!viewerCanReact || imageBusy} className="rounded-lg border px-2 py-1 transition-colors" style={viewerReaction === 'dislike' ? { borderColor: '#ef4444', background: '#ef4444', color: '#fff' } : { borderColor: 'color-mix(in srgb, var(--social-text-muted) 30%, transparent)', color: 'var(--social-text-secondary)' }}>👎 {image.dislikesCount || 0}</button>
                         </div>
                         {canManageGallery ? (
-                          <div className="space-y-2 border-t border-slate-100 pt-2">
+                          <div className="space-y-2 border-t pt-2" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 15%, transparent)' }}>
                             {editState ? (
                               <div className="space-y-2">
-                                {image.mediaType === 'url' ? <input type="url" value={editState.mediaUrl} onChange={(event) => handleEditGalleryField(image._id, 'mediaUrl', event.target.value)} placeholder="https://example.com/photo.jpg" className="w-full rounded-xl border px-2 py-1 text-sm" /> : null}
-                                <input type="text" value={editState.title} onChange={(event) => handleEditGalleryField(image._id, 'title', event.target.value)} placeholder="Title" maxLength={140} className="w-full rounded-xl border px-2 py-1 text-sm" />
-                                <input type="text" value={editState.caption} onChange={(event) => handleEditGalleryField(image._id, 'caption', event.target.value)} placeholder="Caption" maxLength={280} className="w-full rounded-xl border px-2 py-1 text-sm" />
+                                {image.mediaType === 'url' ? <input type="url" value={editState.mediaUrl} onChange={(event) => handleEditGalleryField(image._id, 'mediaUrl', event.target.value)} placeholder="https://example.com/photo.jpg" className="w-full rounded-xl border px-2 py-1 text-sm" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-primary)' }} /> : null}
+                                <input type="text" value={editState.title} onChange={(event) => handleEditGalleryField(image._id, 'title', event.target.value)} placeholder="Title" maxLength={140} className="w-full rounded-xl border px-2 py-1 text-sm" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-primary)' }} />
+                                <input type="text" value={editState.caption} onChange={(event) => handleEditGalleryField(image._id, 'caption', event.target.value)} placeholder="Caption" maxLength={280} className="w-full rounded-xl border px-2 py-1 text-sm" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-primary)' }} />
                                 <div className="flex gap-2">
-                                  <button type="button" onClick={() => handleSaveGalleryItem(image)} disabled={imageBusy} className="rounded-lg bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-60">Save</button>
-                                  <button type="button" onClick={() => handleCancelEditGalleryItem(image._id)} disabled={imageBusy} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">Cancel</button>
+                                  <button type="button" onClick={() => handleSaveGalleryItem(image)} disabled={imageBusy} className="rounded-lg px-2 py-1 text-xs text-white disabled:opacity-60" style={{ background: 'var(--accent)' }}>Save</button>
+                                  <button type="button" onClick={() => handleCancelEditGalleryItem(image._id)} disabled={imageBusy} className="rounded-lg border px-2 py-1 text-xs" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', color: 'var(--social-text-secondary)' }}>Cancel</button>
                                 </div>
                               </div>
-                            ) : <button type="button" onClick={() => handleStartEditGalleryItem(image)} disabled={imageBusy} className="text-xs text-blue-600 hover:text-blue-700">Edit image</button>}
-                            <button type="button" onClick={() => handleRemoveGalleryImage(image._id)} disabled={imageBusy} className="text-xs text-red-600 hover:text-red-700 disabled:opacity-60">Remove image</button>
+                            ) : <button type="button" onClick={() => handleStartEditGalleryItem(image)} disabled={imageBusy} className="text-xs" style={{ color: 'var(--accent)' }}>Edit image</button>}
+                            <button type="button" onClick={() => handleRemoveGalleryImage(image._id)} disabled={imageBusy} className="text-xs disabled:opacity-60" style={{ color: '#ef4444' }}>Remove image</button>
                           </div>
                         ) : null}
                       </div>
@@ -5692,9 +5692,9 @@ const Social = () => {
               <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
                 <div className="h-0.5" style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor2})` }} />
                 <div className="px-4 py-4">
-                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">About</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                    {activeProfile?.bio || activeProfile?.tagline || <span className="italic text-slate-500">No bio shared yet.</span>}
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--social-text-muted)' }}>About</h3>
+                  <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--social-text-secondary)' }}>
+                    {activeProfile?.bio || activeProfile?.tagline || <span className="italic" style={{ color: 'var(--social-text-muted)' }}>No bio shared yet.</span>}
                   </p>
                 </div>
               </div>
@@ -5704,12 +5704,12 @@ const Social = () => {
             {!isPrivateGuestLock ? (
               <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
                 <div className="px-4 py-4">
-                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Details</h3>
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--social-text-muted)' }}>Details</h3>
                   <div className="mt-3 space-y-2.5">
-                    {activeProfile?.location ? <div className="flex items-center gap-2.5 text-sm text-slate-300"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>📍</span>{activeProfile.location}</div> : null}
+                    {activeProfile?.location ? <div className="flex items-center gap-2.5 text-sm" style={{ color: 'var(--social-text-secondary)' }}><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>📍</span>{activeProfile.location}</div> : null}
                     {activeProfile?.website ? <div className="flex items-center gap-2.5 text-sm"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>🌐</span><a href={activeProfile.website} target="_blank" rel="noopener noreferrer" className="truncate hover:underline" style={{ color: accentColor }}>{activeProfile.website}</a></div> : null}
-                    {activeProfile?.pronouns ? <div className="flex items-center gap-2.5 text-sm text-slate-300"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>💬</span>{activeProfile.pronouns}</div> : null}
-                    {activeProfile?.createdAt ? <div className="flex items-center gap-2.5 text-sm text-slate-300"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>📅</span>Joined {new Date(activeProfile.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div> : null}
+                    {activeProfile?.pronouns ? <div className="flex items-center gap-2.5 text-sm" style={{ color: 'var(--social-text-secondary)' }}><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>💬</span>{activeProfile.pronouns}</div> : null}
+                    {activeProfile?.createdAt ? <div className="flex items-center gap-2.5 text-sm" style={{ color: 'var(--social-text-secondary)' }}><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>📅</span>Joined {new Date(activeProfile.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div> : null}
                     {ownerResumeMeta ? <div className="flex items-center gap-2.5 text-sm"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs" style={{ background: `${accentColor}15` }}>📄</span><Link to={`/resume/${activeProfile?.username}`} className="hover:underline" style={{ color: accentColor }}>View Resume</Link></div> : null}
                   </div>
                 </div>
@@ -5720,7 +5720,7 @@ const Social = () => {
             {!isPrivateGuestLock ? (
               <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
                 <div className="px-4 py-4">
-                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Top Friends</h3>
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--social-text-muted)' }}>Top Friends</h3>
                   <div className="mt-3">
                     {topFriends.length > 0 ? (
                       <div className="grid grid-cols-5 gap-2">
@@ -5732,12 +5732,12 @@ const Social = () => {
                               </div>
                               <PresenceIndicator presence={friend.presence} />
                             </div>
-                            <span className="truncate text-[10px] text-slate-500 group-hover:text-slate-300">{friend.realName || friend.username}</span>
+                            <span className="truncate text-[10px]" style={{ color: 'var(--social-text-muted)' }}>{friend.realName || friend.username}</span>
                           </Link>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-slate-500">No top friends configured.</p>
+                      <p className="text-sm" style={{ color: 'var(--social-text-muted)' }}>No top friends configured.</p>
                     )}
                   </div>
                 </div>
@@ -5748,7 +5748,7 @@ const Social = () => {
             {!isPrivateGuestLock ? (
               <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
                 <div className="px-4 py-4">
-                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Partner / Spouse</h3>
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--social-text-muted)' }}>Partner / Spouse</h3>
                   <div className="mt-3">
                     {activePartnerFriend ? (
                       <Link to={`/social?user=${encodeURIComponent(activePartnerFriend.username)}`} className="group flex items-center gap-3 rounded-2xl p-3 transition hover:bg-white/[0.04]" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.06))' }}>
