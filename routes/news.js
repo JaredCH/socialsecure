@@ -741,7 +741,39 @@ router.get('/feed', authenticateToken, async (req, res) => {
     }
 
     const cacheResult = await getArticlesForLocation(normalizedLocation.locationKey, { normalizedLocation });
-    const filteredArticles = filterCachedArticles(cacheResult.articles, { tier, category, maxAgeHours });
+    let filteredArticles = filterCachedArticles(cacheResult.articles, { tier, category, maxAgeHours });
+
+    // When a specific category is requested, supplement with articles from the
+    // category ingestion pipeline (Pipeline 2) stored in the Article collection.
+    const normalizedCat = normalizeCategoryKey(category);
+    if (normalizedCat && normalizedCat !== 'all') {
+      const catQuery = { category: normalizedCat, isActive: true };
+      if (maxAgeHours) {
+        catQuery.publishedAt = { $gte: new Date(Date.now() - Number(maxAgeHours) * 60 * 60 * 1000) };
+      }
+      const categoryArticles = await Article.find(catQuery)
+        .sort({ publishedAt: -1 })
+        .limit(100)
+        .lean();
+
+      const existingUrls = new Set(filteredArticles.map((a) => (a.url || a.link || '').toLowerCase()));
+      const mapped = categoryArticles
+        .filter((a) => !existingUrls.has((a.url || '').toLowerCase()))
+        .map((a) => ({
+          ...a,
+          link: a.url,
+          tier: a.localityLevel === 'city' || a.localityLevel === 'county' ? 'local'
+            : a.localityLevel === 'state' ? 'state' : 'national',
+        }));
+
+      filteredArticles = [...filteredArticles, ...mapped]
+        .sort((a, b) => {
+          const aTime = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+          const bTime = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+          return bTime - aTime;
+        });
+    }
+
     const start = (safePage - 1) * safeLimit;
     const pageArticles = filteredArticles.slice(start, start + safeLimit);
 

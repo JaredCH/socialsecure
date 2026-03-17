@@ -4,10 +4,10 @@ const express = require('express');
 jest.mock('jsonwebtoken', () => ({
   verify: jest.fn((token, secret, callback) => callback(null, { userId: 'user-1' }))
 }));
-jest.mock('../models/Article', () => ({
-  find: jest.fn(),
-  countDocuments: jest.fn()
-}));
+jest.mock('../models/Article', () => {
+  const chainable = { sort: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), lean: jest.fn().mockResolvedValue([]) };
+  return { find: jest.fn().mockReturnValue(chainable), countDocuments: jest.fn() };
+});
 jest.mock('../models/ArticleImpression', () => ({
   upsertImpression: jest.fn().mockResolvedValue({})
 }));
@@ -64,6 +64,7 @@ jest.mock('../services/locationPreloader', () => ({
 
 const NewsPreferences = require('../models/NewsPreferences');
 const User = require('../models/User');
+const Article = require('../models/Article');
 const ArticleImpression = require('../models/ArticleImpression');
 const { getArticlesForLocation, searchCachedArticles, getCacheMetrics } = require('../services/locationCacheService');
 const { resolvePrimaryLocation } = require('../services/locationNormalizer');
@@ -125,6 +126,68 @@ describe('news cache-backed routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.articles).toHaveLength(1);
     expect(response.body.articles[0]).toMatchObject({ title: 'Health update', category: 'Health' });
+  });
+
+  it('supplements category feed with articles from the Article collection', async () => {
+    // Location cache has no sports articles
+    getArticlesForLocation.mockResolvedValueOnce({
+      cacheHit: true,
+      locationKey: 'san_marcos_tx_us',
+      articles: [
+        { _id: '1', title: 'General update', link: 'https://example.com/gen', url: 'https://example.com/gen', tier: 'local', category: 'general', locationKey: 'san_marcos_tx_us' }
+      ]
+    });
+
+    // Article collection has sports articles from Pipeline 2
+    const chainable = {
+      sort: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([
+        { _id: 's1', title: 'Big Game Tonight', url: 'https://example.com/sports1', category: 'sports', localityLevel: 'global', publishedAt: new Date(), isActive: true },
+        { _id: 's2', title: 'Championship Results', url: 'https://example.com/sports2', category: 'sports', localityLevel: 'state', publishedAt: new Date(), isActive: true }
+      ])
+    };
+    Article.find.mockReturnValueOnce(chainable);
+
+    const response = await request(buildApp())
+      .get('/api/news/feed?category=sports')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    // No location-cached sports articles, but 2 from Article collection
+    expect(response.body.articles).toHaveLength(2);
+    expect(response.body.articles.map((a) => a.title)).toEqual(
+      expect.arrayContaining(['Big Game Tonight', 'Championship Results'])
+    );
+    expect(Article.find).toHaveBeenCalledWith({ category: 'sports', isActive: true });
+  });
+
+  it('deduplicates category articles already present in the location cache', async () => {
+    getArticlesForLocation.mockResolvedValueOnce({
+      cacheHit: true,
+      locationKey: 'san_marcos_tx_us',
+      articles: [
+        { _id: '1', title: 'Sports from cache', link: 'https://example.com/sports-dup', url: 'https://example.com/sports-dup', tier: 'local', category: 'sports', locationKey: 'san_marcos_tx_us' }
+      ]
+    });
+
+    const chainable = {
+      sort: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([
+        { _id: 's1', title: 'Sports from cache', url: 'https://example.com/sports-dup', category: 'sports', localityLevel: 'global', publishedAt: new Date(), isActive: true },
+        { _id: 's2', title: 'Unique Sports Article', url: 'https://example.com/sports-unique', category: 'sports', localityLevel: 'global', publishedAt: new Date(), isActive: true }
+      ])
+    };
+    Article.find.mockReturnValueOnce(chainable);
+
+    const response = await request(buildApp())
+      .get('/api/news/feed?category=sports')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    // 1 from cache + 1 unique from Article (duplicate excluded)
+    expect(response.body.articles).toHaveLength(2);
   });
 
   it('tracks impressions using article links and location keys', async () => {
