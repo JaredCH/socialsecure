@@ -4220,7 +4220,7 @@ const Social = () => {
           return (
             <div className="space-y-4 p-4">
               <button type="button" onClick={() => setBlogViewingPost(null)} className="text-xs text-slate-400 hover:text-white">← Back to posts</button>
-              <article className="rounded-2xl border border-white/10 p-6" style={postStyle}>
+              <article className="relative rounded-2xl border border-white/10 p-6" style={postStyle}>
                 {post.backgroundImage ? <div className="absolute inset-0 rounded-2xl bg-black/50" /> : null}
                 <div className="relative">
                   <h2 className="text-xl font-bold text-white">{post.title}</h2>

@@ -131,7 +131,7 @@ router.post(
       return res.status(201).json({ success: true, post });
     } catch (error) {
       if (error.code === 11000) {
-        return res.status(409).json({ error: 'A blog post with this title already exists. Please choose a different title.' });
+        return res.status(409).json({ error: 'A blog post with a similar title already exists. Please choose a different title.' });
       }
       console.error('Error creating blog post:', error);
       return res.status(500).json({ error: 'Failed to create blog post' });
@@ -184,7 +184,7 @@ router.put(
       return res.json({ success: true, post });
     } catch (error) {
       if (error.code === 11000) {
-        return res.status(409).json({ error: 'A blog post with this title already exists.' });
+        return res.status(409).json({ error: 'A blog post with a similar title already exists.' });
       }
       console.error('Error updating blog post:', error);
       return res.status(500).json({ error: 'Failed to update blog post' });
