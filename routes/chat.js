@@ -1071,7 +1071,7 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
           type: 'state',
           state: user.state,
           country,
-          coordinates: coordinates || undefined
+          coordinates: coordinates ?? undefined
         })
         : Promise.resolve(null),
       user.state && user.county
@@ -1080,7 +1080,7 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
           state: user.state,
           country,
           county: user.county,
-          coordinates: coordinates || undefined
+          coordinates: coordinates ?? undefined
         })
         : Promise.resolve(null),
       normalizedZipCode
