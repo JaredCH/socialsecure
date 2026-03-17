@@ -632,8 +632,10 @@ chatRoomSchema.statics.syncUserLocationRooms = async function(user) {
   const createdRooms = [];
   const ensureMembership = async (room) => {
     if (!room) return;
-    const isMember = Array.isArray(room.members) && room.members.some((memberId) => String(memberId) === String(user._id));
+    const members = Array.isArray(room.members) ? room.members : [];
+    const isMember = members.some((memberId) => String(memberId) === String(user._id));
     if (isMember) return;
+    room.members = members;
     room.members.push(user._id);
     await room.save();
   };

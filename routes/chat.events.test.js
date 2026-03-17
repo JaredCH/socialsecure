@@ -268,6 +268,30 @@ describe('Chat event room discovery routes', () => {
     expect(response.body.hasMore).toBe(false);
   });
 
+  it('still returns all rooms when discovery seeding fails', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    ChatRoom.ensureDefaultDiscoveryRooms.mockRejectedValueOnce(new Error('seed failure'));
+    ChatRoom.aggregate.mockResolvedValue([
+      {
+        _id: 'room-any',
+        name: 'General Room',
+        type: 'city',
+        members: ['m1']
+      }
+    ]);
+    ChatRoom.countDocuments.mockResolvedValue(1);
+
+    const app = buildApp();
+    const response = await request(app)
+      .get('/api/chat/rooms/all?page=1&limit=10')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.rooms).toHaveLength(1);
+    expect(ChatRoom.aggregate).toHaveBeenCalledTimes(1);
+    consoleErrorSpy.mockRestore();
+  });
+
   it('returns discovery room types ahead of city rooms in the all rooms payload', async () => {
     ChatRoom.aggregate.mockResolvedValue([
       { _id: 'state-1', name: 'Alabama', type: 'state', members: [] },
@@ -400,6 +424,50 @@ describe('Chat event room discovery routes', () => {
         distanceMiles: 2.5
       })
     ]);
+  });
+
+  it('keeps quick-access responses working when background location sync fails', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const onboardingSelect = jest.fn().mockResolvedValue({ _id: 'user-1', onboardingStatus: 'completed' });
+    const locationSelect = jest.fn().mockResolvedValue({
+      _id: 'user-1',
+      city: 'Boston',
+      state: 'MA',
+      country: 'US',
+      county: 'Suffolk County',
+      zipCode: '02115',
+      location: { type: 'Point', coordinates: [-71.0921, 42.3389] }
+    });
+    User.findById
+      .mockReturnValueOnce({ select: onboardingSelect })
+      .mockReturnValueOnce({ select: locationSelect });
+    ChatRoom.syncUserLocationRooms.mockRejectedValueOnce(new Error('membership failure'));
+    ChatRoom.findOrCreateByLocation
+      .mockResolvedValueOnce({ room: { _id: 'state-ma', name: 'Massachusetts', type: 'state', members: ['user-1'] } })
+      .mockResolvedValueOnce({ room: { _id: 'county-suffolk', name: 'Suffolk County, Massachusetts', type: 'county', members: ['user-1'] } });
+    ChatConversation.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        _id: 'zip-02115',
+        type: 'zip-room',
+        zipCode: '02115',
+        title: 'Zip 02115',
+        participants: []
+      })
+    });
+    ChatRoom.aggregate.mockResolvedValue([]);
+
+    const app = buildApp();
+    const response = await request(app)
+      .get('/api/chat/rooms/quick-access')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.rooms).toMatchObject({
+      state: { _id: 'state-ma' },
+      county: { _id: 'county-suffolk' },
+      zip: { _id: 'zip-02115' }
+    });
+    consoleErrorSpy.mockRestore();
   });
 
   it('handles quick-access users with unsupported location coordinates without 500 errors', async () => {
@@ -600,5 +668,50 @@ describe('Chat event room discovery routes', () => {
       createdRooms: [],
       allRooms: []
     });
+  });
+
+  it('returns existing rooms when sync-location membership updates fail', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const onboardingSelect = jest.fn().mockResolvedValue({ _id: 'user-1', onboardingStatus: 'completed' });
+    const syncUserSelect = jest.fn(function select() {
+      return this;
+    });
+    const syncUserLean = jest.fn().mockResolvedValue({
+      _id: 'user-1',
+      city: 'Boston',
+      state: 'MA',
+      country: 'US',
+      county: 'Suffolk County',
+      zipCode: '02115',
+      location: { type: 'Point', coordinates: [-71.0921, 42.3389] }
+    });
+    User.findById
+      .mockReturnValueOnce({ select: onboardingSelect })
+      .mockReturnValueOnce({
+        select: syncUserSelect,
+        lean: syncUserLean
+      });
+    ChatRoom.syncUserLocationRooms.mockRejectedValueOnce(new Error('membership failure'));
+    ChatRoom.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          { _id: 'room-1', name: 'Boston (ZIP 02115)', type: 'city', zipCode: '02115', memberCount: 1 }
+        ])
+      })
+    });
+
+    const app = buildApp();
+    const response = await request(app)
+      .post('/api/chat/rooms/sync-location')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      message: 'Location rooms synced. 0 new room(s) created.',
+      createdRooms: [],
+      allRooms: [{ _id: 'room-1', name: 'Boston (ZIP 02115)', type: 'city', zipCode: '02115', memberCount: 1 }]
+    });
+    consoleErrorSpy.mockRestore();
   });
 });

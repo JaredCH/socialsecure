@@ -412,6 +412,9 @@ describe('Chat zip room indicator', () => {
 
     const menuBar = container.querySelector('[data-chat-menu-bar]');
     expect(menuBar).not.toBeNull();
+    const workspacePanel = container.querySelector('[data-testid="chat-workspace-panel"]');
+    expect(workspacePanel).not.toBeNull();
+    expect(workspacePanel.contains(menuBar)).toBe(true);
 
     const channelTabs = menuBar.querySelector('[data-chat-channel-tabs]');
     expect(channelTabs).not.toBeNull();
@@ -628,7 +631,7 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).toContain('SocialSecure');
   });
 
-  it('shows an admin control panel for creating and reordering managed rooms', async () => {
+  it('shows a collapsed admin control panel by default and expands it for room management', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115', isAdmin: true } }
     });
@@ -653,6 +656,15 @@ describe('Chat zip room indicator', () => {
     await renderChat();
 
     expect(container.querySelector('[data-testid="chat-admin-control-panel"]')).not.toBeNull();
+    expect(container.querySelector('input[aria-label="Admin room name"]')).toBeNull();
+
+    const toggleAdminControls = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Show controls');
+    expect(toggleAdminControls).not.toBeUndefined();
+
+    await act(async () => {
+      toggleAdminControls.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
 
     const adminNameInput = container.querySelector('input[aria-label="Admin room name"]');
     const adminParentSelect = container.querySelector('select[aria-label="Admin room parent"]');
@@ -958,11 +970,13 @@ describe('Chat zip room indicator', () => {
 
     const pageHeader = container.querySelector('[data-testid="chat-page-header"]');
     expect(pageHeader).not.toBeNull();
+    expect(pageHeader.className).not.toContain('sticky');
     expect(pageHeader.className).toContain('px-1.5');
     expect(pageHeader.className).toContain('py-1');
 
     const workspacePanel = container.querySelector('[data-testid="chat-workspace-panel"]');
     expect(workspacePanel).not.toBeNull();
+    expect(workspacePanel.contains(pageHeader)).toBe(true);
     expect(workspacePanel.className).toContain('px-1.5');
     expect(workspacePanel.className).toContain('pt-1');
 

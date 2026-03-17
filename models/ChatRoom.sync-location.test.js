@@ -68,6 +68,30 @@ describe('ChatRoom.syncUserLocationRooms zip-first behavior', () => {
       country: 'US'
     }));
   });
+
+  it('adds the user when a legacy room has a missing members array', async () => {
+    const zipRoom = { members: null, save: jest.fn().mockResolvedValue(true) };
+    const countyRoom = { members: [], save: jest.fn().mockResolvedValue(true) };
+    const stateRoom = { members: [], save: jest.fn().mockResolvedValue(true) };
+
+    jest.spyOn(ChatRoom, 'findOrCreateByLocation')
+      .mockResolvedValueOnce({ room: zipRoom, created: false })
+      .mockResolvedValueOnce({ room: countyRoom, created: false })
+      .mockResolvedValueOnce({ room: stateRoom, created: false });
+
+    await expect(ChatRoom.syncUserLocationRooms({
+      _id: 'user-1',
+      location: { coordinates: [-97.7431, 30.2672] },
+      zipCode: '78701',
+      county: 'Travis',
+      city: 'Austin',
+      state: 'TX',
+      country: 'US'
+    })).resolves.toMatchObject({ created: 0 });
+
+    expect(zipRoom.members).toEqual(['user-1']);
+    expect(zipRoom.save).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ChatRoom.findOrCreateByLocation canonical seeded room reuse', () => {
