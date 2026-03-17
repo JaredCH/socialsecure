@@ -23,7 +23,8 @@ import GlobalSocialLauncher from './components/social/GlobalSocialLauncher';
 import NotificationSettings from './pages/NotificationSettings';
 import ResumePublic from './pages/ResumePublic';
 import MobileProfile from './pages/MobileProfile';
-import { authAPI, notificationAPI, getAuthToken, setAuthToken, clearAuthToken } from './utils/api';
+import Friends from './pages/Friends';
+import { authAPI, notificationAPI, friendsAPI, getAuthToken, setAuthToken, clearAuthToken } from './utils/api';
 import { initRealtime, disconnectRealtime } from './utils/realtime';
 import { deliverSiteNotification, shouldDisplaySiteNotification } from './utils/browserNotifications';
 
@@ -178,6 +179,7 @@ function App() {
   });
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [incomingNotification, setIncomingNotification] = useState(null);
+  const [friendPresence, setFriendPresence] = useState({ online: 0, offline: 0 });
   const [notificationPreferences, setNotificationPreferences] = useState({});
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [welcomeConfirmationPending, setWelcomeConfirmationPending] = useState(
@@ -301,6 +303,20 @@ function App() {
 
     bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!canUseProtectedFeatures) return;
+    let cancelled = false;
+    const fetchPresence = async () => {
+      try {
+        const res = await friendsAPI.getPresenceSummary();
+        if (!cancelled) setFriendPresence({ online: res.data.online || 0, offline: res.data.offline || 0 });
+      } catch { /* best effort */ }
+    };
+    fetchPresence();
+    const interval = setInterval(fetchPresence, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [canUseProtectedFeatures]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -536,6 +552,7 @@ function App() {
                       { to: '/calendar', label: 'Calendar' },
                       { to: '/resume', label: 'Resume' },
                       { to: '/discover', label: 'Discover' },
+                      { to: '/friends', label: `Friends ${friendPresence.online} | ${friendPresence.offline}` },
                       ...(user?.isAdmin ? [{ to: '/control-panel', label: 'Control Panel' }] : []),
                       { to: '/settings', label: 'User Settings' },
                       { to: '/refer', label: 'Refer Friend' },
@@ -788,7 +805,7 @@ function App() {
                   encryptionPasswordRequired={encryptionPasswordRequired}
                   passwordResetRequired={passwordResetRequired}
                 >
-                  <Social />
+                  <Friends user={user} />
                 </ProtectedRoute>
               )}
             />
