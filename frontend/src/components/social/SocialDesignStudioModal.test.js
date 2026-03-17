@@ -160,6 +160,41 @@ describe('SocialDesignStudioModal layout studio', () => {
     expect(timelinePreview.style.top).toBe('calc(0% + 4px)');
   });
 
+  it('keeps the design studio overlay above app chrome layers', async () => {
+    await act(async () => {
+      root.render(
+        <SocialDesignStudioModal
+          isOpen
+          onClose={jest.fn()}
+          preferences={{}}
+          configs={[]}
+          activeConfigId=""
+          sharedDesigns={[]}
+          favoriteDesigns={[]}
+          onApplyTemplate={jest.fn()}
+          onGlobalStylesChange={jest.fn()}
+          onPanelOverrideToggle={jest.fn()}
+          onPanelStyleChange={jest.fn()}
+          onPanelLayoutChange={jest.fn()}
+          onCreateConfig={jest.fn()}
+          onUpdateConfig={jest.fn()}
+          onApplyConfig={jest.fn()}
+          onDuplicateConfig={jest.fn()}
+          onDeleteConfig={jest.fn()}
+          onFavoriteShared={jest.fn()}
+          onCloneShared={jest.fn()}
+          busy={false}
+          error=""
+          successMessage=""
+        />
+      );
+    });
+
+    const overlay = container.querySelector('.fixed.inset-0');
+    expect(overlay).toBeTruthy();
+    expect(overlay.className).toContain('z-[1700]');
+  });
+
   it('renders safely when toggling from closed to open', async () => {
     const baseProps = {
       onClose: jest.fn(),
