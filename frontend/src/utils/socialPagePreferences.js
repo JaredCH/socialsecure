@@ -7,6 +7,8 @@ export const SOCIAL_LAYOUT_SIZES = ['sidePanelFull', 'sidePanelHalfHeight', 'qua
 export const SOCIAL_LAYOUT_HEIGHTS = ['halfRow', 'fullRow', 'twoRows', 'threeRows', 'fourRows'];
 export const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'settingsShortcut', 'referShortcut', 'chatPanel', 'communityNotes'];
 export const SOCIAL_PANEL_SHAPES = ['rectangle', 'square', 'wide', 'tall', 'l-shape', 't-shape', 'z-shape'];
+export const BODY_BG_DISPLAY_MODES = ['cover', 'repeat', 'fixed'];
+export const BODY_BG_OVERLAY_ANIMATIONS = ['none', 'snow', 'easter-eggs', 'halloween-ghosts', 'valentines-hearts', 'fireworks'];
 export const SOCIAL_PANEL_SHAPE_MASKS = {
   rectangle: [[1, 1], [1, 1]],
   square: [[1, 1], [1, 1]],
@@ -283,7 +285,13 @@ export const DEFAULT_GLOBAL_STYLES = {
     subHeader: 'xl',
     regular: 'base',
     small: 'sm'
-  }
+  },
+  bodyBackgroundImage: '',
+  bodyBackgroundOverlay: 0,
+  bodyBackgroundGrain: 0,
+  bodyBackgroundBlur: 0,
+  bodyBackgroundDisplayMode: 'cover',
+  bodyBackgroundOverlayAnimation: 'none'
 };
 
 const BALANCED_LAYOUT_PRESET = SOCIAL_LAYOUT_PRESETS.find((preset) => preset.id === 'balanced')
@@ -559,13 +567,31 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default', requ
   const accentColorToken = allowedAccents.includes(raw.accentColorToken)
     ? raw.accentColorToken
     : (allowedAccents.includes(defaults.accentColorToken) ? defaults.accentColorToken : allowedAccents[0]);
+  const normalizeBodyBgUrl = (val) => {
+    if (typeof val !== 'string') return '';
+    const trimmed = val.trim();
+    if (!trimmed || trimmed.length > 2048) return '';
+    if (/^\/uploads\/backgrounds\/[a-f0-9]+\/[a-f0-9]+-[a-f0-9]+\.\w{2,5}$/.test(trimmed)) return trimmed;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.toString();
+    } catch { /* invalid URL */ }
+    return '';
+  };
+  const clampFloat = (val, min, max) => { const n = Number(val); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : min; };
   const globalStyles = {
     panelColor: isHex(raw.globalStyles?.panelColor || '') ? raw.globalStyles.panelColor : DEFAULT_GLOBAL_STYLES.panelColor,
     headerColor: isHex(raw.globalStyles?.headerColor || '') ? raw.globalStyles.headerColor : DEFAULT_GLOBAL_STYLES.headerColor,
     fontFamily: SOCIAL_FONT_FAMILIES.includes(raw.globalStyles?.fontFamily) ? raw.globalStyles.fontFamily : DEFAULT_GLOBAL_STYLES.fontFamily,
     fontColor: isHex(raw.globalStyles?.fontColor || '') ? raw.globalStyles.fontColor : DEFAULT_GLOBAL_STYLES.fontColor,
     pageBackgroundColor: isHex(raw.globalStyles?.pageBackgroundColor || '') ? raw.globalStyles.pageBackgroundColor : DEFAULT_GLOBAL_STYLES.pageBackgroundColor,
-    fontSizes: normalizeFontSizes(raw.globalStyles?.fontSizes)
+    fontSizes: normalizeFontSizes(raw.globalStyles?.fontSizes),
+    bodyBackgroundImage: normalizeBodyBgUrl(raw.globalStyles?.bodyBackgroundImage),
+    bodyBackgroundOverlay: clampFloat(raw.globalStyles?.bodyBackgroundOverlay, 0, 1),
+    bodyBackgroundGrain: clampFloat(raw.globalStyles?.bodyBackgroundGrain, 0, 1),
+    bodyBackgroundBlur: Math.round(clampFloat(raw.globalStyles?.bodyBackgroundBlur, 0, 20)),
+    bodyBackgroundDisplayMode: BODY_BG_DISPLAY_MODES.includes(raw.globalStyles?.bodyBackgroundDisplayMode) ? raw.globalStyles.bodyBackgroundDisplayMode : DEFAULT_GLOBAL_STYLES.bodyBackgroundDisplayMode,
+    bodyBackgroundOverlayAnimation: BODY_BG_OVERLAY_ANIMATIONS.includes(raw.globalStyles?.bodyBackgroundOverlayAnimation) ? raw.globalStyles.bodyBackgroundOverlayAnimation : DEFAULT_GLOBAL_STYLES.bodyBackgroundOverlayAnimation
   };
   const normalizePanelsForMode = (panelInput = {}, fallbackPanels = defaults.panels) => {
     const normalizedPanels = {};

@@ -100,4 +100,87 @@ describe('SocialStageSettingsSidebar', () => {
     });
     expect(onHeroRandomGalleryToggle).toHaveBeenCalledWith(true);
   });
+
+  it('shows display mode selector when body background image is set', async () => {
+    const onBodyBackgroundDisplayModeChange = jest.fn();
+    await act(async () => {
+      root.render(
+        <SocialStageSettingsSidebar
+          isOpen
+          bodyBackgroundImage="https://example.com/bg.jpg"
+          bodyBackgroundDisplayMode="cover"
+          onBodyBackgroundDisplayModeChange={onBodyBackgroundDisplayModeChange}
+        />
+      );
+    });
+
+    const modeSelector = container.querySelector('[data-testid="display-mode-selector"]');
+    expect(modeSelector).toBeTruthy();
+    const buttons = Array.from(modeSelector.querySelectorAll('button'));
+    expect(buttons.map((b) => b.textContent)).toEqual(['Stretched', 'Repeating', 'Fixed']);
+
+    const stretchedBtn = buttons.find((b) => b.textContent === 'Stretched');
+    expect(stretchedBtn.className).toContain('bg-blue-50');
+
+    await act(async () => {
+      buttons.find((b) => b.textContent === 'Fixed').click();
+    });
+    expect(onBodyBackgroundDisplayModeChange).toHaveBeenCalledWith('fixed');
+  });
+
+  it('shows seasonal overlay animation selector', async () => {
+    const onBodyBackgroundOverlayAnimationChange = jest.fn();
+    await act(async () => {
+      root.render(
+        <SocialStageSettingsSidebar
+          isOpen
+          bodyBackgroundOverlayAnimation="none"
+          onBodyBackgroundOverlayAnimationChange={onBodyBackgroundOverlayAnimationChange}
+        />
+      );
+    });
+
+    const animSelector = container.querySelector('[data-testid="overlay-animation-selector"]');
+    expect(animSelector).toBeTruthy();
+    const buttons = Array.from(animSelector.querySelectorAll('button'));
+    expect(buttons.length).toBe(6);
+    expect(buttons.map((b) => b.textContent.trim())).toEqual(
+      expect.arrayContaining(['None', expect.stringContaining('Christmas Snow'), expect.stringContaining('Easter Eggs'), expect.stringContaining('Halloween Ghosts')])
+    );
+
+    await act(async () => {
+      buttons.find((b) => b.textContent.includes('Christmas Snow')).click();
+    });
+    expect(onBodyBackgroundOverlayAnimationChange).toHaveBeenCalledWith('snow');
+  });
+
+  it('hides display mode selector when no body background image is set', async () => {
+    await act(async () => {
+      root.render(
+        <SocialStageSettingsSidebar
+          isOpen
+          bodyBackgroundImage=""
+        />
+      );
+    });
+
+    const modeSelector = container.querySelector('[data-testid="display-mode-selector"]');
+    expect(modeSelector).toBeNull();
+  });
+
+  it('shows upload status after successful upload', async () => {
+    const mockUpload = jest.fn().mockResolvedValue();
+    await act(async () => {
+      root.render(
+        <SocialStageSettingsSidebar
+          isOpen
+          onBodyBackgroundUpload={mockUpload}
+        />
+      );
+    });
+
+    const uploadBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Upload image');
+    expect(uploadBtn).toBeTruthy();
+    expect(uploadBtn.disabled).toBe(false);
+  });
 });

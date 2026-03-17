@@ -560,6 +560,13 @@ export const socialPageAPI = {
   favoriteShared: (configId) => api.post(`/social-page/shared/${encodeURIComponent(configId)}/favorite`),
   unfavoriteShared: (configId) => api.delete(`/social-page/shared/${encodeURIComponent(configId)}/favorite`),
   cloneShared: (configId, payload) => api.post(`/social-page/shared/${encodeURIComponent(configId)}/clone`, payload),
+  uploadBodyBackground: (file) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return api.post('/social-page/body-background-upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  }
 };
 
 export const blogAPI = {
