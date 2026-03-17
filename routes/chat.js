@@ -283,12 +283,28 @@ const formatDiscoveryRoomSummary = (room, userId = null) => ({
     : undefined
 });
 const toPlainDoc = (doc) => (doc?.toObject ? doc.toObject() : doc);
-const hasValidCoordinates = (location) => (
-  Array.isArray(location?.coordinates)
-  && location.coordinates.length === 2
-  && Number.isFinite(Number(location.coordinates[0]))
-  && Number.isFinite(Number(location.coordinates[1]))
-);
+const hasValidCoordinates = (location) => {
+  if (!Array.isArray(location?.coordinates) || location.coordinates.length !== 2) {
+    return false;
+  }
+
+  const longitude = Number(location.coordinates[0]);
+  const latitude = Number(location.coordinates[1]);
+
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+    return false;
+  }
+
+  if (Math.abs(longitude) > 180 || Math.abs(latitude) > 90) {
+    return false;
+  }
+
+  if (longitude === 0 && latitude === 0) {
+    return false;
+  }
+
+  return true;
+};
 const getNormalizedCoordinates = (location) => (
   hasValidCoordinates(location)
     ? location.coordinates.map((value) => Number(value))
