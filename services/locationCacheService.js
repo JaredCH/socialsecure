@@ -152,7 +152,8 @@ async function refreshLocationInBackground(locationKey, normalized) {
       await logCacheEvent('cache_background_refresh', { locationKey, cacheHit: false, articleCount: hydrated.length, fetchErrors });
     }
   } catch (err) {
-    // Background refresh is best-effort; do not propagate errors.
+    // Background refresh is best-effort; log but do not propagate.
+    console.error('[news-cache] background refresh failed for', locationKey, err?.message || err);
   }
 }
 
