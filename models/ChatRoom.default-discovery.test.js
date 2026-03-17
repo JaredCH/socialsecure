@@ -166,4 +166,38 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
     expect(deleteManySpy).toHaveBeenNthCalledWith(1, { _id: { $in: ['state-legacy'] } });
     expect(deleteManySpy).toHaveBeenNthCalledWith(2, { _id: { $in: ['city-legacy'] } });
   });
+
+  it('continues seeding when bulk upserts hit duplicate-key races', async () => {
+    const duplicateError = Object.assign(new Error('E11000 duplicate key'), {
+      code: 11000
+    });
+    const bulkWriteSpy = jest.spyOn(ChatRoom, 'bulkWrite').mockRejectedValue(duplicateError);
+    const reconcileSpy = jest.spyOn(ChatRoom, 'reconcileDefaultDiscoveryRoomDuplicates').mockResolvedValue(undefined);
+
+    await expect(ChatRoom.ensureDefaultDiscoveryRooms({ force: true })).resolves.toBeUndefined();
+
+    expect(bulkWriteSpy).toHaveBeenCalledTimes(1);
+    expect(reconcileSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues seeding when bulkWrite reports only duplicate-key write errors', async () => {
+    const duplicateWriteErrors = Object.assign(new Error('Bulk write duplicate entries'), {
+      writeErrors: [{ code: 11000 }, { code: 11000 }]
+    });
+    jest.spyOn(ChatRoom, 'bulkWrite').mockRejectedValue(duplicateWriteErrors);
+    const reconcileSpy = jest.spyOn(ChatRoom, 'reconcileDefaultDiscoveryRoomDuplicates').mockResolvedValue(undefined);
+
+    await expect(ChatRoom.ensureDefaultDiscoveryRooms({ force: true })).resolves.toBeUndefined();
+
+    expect(reconcileSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rethrows non-duplicate bulk write errors', async () => {
+    const bulkError = Object.assign(new Error('Validation failed'), { code: 121 });
+    jest.spyOn(ChatRoom, 'bulkWrite').mockRejectedValue(bulkError);
+    const reconcileSpy = jest.spyOn(ChatRoom, 'reconcileDefaultDiscoveryRoomDuplicates').mockResolvedValue(undefined);
+
+    await expect(ChatRoom.ensureDefaultDiscoveryRooms({ force: true })).rejects.toThrow('Validation failed');
+    expect(reconcileSpy).not.toHaveBeenCalled();
+  });
 });
