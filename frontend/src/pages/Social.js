@@ -171,19 +171,28 @@ const SURFACE_TONE_STYLES = {
     ring: 'border-sky-200/80',
     glow: 'shadow-[0_0_0_1px_rgba(186,230,253,0.8),0_18px_45px_rgba(14,165,233,0.14)]',
     badge: 'bg-sky-100 text-sky-700',
-    button: 'border-sky-200 text-sky-700 hover:bg-sky-50'
+    button: 'border-sky-200 text-sky-700 hover:bg-sky-50',
+    iconBg: 'bg-sky-50',
+    iconStroke: '#0284c7',
+    primaryButton: 'bg-sky-600 text-white hover:bg-sky-700',
   },
   amber: {
     ring: 'border-amber-200/80',
     glow: 'shadow-[0_0_0_1px_rgba(253,230,138,0.8),0_18px_45px_rgba(245,158,11,0.16)]',
     badge: 'bg-amber-100 text-amber-700',
-    button: 'border-amber-200 text-amber-700 hover:bg-amber-50'
+    button: 'border-amber-200 text-amber-700 hover:bg-amber-50',
+    iconBg: 'bg-amber-50',
+    iconStroke: '#d97706',
+    primaryButton: 'bg-amber-600 text-white hover:bg-amber-700',
   },
   emerald: {
     ring: 'border-emerald-200/80',
     glow: 'shadow-[0_0_0_1px_rgba(167,243,208,0.8),0_18px_45px_rgba(16,185,129,0.15)]',
     badge: 'bg-emerald-100 text-emerald-700',
-    button: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+    button: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50',
+    iconBg: 'bg-emerald-50',
+    iconStroke: '#059669',
+    primaryButton: 'bg-emerald-600 text-white hover:bg-emerald-700',
   }
 };
 
@@ -3710,12 +3719,12 @@ const Social = () => {
             {feedError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">{feedError}</div> : null}
             {isAuthenticated && !realtimeEnabled ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Real-time social updates are disabled for this account. Periodic refresh remains active.</div> : null}
             {loadingFeed ? <div className="rounded-xl border bg-slate-50 p-6 text-slate-500">Loading feed…</div> : posts.length === 0 ? renderSoftEmptyState({
-              eyebrow: 'Quiet timeline',
-              title: isOwnSocialContext ? 'Your feed is ready for its first post.' : 'Nothing has been shared here yet.',
+              icon: <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="#0284c7" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>,
+              title: isOwnSocialContext ? 'Your timeline is empty' : 'Nothing here yet',
               description: isOwnSocialContext
-                ? 'Start with a short post, an image, or a pinned note. The timeline becomes much easier to understand once it has a clear starting point.'
-                : 'This profile has not shared any visible posts for your current access level.',
-              actionLabel: isOwnSocialContext ? 'Open composer' : null,
+                ? 'Share a thought, a photo, or a quick update to get your feed started.'
+                : 'This profile hasn\'t shared any posts visible to you.',
+              actionLabel: isOwnSocialContext ? 'Create a post' : null,
               onAction: isOwnSocialContext ? () => setComposerVisible(true) : null,
               tone: 'blue'
             }) : posts.map((post) => {
@@ -3900,12 +3909,12 @@ const Social = () => {
             ) : null}
             {galleryError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{galleryError}</div> : null}
             {galleryLoading ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">Loading gallery…</div> : galleryItems.length === 0 ? renderSoftEmptyState({
-              eyebrow: 'Open canvas',
-              title: isOwnSocialContext ? 'Your gallery is empty, but it can stay elegant.' : 'No gallery images are visible right now.',
+              icon: <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="#d97706" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" /></svg>,
+              title: isOwnSocialContext ? 'No images yet' : 'Gallery is empty',
               description: isOwnSocialContext
-                ? 'Add one strong image and let the rest stay minimal. Titles, captions, and audience settings are available only when you expand them.'
-                : 'This profile has not shared any gallery items for your current access level.',
-              actionLabel: isOwnSocialContext && canManageGallery ? 'Open advanced' : null,
+                ? 'Upload a photo to start building your gallery.'
+                : 'This profile hasn\'t added any gallery items visible to you.',
+              actionLabel: isOwnSocialContext && canManageGallery ? 'Add image' : null,
               onAction: isOwnSocialContext && canManageGallery ? () => setGalleryComposerPanels((prev) => ({ ...prev, details: true })) : null,
               tone: 'amber'
             }) : (
@@ -3994,7 +4003,11 @@ const Social = () => {
                     </div>
                     <div data-testid="social-mini-chat-viewport" className="max-h-72 space-y-2 overflow-y-auto px-3 py-3 [scrollbar-gutter:stable]">
                       {profileChatMessages.length === 0 ? (
-                        <p className="text-sm text-slate-500">No messages yet. Start the conversation.</p>
+                        <div className="flex flex-col items-center py-6 text-center">
+                          <svg className="mb-2 h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" /></svg>
+                          <p className="text-sm font-medium text-slate-500">No messages yet</p>
+                          <p className="mt-0.5 text-xs text-slate-400">Start the conversation below.</p>
+                        </div>
                       ) : profileChatMessages.map((message) => {
                         const isOwnMessage = isProfileChatOwnMessage(message);
                         return (
@@ -4325,20 +4338,27 @@ const Social = () => {
     </section>
   );
 
-  const renderSoftEmptyState = ({ eyebrow, title, description, actionLabel, onAction, tone = 'blue' }) => {
+  const renderSoftEmptyState = ({ icon, title, description, actionLabel, onAction, tone = 'blue' }) => {
     const toneStyle = SURFACE_TONE_STYLES[tone] || SURFACE_TONE_STYLES.blue;
+
+    const defaultIcon = (
+      <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke={toneStyle.iconStroke} strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+      </svg>
+    );
+
     return (
-      <div className={`rounded-[1.5rem] border bg-white/90 px-4 py-4 text-sm text-slate-600 ${toneStyle.ring} ${toneStyle.glow}`}>
-        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] ${toneStyle.badge}`}>
-          {eyebrow}
-        </span>
-        <p className="mt-3 text-base font-semibold text-slate-900">{title}</p>
-        <p className="mt-2 max-w-xl leading-6 text-slate-600">{description}</p>
+      <div className="flex flex-col items-center rounded-[1.5rem] border bg-white/95 px-6 py-10 text-center">
+        <div className={`mb-4 flex h-16 w-16 items-center justify-center rounded-full ${toneStyle.iconBg}`}>
+          {icon || defaultIcon}
+        </div>
+        <p className="text-lg font-semibold text-slate-900">{title}</p>
+        <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">{description}</p>
         {actionLabel && onAction ? (
           <button
             type="button"
             onClick={onAction}
-            className={`mt-4 inline-flex rounded-full border px-4 py-2 text-xs font-semibold transition ${toneStyle.button}`}
+            className={`mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold shadow-sm transition ${toneStyle.primaryButton}`}
           >
             {actionLabel}
           </button>
@@ -4483,7 +4503,10 @@ const Social = () => {
               <div className="mt-3 space-y-2 rounded-xl bg-white/70 px-3 py-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Upcoming</p>
                 {upcomingCalendarItems.length === 0 ? (
-                  <p className="text-xs text-slate-500">No upcoming events or holidays in this window.</p>
+                  <div className="flex flex-col items-center py-4 text-center">
+                    <svg className="mb-1.5 h-6 w-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                    <p className="text-xs text-slate-400">No upcoming events in this window.</p>
+                  </div>
                 ) : (
                   <ul className="space-y-2">
                     {upcomingCalendarItems.map((item) => (
@@ -4531,7 +4554,11 @@ const Social = () => {
               </div>
             </div>
             {calendarCountdowns.length === 0 ? (
-              <div className="rounded-2xl bg-white/50 px-4 py-4 text-slate-500">No active countdown posts yet.</div>
+              <div className="flex flex-col items-center rounded-2xl bg-white/50 px-4 py-6 text-center">
+                <svg className="mb-2 h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                <p className="text-sm font-medium text-slate-500">No countdowns yet</p>
+                <p className="mt-0.5 text-xs text-slate-400">Create a countdown post to track upcoming moments.</p>
+              </div>
             ) : (
               calendarCountdowns.map((post) => (
                 <div key={post._id} className="rounded-2xl bg-white/55 px-4 py-4">
