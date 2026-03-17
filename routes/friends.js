@@ -250,6 +250,17 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
       { _id: friendship.recipient },
       { $inc: { friendCount: 1 } }
     );
+
+    await createNotification({
+      recipientId: friendship.requester,
+      senderId: friendship.recipient,
+      type: 'system',
+      title: 'Friend request accepted',
+      body: `${req.user.username || req.user.realName || 'Someone'} accepted your friend request`,
+      data: {
+        url: '/social'
+      }
+    });
     
     res.json({
       success: true,

@@ -89,7 +89,7 @@ describe('Discovery friend requests', () => {
     expect(friendsAPI.sendRequest).toHaveBeenCalledWith('user-123');
   });
 
-  it('shows backend error details when sending a request fails', async () => {
+  it('shows pending state when backend says a request was already sent', async () => {
     discoveryAPI.getUsers.mockResolvedValueOnce({
       data: {
         users: [
@@ -120,6 +120,31 @@ describe('Discovery friend requests', () => {
       addFriendButton.click();
     });
 
-    expect(container.textContent).toContain('Friend request already sent');
+    expect(container.textContent).toContain('Pending');
+  });
+
+  it('shows pending state for users with outgoing pending requests', async () => {
+    discoveryAPI.getUsers.mockResolvedValueOnce({
+      data: {
+        users: [
+          {
+            _id: '507f1f77bcf86cd799439099',
+            username: 'pending_friend',
+            realName: 'Pending Friend',
+            relationship: 'pending',
+            requestDirection: 'outgoing'
+          }
+        ],
+        hasMore: false
+      }
+    });
+
+    await renderDiscovery();
+
+    expect(container.textContent).toContain('Pending');
+    const addFriendButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Add Friend'));
+    expect(addFriendButton).toBeUndefined();
+    expect(friendsAPI.sendRequest).not.toHaveBeenCalled();
   });
 });

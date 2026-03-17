@@ -58,13 +58,14 @@ const mockAuthUser = () => {
   });
 };
 
-const mockFriendAndBlockLookups = () => {
-  mockFriendship.find.mockReturnValue({
-    select: jest.fn().mockReturnValue({
-      lean: jest.fn().mockResolvedValue([
-        { requester: 'viewer-1', recipient: 'friend-1' }
-      ])
-    })
+const mockFriendAndBlockLookups = ({ accepted = [{ requester: 'viewer-1', recipient: 'friend-1' }], pending = [] } = {}) => {
+  mockFriendship.find.mockImplementation((query) => {
+    const rows = query?.status === 'pending' ? pending : accepted;
+    return {
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(rows)
+      })
+    };
   });
 
   mockBlockList.find
@@ -138,6 +139,8 @@ describe('Discovery routes', () => {
       _id: 'u-1',
       username: 'alice'
     });
+    expect(response.body.users[0].relationship).toBe('none');
+    expect(response.body.users[0].requestDirection).toBeNull();
     expect(response.body.users[0].ranking.signals).toHaveProperty('textMatch');
     expect(response.body.users[0].ranking.signals).toHaveProperty('locationSignal');
     expect(response.body.users[0].ranking.signals).toHaveProperty('socialSignal');
@@ -183,6 +186,48 @@ describe('Discovery routes', () => {
     expect(second.status).toBe(200);
     expect(second.body.cached).toBe(true);
     expect(mockUser.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('includes outgoing pending relationship metadata in user discovery results', async () => {
+    const app = buildApp();
+    mockAuthUser();
+    mockFriendAndBlockLookups({
+      accepted: [],
+      pending: [{ requester: 'viewer-1', recipient: 'u-3' }]
+    });
+
+    mockUser.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue([
+              {
+                _id: 'u-3',
+                username: 'pendinguser',
+                realName: 'Pending User',
+                city: 'Austin',
+                state: 'TX',
+                country: 'US',
+                friendCount: 1,
+                createdAt: new Date('2026-03-01T00:00:00.000Z')
+              }
+            ])
+          })
+        })
+      })
+    });
+
+    const response = await request(app)
+      .get('/api/discovery/users?page=1&limit=10')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.users).toHaveLength(1);
+    expect(response.body.users[0]).toMatchObject({
+      _id: 'u-3',
+      relationship: 'pending',
+      requestDirection: 'outgoing'
+    });
   });
 
   it('accepts click analytics events and rejects invalid event types', async () => {

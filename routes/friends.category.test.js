@@ -38,6 +38,7 @@ jest.mock('../services/realtime', () => ({
 
 const jwt = require('jsonwebtoken');
 const friendsRouter = require('./friends');
+const { createNotification } = require('../services/notifications');
 
 const buildApp = () => {
   const app = express();
@@ -154,6 +155,40 @@ describe('Friends category and top5 routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.relationship).toBe('accepted');
     expect(response.body.category).toBe('secure');
+  });
+
+  it('creates a requester notification when a pending request is accepted', async () => {
+    const acceptedAt = new Date('2026-03-17T00:00:00.000Z');
+    const friendshipDoc = {
+      _id: '507f1f77bcf86cd799439099',
+      requester: { toString: () => '507f1f77bcf86cd799439022' },
+      recipient: { toString: () => '507f1f77bcf86cd799439011' },
+      status: 'pending',
+      acceptedAt: null,
+      requesterCategory: 'social',
+      recipientCategory: 'social',
+      save: jest.fn().mockImplementation(function save() {
+        this.acceptedAt = acceptedAt;
+        return Promise.resolve(true);
+      })
+    };
+    mockFriendship.findById.mockResolvedValue(friendshipDoc);
+
+    const app = buildApp();
+    const response = await request(app)
+      .post('/api/friends/507f1f77bcf86cd799439099/accept')
+      .set('Authorization', 'Bearer token')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(friendshipDoc.status).toBe('accepted');
+    expect(mockUser.updateOne).toHaveBeenCalledTimes(2);
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      recipientId: friendshipDoc.requester,
+      senderId: friendshipDoc.recipient,
+      type: 'system',
+      title: 'Friend request accepted'
+    }));
   });
 
   it('returns backend top5 validation errors from update route', async () => {
