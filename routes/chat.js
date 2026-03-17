@@ -2467,6 +2467,9 @@ router.post('/rooms/admin', roomWriteLimiter, authenticateToken, [
       room: formatDiscoveryRoomSummary(toPlainDoc(room), req.user.userId)
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ error: 'A chat room with this unique key already exists' });
+    }
     console.error('Error creating admin-managed chat room:', error);
     return res.status(500).json({ error: 'Failed to create chat room', details: error.message });
   }

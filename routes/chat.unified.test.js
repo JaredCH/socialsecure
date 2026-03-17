@@ -269,6 +269,37 @@ describe('Unified chat hub routes', () => {
     expect(mockChatRoom.create).not.toHaveBeenCalled();
   });
 
+  it('returns a conflict error when admin room creation hits a duplicate unique key', async () => {
+    const app = buildApp();
+    mockUser.findById
+      .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
+      .mockImplementationOnce(() => createSelectLean({ _id: '507f1f77bcf86cd799439011', isAdmin: true }));
+    mockChatRoom.findOne = jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue(null)
+        })
+      })
+    });
+    const duplicateError = new Error('E11000 duplicate key error');
+    duplicateError.code = 11000;
+    mockChatRoom.create = jest.fn().mockRejectedValue(duplicateError);
+
+    const response = await request(app)
+      .post('/api/chat/rooms/admin')
+      .set('Authorization', 'Bearer token')
+      .send({
+        name: 'New Topic Room',
+        type: 'topic',
+        discoveryGroup: 'topics',
+        country: 'US',
+        defaultLanding: false
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe('A chat room with this unique key already exists');
+  });
+
   it('applies a 20 second global cooldown to non-DM conversation messages', async () => {
     const app = buildApp();
     const saveConversation = jest.fn().mockResolvedValue(undefined);

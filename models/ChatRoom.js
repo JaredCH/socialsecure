@@ -223,7 +223,7 @@ const chatRoomSchema = new mongoose.Schema({
   },
   stableKey: {
     type: String,
-    default: null
+    default: undefined
   },
   discoveryGroup: {
     type: String,
@@ -491,7 +491,7 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
     discoveryGroup: getDiscoveryGroupForType(type),
     parentRoomId: null,
     defaultLanding: false,
-    stableKey: canonicalDiscoveryRoom?.stableKey || null,
+    stableKey: canonicalDiscoveryRoom?.stableKey || undefined,
     members: [],
     messageCount: 0,
     lastActivity: new Date()
