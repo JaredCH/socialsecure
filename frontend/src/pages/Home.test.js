@@ -130,29 +130,17 @@ describe('Home landing page', () => {
     expect(container.querySelectorAll('[data-testid="news-card"]').length).toBe(6);
     expect(container.textContent).toContain('NEWS AGGREGATION ENGINE');
     expect(container.textContent).toContain('One Intelligent Feed.');
-    expect(container.textContent).toContain('Aggregated');
-    expect(container.textContent).toContain('in Real-Time');
   });
 
-  it('renders data flow visualization and privacy shield', async () => {
+  it('renders the privacy shield section', async () => {
     await renderHome({ isAuthenticated: false });
 
-    expect(container.querySelector('[data-testid="data-flow"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="privacy-shield"]')).not.toBeNull();
-    expect(container.textContent).toContain('DATA FLOW ARCHITECTURE');
     expect(container.textContent).toContain('PRIVACY SHIELD');
     expect(container.textContent).toContain('AES-256 encryption at rest');
     expect(container.textContent).toContain('End-to-end encrypted messaging');
     expect(container.textContent).toContain('Optional BYO PGP keys');
     expect(container.textContent).toContain('Zero-knowledge architecture');
-  });
-
-  it('renders the location intelligence section', async () => {
-    await renderHome({ isAuthenticated: false });
-
-    expect(container.querySelector('[data-testid="location-intelligence"]')).not.toBeNull();
-    expect(container.textContent).toContain('LOCATION INTELLIGENCE');
-    expect(container.textContent).toContain('Nearby Data,');
   });
 
   it('renders the platform features grid with all 6 features', async () => {

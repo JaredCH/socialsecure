@@ -4,15 +4,37 @@ import { Link } from 'react-router-dom';
 
 /* ─── US map simplified SVG path ───────────────────────────────────────────── */
 const US_MAP_PATH =
-  'M 150 120 L 160 100 L 200 90 L 240 85 L 280 80 L 310 82 L 340 78 ' +
-  'L 370 80 L 400 75 L 430 78 L 460 80 L 490 82 L 520 78 L 550 80 ' +
-  'L 570 90 L 580 100 L 590 120 L 595 140 L 590 160 L 580 175 L 570 185 ' +
-  'L 565 200 L 560 210 L 570 220 L 575 235 L 580 250 L 570 260 ' +
-  'L 555 265 L 540 260 L 520 265 L 500 270 L 480 275 L 460 270 ' +
-  'L 440 275 L 420 280 L 400 278 L 380 280 L 360 275 L 340 278 ' +
-  'L 320 280 L 300 275 L 280 278 L 260 280 L 240 275 L 220 270 ' +
-  'L 200 265 L 180 260 L 165 250 L 155 240 L 150 225 L 145 210 ' +
-  'L 140 195 L 138 180 L 140 160 L 145 140 Z';
+  /* Pacific Northwest */
+  'M 155 82 L 160 80 L 175 78 L 190 80 ' +
+  /* Northern border (MT, ND, MN, WI, MI) */
+  'L 210 78 L 250 76 L 290 75 L 330 76 L 370 75 L 400 76 L 430 78 ' +
+  /* Great Lakes region (MI, NY, New England) */
+  'L 450 80 L 465 78 L 475 82 L 490 78 L 505 76 L 520 80 L 540 82 ' +
+  'L 555 78 L 568 82 L 575 88 ' +
+  /* Northeast coast (ME down to VA) */
+  'L 578 95 L 582 100 L 580 108 L 575 115 L 578 120 L 582 125 ' +
+  'L 578 132 L 572 138 L 568 145 L 570 152 L 575 158 ' +
+  /* Mid-Atlantic / Southeast coast */
+  'L 572 165 L 565 172 L 555 180 L 548 190 L 540 200 ' +
+  /* Southeast (SC, GA) */
+  'L 535 210 L 540 218 L 545 225 L 540 235 ' +
+  /* Florida */
+  'L 535 240 L 540 248 L 548 258 L 555 270 L 552 280 L 545 288 ' +
+  'L 535 282 L 530 272 L 525 260 L 520 250 ' +
+  /* Gulf coast (AL, MS, LA) */
+  'L 510 248 L 500 252 L 488 250 L 478 255 L 468 252 L 455 256 ' +
+  'L 440 254 L 425 258 L 410 256 ' +
+  /* Texas Gulf coast */
+  'L 395 260 L 380 268 L 365 275 L 355 282 L 345 278 L 338 270 ' +
+  /* Texas-Mexico border */
+  'L 330 262 L 320 258 L 305 260 L 295 265 L 280 262 L 268 258 ' +
+  /* Southwest border (NM, AZ) */
+  'L 255 260 L 240 262 L 220 260 L 200 258 L 180 260 ' +
+  /* Southern California */
+  'L 168 255 L 158 248 L 150 238 ' +
+  /* California coast north */
+  'L 148 225 L 145 210 L 142 195 L 140 180 L 138 165 L 140 150 ' +
+  'L 142 135 L 145 120 L 148 105 L 150 95 L 155 82 Z';
 
 /* ─── City data for heatmap markers ────────────────────────────────────────── */
 const CITIES = [
@@ -400,25 +422,6 @@ function NewsCard({ source, index, merged }) {
   );
 }
 
-/* ─── Data Flow Node ───────────────────────────────────────────────────────── */
-function DataFlowNode({ label, icon, x, y, delay }) {
-  return (
-    <motion.div
-      className="absolute flex flex-col items-center"
-      style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
-      initial={{ opacity: 0, scale: 0 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true }}
-      transition={{ delay, duration: 0.5 }}
-    >
-      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30 flex items-center justify-center text-2xl backdrop-blur-sm">
-        {icon}
-      </div>
-      <span className="mt-1 text-xs text-slate-400 font-mono whitespace-nowrap">{label}</span>
-    </motion.div>
-  );
-}
-
 /* ─── Section wrapper with scroll animations ───────────────────────────────── */
 function Section({ children, className = '', id, dark = true }) {
   return (
@@ -533,29 +536,6 @@ function Home({ isAuthenticated }) {
   /* ─── Heatmap section state ─── */
   const mapRef = useRef(null);
   const mapInView = useInView(mapRef, { once: true, margin: '-100px' });
-
-  /* ─── Location pins state ─── */
-  const [locationPins, setLocationPins] = useState([]);
-  const locationRef = useRef(null);
-  const locationInView = useInView(locationRef, { once: true, margin: '-100px' });
-
-  useEffect(() => {
-    if (!locationInView) return;
-    const pins = [];
-    const interval = setInterval(() => {
-      if (pins.length >= 8) {
-        clearInterval(interval);
-        return;
-      }
-      pins.push({
-        id: pins.length,
-        x: 15 + Math.random() * 70,
-        y: 15 + Math.random() * 70,
-      });
-      setLocationPins([...pins]);
-    }, 400);
-    return () => clearInterval(interval);
-  }, [locationInView]);
 
   /* ─── Platform features ─── */
   const platformFeatures = useMemo(
@@ -962,19 +942,6 @@ function Home({ isAuthenticated }) {
 
           {/* Aggregation visualization */}
           <div className="relative" data-testid="news-aggregation">
-            {/* Central hub indicator */}
-            <motion.div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30 z-10 flex items-center justify-center"
-              animate={{ scale: [1, 1.1, 1], opacity: [0.6, 1, 0.6] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <span className="text-xs text-blue-400 font-mono text-center">
-                Aggregated
-                <br />
-                in Real-Time
-              </span>
-            </motion.div>
-
             {/* News cards grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {NEWS_SOURCES.map((source, i) => (
@@ -1025,92 +992,7 @@ function Home({ isAuthenticated }) {
       </Section>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  DATA FLOW VISUALIZATION                                           */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      <Section dark={false}>
-        <div className="max-w-5xl mx-auto">
-          <motion.div
-            className="text-center mb-12"
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <span className="inline-block px-3 py-1 rounded-full bg-cyan-900/40 border border-cyan-500/30 text-cyan-400 text-xs font-mono mb-4">
-              DATA FLOW ARCHITECTURE
-            </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-              See How Your{' '}
-              <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                Data Moves
-              </span>
-            </h2>
-            <p className="text-slate-400 max-w-2xl mx-auto">
-              Transparent data flow between users, locations, and intelligence nodes — all
-              encrypted, all private.
-            </p>
-          </motion.div>
-
-          <GlassCard hover={false} className="relative h-80 sm:h-96" data-testid="data-flow">
-            {/* Connection lines SVG */}
-            <svg
-              className="absolute inset-0 w-full h-full"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-            >
-              {[
-                { x1: 20, y1: 25, x2: 50, y2: 50 },
-                { x1: 80, y1: 25, x2: 50, y2: 50 },
-                { x1: 20, y1: 75, x2: 50, y2: 50 },
-                { x1: 80, y1: 75, x2: 50, y2: 50 },
-                { x1: 50, y1: 10, x2: 50, y2: 50 },
-                { x1: 50, y1: 90, x2: 50, y2: 50 },
-              ].map((line, i) => (
-                <motion.line
-                  key={i}
-                  x1={line.x1}
-                  y1={line.y1}
-                  x2={line.x2}
-                  y2={line.y2}
-                  stroke="rgba(59,130,246,0.2)"
-                  strokeWidth="0.3"
-                  strokeDasharray="2 2"
-                  initial={{ pathLength: 0 }}
-                  whileInView={{ pathLength: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.15, duration: 1 }}
-                />
-              ))}
-            </svg>
-
-            {/* Nodes */}
-            <DataFlowNode label="User A" icon={'\u{1F464}'} x={20} y={25} delay={0.2} />
-            <DataFlowNode label="User B" icon={'\u{1F464}'} x={80} y={25} delay={0.3} />
-            <DataFlowNode label="Location" icon={'\u{1F4CD}'} x={20} y={75} delay={0.4} />
-            <DataFlowNode label="News" icon={'\u{1F4F0}'} x={80} y={75} delay={0.5} />
-            <DataFlowNode label="Cloud" icon={'\u2601\uFE0F'} x={50} y={10} delay={0.6} />
-            <DataFlowNode label="Storage" icon={'\u{1F4BE}'} x={50} y={90} delay={0.7} />
-
-            {/* Central hub */}
-            <motion.div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
-              initial={{ opacity: 0, scale: 0 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.8, type: 'spring' }}
-            >
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-600/30 to-purple-600/30 border-2 border-blue-500/40 flex items-center justify-center backdrop-blur-sm">
-                <div className="text-center">
-                  <div className="text-xl">{'\u{1F510}'}</div>
-                  <div className="text-[10px] text-blue-400 font-mono">Encrypted Hub</div>
-                </div>
-              </div>
-            </motion.div>
-          </GlassCard>
-        </div>
-      </Section>
-
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/*  PRIVACY SHIELD + LOCATION INTELLIGENCE                            */}
+      {/*  PRIVACY SHIELD                                                      */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       <Section dark>
         <div className="max-w-6xl mx-auto">
@@ -1160,92 +1042,6 @@ function Home({ isAuthenticated }) {
             </div>
 
             <PrivacyShield />
-          </div>
-
-          {/* Location Intelligence */}
-          <div className="mt-20 grid md:grid-cols-2 gap-12 items-center" ref={locationRef}>
-            <motion.div
-              className="order-2 md:order-1"
-              initial={{ opacity: 0, x: -30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-            >
-              <GlassCard
-                hover={false}
-                className="relative h-64 overflow-hidden"
-                data-testid="location-intelligence"
-              >
-                {/* Mini map background */}
-                <div className="absolute inset-0 opacity-30">
-                  <svg viewBox="100 60 540 260" className="w-full h-full">
-                    <path
-                      d={US_MAP_PATH}
-                      fill="none"
-                      stroke="rgba(59,130,246,0.4)"
-                      strokeWidth="1"
-                    />
-                  </svg>
-                </div>
-
-                {/* Dynamic pins */}
-                {locationPins.map((pin) => (
-                  <motion.div
-                    key={pin.id}
-                    className="absolute"
-                    style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
-                    initial={{ opacity: 0, scale: 0, y: -20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    transition={{ type: 'spring', damping: 12 }}
-                    data-testid="location-pin"
-                  >
-                    <div className="w-4 h-4 rounded-full bg-blue-500/60 border border-blue-400/80 shadow-lg shadow-blue-500/30" />
-                    <motion.div
-                      className="absolute inset-0 rounded-full border border-blue-400/30"
-                      animate={{ scale: [1, 2.5], opacity: [0.4, 0] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                    />
-                  </motion.div>
-                ))}
-
-                {/* User location indicator */}
-                <motion.div
-                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-                  initial={{ opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.5 }}
-                >
-                  <div className="w-6 h-6 rounded-full bg-emerald-500/80 border-2 border-white/50 shadow-lg shadow-emerald-500/40" />
-                  <motion.div
-                    className="absolute inset-0 rounded-full border-2 border-emerald-400/50"
-                    animate={{ scale: [1, 3], opacity: [0.5, 0] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
-                </motion.div>
-              </GlassCard>
-            </motion.div>
-
-            <motion.div
-              className="order-1 md:order-2"
-              initial={{ opacity: 0, x: 30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-            >
-              <span className="inline-block px-3 py-1 rounded-full bg-blue-900/40 border border-blue-500/30 text-blue-400 text-xs font-mono mb-4">
-                LOCATION INTELLIGENCE
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-                Nearby Data,{' '}
-                <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                  On Demand
-                </span>
-              </h2>
-              <p className="text-slate-400">
-                Your location triggers nearby data points dynamically. See what's happening
-                around you without broadcasting your exact position. Privacy-preserving local
-                intelligence at your fingertips.
-              </p>
-            </motion.div>
           </div>
         </div>
       </Section>
