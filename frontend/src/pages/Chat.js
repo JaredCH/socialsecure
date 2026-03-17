@@ -638,13 +638,13 @@ function Chat() {
 
   const workspaceEntries = useMemo(() => {
     const entries = new Map();
-    [hubData?.zip?.current, ...(hubData?.zip?.nearby || []), ...(hubData?.dm || []), ...allChatRooms].forEach((entry) => {
+    [hubData?.zip?.current, ...(hubData?.zip?.nearby || []), ...(hubData?.dm || []), ...allChatRooms, quickAccessRooms.state, quickAccessRooms.county].forEach((entry) => {
       const entryId = normalizeId(entry?._id);
       if (!entryId) return;
       entries.set(entryId, entry);
     });
     return entries;
-  }, [allChatRooms, hubData]);
+  }, [allChatRooms, hubData, quickAccessRooms.state, quickAccessRooms.county]);
   const roomUserPresenceMap = useMemo(
     () => new Map(roomUsers.map((user) => [normalizeId(user?._id), user?.presence || null])),
     [roomUsers]
@@ -929,7 +929,8 @@ function Chat() {
     if (!normalizedConversationId) return;
     let removedOverflowTab = false;
     setOpenChatTabIds((prev) => {
-      const next = [...prev.filter((tabId) => tabId !== normalizedConversationId), normalizedConversationId];
+      if (prev.includes(normalizedConversationId)) return prev;
+      const next = [...prev, normalizedConversationId];
       if (next.length <= MAX_OPEN_CHAT_TABS) return next;
       removedOverflowTab = true;
       return next.slice(next.length - MAX_OPEN_CHAT_TABS);
@@ -1045,6 +1046,7 @@ function Chat() {
     if (!profile?._id || allChatRoomsLoading || typeof chatAPI.joinRoom !== 'function') return;
     const roomIdsToAutoJoin = Array.from(new Set([
       normalizeId(quickAccessRooms.state?._id),
+      normalizeId(quickAccessRooms.county?._id),
       ...defaultLandingRooms.map((room) => normalizeId(room?._id))
     ].filter(Boolean)));
     if (roomIdsToAutoJoin.length === 0) return;
@@ -1083,6 +1085,7 @@ function Chat() {
     defaultLandingRooms,
     joinedRoomIds,
     profile?._id,
+    quickAccessRooms.county?._id,
     quickAccessRooms.state?._id
   ]);
 
