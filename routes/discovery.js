@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const Post = require('../models/Post');
+const Friendship = require('../models/Friendship');
 const BlockList = require('../models/BlockList');
 const SiteContentFilter = require('../models/SiteContentFilter');
 const {
@@ -200,14 +201,44 @@ router.get('/users', authenticateToken, discoveryLimiter, async (req, res) => {
       .limit(Math.min(300, Math.max(120, limit * 12)))
       .lean();
 
+    const candidateIds = candidates
+      .map((candidate) => String(candidate?._id || '').trim())
+      .filter(Boolean);
+
+    const pendingByUserId = new Map();
+    if (candidateIds.length > 0) {
+      const pendingFriendships = await Friendship.find({
+        status: 'pending',
+        $or: [
+          { requester: viewerId, recipient: { $in: candidateIds } },
+          { recipient: viewerId, requester: { $in: candidateIds } }
+        ]
+      }).select('requester recipient').lean();
+
+      for (const friendship of pendingFriendships) {
+        const requesterId = String(friendship?.requester || '');
+        const recipientId = String(friendship?.recipient || '');
+        if (requesterId === viewerId && recipientId) {
+          pendingByUserId.set(recipientId, 'outgoing');
+        } else if (recipientId === viewerId && requesterId) {
+          pendingByUserId.set(requesterId, 'incoming');
+        }
+      }
+    }
+
     const ranked = candidates
       .filter((candidate) => !blockedOrMuted.has(String(candidate._id)))
       .map((candidate) => {
+        const candidateId = String(candidate._id || '');
         const textMatch = scoreTextMatch(query, candidate.username, candidate.realName);
         const socialSignal = Math.min(1, Math.log1p(Number(candidate.friendCount || 0)) / 4);
         const locationSignal = scoreLocationAffinity(req.viewerProfile, candidate);
         const freshness = recencyScore(candidate.createdAt, 120);
-        const isAlreadyFriend = relationshipContext.friendIds.has(String(candidate._id));
+        const isAlreadyFriend = relationshipContext.friendIds.has(candidateId);
+        const pendingDirection = pendingByUserId.get(candidateId) || null;
+        const relationship = isAlreadyFriend
+          ? 'accepted'
+          : (pendingDirection ? 'pending' : 'none');
 
         const score =
           (textMatch * 0.4)
@@ -227,7 +258,9 @@ router.get('/users', authenticateToken, discoveryLimiter, async (req, res) => {
               freshness: Number(freshness.toFixed(3)),
               alreadyFriend: isAlreadyFriend
             }
-          }
+          },
+          relationship,
+          requestDirection: relationship === 'pending' ? pendingDirection : null
         };
       })
       .sort((a, b) => (b.ranking.score - a.ranking.score) || (new Date(b.createdAt) - new Date(a.createdAt)));

@@ -24,9 +24,20 @@ const extractApiErrorMessage = (error, fallbackMessage) => (
   error?.response?.data?.error || fallbackMessage
 );
 
+const getInitialRequestState = (user) => (
+  user?.relationship === 'pending' && user?.requestDirection === 'outgoing'
+    ? 'sent'
+    : 'idle'
+);
+
 const UserCard = ({ user, onSendRequest }) => {
-  const [requestState, setRequestState] = useState('idle'); // idle | loading | sent | error
+  const [requestState, setRequestState] = useState(() => getInitialRequestState(user)); // idle | loading | sent | error
   const [requestError, setRequestError] = useState('');
+
+  useEffect(() => {
+    setRequestState(getInitialRequestState(user));
+    setRequestError('');
+  }, [user?.relationship, user?.requestDirection]);
 
   const handleSendRequest = async () => {
     const targetUserId = resolveUserId(user);
@@ -43,7 +54,8 @@ const UserCard = ({ user, onSendRequest }) => {
       setRequestState('sent');
     } catch (error) {
       setRequestError(extractApiErrorMessage(error, 'Failed to send request. Please try again.'));
-      setRequestState('error');
+      const alreadyPending = String(error?.response?.data?.error || '').toLowerCase().includes('already sent');
+      setRequestState(alreadyPending ? 'sent' : 'error');
     }
   };
 
@@ -77,7 +89,7 @@ const UserCard = ({ user, onSendRequest }) => {
           </div>
 
           {requestState === 'sent' ? (
-            <span className="text-sm text-green-600 font-medium flex-shrink-0">Request sent ✓</span>
+            <span className="text-sm text-amber-600 font-medium flex-shrink-0">Pending</span>
           ) : (
             <button
               onClick={handleSendRequest}
