@@ -6219,15 +6219,16 @@ const Social = () => {
 
       {activeGalleryImage ? (
         <div className="fixed inset-0 z-[1700] bg-black/85 p-3 sm:p-6">
+          <button
+            type="button"
+            onClick={handleCloseGalleryImage}
+            className="absolute right-4 top-4 z-20 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black/80 sm:right-6 sm:top-6"
+            aria-label="Close gallery viewer"
+          >
+            Close ✕
+          </button>
           <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-4 lg:flex-row">
             <div className="relative flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-white/20 bg-black/40 p-2 sm:p-4">
-              <button
-                type="button"
-                onClick={handleCloseGalleryImage}
-                className="absolute right-3 top-3 z-10 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black/80"
-              >
-                Close ✕
-              </button>
               <img src={activeGalleryImage.mediaUrl} alt={activeGalleryImage.title || 'Gallery item'} className="max-h-full max-w-full rounded-xl object-contain" />
             </div>
             <aside className="flex w-full flex-col rounded-2xl border border-white/20 bg-white/95 p-4 text-slate-900 lg:w-[360px]">
