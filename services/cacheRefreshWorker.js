@@ -4,7 +4,9 @@ const LocationNewsCache = require('../models/LocationNewsCache');
 const { CACHE_TTL_MS, getArticlesForLocation } = require('./locationCacheService');
 const { preloadCommonLocations } = require('./locationPreloader');
 
-const REFRESH_INTERVAL_MS = CACHE_TTL_MS;
+// Refresh 5 minutes before TTL expiry so no user ever hits a cold cache
+const REFRESH_LEAD_MS = 5 * 60 * 1000;
+const REFRESH_INTERVAL_MS = CACHE_TTL_MS - REFRESH_LEAD_MS;
 let schedulerHandle = null;
 let schedulerStartedAt = null;
 let lastRefreshRunAt = null;

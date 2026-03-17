@@ -60,12 +60,16 @@ function News() {
   const desktopFeedRef = useRef(null);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
+  const [prefetchedFeed, setPrefetchedFeed] = useState(null);
+
   const bootstrap = useCallback(async () => {
-    const [prefsRes, sourcesRes, sportsRes, taxRes] = await Promise.allSettled([
+    // Fire feed prefetch in parallel with bootstrap — feed doesn't depend on bootstrap results
+    const [prefsRes, sourcesRes, sportsRes, taxRes, feedRes] = await Promise.allSettled([
       newsAPI.getPreferences(),
       newsAPI.getSources(),
       newsAPI.getSportsTeams(),
       newsAPI.getLocationTaxonomy(),
+      newsAPI.getFeed({ page: 1, limit: 50 }),
     ]);
     if (prefsRes.status === 'fulfilled') {
       setPreferences(prefsRes.value.data?.preferences || null);
@@ -75,6 +79,9 @@ function News() {
     if (sportsRes.status === 'fulfilled')  setSportsLeagues(sportsRes.value.data?.leagues || []);
     if (taxRes.status === 'fulfilled') {
       setLocationTaxonomy(taxRes.value.data?.taxonomy || locationTaxonomy);
+    }
+    if (feedRes.status === 'fulfilled') {
+      setPrefetchedFeed(feedRes.value.data || null);
     }
 }, []);
 
@@ -294,6 +301,7 @@ function News() {
               activeDate={activeDate}
               searchQuery={searchQuery}
               onArticle={setSelectedArticle}
+              prefetchedFeed={prefetchedFeed}
             />
           </div>
         </div>
@@ -356,6 +364,7 @@ function News() {
               activeDate={activeDate}
               searchQuery={searchQuery}
               onArticle={setSelectedArticle}
+              prefetchedFeed={prefetchedFeed}
             />
           </div>
         </div>
