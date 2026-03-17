@@ -699,6 +699,7 @@ const Social = () => {
   const [profileChatAccessDraft, setProfileChatAccessDraft] = useState({ readRoles: ['friends', 'circles'], writeRoles: ['friends', 'circles'] });
   const [profileChatSavingAccess, setProfileChatSavingAccess] = useState(false);
   const [profileChatControlsExpanded, setProfileChatControlsExpanded] = useState(false);
+  const [miniChatDesktopViewportMaxHeight, setMiniChatDesktopViewportMaxHeight] = useState(null);
   const [calendarPreviewEvents, setCalendarPreviewEvents] = useState([]);
   const [calendarPreviewLoading, setCalendarPreviewLoading] = useState(false);
   const [calendarPreviewError, setCalendarPreviewError] = useState('');
@@ -746,6 +747,8 @@ const Social = () => {
   const composerDesignTextareaRef = useRef(null);
   const composerCodeTextareaRef = useRef(null);
   const miniChatViewportRef = useRef(null);
+  const miniChatPanelRef = useRef(null);
+  const socialSidebarRef = useRef(null);
 
   const realtimeEnabled = currentUser?.realtimePreferences?.enabled !== false;
 
@@ -1943,6 +1946,53 @@ const Social = () => {
       setEditorLayoutMode(viewportLayoutMode);
     }
   }, [designStudioOpen, viewportLayoutMode]);
+
+  useEffect(() => {
+    if (activeHeroTab !== 'chat') {
+      setMiniChatDesktopViewportMaxHeight(null);
+      return undefined;
+    }
+
+    const updateMiniChatHeight = () => {
+      if (window.innerWidth < 1024) {
+        setMiniChatDesktopViewportMaxHeight(null);
+        return;
+      }
+      const sidebarRect = socialSidebarRef.current?.getBoundingClientRect();
+      const panelRect = miniChatPanelRef.current?.getBoundingClientRect();
+      const viewportRect = miniChatViewportRef.current?.getBoundingClientRect();
+      if (!sidebarRect || !panelRect || !viewportRect) {
+        setMiniChatDesktopViewportMaxHeight(null);
+        return;
+      }
+      const panelChromeHeight = Math.max(0, panelRect.height - viewportRect.height);
+      const availablePanelHeight = sidebarRect.bottom - panelRect.top;
+      const availableViewportHeight = Math.floor(availablePanelHeight - panelChromeHeight);
+      if (!Number.isFinite(availableViewportHeight)) {
+        setMiniChatDesktopViewportMaxHeight(null);
+        return;
+      }
+      const nextHeight = Math.max(288, availableViewportHeight);
+      setMiniChatDesktopViewportMaxHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+
+    updateMiniChatHeight();
+    const animationFrame = window.requestAnimationFrame(updateMiniChatHeight);
+    window.addEventListener('resize', updateMiniChatHeight);
+
+    let resizeObserver;
+    if (typeof ResizeObserver === 'function') {
+      resizeObserver = new ResizeObserver(updateMiniChatHeight);
+      if (socialSidebarRef.current) resizeObserver.observe(socialSidebarRef.current);
+      if (miniChatPanelRef.current) resizeObserver.observe(miniChatPanelRef.current);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener('resize', updateMiniChatHeight);
+      if (resizeObserver) resizeObserver.disconnect();
+    };
+  }, [activeHeroTab, profileChatMessages.length, profileChatControlsExpanded, profileChatError, profileChatInput, profileChatPermissions.canRead]);
 
   useEffect(() => {
     if (isGuestPreview || !isOwnSocialContext || activeHeroTab !== 'main') {
@@ -3927,7 +3977,7 @@ const Social = () => {
         {
           const canPostToProfileThread = isAuthenticated && profileChatPermissions.canWrite;
           return (
-            <div className="flex flex-col gap-0 overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900 shadow-[0_16px_40px_rgba(15,23,42,0.35)]">
+            <div ref={miniChatPanelRef} className="flex flex-col gap-0 overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900 shadow-[0_16px_40px_rgba(15,23,42,0.35)]">
               {/* Chat header – mirrors main Chat header style */}
               <div className="flex items-center justify-between border-b border-slate-700 bg-slate-900/98 px-3 py-2">
                 <div className="flex items-center gap-2 min-w-0">
@@ -3970,7 +4020,12 @@ const Social = () => {
                 <div className="px-3 py-4 text-[12px] text-slate-400">Loading chat room…</div>
               ) : profileChatPermissions.canRead ? (
                 <>
-                  <div ref={miniChatViewportRef} data-testid="social-mini-chat-viewport" className="flex max-h-72 flex-col overflow-y-auto bg-slate-950/60 px-3 py-2 font-mono text-[13px] leading-5 [scrollbar-gutter:stable]">
+                  <div
+                    ref={miniChatViewportRef}
+                    data-testid="social-mini-chat-viewport"
+                    className="flex h-72 max-h-72 flex-col overflow-y-auto bg-slate-950/60 px-3 py-2 font-mono text-[13px] leading-5 [scrollbar-gutter:stable] lg:h-[26rem] lg:max-h-none"
+                    style={miniChatDesktopViewportMaxHeight ? { maxHeight: `${miniChatDesktopViewportMaxHeight}px` } : undefined}
+                  >
                     {profileChatMessages.length === 0 ? (
                       <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">
                         <p className="text-sm font-medium text-slate-500">No messages yet</p>
@@ -5507,7 +5562,7 @@ const Social = () => {
           </main>
 
           {/* Left Sidebar (rendered as right on DOM for visual order, but on mobile it stacks below) */}
-          <aside className="space-y-5" style={isMobile ? {} : { order: -1 }}>
+          <aside ref={socialSidebarRef} className="space-y-5" style={isMobile ? {} : { order: -1 }}>
             {/* About Panel */}
             {!isPrivateGuestLock ? (
               <div className="overflow-hidden rounded-2xl border border-white/[0.06]" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>

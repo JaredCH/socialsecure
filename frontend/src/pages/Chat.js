@@ -1455,7 +1455,26 @@ function Chat() {
         data = response.data;
       }
 
-      setMessages((prev) => upsertConversationMessage(prev, data.message));
+      let messageForState = data?.message || null;
+      if (messageForState) {
+        const senderId = String(messageForState.userId?._id || messageForState.userId || '');
+        if (senderId && senderId === String(profile?._id || '')) {
+          const existingUser = (typeof messageForState.userId === 'object' && messageForState.userId !== null)
+            ? messageForState.userId
+            : { _id: messageForState.userId };
+          messageForState = {
+            ...messageForState,
+            userId: {
+              ...existingUser,
+              _id: existingUser._id || profile?._id,
+              username: existingUser.username || profile?.username,
+              realName: existingUser.realName || profile?.realName,
+              avatarUrl: existingUser.avatarUrl || profile?.avatarUrl || ''
+            }
+          };
+        }
+      }
+      setMessages((prev) => upsertConversationMessage(prev, messageForState));
       setComposerValue('');
       setLocalTyping(false);
       if (!isRoomConversation(activeConversation)) {
