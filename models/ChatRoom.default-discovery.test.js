@@ -73,7 +73,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
 
   it('merges duplicate seeded state and city rooms into the canonical stable-key room', async () => {
     const bulkWriteSpy = jest.spyOn(ChatRoom, 'bulkWrite').mockResolvedValue({ ok: 1 });
-    jest.spyOn(ChatRoom, 'find').mockResolvedValue([
+    const candidateRooms = [
       {
         _id: 'state-canonical',
         type: 'state',
@@ -116,7 +116,12 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
         messageCount: 1,
         lastActivity: new Date('2026-01-03T00:00:00.000Z')
       }
-    ]);
+    ];
+    jest.spyOn(ChatRoom, 'find').mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(candidateRooms)
+      })
+    });
     const updateOneSpy = jest.spyOn(ChatRoom, 'updateOne').mockResolvedValue({ acknowledged: true });
     const deleteManySpy = jest.spyOn(ChatRoom, 'deleteMany').mockResolvedValue({ acknowledged: true, deletedCount: 2 });
 
@@ -169,7 +174,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
 
   it('ignores malformed legacy duplicate members while reconciling discovery rooms', async () => {
     jest.spyOn(ChatRoom, 'bulkWrite').mockResolvedValue({ ok: 1 });
-    jest.spyOn(ChatRoom, 'find').mockResolvedValue([
+    const candidateRooms = [
       {
         _id: 'state-canonical',
         type: 'state',
@@ -190,7 +195,12 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
         messageCount: 3,
         lastActivity: new Date('2026-01-02T00:00:00.000Z')
       }
-    ]);
+    ];
+    jest.spyOn(ChatRoom, 'find').mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(candidateRooms)
+      })
+    });
     const updateOneSpy = jest.spyOn(ChatRoom, 'updateOne').mockResolvedValue({ acknowledged: true });
     const deleteManySpy = jest.spyOn(ChatRoom, 'deleteMany').mockResolvedValue({ acknowledged: true, deletedCount: 1 });
 
@@ -216,6 +226,23 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
       })
     );
     expect(deleteManySpy).toHaveBeenCalledWith({ _id: { $in: ['state-legacy'] } });
+  });
+
+  it('uses lean duplicate-room reads to avoid cast failures from legacy malformed room documents', async () => {
+    jest.spyOn(ChatRoom, 'bulkWrite').mockResolvedValue({ ok: 1 });
+    const selectMock = jest.fn();
+    const leanMock = jest.fn().mockResolvedValue([]);
+    selectMock.mockReturnValue({ lean: leanMock });
+    const findMock = jest.spyOn(ChatRoom, 'find').mockReturnValue({
+      select: selectMock,
+      then: (resolve, reject) => reject(new Error('Cast to [Number] failed for value "{ rejected: true }" at path "coordinates"'))
+    });
+
+    await expect(ChatRoom.ensureDefaultDiscoveryRooms({ force: true })).resolves.toBeUndefined();
+
+    expect(findMock).toHaveBeenCalledTimes(1);
+    expect(selectMock).toHaveBeenCalledWith('_id type city state country stableKey members messageCount lastActivity');
+    expect(leanMock).toHaveBeenCalledTimes(1);
   });
 
   it('continues seeding when bulk upserts hit duplicate-key races', async () => {
