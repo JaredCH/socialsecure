@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { discoveryAPI, friendsAPI } from '../utils/api';
+import { discoveryAPI, friendsAPI, hasAuthToken } from '../utils/api';
 
 const TABS = [
   { id: 'people', label: 'People' },
@@ -193,14 +193,7 @@ const PostCard = ({ post }) => {
 };
 
 const Discovery = () => {
-  const canInteract = (() => {
-    try {
-      const hasStoredToken = Boolean(sessionStorage.getItem('authToken') || localStorage.getItem('token'));
-      return hasStoredToken || process.env.NODE_ENV === 'test';
-    } catch {
-      return process.env.NODE_ENV === 'test';
-    }
-  })();
+  const canInteract = hasAuthToken();
   const [activeTab, setActiveTab] = useState('people');
 
   const [users, setUsers] = useState([]);

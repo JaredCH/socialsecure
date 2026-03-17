@@ -74,7 +74,7 @@ export const setAuthToken = (token) => {
 };
 
 export const clearAuthToken = () => setAuthToken(null);
-const hasAuthToken = () => Boolean(getAuthToken());
+export const hasAuthToken = () => Boolean(getAuthToken());
 
 export const normalizeApiBaseUrl = (apiUrl) => {
   const trimmedApiUrl = (apiUrl || '').trim();

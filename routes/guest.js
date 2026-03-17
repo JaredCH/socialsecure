@@ -11,10 +11,13 @@ const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocatio
 const { guestSessionContext } = require('../utils/guestSessionContext');
 
 const router = express.Router();
+const MAX_DISCOVERY_POSTS_FETCH_LIMIT = 200;
+const MIN_DISCOVERY_POSTS_FETCH_LIMIT = 100;
+const DISCOVERY_POSTS_FETCH_MULTIPLIER = 10;
 
 const guestReadLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 180,
+  max: 120,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many guest requests, please try again shortly.' }
@@ -40,7 +43,7 @@ const toRoomSummary = (room) => ({
   lastActivity: room?.lastActivity || null
 });
 
-const filterFeedArticles = (articles = [], { category = null, maxAgeHours = null } = {}) => {
+const filterNewsFeedArticles = (articles = [], { category = null, maxAgeHours = null } = {}) => {
   const now = Date.now();
   const normalizedCategory = String(category || '').trim().toLowerCase();
 
@@ -83,7 +86,7 @@ router.get('/news/feed', async (req, res) => {
     }
 
     const cacheResult = await getArticlesForLocation(normalizedLocation.locationKey, { normalizedLocation });
-    const filteredArticles = filterFeedArticles(cacheResult.articles || [], req.query);
+    const filteredArticles = filterNewsFeedArticles(cacheResult.articles || [], req.query);
     const start = (page - 1) * limit;
     const pageArticles = filteredArticles.slice(start, start + limit);
 
@@ -257,7 +260,10 @@ router.get('/discovery/posts', async (req, res) => {
 
     const candidates = await Post.find(postFilter)
       .sort({ createdAt: -1 })
-      .limit(Math.min(200, Math.max(100, limit * 10)))
+      .limit(Math.min(
+        MAX_DISCOVERY_POSTS_FETCH_LIMIT,
+        Math.max(MIN_DISCOVERY_POSTS_FETCH_LIMIT, limit * DISCOVERY_POSTS_FETCH_MULTIPLIER)
+      ))
       .populate('authorId', 'username realName city state country')
       .populate('targetFeedId', 'username realName');
 
