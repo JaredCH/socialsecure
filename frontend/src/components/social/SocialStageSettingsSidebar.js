@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const SIDEBAR_OVERLAY_Z_INDEX_CLASS = 'z-[1400]';
+const SIDEBAR_OVERLAY_Z_INDEX_CLASS = 'z-[1700]';
 const SIDEBAR_PANEL_SHADOW_CLASS = 'shadow-[0_30px_90px_rgba(15,23,42,0.35)]';
 
 const DISPLAY_MODE_OPTIONS = [
