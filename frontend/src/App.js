@@ -8,8 +8,10 @@ import UserSettings from './pages/UserSettings';
 import ReferFriend from './pages/ReferFriend';
 import Social from './pages/Social';
 import Chat from './pages/Chat';
+import GuestChat from './pages/GuestChat';
 import Market from './pages/Market';
 import News from './pages/News';
+import GuestNews from './pages/GuestNews';
 import Maps from './pages/Maps';
 import Discovery from './pages/Discovery';
 import Calendar from './pages/Calendar';
@@ -806,7 +808,7 @@ function App() {
                 >
                   <Social />
                 </ProtectedRoute>
-              ) : <Navigate to="/discover" replace />}
+              ) : <Discovery />}
             />
             <Route
               path="/friends"
@@ -846,7 +848,7 @@ function App() {
                 >
                   <Chat />
                 </ProtectedRoute>
-              ) : <Chat />}
+              ) : <GuestChat />}
             />
             <Route
               path="/market"
@@ -872,7 +874,7 @@ function App() {
                 >
                   <News />
                 </ProtectedRoute>
-              ) : <News />}
+              ) : <GuestNews />}
             />
             <Route
               path="/maps"
