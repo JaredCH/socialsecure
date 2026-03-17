@@ -167,6 +167,57 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
     expect(deleteManySpy).toHaveBeenNthCalledWith(2, { _id: { $in: ['city-legacy'] } });
   });
 
+  it('ignores malformed legacy duplicate members while reconciling discovery rooms', async () => {
+    jest.spyOn(ChatRoom, 'bulkWrite').mockResolvedValue({ ok: 1 });
+    jest.spyOn(ChatRoom, 'find').mockResolvedValue([
+      {
+        _id: 'state-canonical',
+        type: 'state',
+        state: 'TX',
+        country: 'US',
+        stableKey: 'state:TX',
+        members: ['user-1'],
+        messageCount: 2,
+        lastActivity: new Date('2026-01-01T00:00:00.000Z')
+      },
+      {
+        _id: 'state-legacy',
+        type: 'state',
+        state: 'TX',
+        country: 'US',
+        stableKey: null,
+        members: { userId: 'legacy-bad-shape' },
+        messageCount: 3,
+        lastActivity: new Date('2026-01-02T00:00:00.000Z')
+      }
+    ]);
+    const updateOneSpy = jest.spyOn(ChatRoom, 'updateOne').mockResolvedValue({ acknowledged: true });
+    const deleteManySpy = jest.spyOn(ChatRoom, 'deleteMany').mockResolvedValue({ acknowledged: true, deletedCount: 1 });
+
+    const chatMessageModel = { updateMany: jest.fn().mockResolvedValue({ acknowledged: true }) };
+    const roomKeyPackageModel = { updateMany: jest.fn().mockResolvedValue({ acknowledged: true }) };
+    const notificationModel = { updateMany: jest.fn().mockResolvedValue({ acknowledged: true }) };
+    jest.spyOn(mongoose, 'model').mockImplementation((modelName) => {
+      if (modelName === 'ChatMessage') return chatMessageModel;
+      if (modelName === 'RoomKeyPackage') return roomKeyPackageModel;
+      if (modelName === 'Notification') return notificationModel;
+      throw new Error(`Unexpected model lookup: ${modelName}`);
+    });
+
+    await expect(ChatRoom.ensureDefaultDiscoveryRooms({ force: true })).resolves.toBeUndefined();
+
+    expect(updateOneSpy).toHaveBeenCalledWith(
+      { _id: 'state-canonical' },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          members: ['user-1'],
+          messageCount: 5
+        })
+      })
+    );
+    expect(deleteManySpy).toHaveBeenCalledWith({ _id: { $in: ['state-legacy'] } });
+  });
+
   it('continues seeding when bulk upserts hit duplicate-key races', async () => {
     const duplicateError = Object.assign(new Error('E11000 duplicate key'), {
       code: 11000

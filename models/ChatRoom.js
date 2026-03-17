@@ -542,7 +542,8 @@ chatRoomSchema.statics.reconcileDefaultDiscoveryRoomDuplicates = async function(
     const mergedMembers = [];
     const memberIds = new Set();
     [canonicalRoom, ...duplicates].forEach((room) => {
-      (room.members || []).forEach((memberId) => {
+      const roomMembers = Array.isArray(room.members) ? room.members : [];
+      roomMembers.forEach((memberId) => {
         const key = String(memberId);
         if (!memberIds.has(key)) {
           memberIds.add(key);
