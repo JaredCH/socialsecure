@@ -61,6 +61,10 @@ function scrambleText(text) {
 }
 
 /* ─── Particle Canvas Background ───────────────────────────────────────────── */
+const PARTICLE_COUNT = 60;
+const GRID_SPACING = 60;
+const MAX_CONNECTION_DISTANCE = 120;
+
 function ParticleGrid({ className }) {
   const canvasRef = useRef(null);
   const prefersReduced = useReducedMotion();
@@ -73,7 +77,7 @@ function ParticleGrid({ className }) {
     let w = (canvas.width = canvas.offsetWidth);
     let h = (canvas.height = canvas.offsetHeight);
 
-    const particles = Array.from({ length: 60 }, () => ({
+    const particles = Array.from({ length: PARTICLE_COUNT }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,
       vx: (Math.random() - 0.5) * 0.4,
@@ -87,14 +91,13 @@ function ParticleGrid({ className }) {
       /* grid lines */
       ctx.strokeStyle = 'rgba(59, 130, 246, 0.06)';
       ctx.lineWidth = 0.5;
-      const grid = 60;
-      for (let gx = 0; gx < w; gx += grid) {
+      for (let gx = 0; gx < w; gx += GRID_SPACING) {
         ctx.beginPath();
         ctx.moveTo(gx, 0);
         ctx.lineTo(gx, h);
         ctx.stroke();
       }
-      for (let gy = 0; gy < h; gy += grid) {
+      for (let gy = 0; gy < h; gy += GRID_SPACING) {
         ctx.beginPath();
         ctx.moveTo(0, gy);
         ctx.lineTo(w, gy);
@@ -119,11 +122,11 @@ function ParticleGrid({ className }) {
           const dx = particles[i].x - particles[j].x;
           const dy = particles[i].y - particles[j].y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 120) {
+          if (dist < MAX_CONNECTION_DISTANCE) {
             ctx.beginPath();
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(59, 130, 246, ${0.15 * (1 - dist / 120)})`;
+            ctx.strokeStyle = `rgba(59, 130, 246, ${0.15 * (1 - dist / MAX_CONNECTION_DISTANCE)})`;
             ctx.lineWidth = 0.5;
             ctx.stroke();
           }
@@ -163,8 +166,11 @@ function ParticleGrid({ className }) {
 }
 
 /* ─── Glowing City Dot ─────────────────────────────────────────────────────── */
+const BASE_DOT_SIZE = 6;
+const DOT_POPULATION_SCALE = 18;
+
 function CityDot({ city, index }) {
-  const size = 6 + city.population * 18;
+  const size = BASE_DOT_SIZE + city.population * DOT_POPULATION_SCALE;
   const glowColor =
     city.population > 0.7
       ? 'rgba(239, 68, 68, 0.7)'
