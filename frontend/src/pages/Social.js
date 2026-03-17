@@ -94,6 +94,16 @@ const RELATIONSHIP_AUDIENCE_LABELS = {
   social: 'Social',
   secure: 'Secure'
 };
+const RELATIONSHIP_AUDIENCE_COLORS = {
+  social: '#0284c7',
+  secure: '#d97706',
+  public: '#16a34a'
+};
+const RELATIONSHIP_AUDIENCE_ICONS = {
+  social: 'S',
+  secure: '🔒',
+  public: '🌐'
+};
 const PROFILE_CHAT_ROLE_OPTIONS = [
   { value: 'friends', label: 'Friends' },
   { value: 'circles', label: 'Circles' },
@@ -661,6 +671,12 @@ const Social = () => {
   const [galleryLoading, setGalleryLoading] = useState(false);
   const [galleryActionLoadingByImage, setGalleryActionLoadingByImage] = useState({});
   const [galleryEditById, setGalleryEditById] = useState({});
+  const [showGalleryUploadModal, setShowGalleryUploadModal] = useState(false);
+  const [galleryUploadPreviews, setGalleryUploadPreviews] = useState([]);
+  const [galleryUploadDescriptions, setGalleryUploadDescriptions] = useState({});
+  const [galleryUploadAudienceOverrides, setGalleryUploadAudienceOverrides] = useState({});
+  const [galleryUploadDefaultAudience, setGalleryUploadDefaultAudience] = useState('social');
+  const [galleryUploading, setGalleryUploading] = useState(false);
   const [heroRandomBackgroundImage, setHeroRandomBackgroundImage] = useState('');
   const [blockedUserIds, setBlockedUserIds] = useState([]);
   const [mutedUserIds, setMutedUserIds] = useState([]);
@@ -3336,6 +3352,90 @@ const Social = () => {
 
   const ownerEditingEnabled = isOwnSocialContext && !isGuestPreview;
 
+  const GALLERY_UPLOAD_MAX_FILES = 6;
+
+  const galleryUploadMaxSlots = Math.min(GALLERY_UPLOAD_MAX_FILES, GALLERY_MAX_ITEMS - galleryItems.length);
+
+  const reindexAfterRemoval = (map, removedIndex) => {
+    const next = {};
+    Object.keys(map).forEach((k) => {
+      const ki = Number(k);
+      if (ki < removedIndex) next[ki] = map[ki];
+      else if (ki > removedIndex) next[ki - 1] = map[ki];
+    });
+    return next;
+  };
+
+  const handleGalleryUploadOpen = () => {
+    setGalleryUploadPreviews([]);
+    setGalleryUploadDescriptions({});
+    setGalleryUploadAudienceOverrides({});
+    setGalleryUploadDefaultAudience('social');
+    setGalleryUploading(false);
+    setShowGalleryUploadModal(true);
+  };
+
+  const handleGalleryUploadClose = () => {
+    galleryUploadPreviews.forEach((p) => { if (p.objectUrl) URL.revokeObjectURL(p.objectUrl); });
+    setShowGalleryUploadModal(false);
+    setGalleryUploadPreviews([]);
+    setGalleryUploadDescriptions({});
+    setGalleryUploadAudienceOverrides({});
+    setGalleryUploading(false);
+  };
+
+  const handleGalleryUploadFileSelect = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (files.length === 0) return;
+    const remainingSlots = galleryUploadMaxSlots - galleryUploadPreviews.length;
+    if (remainingSlots <= 0) return;
+    const accepted = [];
+    for (const file of files.slice(0, remainingSlots)) {
+      if (!file.type.startsWith('image/')) continue;
+      if (file.size > GALLERY_MAX_IMAGE_SIZE_BYTES) continue;
+      accepted.push({ file, objectUrl: URL.createObjectURL(file) });
+    }
+    if (accepted.length > 0) {
+      setGalleryUploadPreviews((prev) => [...prev, ...accepted]);
+    }
+  };
+
+  const handleGalleryUploadRemoveFile = (index) => {
+    setGalleryUploadPreviews((prev) => {
+      const item = prev[index];
+      if (item?.objectUrl) URL.revokeObjectURL(item.objectUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+    setGalleryUploadDescriptions((prev) => reindexAfterRemoval(prev, index));
+    setGalleryUploadAudienceOverrides((prev) => reindexAfterRemoval(prev, index));
+  };
+
+  const handleGalleryUploadSubmit = async () => {
+    if (!currentUser?._id || galleryUploadPreviews.length === 0) return;
+    setGalleryUploading(true);
+    setGalleryError('');
+    const uploaded = [];
+    try {
+      for (let i = 0; i < galleryUploadPreviews.length; i++) {
+        const { file } = galleryUploadPreviews[i];
+        const caption = (galleryUploadDescriptions[i] || '').trim();
+        const audience = galleryUploadAudienceOverrides[i] || galleryUploadDefaultAudience;
+        const response = await galleryAPI.uploadGalleryItem(currentUser._id, file, caption, audience);
+        const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
+        if (created) uploaded.push(created);
+      }
+      if (uploaded.length > 0) {
+        setGalleryItems((prev) => [...uploaded, ...prev]);
+      }
+      handleGalleryUploadClose();
+    } catch (error) {
+      setGalleryError(error.response?.data?.error || 'Failed to upload gallery images.');
+    } finally {
+      setGalleryUploading(false);
+    }
+  };
+
   const renderPanelBody = (panelId) => {
     switch (panelId) {
       case 'profile_header':
@@ -4025,7 +4125,18 @@ const Social = () => {
       case 'gallery':
         return (
           <div className="relative space-y-4 pt-5">
-            <span className="absolute right-0 top-0 text-[11px] font-medium" style={{ color: 'var(--social-text-muted)' }}>{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
+            <span className="absolute right-0 top-0 text-[11px] font-medium text-slate-400">{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
+            {canManageGallery && galleryItems.length < GALLERY_MAX_ITEMS ? (
+              <button
+                type="button"
+                onClick={handleGalleryUploadOpen}
+                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold shadow-sm transition-colors"
+                style={{ border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)', background: 'color-mix(in srgb, var(--accent) 8%, var(--bg-panel))', color: 'var(--accent)' }}
+              >
+                <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="2" y="4" width="16" height="12" rx="2" /><circle cx="7" cy="9" r="1.5" /><path d="M2 14l4-4 4 4 3-3 5 4" /></svg>
+                Add to Gallery
+              </button>
+            ) : null}
             {!isAuthenticated ? (
               <div className="space-y-2 rounded-xl border p-3" style={{ background: 'var(--social-surface-soft)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)' }}>
                 <p className="text-sm" style={{ color: 'var(--social-text-secondary)' }}>Choose a profile to browse gallery media.</p>
@@ -4042,8 +4153,8 @@ const Social = () => {
               description: isOwnSocialContext
                 ? 'No gallery items have been added yet.'
                 : 'This profile hasn\'t added any gallery items visible to you.',
-              actionLabel: null,
-              onAction: null,
+              actionLabel: canManageGallery ? 'Add images' : null,
+              onAction: canManageGallery ? handleGalleryUploadOpen : null,
               tone: 'amber'
             }) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
@@ -6033,6 +6144,131 @@ const Social = () => {
         onToggleTopFriend={toggleDraftTopFriend}
         onMoveTopFriend={moveDraftTopFriend}
       />
+
+      {/* Gallery Upload Modal */}
+      {showGalleryUploadModal ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/55 px-4 py-6 backdrop-blur-sm">
+          <div className="flex w-full max-w-2xl flex-col rounded-3xl border border-white/60 bg-white shadow-2xl" style={{ maxHeight: 'calc(100vh - 3rem)' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Add to Gallery</h3>
+                <p className="text-sm text-slate-500">Select up to {galleryUploadMaxSlots} images with optional descriptions.</p>
+              </div>
+              <button type="button" onClick={handleGalleryUploadClose} className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
+                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              </button>
+            </div>
+            {/* Body */}
+            <div className="flex-1 space-y-4 overflow-y-auto p-5">
+              {/* File picker + batch audience toggle */}
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-sm transition-colors hover:bg-blue-100">
+                  <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="2" y="4" width="16" height="12" rx="2" /><circle cx="7" cy="9" r="1.5" /><path d="M2 14l4-4 4 4 3-3 5 4" /></svg>
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryUploadFileSelect} disabled={galleryUploading} />
+                  Select images
+                </label>
+                <span className="text-[11px] font-medium text-slate-400">{galleryUploadPreviews.length} / {galleryUploadMaxSlots} selected</span>
+                {/* Batch audience toggle */}
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-slate-400">All images:</span>
+                  <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                    {['social', 'secure', 'public'].map((aud) => (
+                      <button
+                        key={aud}
+                        type="button"
+                        onClick={() => {
+                          setGalleryUploadDefaultAudience(aud);
+                          setGalleryUploadAudienceOverrides({});
+                        }}
+                        className="rounded-md px-2 py-0.5 text-[10px] font-semibold transition-all"
+                        style={galleryUploadDefaultAudience === aud && Object.keys(galleryUploadAudienceOverrides).length === 0
+                          ? { backgroundColor: RELATIONSHIP_AUDIENCE_COLORS[aud], color: '#fff' }
+                          : { color: '#94a3b8' }
+                        }
+                      >
+                        {RELATIONSHIP_AUDIENCE_LABELS[aud]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {/* Image previews grid */}
+              {galleryUploadPreviews.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {galleryUploadPreviews.map((preview, index) => {
+                    const effectiveAudience = galleryUploadAudienceOverrides[index] || galleryUploadDefaultAudience;
+                    return (
+                      <div key={`${preview.file.name}-${index}`} className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+                        <img src={preview.objectUrl} alt={`Preview ${index + 1}`} className="h-28 w-full object-cover" />
+                        {/* Remove button */}
+                        <button
+                          type="button"
+                          onClick={() => handleGalleryUploadRemoveFile(index)}
+                          disabled={galleryUploading}
+                          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-30"
+                          style={{ background: 'rgba(0,0,0,0.6)' }}
+                        >
+                          ✕
+                        </button>
+                        {/* Per-image audience override */}
+                        <div className="absolute left-1 top-1 flex rounded-md p-px opacity-0 transition-opacity group-hover:opacity-100" style={{ background: 'rgba(0,0,0,0.5)' }}>
+                          {['social', 'secure', 'public'].map((aud) => (
+                            <button
+                              key={aud}
+                              type="button"
+                              onClick={() => setGalleryUploadAudienceOverrides((prev) => ({ ...prev, [index]: aud }))}
+                              className={`px-1.5 py-px text-[9px] font-semibold ${aud === 'social' ? 'rounded-l-md' : aud === 'public' ? 'rounded-r-md' : ''}`}
+                              style={effectiveAudience === aud
+                                ? { backgroundColor: RELATIONSHIP_AUDIENCE_COLORS[aud], color: '#fff' }
+                                : { color: 'rgba(255,255,255,0.7)' }
+                              }
+                            >
+                              {RELATIONSHIP_AUDIENCE_ICONS[aud]}
+                            </button>
+                          ))}
+                        </div>
+                        {/* Audience badge - positioned at the bottom of the image area */}
+                        <span className={`absolute right-1 top-[6rem] rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${effectiveAudience === 'secure' ? 'bg-amber-100 text-amber-800' : effectiveAudience === 'public' ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800'}`}>
+                          {RELATIONSHIP_AUDIENCE_LABELS[effectiveAudience]}
+                        </span>
+                        {/* Description input */}
+                        <input
+                          type="text"
+                          value={galleryUploadDescriptions[index] || ''}
+                          onChange={(event) => setGalleryUploadDescriptions((prev) => ({ ...prev, [index]: event.target.value }))}
+                          placeholder="Add description…"
+                          maxLength={280}
+                          disabled={galleryUploading}
+                          className="w-full border-t border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none disabled:opacity-50"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-10 text-center">
+                  <svg className="mb-2 h-10 w-10 text-slate-300" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.2}><rect x="2" y="4" width="16" height="12" rx="2" /><circle cx="7" cy="9" r="1.5" /><path d="M2 14l4-4 4 4 3-3 5 4" /></svg>
+                  <p className="text-sm font-medium text-slate-400">Click &quot;Select images&quot; to choose photos</p>
+                  <p className="mt-1 text-[11px] text-slate-400">Up to {galleryUploadMaxSlots} images, max 3MB each</p>
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
+              <button type="button" onClick={handleGalleryUploadClose} disabled={galleryUploading} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+              <button
+                type="button"
+                onClick={handleGalleryUploadSubmit}
+                disabled={galleryUploading || galleryUploadPreviews.length === 0}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {galleryUploading ? 'Uploading…' : `Upload ${galleryUploadPreviews.length || ''} image${galleryUploadPreviews.length === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <ReportModal
         isOpen={reportModalState.isOpen}
