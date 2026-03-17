@@ -391,7 +391,7 @@ const SocialDesignStudioModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-4 pb-6 pt-20 backdrop-blur-sm sm:pt-24">
+    <div className="fixed inset-0 z-[1700] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-4 pb-6 pt-20 backdrop-blur-sm sm:pt-24">
       <div className="relative flex h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-[2rem] border border-blue-100 bg-white shadow-2xl">
         {/* Header */}
         <div className="sticky top-0 z-20 flex items-center justify-between border-b border-blue-100 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-6 py-4 text-white shadow-sm">
