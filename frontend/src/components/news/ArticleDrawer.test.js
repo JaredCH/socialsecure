@@ -90,6 +90,7 @@ describe('ArticleDrawer', () => {
 
     const closeButton = document.body.querySelector('button[aria-label="Close article drawer"]');
     expect(closeButton).not.toBeNull();
+    expect(closeButton.textContent).toContain('Close preview');
 
     await act(async () => {
       closeButton.click();
