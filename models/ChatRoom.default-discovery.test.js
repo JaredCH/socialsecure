@@ -7,7 +7,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
     jest.restoreAllMocks();
   });
 
-  it('seeds properly named state, county, and topic discovery rooms', async () => {
+  it('seeds properly named state, city, and topic discovery rooms', async () => {
     const bulkWriteSpy = jest.spyOn(ChatRoom, 'bulkWrite').mockResolvedValue({ ok: 1 });
     jest.spyOn(ChatRoom, 'reconcileDefaultDiscoveryRoomDuplicates').mockResolvedValue(undefined);
 
@@ -16,7 +16,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
     expect(bulkWriteSpy).toHaveBeenCalledTimes(1);
     const [operations] = bulkWriteSpy.mock.calls[0];
     const expectedCount = STATE_DISCOVERY_ROOMS.length
-      + STATE_DISCOVERY_ROOMS.reduce((total, state) => total + state.counties.length, 0)
+      + STATE_DISCOVERY_ROOMS.reduce((total, state) => total + state.cities.length, 0)
       + TOPIC_DISCOVERY_ROOMS.length;
     expect(operations).toHaveLength(expectedCount);
 
@@ -38,17 +38,17 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
       }),
       expect.objectContaining({
         updateOne: expect.objectContaining({
-          filter: { stableKey: 'county:CA:los angeles county' },
+          filter: { stableKey: 'city:CA:los angeles' },
           update: expect.objectContaining({
             $set: expect.objectContaining({
-              name: 'Los Angeles County, California',
-              type: 'county',
-              county: 'Los Angeles County'
+              name: 'Los Angeles, California',
+              type: 'city',
+              city: 'Los Angeles'
             }),
             $setOnInsert: expect.objectContaining({
-              name: 'Los Angeles County, California',
-              type: 'county',
-              county: 'Los Angeles County'
+              name: 'Los Angeles, California',
+              type: 'city',
+              city: 'Los Angeles'
             })
           })
         })
@@ -71,7 +71,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
     ]));
   });
 
-  it('merges duplicate seeded state and county rooms into the canonical stable-key room', async () => {
+  it('merges duplicate seeded state and city rooms into the canonical stable-key room', async () => {
     const bulkWriteSpy = jest.spyOn(ChatRoom, 'bulkWrite').mockResolvedValue({ ok: 1 });
     jest.spyOn(ChatRoom, 'find').mockResolvedValue([
       {
@@ -95,22 +95,22 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
         lastActivity: new Date('2026-01-02T00:00:00.000Z')
       },
       {
-        _id: 'county-canonical',
-        type: 'county',
+        _id: 'city-canonical',
+        type: 'city',
+        city: 'Houston',
         state: 'TX',
         country: 'US',
-        county: 'Travis County',
-        stableKey: 'county:TX:travis county',
+        stableKey: 'city:TX:houston',
         members: [],
         messageCount: 0,
         lastActivity: new Date('2026-01-01T00:00:00.000Z')
       },
       {
-        _id: 'county-legacy',
-        type: 'county',
+        _id: 'city-legacy',
+        type: 'city',
+        city: 'Houston',
         state: 'Texas',
         country: 'US',
-        county: 'Travis County',
         stableKey: null,
         members: ['user-3'],
         messageCount: 1,
@@ -140,8 +140,8 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
     );
     expect(chatMessageModel.updateMany).toHaveBeenNthCalledWith(
       2,
-      { roomId: { $in: ['county-legacy'] } },
-      { $set: { roomId: 'county-canonical' } }
+      { roomId: { $in: ['city-legacy'] } },
+      { $set: { roomId: 'city-canonical' } }
     );
     expect(updateOneSpy).toHaveBeenCalledWith(
       { _id: 'state-canonical' },
@@ -154,16 +154,16 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
       })
     );
     expect(updateOneSpy).toHaveBeenCalledWith(
-      { _id: 'county-canonical' },
+      { _id: 'city-canonical' },
       expect.objectContaining({
         $set: expect.objectContaining({
-          name: 'Travis County, Texas',
+          name: 'Houston, Texas',
           members: ['user-3'],
           messageCount: 1
         })
       })
     );
     expect(deleteManySpy).toHaveBeenNthCalledWith(1, { _id: { $in: ['state-legacy'] } });
-    expect(deleteManySpy).toHaveBeenNthCalledWith(2, { _id: { $in: ['county-legacy'] } });
+    expect(deleteManySpy).toHaveBeenNthCalledWith(2, { _id: { $in: ['city-legacy'] } });
   });
 });

@@ -43,10 +43,15 @@ const mockNewsPreferencesModel = {
 
 const mockTriggerLocationIngest = jest.fn().mockResolvedValue({ status: 'queued', zipCode: '78666' });
 
+const mockExpandCityRoomsForZip = jest.fn().mockResolvedValue({ created: [] });
+
 jest.mock('../models/User', () => mockUserModel);
 jest.mock('../models/Session', () => mockSessionModel);
 jest.mock('../models/SecurityEvent', () => mockSecurityEventModel);
 jest.mock('../models/NewsPreferences', () => mockNewsPreferencesModel);
+jest.mock('../models/ChatRoom', () => ({
+  expandCityRoomsForZip: mockExpandCityRoomsForZip
+}));
 jest.mock('../services/newsIngestion.local', () => ({
   triggerLocationIngest: mockTriggerLocationIngest
 }));

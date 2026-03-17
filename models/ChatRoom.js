@@ -27,16 +27,16 @@ const findDefaultStateDiscoveryEntry = (state, country) => {
     || null;
 };
 
-const findDefaultCountyDiscoveryName = (stateEntry, county) => {
-  if (!stateEntry) return null;
+const findDefaultCityDiscoveryName = (stateEntry, city) => {
+  if (!stateEntry || !Array.isArray(stateEntry.cities)) return null;
 
-  const normalizedCounty = normalizeLocationToken(county);
-  if (!normalizedCounty) return null;
+  const normalizedCity = normalizeLocationToken(city);
+  if (!normalizedCity) return null;
 
-  return stateEntry.counties.find((countyName) => countyName.toLowerCase() === normalizedCounty.toLowerCase()) || null;
+  return stateEntry.cities.find((cityName) => cityName.toLowerCase() === normalizedCity.toLowerCase()) || null;
 };
 
-const getCanonicalDiscoveryRoomData = ({ type, state, country, county }) => {
+const getCanonicalDiscoveryRoomData = ({ type, city, state, country }) => {
   const stateEntry = findDefaultStateDiscoveryEntry(state, country);
   if (!stateEntry) {
     return null;
@@ -56,20 +56,20 @@ const getCanonicalDiscoveryRoomData = ({ type, state, country, county }) => {
     };
   }
 
-  if (type === 'county') {
-    const matchedCounty = findDefaultCountyDiscoveryName(stateEntry, county);
-    if (!matchedCounty) {
+  if (type === 'city' && city) {
+    const matchedCity = findDefaultCityDiscoveryName(stateEntry, city);
+    if (!matchedCity) {
       return null;
     }
 
     return {
-      stableKey: `county:${stateEntry.code}:${matchedCounty.toLowerCase()}`,
-      name: `${matchedCounty}, ${stateEntry.name}`,
+      stableKey: `city:${stateEntry.code}:${matchedCity.toLowerCase()}`,
+      name: `${matchedCity}, ${stateEntry.name}`,
       state: stateEntry.code,
       country: 'US',
-      county: matchedCounty,
+      city: matchedCity,
       location: { type: 'Point', coordinates: [...DEFAULT_DISCOVERY_ROOM_LOCATION.coordinates] },
-      radius: 75,
+      radius: 50,
       discoverable: true,
       autoLifecycle: false
     };
@@ -272,35 +272,35 @@ const buildDefaultDiscoveryRoomOperations = (now) => {
       }
     });
 
-    stateEntry.counties.forEach((countyName) => {
+    stateEntry.cities.forEach((cityName) => {
       operations.push({
         updateOne: {
-        filter: { stableKey: `county:${stateEntry.code}:${countyName.toLowerCase()}` },
+        filter: { stableKey: `city:${stateEntry.code}:${cityName.toLowerCase()}` },
         update: {
           $set: {
-            name: `${countyName}, ${stateEntry.name}`,
-            type: 'county',
+            name: `${cityName}, ${stateEntry.name}`,
+            type: 'city',
             state: stateEntry.code,
             country: 'US',
-            county: countyName,
+            city: cityName,
             location: { type: 'Point', coordinates: [...DEFAULT_DISCOVERY_ROOM_LOCATION.coordinates] },
-            radius: 75,
+            radius: 50,
             discoverable: true,
             autoLifecycle: false
           },
           $setOnInsert: {
-            name: `${countyName}, ${stateEntry.name}`,
-            type: 'county',
+            name: `${cityName}, ${stateEntry.name}`,
+            type: 'city',
             state: stateEntry.code,
             country: 'US',
-            county: countyName,
+            city: cityName,
             location: { type: 'Point', coordinates: [...DEFAULT_DISCOVERY_ROOM_LOCATION.coordinates] },
-            radius: 75,
+            radius: 50,
             members: [],
             messageCount: 0,
             discoverable: true,
             autoLifecycle: false,
-              stableKey: `county:${stateEntry.code}:${countyName.toLowerCase()}`,
+              stableKey: `city:${stateEntry.code}:${cityName.toLowerCase()}`,
               lastActivity: now
             }
           },
@@ -356,8 +356,9 @@ const buildDuplicateDiscoveryRoomQuery = () => {
         state: { $in: stateIdentifiers }
       },
       {
-        type: 'county',
-        state: { $in: stateIdentifiers }
+        type: 'city',
+        state: { $in: stateIdentifiers },
+        stableKey: { $exists: true, $ne: null }
       }
     ]
   };
@@ -405,7 +406,7 @@ chatRoomSchema.statics.findNearby = function(longitude, latitude, maxDistanceMil
 // Static method to find or create a room by location (idempotent)
 chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
   const { type, city, state, country, county, zipCode, coordinates, radius = 50 } = locationData;
-  const canonicalDiscoveryRoom = getCanonicalDiscoveryRoomData({ type, state, country, county });
+  const canonicalDiscoveryRoom = getCanonicalDiscoveryRoomData({ type, city, state, country });
   const query = buildLocationRoomQuery({ type, city, state, country, county, zipCode });
 
   let room = canonicalDiscoveryRoom
@@ -418,7 +419,7 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
       room.name = canonicalDiscoveryRoom.name;
       room.state = canonicalDiscoveryRoom.state;
       room.country = canonicalDiscoveryRoom.country;
-      room.county = canonicalDiscoveryRoom.county;
+      if (canonicalDiscoveryRoom.city) room.city = canonicalDiscoveryRoom.city;
       room.location = canonicalDiscoveryRoom.location;
       room.radius = canonicalDiscoveryRoom.radius;
       room.discoverable = canonicalDiscoveryRoom.discoverable;
@@ -455,11 +456,11 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
   room = new this({
     name: name.trim(),
     type,
-    city: type === 'city' ? city : undefined,
+    city: type === 'city' ? (canonicalDiscoveryRoom?.city || city) : undefined,
     state: canonicalDiscoveryRoom?.state || state,
     country: canonicalDiscoveryRoom?.country || country,
-    county: type === 'county' ? (canonicalDiscoveryRoom?.county || county) : undefined,
-    zipCode: type === 'city' ? zipCode : undefined,
+    county: type === 'county' ? county : undefined,
+    zipCode: (type === 'city' && !canonicalDiscoveryRoom) ? zipCode : undefined,
     location: {
       type: 'Point',
       coordinates: canonicalDiscoveryRoom?.location?.coordinates || coordinates || [0, 0]
@@ -487,9 +488,9 @@ chatRoomSchema.statics.reconcileDefaultDiscoveryRoomDuplicates = async function(
   const groupedRooms = candidateRooms.reduce((acc, room) => {
     const canonical = getCanonicalDiscoveryRoomData({
       type: room.type,
+      city: room.city,
       state: room.state,
-      country: room.country,
-      county: room.county
+      country: room.country
     });
 
     if (!canonical) {
@@ -571,9 +572,9 @@ chatRoomSchema.statics.reconcileDefaultDiscoveryRoomDuplicates = async function(
       {
         $set: {
           name: canonical.name,
+          city: canonical.city,
           state: canonical.state,
           country: canonical.country,
-          county: canonical.county,
           location: canonical.location,
           radius: canonical.radius,
           discoverable: canonical.discoverable,
@@ -663,6 +664,108 @@ chatRoomSchema.statics.syncUserLocationRooms = async function(user) {
     rooms: createdRooms,
     created: createdRooms.length
   };
+};
+
+// Static method to expand city chat rooms based on a user's zip code during registration.
+// Rules:
+// - If the zip resolves to a single city, create that city room if it doesn't already exist.
+// - If the zip resolves to multiple nearby cities, create up to 3 per registration.
+// - If the zip was seen before and has additional cities, add up to 3 more.
+chatRoomSchema.statics.expandCityRoomsForZip = async function({ zipCode, city, state, country, coordinates } = {}) {
+  if (!zipCode || !state) return { created: [] };
+
+  const MAX_CITIES_PER_BATCH = 3;
+  const ZipLocationIndexModel = getRegisteredModel('ZipLocationIndex');
+  const normalizedState = normalizeLocationToken(state).toUpperCase();
+
+  // Find city rooms already tied to this exact zip code
+  const existingZipRoom = await this.findOne({ type: 'city', zipCode });
+  const created = [];
+
+  // Resolve the primary city room (seeded or zip-based)
+  if (city) {
+    const stateEntry = findDefaultStateDiscoveryEntry(state, country || 'US');
+    const isSeededCity = stateEntry && findDefaultCityDiscoveryName(stateEntry, city);
+
+    if (isSeededCity) {
+      // City is in the seeded top-10 – room already exists via seed; nothing to create.
+    } else if (!existingZipRoom) {
+      // Create a zip-based city room for the primary city
+      const { room, created: wasCreated } = await this.findOrCreateByLocation({
+        type: 'city',
+        city,
+        state: normalizedState,
+        country: country || 'US',
+        zipCode,
+        coordinates: coordinates || [0, 0],
+        radius: 25
+      });
+      if (wasCreated) created.push(room);
+    }
+  }
+
+  // Look for additional nearby cities from the ZipLocationIndex
+  if (coordinates && Array.isArray(coordinates) && coordinates.length === 2 && ZipLocationIndexModel) {
+    const [lon, lat] = coordinates.map(Number);
+    if (Number.isFinite(lon) && Number.isFinite(lat)) {
+      // Collect city names we already have rooms for in this state
+      const existingCityRooms = await this.find({
+        type: 'city',
+        state: normalizedState
+      }).select('city zipCode stableKey').lean();
+
+      const seenCityKeys = new Set();
+      for (const room of existingCityRooms) {
+        if (room.city) seenCityKeys.add(room.city.toLowerCase());
+        if (room.zipCode) seenCityKeys.add(`zip:${room.zipCode}`);
+      }
+      for (const newRoom of created) {
+        if (newRoom.city) seenCityKeys.add(newRoom.city.toLowerCase());
+        if (newRoom.zipCode) seenCityKeys.add(`zip:${newRoom.zipCode}`);
+      }
+      if (city) seenCityKeys.add(city.toLowerCase());
+      seenCityKeys.add(`zip:${zipCode}`);
+
+      // ~0.3 degrees ≈ 20 miles at mid-latitudes
+      const nearbyEntries = await ZipLocationIndexModel.find({
+        $or: [
+          { stateCode: { $regex: new RegExp(`^${normalizedState}$`, 'i') } },
+          { state: { $regex: new RegExp(`^${normalizedState}$`, 'i') } }
+        ],
+        latitude: { $gte: lat - 0.3, $lte: lat + 0.3 },
+        longitude: { $gte: lon - 0.3, $lte: lon + 0.3 }
+      }).lean();
+
+      for (const entry of nearbyEntries) {
+        if (created.length >= MAX_CITIES_PER_BATCH) break;
+
+        const entryCity = (entry.city || '').trim();
+        const entryZip = (entry.zipCode || '').trim();
+        if (!entryCity || !entryZip) continue;
+        if (seenCityKeys.has(entryCity.toLowerCase()) || seenCityKeys.has(`zip:${entryZip}`)) continue;
+
+        seenCityKeys.add(entryCity.toLowerCase());
+        seenCityKeys.add(`zip:${entryZip}`);
+
+        // Skip if the city is a seeded top-10 city (room already exists)
+        const stateEntry = findDefaultStateDiscoveryEntry(normalizedState, 'US');
+        if (stateEntry && findDefaultCityDiscoveryName(stateEntry, entryCity)) continue;
+
+        const { room, created: wasCreated } = await this.findOrCreateByLocation({
+          type: 'city',
+          city: entryCity,
+          state: entry.stateCode || normalizedState,
+          country: 'US',
+          zipCode: entryZip,
+          coordinates: [Number(entry.longitude), Number(entry.latitude)],
+          radius: 25
+        });
+        if (wasCreated) created.push(room);
+      }
+    }
+  }
+
+  return { created };
 };
 
 // Method to add member to room
