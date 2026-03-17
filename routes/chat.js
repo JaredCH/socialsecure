@@ -172,6 +172,7 @@ const DEFAULT_PROFILE_THREAD_ACCESS = Object.freeze({
   readRoles: ['friends', 'circles'],
   writeRoles: ['friends', 'circles']
 });
+const ADMIN_ROOM_DEFAULT_LOCATION = Object.freeze({ type: 'Point', coordinates: [0, 0] });
 const unifiedChatLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 90,
@@ -287,7 +288,7 @@ const buildAllRoomsAggregationPipeline = (skip, limit) => ([
       }
     }
   },
-  { $sort: { discoveryTypePriority: 1, discoveryParentPriority: 0, sortOrder: 1, name: 1, lastActivity: -1, createdAt: -1 } },
+  { $sort: { discoveryTypePriority: 1, discoveryParentPriority: 1, sortOrder: 1, name: 1, lastActivity: -1, createdAt: -1 } },
   { $skip: skip },
   { $limit: limit },
   {
@@ -2352,8 +2353,7 @@ router.post('/rooms', [
   }
 });
 
-router.post('/rooms/admin', [
-  authenticateToken,
+router.post('/rooms/admin', roomWriteLimiter, authenticateToken, [
   body('name').trim().notEmpty().withMessage('Room name is required'),
   body('type').optional().isIn(ROOM_DISCOVERY_TYPES).withMessage('Invalid room type'),
   body('discoveryGroup').optional().isIn(ROOM_DISCOVERY_GROUPS).withMessage('Invalid room list'),
@@ -2411,7 +2411,7 @@ router.post('/rooms/admin', [
       county: req.body.county || undefined,
       state: req.body.state || parentRoom?.state || undefined,
       country: req.body.country || parentRoom?.country || 'US',
-      location: { type: 'Point', coordinates: [0, 0] },
+      location: { type: 'Point', coordinates: [...ADMIN_ROOM_DEFAULT_LOCATION.coordinates] },
       radius: type === 'state' || type === 'topic' ? 100 : 50,
       createdBy: req.user.userId,
       sortOrder: normalizeRoomSortOrder(lastSibling?.sortOrder, -1) + 1,
@@ -2435,8 +2435,7 @@ router.post('/rooms/admin', [
   }
 });
 
-router.put('/rooms/:roomId', [
-  authenticateToken,
+router.put('/rooms/:roomId', roomWriteLimiter, authenticateToken, [
   body('name').optional().trim().notEmpty().withMessage('Room name cannot be empty'),
   body('type').optional().isIn(ROOM_DISCOVERY_TYPES).withMessage('Invalid room type'),
   body('discoveryGroup').optional().isIn(ROOM_DISCOVERY_GROUPS).withMessage('Invalid room list'),
@@ -2475,6 +2474,12 @@ router.put('/rooms/:roomId', [
       : null;
     if (parentRoomId && (!parentRoom || isArchivedRoom(parentRoom))) {
       return res.status(404).json({ error: 'Parent chat room not found' });
+    }
+    if (parentRoomId) {
+      const descendantIds = await collectRoomDescendantIds(room._id);
+      if (descendantIds.some((entryId) => String(entryId) === parentRoomId)) {
+        return res.status(400).json({ error: 'A room cannot be nested under one of its descendants' });
+      }
     }
 
     const discoveryGroup = parentRoom
@@ -2516,8 +2521,7 @@ router.put('/rooms/:roomId', [
   }
 });
 
-router.post('/rooms/:roomId/move', [
-  authenticateToken,
+router.post('/rooms/:roomId/move', roomWriteLimiter, authenticateToken, [
   body('direction').isIn(['up', 'down']).withMessage('Invalid move direction')
 ], async (req, res) => {
   const errors = validationResult(req);

@@ -49,6 +49,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
               defaultLanding: true,
               discoveryGroup: 'topics',
               name: 'SocialSecure',
+              sortOrder: 0,
               type: 'topic'
             })
           })
@@ -71,6 +72,8 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
         })
       })
     ]));
+    const californiaOperation = operations.find((entry) => entry?.updateOne?.filter?.stableKey === 'state:CA');
+    expect(californiaOperation.updateOne.update.$setOnInsert.sortOrder).toBe(4);
   });
 
   it('merges duplicate seeded state and city rooms into the canonical stable-key room', async () => {

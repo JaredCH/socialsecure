@@ -796,6 +796,10 @@ function Chat() {
     acc[parentId].push(room);
     return acc;
   }, {}), [allChatRooms]);
+  const allChatRoomsById = useMemo(
+    () => new Map(allChatRooms.map((room) => [normalizeId(room?._id), room])),
+    [allChatRooms]
+  );
   const managedStateRooms = useMemo(
     () => allChatRooms
       .filter((room) => getRoomDiscoveryGroup(room) === 'states' && !normalizeId(room?.parentRoomId?._id || room?.parentRoomId))
@@ -1462,7 +1466,7 @@ function Chat() {
 
   const canDeleteRoom = useCallback((room) => {
     const ownerId = String(room?.createdBy?._id || room?.createdBy || '').trim();
-    if (Boolean(profile?.isAdmin)) return !room?.eventRef;
+    if (profile?.isAdmin) return !room?.eventRef;
     if (room?.stableKey || room?.eventRef || room?.autoLifecycle) return false;
     return ownerId && ownerId === String(profile?._id || '');
   }, [profile?._id, profile?.isAdmin]);
@@ -1513,7 +1517,7 @@ function Chat() {
     setAdminRoomForm((prev) => {
       const next = { ...prev, [field]: value };
       if (field === 'parentRoomId' && value) {
-        const parent = allChatRooms.find((room) => normalizeId(room?._id) === normalizeId(value));
+        const parent = allChatRoomsById.get(normalizeId(value));
         if (parent) {
           next.discoveryGroup = getRoomDiscoveryGroup(parent) || prev.discoveryGroup;
           if (!next.state && parent.state) next.state = parent.state;
@@ -1525,7 +1529,7 @@ function Chat() {
       }
       return next;
     });
-  }, [allChatRooms]);
+  }, [allChatRoomsById]);
 
   const handleEditRoom = useCallback((room) => {
     setEditingRoomId(normalizeId(room?._id));
@@ -1896,7 +1900,7 @@ function Chat() {
     return 'Secure Chat';
   }, [activeChannel, activeConversation, resolvedZipCode]);
   const activeMenuIcon = activeConversation ? getConversationTabIcon(activeConversation) : (activeChannel === 'dm' ? '✉️' : '💬');
-  const renderManagedRoomBranch = useCallback((room, depth = 0) => {
+  const renderManagedRoomBranch = useCallback((room, depth = 0, extraProps = {}) => {
     const roomId = normalizeId(room?._id);
     const joined = Boolean(joinedRoomIds[roomId]);
     const children = (childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder);
@@ -1911,6 +1915,7 @@ function Chat() {
         style={{ marginLeft: paddingLeft }}
         data-room-tree-item={room.name}
         data-discovery-city={room.type === 'city' ? room.name : undefined}
+        {...extraProps}
       >
         <div className="flex items-center justify-between gap-2">
           <button
@@ -2369,7 +2374,7 @@ function Chat() {
                           {managedTopicRooms.length === 0 ? <li className="opacity-75">No topic chats available.</li> : null}
                           {managedTopicRooms.map((room) => (
                             <React.Fragment key={String(room._id)}>
-                              {React.cloneElement(renderManagedRoomBranch(room), { 'data-topic-room': room.name })}
+                              {renderManagedRoomBranch(room, 0, { 'data-topic-room': room.name })}
                             </React.Fragment>
                           ))}
                         </ul>
