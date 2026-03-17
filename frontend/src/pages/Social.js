@@ -714,6 +714,9 @@ const Social = () => {
   const [calendarEventBusy, setCalendarEventBusy] = useState(false);
   const [partnerActionBusyFriendshipId, setPartnerActionBusyFriendshipId] = useState('');
   const [partnerActionError, setPartnerActionError] = useState('');
+  const [partnerSearchOpen, setPartnerSearchOpen] = useState(false);
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
+  const [partnerConfirmFriend, setPartnerConfirmFriend] = useState(null);
   const [personalInfoModalOpen, setPersonalInfoModalOpen] = useState(false);
   const [personalInfoDraft, setPersonalInfoDraft] = useState({ values: {}, visibility: {} });
   const [personalInfoSaveBusy, setPersonalInfoSaveBusy] = useState(false);
@@ -726,6 +729,7 @@ const Social = () => {
   const designDirtyRef = useRef(false);
   const composerDesignTextareaRef = useRef(null);
   const composerCodeTextareaRef = useRef(null);
+  const miniChatViewportRef = useRef(null);
 
   const realtimeEnabled = currentUser?.realtimePreferences?.enabled !== false;
 
@@ -1147,6 +1151,11 @@ const Social = () => {
       setProfileChatSending(false);
     }
   }, [profileChatInput, profileChatThreadId, profileChatSending, profileChatPermissions.canWrite]);
+
+  useEffect(() => {
+    const el = miniChatViewportRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [profileChatMessages]);
 
   const handleSaveProfileChatAccess = useCallback(async () => {
     if (!profileChatPermissions.isOwner || !activeProfile?._id) return;
@@ -3795,48 +3804,27 @@ const Social = () => {
                 <div className="px-3 py-4 text-[12px] text-slate-400">Loading chat room…</div>
               ) : profileChatPermissions.canRead ? (
                 <>
-                  <div data-testid="social-mini-chat-viewport" className="max-h-72 space-y-1.5 overflow-y-auto bg-slate-950/60 px-3 py-3 [scrollbar-gutter:stable]">
+                  <div ref={miniChatViewportRef} data-testid="social-mini-chat-viewport" className="flex max-h-72 flex-col overflow-y-auto bg-slate-950/60 px-3 py-2 font-mono text-[13px] leading-5 [scrollbar-gutter:stable]">
                     {profileChatMessages.length === 0 ? (
-                      <div className="flex flex-col items-center py-6 text-center">
-                        <svg className="mb-2 h-8 w-8 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" /></svg>
+                      <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">
                         <p className="text-sm font-medium text-slate-500">No messages yet</p>
                         <p className="mt-0.5 text-xs text-slate-600">Start the conversation below.</p>
                       </div>
-                    ) : profileChatMessages.map((message, msgIndex) => {
+                    ) : profileChatMessages.map((message) => {
                       const isOwnMessage = isProfileChatOwnMessage(message);
-                      const prevMessage = profileChatMessages[msgIndex - 1];
-                      const groupedWithPrev = Boolean(
-                        prevMessage
-                        && String(prevMessage?.userId?._id || '') === String(message?.userId?._id || '')
-                        && (new Date(message?.createdAt || 0).getTime() - new Date(prevMessage?.createdAt || 0).getTime()) < MINI_CHAT_MESSAGE_GROUP_THRESHOLD_MS
-                      );
+                      const displayName = isOwnMessage ? 'You' : `@${message?.userId?.username || 'user'}`;
+                      const timeStr = message?.createdAt
+                        ? new Date(message.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                        : '';
                       return (
                         <div
                           key={message._id}
-                          className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} ${groupedWithPrev ? 'mt-0.5' : 'mt-2'}`}
+                          data-testid="social-mini-chat-line"
+                          className="flex gap-1.5 border-b border-slate-800/40 px-1 py-[3px] text-slate-100 hover:bg-slate-800/30"
                         >
-                          <div
-                            data-testid="social-mini-chat-bubble"
-                            className={`max-w-[88%] rounded-2xl border px-2.5 py-2 shadow-sm ${
-                              isOwnMessage
-                                ? 'border-blue-500/70 bg-blue-600 text-white'
-                                : 'border-slate-700 bg-slate-800 text-slate-100'
-                            } ${groupedWithPrev ? (isOwnMessage ? 'rounded-tr-md' : 'rounded-tl-md') : ''}`}
-                          >
-                            {!groupedWithPrev ? (
-                              <p className={`mb-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                isOwnMessage ? 'text-blue-200' : 'text-slate-400'
-                              }`}>
-                                {isOwnMessage ? 'You' : `@${message?.userId?.username || 'user'}`}
-                              </p>
-                            ) : null}
-                            <p data-testid="social-mini-chat-message-content" className="whitespace-pre-wrap break-words text-[13px] leading-5">{message?.content || ''}</p>
-                            {message?.createdAt ? (
-                              <p className={`mt-0.5 text-right text-[10px] opacity-60 ${isOwnMessage ? 'text-blue-100' : 'text-slate-400'}`}>
-                                {new Date(message.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
-                              </p>
-                            ) : null}
-                          </div>
+                          <span className="shrink-0 text-[11px] leading-5 text-slate-500">{timeStr}</span>
+                          <span className="shrink-0 font-semibold leading-5" style={{ color: isOwnMessage ? 'var(--accent, #60a5fa)' : '#94a3b8' }}>{displayName}</span>
+                          <p data-testid="social-mini-chat-message-content" className="min-w-0 whitespace-pre-wrap break-words leading-5">{message?.content || ''}</p>
                         </div>
                       );
                     })}
@@ -4856,6 +4844,11 @@ const Social = () => {
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
+  const bodyBgImage = socialPreferences.globalStyles?.bodyBackgroundImage || '';
+  const bodyBgOverlay = socialPreferences.globalStyles?.bodyBackgroundOverlay || 0;
+  const bodyBgGrain = socialPreferences.globalStyles?.bodyBackgroundGrain || 0;
+  const bodyBgBlur = socialPreferences.globalStyles?.bodyBackgroundBlur || 0;
+
   const cssCustomProperties = {
     '--accent': accentColor,
     '--accent2': accentColor2,
@@ -4870,8 +4863,17 @@ const Social = () => {
 
   return (
     <div
-      className={`min-h-screen w-full ${pageThemeClass}`}
+      className={`relative min-h-screen w-full ${pageThemeClass}`}
       style={cssCustomProperties}
+    >
+      {bodyBgImage ? (
+        <>
+          <div className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url(${bodyBgImage})`, filter: bodyBgBlur ? `blur(${bodyBgBlur}px)` : undefined, transform: bodyBgBlur ? 'scale(1.05)' : undefined }} />
+          {bodyBgOverlay > 0 ? <div className="pointer-events-none fixed inset-0 z-0" style={{ backgroundColor: `rgba(0,0,0,${bodyBgOverlay})` }} /> : null}
+          {bodyBgGrain > 0 ? <div className="pointer-events-none fixed inset-0 z-0" style={{ opacity: bodyBgGrain, backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.5\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat', backgroundSize: '128px 128px' }} /> : null}
+        </>
+      ) : null}
+      <div className="relative z-10">
     >
       {/* Guest Preview Notice */}
       {isGuestPreview ? (
@@ -5042,87 +5044,145 @@ const Social = () => {
                 <div className="px-4 py-4">
                   <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Partner / Spouse</h3>
                   <div className="mt-3">
-                  {(activePartnerFriend || incomingPartnerRequests.length > 0 || outgoingPartnerRequest || availablePartnerCandidates.length > 0) ? (
-                    <div className="space-y-3">
-                      {activePartnerFriend ? (
-                        <div className="flex items-center gap-3 rounded-xl bg-emerald-500/10 px-3 py-3">
-                          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
-                            {activePartnerFriend.avatarUrl ? <img src={activePartnerFriend.avatarUrl} alt={activePartnerFriend.username} className="h-full w-full object-cover" /> : (activePartnerFriend.realName || activePartnerFriend.username || '?').charAt(0).toUpperCase()}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">Listed partner</p>
-                            <p className="truncate text-sm font-semibold text-slate-200">@{activePartnerFriend.username}</p>
-                          </div>
-                          {isOwnSocialContext && !isGuestPreview ? (
-                            <button
-                              type="button"
-                              onClick={() => handlePartnerListingAction(activePartnerFriend.friendshipId, 'clear')}
-                              disabled={partnerActionBusyFriendshipId === String(activePartnerFriend.friendshipId)}
-                              className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-red-400 hover:border-red-400/30 disabled:opacity-60"
-                            >
-                              Remove
-                            </button>
-                          ) : null}
+                    {activePartnerFriend ? (
+                      <Link to={`/social?user=${encodeURIComponent(activePartnerFriend.username)}`} className="group flex items-center gap-3 rounded-2xl p-3 transition hover:bg-white/[0.04]" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.06))' }}>
+                        <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-sm font-semibold text-white ring-2 ring-emerald-400/40 transition group-hover:ring-emerald-400/70" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                          {activePartnerFriend.avatarUrl ? <img src={activePartnerFriend.avatarUrl} alt={activePartnerFriend.username} className="h-full w-full object-cover" /> : (activePartnerFriend.realName || activePartnerFriend.username || '?').charAt(0).toUpperCase()}
                         </div>
-                      ) : null}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">💚 Partner</p>
+                          <p className="truncate text-sm font-semibold text-slate-200 group-hover:text-white">@{activePartnerFriend.username}</p>
+                          {activePartnerFriend.realName ? <p className="truncate text-xs text-slate-400">{activePartnerFriend.realName}</p> : null}
+                        </div>
+                        <svg className="h-4 w-4 shrink-0 text-slate-500 transition group-hover:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                      </Link>
+                    ) : null}
 
-                      {incomingPartnerRequests.map((friend) => (
-                        <div key={`partner-incoming-${friend.friendshipId || friend._id}`} className="flex items-center gap-3 rounded-xl bg-amber-500/10 px-3 py-3">
-                          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                    {!activePartnerFriend && outgoingPartnerRequest ? (
+                      <div className="flex items-center gap-3 rounded-xl bg-blue-500/10 px-3 py-3">
+                        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                          {outgoingPartnerRequest.avatarUrl ? <img src={outgoingPartnerRequest.avatarUrl} alt={outgoingPartnerRequest.username} className="h-full w-full object-cover" /> : (outgoingPartnerRequest.realName || outgoingPartnerRequest.username || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-400">Pending request</p>
+                          <p className="truncate text-sm font-semibold text-slate-200">@{outgoingPartnerRequest.username}</p>
+                        </div>
+                        {isOwnSocialContext && !isGuestPreview ? (
+                          <button type="button" onClick={() => handlePartnerListingAction(outgoingPartnerRequest.friendshipId, 'clear')} disabled={partnerActionBusyFriendshipId === String(outgoingPartnerRequest.friendshipId)} className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-red-400 disabled:opacity-60">Cancel</button>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {incomingPartnerRequests.map((friend) => (
+                      <div key={`partner-incoming-${friend.friendshipId || friend._id}`} className="flex items-center gap-3 rounded-xl bg-amber-500/10 px-3 py-3">
+                        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                          {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">Incoming request</p>
+                          <p className="truncate text-sm font-semibold text-slate-200">@{friend.username}</p>
+                        </div>
+                        {isOwnSocialContext && !isGuestPreview ? (
+                          <div className="flex gap-1">
+                            <button type="button" onClick={() => handlePartnerListingAction(friend.friendshipId, 'accept')} disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)} className="rounded-lg border border-emerald-400/30 px-2 py-1 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-400/10 disabled:opacity-60">Accept</button>
+                            <button type="button" onClick={() => handlePartnerListingAction(friend.friendshipId, 'deny')} disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)} className="rounded-lg border border-red-400/30 px-2 py-1 text-[10px] font-semibold text-red-400 hover:bg-red-400/10 disabled:opacity-60">Deny</button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+
+                    {isOwnSocialContext && !isGuestPreview && !activePartnerFriend && !outgoingPartnerRequest ? (
+                      <button
+                        type="button"
+                        onClick={() => { setPartnerSearchOpen(true); setPartnerSearchQuery(''); setPartnerConfirmFriend(null); }}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 px-3 py-3 text-xs font-semibold text-slate-400 transition hover:border-white/20 hover:bg-white/[0.04] hover:text-slate-200"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                        Add Partner / Spouse
+                      </button>
+                    ) : null}
+
+                    {isOwnSocialContext && !isGuestPreview && activePartnerFriend ? (
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handlePartnerListingAction(activePartnerFriend.friendshipId, 'clear')}
+                          disabled={partnerActionBusyFriendshipId === String(activePartnerFriend.friendshipId)}
+                          className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-slate-500 hover:border-red-400/30 hover:text-red-400 disabled:opacity-60"
+                        >
+                          Remove partner
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {!isOwnSocialContext && !activePartnerFriend ? (
+                      <p className="text-sm text-slate-500">No partner listed.</p>
+                    ) : null}
+
+                    {partnerActionError ? <div className="mt-2 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{partnerActionError}</div> : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Partner Search Popup */}
+            {partnerSearchOpen && isOwnSocialContext && !isGuestPreview ? (
+              <div className="fixed inset-0 z-[1500] flex items-center justify-center">
+                <button type="button" onClick={() => setPartnerSearchOpen(false)} className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" aria-label="Close partner search" />
+                <div className="relative z-10 w-full max-w-sm rounded-2xl border border-white/10 p-5 shadow-2xl" style={{ background: 'var(--bg-base, #0d0d14)' }}>
+                  <h3 className="text-sm font-semibold text-slate-200">Add Partner / Spouse</h3>
+                  <p className="mt-1 text-xs text-slate-400">Search your friends to send a partner request.</p>
+                  <input
+                    type="text"
+                    value={partnerSearchQuery}
+                    onChange={(e) => { setPartnerSearchQuery(e.target.value); setPartnerConfirmFriend(null); }}
+                    placeholder="Search friends…"
+                    autoFocus
+                    className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1"
+                    style={{ '--tw-ring-color': 'var(--accent)' }}
+                  />
+                  <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                    {availablePartnerCandidates
+                      .filter((f) => !partnerSearchQuery || f.username?.toLowerCase().includes(partnerSearchQuery.toLowerCase()) || f.realName?.toLowerCase().includes(partnerSearchQuery.toLowerCase()))
+                      .map((friend) => (
+                        <button
+                          key={`ps-${friend.friendshipId || friend._id}`}
+                          type="button"
+                          onClick={() => setPartnerConfirmFriend(friend)}
+                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${partnerConfirmFriend && String(partnerConfirmFriend.friendshipId) === String(friend.friendshipId) ? 'ring-1' : 'hover:bg-white/[0.04]'}`}
+                          style={partnerConfirmFriend && String(partnerConfirmFriend.friendshipId) === String(friend.friendshipId) ? { background: 'rgba(255,255,255,0.06)', '--tw-ring-color': 'var(--accent)' } : undefined}
+                        >
+                          <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
                             {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">Incoming request</p>
                             <p className="truncate text-sm font-semibold text-slate-200">@{friend.username}</p>
+                            {friend.realName ? <p className="truncate text-xs text-slate-400">{friend.realName}</p> : null}
                           </div>
-                          {isOwnSocialContext && !isGuestPreview ? (
-                            <div className="flex gap-1">
-                              <button type="button" onClick={() => handlePartnerListingAction(friend.friendshipId, 'accept')} disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)} className="rounded-lg border border-emerald-400/30 px-2 py-1 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-400/10 disabled:opacity-60">Accept</button>
-                              <button type="button" onClick={() => handlePartnerListingAction(friend.friendshipId, 'deny')} disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)} className="rounded-lg border border-red-400/30 px-2 py-1 text-[10px] font-semibold text-red-400 hover:bg-red-400/10 disabled:opacity-60">Deny</button>
-                            </div>
-                          ) : null}
-                        </div>
+                        </button>
                       ))}
-
-                      {!activePartnerFriend && outgoingPartnerRequest ? (
-                        <div className="flex items-center gap-3 rounded-xl bg-blue-500/10 px-3 py-3">
-                          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
-                            {outgoingPartnerRequest.avatarUrl ? <img src={outgoingPartnerRequest.avatarUrl} alt={outgoingPartnerRequest.username} className="h-full w-full object-cover" /> : (outgoingPartnerRequest.realName || outgoingPartnerRequest.username || '?').charAt(0).toUpperCase()}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-400">Pending request</p>
-                            <p className="truncate text-sm font-semibold text-slate-200">@{outgoingPartnerRequest.username}</p>
-                          </div>
-                          {isOwnSocialContext && !isGuestPreview ? (
-                            <button type="button" onClick={() => handlePartnerListingAction(outgoingPartnerRequest.friendshipId, 'clear')} disabled={partnerActionBusyFriendshipId === String(outgoingPartnerRequest.friendshipId)} className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-red-400 disabled:opacity-60">Cancel</button>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {isOwnSocialContext && !isGuestPreview && !activePartnerFriend && availablePartnerCandidates.length > 0 ? (
-                        <div className="space-y-1.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Send request</p>
-                          {availablePartnerCandidates.map((friend) => (
-                            <button
-                              key={`partner-candidate-${friend.friendshipId || friend._id}`}
-                              type="button"
-                              onClick={() => handlePartnerListingAction(friend.friendshipId, 'request')}
-                              disabled={partnerActionBusyFriendshipId === String(friend.friendshipId)}
-                              className="flex w-full items-center justify-between rounded-xl border border-white/10 px-3 py-2 text-left text-xs font-semibold text-slate-300 hover:border-blue-400/30 hover:bg-blue-500/10 disabled:opacity-60"
-                            >
-                              <span>@{friend.username}</span>
-                              <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-blue-400">Request</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      {partnerActionError ? <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{partnerActionError}</div> : null}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">No partner listing activity yet.</p>
-                  )}
+                    {availablePartnerCandidates.filter((f) => !partnerSearchQuery || f.username?.toLowerCase().includes(partnerSearchQuery.toLowerCase()) || f.realName?.toLowerCase().includes(partnerSearchQuery.toLowerCase())).length === 0 ? (
+                      <p className="px-3 py-3 text-center text-xs text-slate-500">{availablePartnerCandidates.length === 0 ? 'No friends available.' : 'No matches found.'}</p>
+                    ) : null}
                   </div>
+                  {partnerConfirmFriend ? (
+                    <div className="mt-3 rounded-xl border border-white/10 p-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                      <p className="text-xs text-slate-400">Send partner request to <span className="font-semibold text-slate-200">@{partnerConfirmFriend.username}</span>?</p>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { handlePartnerListingAction(partnerConfirmFriend.friendshipId, 'request'); setPartnerSearchOpen(false); }}
+                          disabled={partnerActionBusyFriendshipId === String(partnerConfirmFriend.friendshipId)}
+                          className="flex-1 rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                          style={{ backgroundColor: 'var(--accent)' }}
+                        >
+                          Confirm
+                        </button>
+                        <button type="button" onClick={() => setPartnerConfirmFriend(null)} className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200">Cancel</button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <button type="button" onClick={() => setPartnerSearchOpen(false)} className="mt-3 w-full rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200">Close</button>
                 </div>
               </div>
             ) : null}
@@ -5224,6 +5284,14 @@ const Social = () => {
         heroRandomGalleryEnabled={Boolean(socialPreferences.hero?.backgroundImageUseRandomGallery)}
         heroProfileImage={socialPreferences.hero?.profileImage || ''}
         heroProfileImageHistory={socialPreferences.hero?.profileImageHistory || []}
+        bodyBackgroundImage={socialPreferences.globalStyles?.bodyBackgroundImage || ''}
+        bodyBackgroundOverlay={socialPreferences.globalStyles?.bodyBackgroundOverlay || 0}
+        bodyBackgroundGrain={socialPreferences.globalStyles?.bodyBackgroundGrain || 0}
+        bodyBackgroundBlur={socialPreferences.globalStyles?.bodyBackgroundBlur || 0}
+        onBodyBackgroundImageChange={(value) => updateGlobalStyles({ bodyBackgroundImage: value })}
+        onBodyBackgroundOverlayChange={(value) => updateGlobalStyles({ bodyBackgroundOverlay: value })}
+        onBodyBackgroundGrainChange={(value) => updateGlobalStyles({ bodyBackgroundGrain: value })}
+        onBodyBackgroundBlurChange={(value) => updateGlobalStyles({ bodyBackgroundBlur: value })}
         themePreset={socialPreferences.themePreset || 'default'}
         themeOptions={STAGE_THEME_OPTIONS}
         accentColor={accentColor}
@@ -5258,6 +5326,7 @@ const Social = () => {
         onClose={closeReportModal}
         onSubmit={submitReport}
       />
+      </div>
     </div>
   );
 };

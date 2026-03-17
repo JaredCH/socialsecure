@@ -557,11 +557,9 @@ describe('Social page hero background rendering', () => {
     expect(messageText).toBeDefined();
     expect(messageText.className).toContain('leading-5');
 
-    const messageBubble = messageText?.closest('[data-testid="social-mini-chat-bubble"]');
-    expect(messageBubble).toBeTruthy();
-    expect(messageBubble?.className).toContain('px-2.5');
-    expect(messageBubble?.className).toContain('py-2');
-    expect(messageBubble?.className).toContain('max-w-[88%]');
+    const messageLine = messageText?.closest('[data-testid="social-mini-chat-line"]');
+    expect(messageLine).toBeTruthy();
+    expect(messageLine?.className).toContain('border-b');
 
     expect(messageText?.closest('div.overflow-y-auto')).toBe(messageViewport);
   });

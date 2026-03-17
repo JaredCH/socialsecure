@@ -17,6 +17,14 @@ const SocialStageSettingsSidebar = ({
   heroRandomGalleryEnabled,
   heroProfileImage,
   heroProfileImageHistory,
+  bodyBackgroundImage,
+  bodyBackgroundOverlay,
+  bodyBackgroundGrain,
+  bodyBackgroundBlur,
+  onBodyBackgroundImageChange,
+  onBodyBackgroundOverlayChange,
+  onBodyBackgroundGrainChange,
+  onBodyBackgroundBlurChange,
   themePreset,
   themeOptions,
   accentColor,
@@ -43,8 +51,10 @@ const SocialStageSettingsSidebar = ({
     : (themeValues[0] || 'default');
   const backgroundFileInputRef = useRef(null);
   const profileFileInputRef = useRef(null);
+  const bodyBgFileInputRef = useRef(null);
   const [heroBackgroundDraft, setHeroBackgroundDraft] = useState(heroBackgroundImage);
   const [heroProfileDraft, setHeroProfileDraft] = useState(heroProfileImage);
+  const [bodyBgDraft, setBodyBgDraft] = useState(bodyBackgroundImage || '');
 
   useEffect(() => {
     setHeroBackgroundDraft(heroBackgroundImage);
@@ -53,6 +63,10 @@ const SocialStageSettingsSidebar = ({
   useEffect(() => {
     setHeroProfileDraft(heroProfileImage);
   }, [heroProfileImage]);
+
+  useEffect(() => {
+    setBodyBgDraft(bodyBackgroundImage || '');
+  }, [bodyBackgroundImage]);
 
   return (
     <div className={`fixed inset-0 ${SIDEBAR_OVERLAY_Z_INDEX_CLASS} pointer-events-none`}>
@@ -218,6 +232,113 @@ const SocialStageSettingsSidebar = ({
 
           <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <div>
+              <h3 className="text-sm font-semibold text-slate-900">Body Background Image</h3>
+              <p className="mt-1 text-xs text-slate-500">Optional full-page background image with overlay effects. Leave empty to use your theme colors.</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={bodyBgDraft}
+                onChange={(event) => setBodyBgDraft(event.target.value)}
+                placeholder="https://example.com/background.jpg"
+                className="flex-1 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+              <button
+                type="button"
+                onClick={() => onBodyBackgroundImageChange(bodyBgDraft)}
+                className="rounded-2xl border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+              >
+                Set
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => bodyBgFileInputRef.current?.click()}
+                className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Upload image
+              </button>
+              <input
+                ref={bodyBgFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => { onBodyBackgroundImageChange(reader.result); };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+              {bodyBackgroundImage ? (
+                <button
+                  type="button"
+                  onClick={() => { onBodyBackgroundImageChange(''); setBodyBgDraft(''); }}
+                  className="rounded-2xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            {bodyBackgroundImage ? (
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex h-20 items-center justify-center overflow-hidden rounded-xl bg-slate-200">
+                  <img src={bodyBackgroundImage} alt="Body background preview" className="h-full w-full object-cover" />
+                </div>
+                <div>
+                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    Dark overlay
+                    <span className="text-slate-400">{Math.round((bodyBackgroundOverlay || 0) * 100)}%</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={bodyBackgroundOverlay || 0}
+                    onChange={(event) => onBodyBackgroundOverlayChange(parseFloat(event.target.value))}
+                    className="mt-1 w-full accent-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    Grain / Noise
+                    <span className="text-slate-400">{Math.round((bodyBackgroundGrain || 0) * 100)}%</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={bodyBackgroundGrain || 0}
+                    onChange={(event) => onBodyBackgroundGrainChange(parseFloat(event.target.value))}
+                    className="mt-1 w-full accent-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    Blur
+                    <span className="text-slate-400">{bodyBackgroundBlur || 0}px</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    step="1"
+                    value={bodyBackgroundBlur || 0}
+                    onChange={(event) => onBodyBackgroundBlurChange(parseInt(event.target.value, 10))}
+                    className="mt-1 w-full accent-blue-600"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+            <div>
               <h3 className="text-sm font-semibold text-slate-900">Accent Color</h3>
               <p className="mt-1 text-xs text-slate-500">Updates links, icons, and primary highlights across the hub.</p>
             </div>
@@ -343,6 +464,10 @@ SocialStageSettingsSidebar.defaultProps = {
   heroRandomGalleryEnabled: false,
   heroProfileImage: '',
   heroProfileImageHistory: [],
+  bodyBackgroundImage: '',
+  bodyBackgroundOverlay: 0,
+  bodyBackgroundGrain: 0,
+  bodyBackgroundBlur: 0,
   themePreset: 'default',
   themeOptions: [],
   accentColor: '#3b82f6',
@@ -363,6 +488,10 @@ SocialStageSettingsSidebar.defaultProps = {
   onHeroProfileImageChange: () => {},
   onHeroProfileImageUpload: () => {},
   onHeroRandomGalleryToggle: () => {},
+  onBodyBackgroundImageChange: () => {},
+  onBodyBackgroundOverlayChange: () => {},
+  onBodyBackgroundGrainChange: () => {},
+  onBodyBackgroundBlurChange: () => {},
   onThemePresetChange: () => {},
   onAccentColorChange: () => {},
   onFontFamilyChange: () => {},
