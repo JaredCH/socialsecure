@@ -492,7 +492,7 @@ describe('Social page hero background rendering', () => {
     confirmSpy.mockRestore();
   });
 
-  it('removes gallery quick-add placeholder panel and keeps a subtle counter', async () => {
+  it('displays a minimal gallery counter without quick-add placeholder content', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
     expect(container.textContent).not.toContain('Your personalized stream');
     expect(container.textContent).not.toContain('Your personalized timeline.');

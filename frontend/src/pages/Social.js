@@ -3545,7 +3545,8 @@ const Social = () => {
       case 'timeline':
         return (
           <div className="space-y-4">
-            <div className="flex items-center justify-end gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-slate-500">Timeline</p>
               <button type="button" onClick={loadFeed} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" disabled={loadingFeed}>{loadingFeed ? 'Refreshing…' : 'Refresh'}</button>
             </div>
             {feedError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">{feedError}</div> : null}
@@ -3669,7 +3670,7 @@ const Social = () => {
               iconType: 'image',
               title: isOwnSocialContext ? 'No images yet' : 'Gallery is empty',
               description: isOwnSocialContext
-                ? 'Upload a photo to start building your gallery.'
+                ? 'No gallery items have been added yet.'
                 : 'This profile hasn\'t added any gallery items visible to you.',
               actionLabel: null,
               onAction: null,
