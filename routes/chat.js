@@ -227,11 +227,44 @@ const buildRouteLimiter = (max, message) => rateLimit({
     xForwardedForHeader: false
   }
 });
+const ROOM_DISCOVERY_TYPES = ['state', 'topic', 'city', 'county'];
+const ROOM_DISCOVERY_GROUPS = ['states', 'topics'];
+const getDiscoveryGroupForRoom = (room) => {
+  if (!room) return null;
+  if (room.discoveryGroup === 'states' || room.discoveryGroup === 'topics') {
+    return room.discoveryGroup;
+  }
+  if (room.type === 'state') return 'states';
+  if (room.type === 'topic') return 'topics';
+  return null;
+};
+const isArchivedRoom = (room) => Boolean(room?.archivedAt);
+const normalizeRoomSortOrder = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+const formatRoomSiblingFilter = (room) => ({
+  archivedAt: null,
+  discoveryGroup: getDiscoveryGroupForRoom(room),
+  parentRoomId: room?.parentRoomId || null
+});
+const requireAdminUser = async (userId) => {
+  const requester = await User.findById(String(userId || '')).select('_id isAdmin').lean();
+  if (!requester) {
+    return { error: { status: 404, body: { error: 'User not found' } } };
+  }
+  if (!requester.isAdmin) {
+    return { error: { status: 403, body: { error: 'Admin access required' } } };
+  }
+  return { requester };
+};
 const DISCOVERY_ROOM_FILTER = {
+  archivedAt: null,
+  discoverable: { $ne: false },
   $or: [
     { type: 'state' },
-    { type: 'city', stableKey: { $exists: true, $ne: null } },
     { type: 'topic' },
+    { parentRoomId: { $ne: null } },
     { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
   ]
 };
@@ -242,16 +275,19 @@ const buildAllRoomsAggregationPipeline = (skip, limit) => ([
       discoveryTypePriority: {
         $switch: {
           branches: [
-            { case: { $eq: ['$type', 'state'] }, then: 0 },
-            { case: { $eq: ['$type', 'city'] }, then: 1 },
-            { case: { $eq: ['$type', 'topic'] }, then: 2 }
+            { case: { $eq: ['$discoveryGroup', 'states'] }, then: 0 },
+            { case: { $eq: ['$discoveryGroup', 'topics'] }, then: 1 },
+            { case: { $eq: ['$type', 'city'] }, then: 2 }
           ],
           default: 3
         }
+      },
+      discoveryParentPriority: {
+        $cond: [{ $ifNull: ['$parentRoomId', false] }, 1, 0]
       }
     }
   },
-  { $sort: { discoveryTypePriority: 1, lastActivity: -1, createdAt: -1 } },
+  { $sort: { discoveryTypePriority: 1, discoveryParentPriority: 0, sortOrder: 1, name: 1, lastActivity: -1, createdAt: -1 } },
   { $skip: skip },
   { $limit: limit },
   {
@@ -269,6 +305,11 @@ const buildAllRoomsAggregationPipeline = (skip, limit) => ([
       eventRef: 1,
       stableKey: 1,
       autoLifecycle: 1,
+      discoveryGroup: 1,
+      parentRoomId: 1,
+      sortOrder: 1,
+      defaultLanding: 1,
+      archivedAt: 1,
       members: 1,
       messageCount: 1,
       lastActivity: 1
@@ -278,11 +319,34 @@ const buildAllRoomsAggregationPipeline = (skip, limit) => ([
 const formatDiscoveryRoomSummary = (room, userId = null) => ({
   ...room,
   memberCount: Array.isArray(room?.members) ? room.members.length : Number(room?.memberCount || 0),
+  discoveryGroup: getDiscoveryGroupForRoom(room),
   isMember: userId
     ? Array.isArray(room?.members) && room.members.some((memberId) => String(memberId) === String(userId))
     : undefined
 });
 const toPlainDoc = (doc) => (doc?.toObject ? doc.toObject() : doc);
+const collectRoomDescendantIds = async (rootRoomId) => {
+  if (typeof ChatRoom.find !== 'function') {
+    return [];
+  }
+  const collectedIds = [];
+  let pendingParentIds = [rootRoomId];
+
+  while (pendingParentIds.length > 0) {
+    const children = await ChatRoom.find({
+      parentRoomId: { $in: pendingParentIds },
+      archivedAt: null
+    }).select('_id').lean();
+    const childIds = children.map((entry) => entry._id).filter(Boolean);
+    if (childIds.length === 0) {
+      break;
+    }
+    collectedIds.push(...childIds);
+    pendingParentIds = childIds;
+  }
+
+  return collectedIds;
+};
 const hasValidCoordinates = (location) => {
   if (!Array.isArray(location?.coordinates) || location.coordinates.length !== 2) {
     return false;
@@ -2288,6 +2352,223 @@ router.post('/rooms', [
   }
 });
 
+router.post('/rooms/admin', [
+  authenticateToken,
+  body('name').trim().notEmpty().withMessage('Room name is required'),
+  body('type').optional().isIn(ROOM_DISCOVERY_TYPES).withMessage('Invalid room type'),
+  body('discoveryGroup').optional().isIn(ROOM_DISCOVERY_GROUPS).withMessage('Invalid room list'),
+  body('parentRoomId').optional({ nullable: true }).trim(),
+  body('state').optional({ nullable: true }).trim(),
+  body('city').optional({ nullable: true }).trim(),
+  body('county').optional({ nullable: true }).trim(),
+  body('country').optional({ nullable: true }).trim(),
+  body('defaultLanding').optional().isBoolean()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { error } = await requireAdminUser(req.user.userId);
+  if (error) {
+    return res.status(error.status).json(error.body);
+  }
+
+  try {
+    const parentRoomId = String(req.body.parentRoomId || '').trim() || null;
+    const parentRoom = parentRoomId
+      ? await ChatRoom.findById(parentRoomId).select('_id discoveryGroup state country archivedAt')
+      : null;
+
+    if (parentRoomId && (!parentRoom || isArchivedRoom(parentRoom))) {
+      return res.status(404).json({ error: 'Parent chat room not found' });
+    }
+
+    const discoveryGroup = parentRoom
+      ? getDiscoveryGroupForRoom(parentRoom)
+      : req.body.discoveryGroup;
+    if (!ROOM_DISCOVERY_GROUPS.includes(discoveryGroup)) {
+      return res.status(400).json({ error: 'A valid room list is required' });
+    }
+
+    const siblingFilter = {
+      archivedAt: null,
+      discoveryGroup,
+      parentRoomId: parentRoom ? parentRoom._id : null
+    };
+    const lastSibling = await ChatRoom.findOne(siblingFilter)
+      .sort({ sortOrder: -1, createdAt: -1 })
+      .select('sortOrder')
+      .lean();
+
+    const type = req.body.type || (discoveryGroup === 'states' ? 'state' : 'topic');
+    const room = await ChatRoom.create({
+      name: req.body.name.trim(),
+      type,
+      discoveryGroup,
+      parentRoomId: parentRoom ? parentRoom._id : null,
+      city: req.body.city || undefined,
+      county: req.body.county || undefined,
+      state: req.body.state || parentRoom?.state || undefined,
+      country: req.body.country || parentRoom?.country || 'US',
+      location: { type: 'Point', coordinates: [0, 0] },
+      radius: type === 'state' || type === 'topic' ? 100 : 50,
+      createdBy: req.user.userId,
+      sortOrder: normalizeRoomSortOrder(lastSibling?.sortOrder, -1) + 1,
+      defaultLanding: Boolean(req.body.defaultLanding)
+    });
+
+    if (room.defaultLanding) {
+      await ChatRoom.updateMany(
+        { _id: { $ne: room._id }, archivedAt: null },
+        { $set: { defaultLanding: false } }
+      );
+    }
+
+    return res.status(201).json({
+      success: true,
+      room: formatDiscoveryRoomSummary(toPlainDoc(room), req.user.userId)
+    });
+  } catch (error) {
+    console.error('Error creating admin-managed chat room:', error);
+    return res.status(500).json({ error: 'Failed to create chat room', details: error.message });
+  }
+});
+
+router.put('/rooms/:roomId', [
+  authenticateToken,
+  body('name').optional().trim().notEmpty().withMessage('Room name cannot be empty'),
+  body('type').optional().isIn(ROOM_DISCOVERY_TYPES).withMessage('Invalid room type'),
+  body('discoveryGroup').optional().isIn(ROOM_DISCOVERY_GROUPS).withMessage('Invalid room list'),
+  body('parentRoomId').optional({ nullable: true }).trim(),
+  body('state').optional({ nullable: true }).trim(),
+  body('city').optional({ nullable: true }).trim(),
+  body('county').optional({ nullable: true }).trim(),
+  body('country').optional({ nullable: true }).trim(),
+  body('defaultLanding').optional().isBoolean()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { error } = await requireAdminUser(req.user.userId);
+  if (error) {
+    return res.status(error.status).json(error.body);
+  }
+
+  try {
+    const room = await ChatRoom.findById(req.params.roomId);
+    if (!room || isArchivedRoom(room)) {
+      return res.status(404).json({ error: 'Chat room not found' });
+    }
+
+    const parentRoomId = Object.prototype.hasOwnProperty.call(req.body, 'parentRoomId')
+      ? (String(req.body.parentRoomId || '').trim() || null)
+      : String(room.parentRoomId || '') || null;
+    if (parentRoomId && parentRoomId === String(room._id)) {
+      return res.status(400).json({ error: 'A room cannot be nested under itself' });
+    }
+
+    const parentRoom = parentRoomId
+      ? await ChatRoom.findById(parentRoomId).select('_id discoveryGroup state country archivedAt')
+      : null;
+    if (parentRoomId && (!parentRoom || isArchivedRoom(parentRoom))) {
+      return res.status(404).json({ error: 'Parent chat room not found' });
+    }
+
+    const discoveryGroup = parentRoom
+      ? getDiscoveryGroupForRoom(parentRoom)
+      : (req.body.discoveryGroup || getDiscoveryGroupForRoom(room));
+    if (!ROOM_DISCOVERY_GROUPS.includes(discoveryGroup)) {
+      return res.status(400).json({ error: 'A valid room list is required' });
+    }
+
+    if (typeof req.body.name === 'string') room.name = req.body.name.trim();
+    if (typeof req.body.type === 'string') room.type = req.body.type;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'city')) room.city = req.body.city || undefined;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'county')) room.county = req.body.county || undefined;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'state')) room.state = req.body.state || parentRoom?.state || undefined;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'country')) room.country = req.body.country || parentRoom?.country || 'US';
+    room.discoveryGroup = discoveryGroup;
+    room.parentRoomId = parentRoom ? parentRoom._id : null;
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'defaultLanding')) {
+      room.defaultLanding = Boolean(req.body.defaultLanding);
+    }
+
+    await room.save();
+
+    if (room.defaultLanding) {
+      await ChatRoom.updateMany(
+        { _id: { $ne: room._id }, archivedAt: null },
+        { $set: { defaultLanding: false } }
+      );
+    }
+
+    return res.json({
+      success: true,
+      room: formatDiscoveryRoomSummary(toPlainDoc(room), req.user.userId)
+    });
+  } catch (error) {
+    console.error('Error updating chat room:', error);
+    return res.status(500).json({ error: 'Failed to update chat room', details: error.message });
+  }
+});
+
+router.post('/rooms/:roomId/move', [
+  authenticateToken,
+  body('direction').isIn(['up', 'down']).withMessage('Invalid move direction')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { error } = await requireAdminUser(req.user.userId);
+  if (error) {
+    return res.status(error.status).json(error.body);
+  }
+
+  try {
+    const room = await ChatRoom.findById(req.params.roomId);
+    if (!room || isArchivedRoom(room)) {
+      return res.status(404).json({ error: 'Chat room not found' });
+    }
+
+    const siblings = await ChatRoom.find(formatRoomSiblingFilter(room))
+      .sort({ sortOrder: 1, name: 1, createdAt: 1 })
+      .select('_id sortOrder name')
+      .lean();
+    const currentIndex = siblings.findIndex((entry) => String(entry._id) === String(room._id));
+    if (currentIndex === -1) {
+      return res.status(404).json({ error: 'Chat room not found in its room list' });
+    }
+
+    const targetIndex = req.body.direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= siblings.length) {
+      return res.json({ success: true, room: formatDiscoveryRoomSummary(toPlainDoc(room), req.user.userId) });
+    }
+
+    const reordered = [...siblings];
+    const [movedRoom] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, movedRoom);
+
+    await Promise.all(reordered.map((entry, index) => (
+      ChatRoom.updateOne({ _id: entry._id }, { $set: { sortOrder: index } })
+    )));
+
+    const updatedRoom = await ChatRoom.findById(req.params.roomId).lean();
+    return res.json({
+      success: true,
+      room: formatDiscoveryRoomSummary(updatedRoom, req.user.userId)
+    });
+  } catch (error) {
+    console.error('Error reordering chat room:', error);
+    return res.status(500).json({ error: 'Failed to reorder chat room', details: error.message });
+  }
+});
+
 router.delete('/rooms/:roomId', roomWriteLimiter, authenticateToken, async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -2307,6 +2588,34 @@ router.delete('/rooms/:roomId', roomWriteLimiter, authenticateToken, async (req,
     const canDelete = Boolean(requester.isAdmin) || (ownerId && ownerId === requesterId);
     if (!canDelete) {
       return res.status(403).json({ error: 'Only the room owner or an admin can delete this chat room' });
+    }
+
+    const shouldArchiveManagedRoom = Boolean(
+      requester.isAdmin
+      && !room.eventRef
+      && (room.stableKey || room.discoveryGroup || room.parentRoomId)
+    );
+
+    if (shouldArchiveManagedRoom) {
+      const archivedAt = new Date();
+      const descendantIds = await collectRoomDescendantIds(room._id);
+      const roomIdsToArchive = [room._id, ...descendantIds];
+      await ChatRoom.updateMany(
+        { _id: { $in: roomIdsToArchive } },
+        {
+          $set: {
+            archivedAt,
+            discoverable: false,
+            defaultLanding: false
+          }
+        }
+      );
+      return res.json({
+        success: true,
+        message: 'Chat room removed from the room list',
+        roomId: String(room._id),
+        archived: true
+      });
     }
 
     if (room.stableKey || room.eventRef || room.autoLifecycle) {

@@ -253,15 +253,17 @@ describe('Unified chat hub routes', () => {
     expect(deleteRoomDoc).toHaveBeenCalled();
   });
 
-  it('prevents deleting protected default rooms', async () => {
+  it('archives protected default rooms for admins instead of hard deleting them', async () => {
     const app = buildApp();
     mockUser.findById
       .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
       .mockImplementationOnce(() => createSelectLean({ _id: '507f1f77bcf86cd799439011', isAdmin: true }));
+    mockChatRoom.updateMany = jest.fn().mockResolvedValue({ modifiedCount: 1 });
     mockChatRoom.findById = jest.fn().mockResolvedValue({
       _id: 'room-locked',
       createdBy: null,
       stableKey: 'topic:ai',
+      discoveryGroup: 'topics',
       eventRef: null,
       autoLifecycle: false,
       deleteOne: jest.fn()
@@ -273,10 +275,11 @@ describe('Unified chat hub routes', () => {
       .delete('/api/chat/rooms/room-locked')
       .set('Authorization', 'Bearer token');
 
-    expect(response.status).toBe(403);
-    expect(response.body.error).toMatch(/cannot be deleted/i);
+    expect(response.status).toBe(200);
+    expect(response.body.archived).toBe(true);
     expect(mockChatMessage.deleteMany).not.toHaveBeenCalled();
     expect(mockRoomKeyPackage.deleteMany).not.toHaveBeenCalled();
+    expect(mockChatRoom.updateMany).toHaveBeenCalled();
   });
 
   it('applies a 20 second global cooldown to non-DM conversation messages', async () => {

@@ -333,6 +333,9 @@ export const chatAPI = {
   joinRoom: (roomId) => api.post(`/chat/rooms/${roomId}/join`),
   leaveRoom: (roomId) => api.post(`/chat/rooms/${roomId}/leave`),
   deleteRoom: (roomId) => api.delete(`/chat/rooms/${roomId}`),
+  createManagedRoom: (payload) => api.post('/chat/rooms/admin', payload),
+  updateRoom: (roomId, payload) => api.put(`/chat/rooms/${roomId}`, payload),
+  moveRoom: (roomId, direction) => api.post(`/chat/rooms/${roomId}/move`, { direction }),
   getAllRooms: (page = 1, limit = 100) =>
     api.get(`/chat/rooms/all?page=${page}&limit=${limit}`),
   getQuickAccessRooms: () => api.get('/chat/rooms/quick-access'),

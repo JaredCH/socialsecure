@@ -7,7 +7,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
     jest.restoreAllMocks();
   });
 
-  it('seeds properly named state, city, and topic discovery rooms', async () => {
+  it('seeds 50 state rooms and topic rooms with SocialSecure as the default landing room', async () => {
     const bulkWriteSpy = jest.spyOn(ChatRoom, 'bulkWrite').mockResolvedValue({ ok: 1 });
     jest.spyOn(ChatRoom, 'reconcileDefaultDiscoveryRoomDuplicates').mockResolvedValue(undefined);
 
@@ -15,9 +15,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
 
     expect(bulkWriteSpy).toHaveBeenCalledTimes(1);
     const [operations] = bulkWriteSpy.mock.calls[0];
-    const expectedCount = STATE_DISCOVERY_ROOMS.length
-      + STATE_DISCOVERY_ROOMS.reduce((total, state) => total + state.cities.length, 0)
-      + TOPIC_DISCOVERY_ROOMS.length;
+    const expectedCount = STATE_DISCOVERY_ROOMS.length + TOPIC_DISCOVERY_ROOMS.length;
     expect(operations).toHaveLength(expectedCount);
 
     expect(operations).toEqual(expect.arrayContaining([
@@ -26,11 +24,13 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
           filter: { stableKey: 'state:AL' },
           update: expect.objectContaining({
             $set: expect.objectContaining({
-              name: 'Alabama',
+              discoveryGroup: 'states',
               type: 'state'
             }),
             $setOnInsert: expect.objectContaining({
+              discoveryGroup: 'states',
               name: 'Alabama',
+              sortOrder: 0,
               type: 'state'
             })
           })
@@ -38,17 +38,18 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
       }),
       expect.objectContaining({
         updateOne: expect.objectContaining({
-          filter: { stableKey: 'city:CA:los angeles' },
+          filter: { stableKey: 'topic:socialsecure' },
           update: expect.objectContaining({
             $set: expect.objectContaining({
-              name: 'Los Angeles, California',
-              type: 'city',
-              city: 'Los Angeles'
+              defaultLanding: true,
+              discoveryGroup: 'topics',
+              type: 'topic'
             }),
             $setOnInsert: expect.objectContaining({
-              name: 'Los Angeles, California',
-              type: 'city',
-              city: 'Los Angeles'
+              defaultLanding: true,
+              discoveryGroup: 'topics',
+              name: 'SocialSecure',
+              type: 'topic'
             })
           })
         })
@@ -58,10 +59,11 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
           filter: { stableKey: 'topic:ai' },
           update: expect.objectContaining({
             $set: expect.objectContaining({
-              name: 'AI',
+              discoveryGroup: 'topics',
               type: 'topic'
             }),
             $setOnInsert: expect.objectContaining({
+              discoveryGroup: 'topics',
               name: 'AI',
               type: 'topic'
             })

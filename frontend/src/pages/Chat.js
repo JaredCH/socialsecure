@@ -192,8 +192,44 @@ const MAX_FAVORITE_ROOMS = 8;
 const MAX_DM_FRIEND_PICKER_RESULTS = 12;
 const MAX_OPEN_CHAT_TABS = 6;
 const ROOM_CHAT_TYPES = ['state', 'county', 'topic', 'city'];
+const ROOM_DISCOVERY_GROUP_OPTIONS = [
+  { value: 'states', label: 'State Chats' },
+  { value: 'topics', label: 'Topics' }
+];
+const ROOM_DISCOVERY_TYPE_OPTIONS = [
+  { value: 'state', label: 'State' },
+  { value: 'topic', label: 'Topic' },
+  { value: 'city', label: 'City / sub-room' },
+  { value: 'county', label: 'County / sub-room' }
+];
 const normalizeId = (value) => String(value || '').trim();
 const sortRoomsByName = (left, right) => String(left?.name || '').localeCompare(String(right?.name || ''));
+const normalizeRoomSortOrder = (room, fallback = Number.MAX_SAFE_INTEGER) => {
+  const parsed = Number(room?.sortOrder);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+const sortRoomsByDiscoveryOrder = (left, right) => {
+  const orderDifference = normalizeRoomSortOrder(left) - normalizeRoomSortOrder(right);
+  if (orderDifference !== 0) return orderDifference;
+  return sortRoomsByName(left, right);
+};
+const getRoomDiscoveryGroup = (room) => {
+  if (room?.discoveryGroup === 'states' || room?.discoveryGroup === 'topics') return room.discoveryGroup;
+  if (room?.type === 'state') return 'states';
+  if (room?.type === 'topic') return 'topics';
+  return null;
+};
+const createRoomAdminForm = (room = null) => ({
+  name: room?.name || '',
+  type: room?.type || 'topic',
+  discoveryGroup: getRoomDiscoveryGroup(room) || 'topics',
+  parentRoomId: normalizeId(room?.parentRoomId?._id || room?.parentRoomId || ''),
+  state: room?.state || '',
+  city: room?.city || '',
+  county: room?.county || '',
+  country: room?.country || 'US',
+  defaultLanding: Boolean(room?.defaultLanding)
+});
 const isRoomConversation = (conversation) => ROOM_CHAT_TYPES.includes(String(conversation?.type || ''));
 const getConversationActivityAt = (conversation) => conversation?.lastMessageAt || conversation?.lastActivity || null;
 const getChatTabTypeLabel = (conversation) => {
@@ -375,7 +411,7 @@ function Chat() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [stateChatsOpen, setStateChatsOpen] = useState(false);
   const [topicsOpen, setTopicsOpen] = useState(false);
-  const [expandedStateRooms, setExpandedStateRooms] = useState({});
+  const [expandedManagedRooms, setExpandedManagedRooms] = useState({});
   const [dmUnlockedByConversation, setDmUnlockedByConversation] = useState({});
   const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(DEFAULT_UNLOCK_DURATION_MINUTES);
   const [unlockingDm, setUnlockingDm] = useState(false);
@@ -385,6 +421,7 @@ function Chat() {
   const [openChatTabIds, setOpenChatTabIds] = useState([]);
   const search = window.location.search;
   const previousActiveChannelRef = useRef('zip');
+  const initialDefaultRoomAppliedRef = useRef(false);
 
   useEffect(() => {
     const requestedChannel = new URLSearchParams(search).get('tab');
@@ -447,6 +484,10 @@ function Chat() {
   const [reactionByMessageId, setReactionByMessageId] = useState({});
   const [adminMessageActionIds, setAdminMessageActionIds] = useState([]);
   const [adminMuteActionUserIds, setAdminMuteActionUserIds] = useState([]);
+  const [adminRoomForm, setAdminRoomForm] = useState(() => createRoomAdminForm());
+  const [editingRoomId, setEditingRoomId] = useState('');
+  const [adminRoomSaving, setAdminRoomSaving] = useState(false);
+  const [adminRoomActionIds, setAdminRoomActionIds] = useState([]);
   const adminMutedUserIds = useMemo(() => new Set(
     roomUsers
       .filter((entry) => {
@@ -463,6 +504,10 @@ function Chat() {
   const adminProcessingUserIds = useMemo(
     () => new Set(adminMuteActionUserIds.map((entry) => String(entry || '').trim()).filter(Boolean)),
     [adminMuteActionUserIds]
+  );
+  const adminProcessingRoomIds = useMemo(
+    () => new Set(adminRoomActionIds.map((entry) => String(entry || '').trim()).filter(Boolean)),
+    [adminRoomActionIds]
   );
   const [userContextMenu, setUserContextMenu] = useState({
     open: false,
@@ -744,29 +789,37 @@ function Chat() {
     [allChatRooms, favoriteRoomIds]
   );
 
-  const stateRoomGroups = useMemo(() => {
-    const cityRoomsByState = allChatRooms
-      .filter((room) => room.type === 'city' && room.stableKey)
-      .sort(sortRoomsByName)
-      .reduce((acc, room) => {
-        const stateCode = String(room.state || '').trim();
-        if (!stateCode) return acc;
-        if (!acc[stateCode]) acc[stateCode] = [];
-        acc[stateCode].push(room);
-        return acc;
-      }, {});
-
-    return allChatRooms
-      .filter((room) => room.type === 'state')
-      .sort(sortRoomsByName)
-      .map((room) => ({
-        room,
-        cities: cityRoomsByState[String(room.state || '').trim()] || []
-      }));
-  }, [allChatRooms]);
-
-  const topicRooms = useMemo(
-    () => allChatRooms.filter((room) => room.type === 'topic').sort(sortRoomsByName),
+  const childRoomsByParentId = useMemo(() => allChatRooms.reduce((acc, room) => {
+    const parentId = normalizeId(room?.parentRoomId?._id || room?.parentRoomId);
+    if (!parentId) return acc;
+    if (!acc[parentId]) acc[parentId] = [];
+    acc[parentId].push(room);
+    return acc;
+  }, {}), [allChatRooms]);
+  const managedStateRooms = useMemo(
+    () => allChatRooms
+      .filter((room) => getRoomDiscoveryGroup(room) === 'states' && !normalizeId(room?.parentRoomId?._id || room?.parentRoomId))
+      .sort(sortRoomsByDiscoveryOrder),
+    [allChatRooms]
+  );
+  const managedTopicRooms = useMemo(
+    () => allChatRooms
+      .filter((room) => getRoomDiscoveryGroup(room) === 'topics' && !normalizeId(room?.parentRoomId?._id || room?.parentRoomId))
+      .sort(sortRoomsByDiscoveryOrder),
+    [allChatRooms]
+  );
+  const defaultLandingRoom = useMemo(
+    () => allChatRooms.find((room) => room?.defaultLanding) || allChatRooms.find((room) => room?.stableKey === 'topic:socialsecure') || null,
+    [allChatRooms]
+  );
+  const roomParentOptions = useMemo(
+    () => allChatRooms
+      .filter((room) => ['state', 'topic', 'city', 'county'].includes(String(room?.type || '')))
+      .sort((left, right) => {
+        const groupDifference = String(getRoomDiscoveryGroup(left) || '').localeCompare(String(getRoomDiscoveryGroup(right) || ''));
+        if (groupDifference !== 0) return groupDifference;
+        return sortRoomsByDiscoveryOrder(left, right);
+      }),
     [allChatRooms]
   );
   const relationalQuickRooms = useMemo(
@@ -783,10 +836,10 @@ function Chat() {
     [theme]
   );
 
-  const handleToggleExpandedStateRoom = useCallback((roomId) => {
+  const handleToggleExpandedManagedRoom = useCallback((roomId) => {
     const normalizedRoomId = normalizeId(roomId);
     if (!normalizedRoomId) return;
-    setExpandedStateRooms((prev) => ({
+    setExpandedManagedRooms((prev) => ({
       ...prev,
       [normalizedRoomId]: !prev[normalizedRoomId]
     }));
@@ -925,6 +978,27 @@ function Chat() {
       applyDefaultConversationSelection(activeChannel, hubData);
     }
   }, [activeChannel, activeConversationId, applyDefaultConversationSelection, hubData]);
+
+  useEffect(() => {
+    if (initialDefaultRoomAppliedRef.current) return;
+    if (!defaultLandingRoom?._id) return;
+    if (allChatRoomsLoading) return;
+    if (activeChannel !== 'zip') return;
+    const currentType = String(activeConversation?.type || '');
+    if (activeConversationId && currentType && currentType !== 'zip-room') {
+      initialDefaultRoomAppliedRef.current = true;
+      return;
+    }
+    openConversationById(defaultLandingRoom._id, { openWorkspace: false });
+    initialDefaultRoomAppliedRef.current = true;
+  }, [
+    activeChannel,
+    activeConversation?.type,
+    activeConversationId,
+    allChatRoomsLoading,
+    defaultLandingRoom,
+    openConversationById
+  ]);
 
   const loadLatestConversationMessages = useCallback(async (conversationId) => {
     const request = isRoomConversation(activeConversation)
@@ -1388,8 +1462,9 @@ function Chat() {
 
   const canDeleteRoom = useCallback((room) => {
     const ownerId = String(room?.createdBy?._id || room?.createdBy || '').trim();
+    if (Boolean(profile?.isAdmin)) return !room?.eventRef;
     if (room?.stableKey || room?.eventRef || room?.autoLifecycle) return false;
-    return Boolean(profile?.isAdmin) || (ownerId && ownerId === String(profile?._id || ''));
+    return ownerId && ownerId === String(profile?._id || '');
   }, [profile?._id, profile?.isAdmin]);
 
   const handleDeleteRoom = useCallback(async (room) => {
@@ -1399,7 +1474,7 @@ function Chat() {
     if (!window.confirm(`Delete "${roomName}"?`)) return;
 
     try {
-      await chatAPI.deleteRoom(roomId);
+      const { data } = await chatAPI.deleteRoom(roomId);
       setAllChatRooms((prev) => prev.filter((entry) => String(entry?._id) !== roomId));
       setJoinedRoomIds((prev) => {
         const next = { ...prev };
@@ -1419,12 +1494,91 @@ function Chat() {
         setRoomUsers([]);
         setMobileWorkspaceOpen(false);
       }
-      toast.success('Deleted room');
+      if (data?.archived) {
+        await loadAllChatRooms().catch(() => null);
+      }
+      toast.success(data?.archived ? 'Removed room from the room list' : 'Deleted room');
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to delete room');
       await loadAllChatRooms().catch(() => null);
     }
   }, [activeConversationId, canDeleteRoom, loadAllChatRooms]);
+
+  const resetAdminRoomForm = useCallback(() => {
+    setEditingRoomId('');
+    setAdminRoomForm(createRoomAdminForm());
+  }, []);
+
+  const handleAdminRoomFormChange = useCallback((field, value) => {
+    setAdminRoomForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === 'parentRoomId' && value) {
+        const parent = allChatRooms.find((room) => normalizeId(room?._id) === normalizeId(value));
+        if (parent) {
+          next.discoveryGroup = getRoomDiscoveryGroup(parent) || prev.discoveryGroup;
+          if (!next.state && parent.state) next.state = parent.state;
+          if (!next.country && parent.country) next.country = parent.country;
+        }
+      }
+      if (field === 'discoveryGroup' && !normalizeId(next.parentRoomId)) {
+        next.type = value === 'states' ? 'state' : 'topic';
+      }
+      return next;
+    });
+  }, [allChatRooms]);
+
+  const handleEditRoom = useCallback((room) => {
+    setEditingRoomId(normalizeId(room?._id));
+    setAdminRoomForm(createRoomAdminForm(room));
+  }, []);
+
+  const handleSaveAdminRoom = useCallback(async (event) => {
+    event.preventDefault();
+    if (!profile?.isAdmin) return;
+    setAdminRoomSaving(true);
+    try {
+      const payload = {
+        ...adminRoomForm,
+        name: String(adminRoomForm.name || '').trim(),
+        parentRoomId: normalizeId(adminRoomForm.parentRoomId) || null,
+        state: String(adminRoomForm.state || '').trim() || undefined,
+        city: String(adminRoomForm.city || '').trim() || undefined,
+        county: String(adminRoomForm.county || '').trim() || undefined,
+        country: String(adminRoomForm.country || '').trim() || 'US',
+        defaultLanding: Boolean(adminRoomForm.defaultLanding)
+      };
+      if (!payload.name) {
+        toast.error('Room name is required.');
+        return;
+      }
+
+      const request = editingRoomId
+        ? chatAPI.updateRoom(editingRoomId, payload)
+        : chatAPI.createManagedRoom(payload);
+      await request;
+      await loadAllChatRooms();
+      resetAdminRoomForm();
+      toast.success(editingRoomId ? 'Room updated' : 'Room created');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to save room');
+    } finally {
+      setAdminRoomSaving(false);
+    }
+  }, [adminRoomForm, editingRoomId, loadAllChatRooms, profile?.isAdmin, resetAdminRoomForm]);
+
+  const handleMoveRoom = useCallback(async (roomId, direction) => {
+    const normalizedRoomId = normalizeId(roomId);
+    if (!profile?.isAdmin || !normalizedRoomId || typeof chatAPI.moveRoom !== 'function') return;
+    setAdminRoomActionIds((prev) => (prev.includes(normalizedRoomId) ? prev : [...prev, normalizedRoomId]));
+    try {
+      await chatAPI.moveRoom(normalizedRoomId, direction);
+      await loadAllChatRooms();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to move room');
+    } finally {
+      setAdminRoomActionIds((prev) => prev.filter((entry) => entry !== normalizedRoomId));
+    }
+  }, [loadAllChatRooms, profile?.isAdmin]);
 
   const handleUnlockActiveDM = useCallback(async () => {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
@@ -1742,6 +1896,80 @@ function Chat() {
     return 'Secure Chat';
   }, [activeChannel, activeConversation, resolvedZipCode]);
   const activeMenuIcon = activeConversation ? getConversationTabIcon(activeConversation) : (activeChannel === 'dm' ? '✉️' : '💬');
+  const renderManagedRoomBranch = useCallback((room, depth = 0) => {
+    const roomId = normalizeId(room?._id);
+    const joined = Boolean(joinedRoomIds[roomId]);
+    const children = (childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder);
+    const isExpanded = Boolean(expandedManagedRooms[roomId]);
+    const hasChildren = children.length > 0;
+    const paddingLeft = `${Math.min(depth, 3) * 0.75}rem`;
+
+    return (
+      <li
+        key={roomId}
+        className="rounded border px-2 py-1"
+        style={{ marginLeft: paddingLeft }}
+        data-room-tree-item={room.name}
+        data-discovery-city={room.type === 'city' ? room.name : undefined}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (hasChildren) {
+                handleToggleExpandedManagedRoom(roomId);
+              } else {
+                handleOpenRoom(room);
+              }
+            }}
+            className="min-w-0 flex-1 text-left"
+            data-discovery-state-summary={room.type === 'state' && depth === 0 ? room.name : undefined}
+            aria-expanded={hasChildren ? isExpanded : undefined}
+          >
+            <span className="truncate font-medium">{room.name}</span>
+            <span className="block text-[10px] uppercase opacity-70">
+              {room.defaultLanding ? 'default room' : room.type}
+              {hasChildren ? ` · ${children.length} sub-room${children.length === 1 ? '' : 's'}` : ''}
+            </span>
+          </button>
+          <div className="flex items-center gap-1">
+            {!joined ? (
+              <button
+                type="button"
+                onClick={() => handleOpenRoom(room)}
+                className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
+              >
+                Join
+              </button>
+            ) : (
+              <span className="opacity-70">Joined</span>
+            )}
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={() => handleToggleExpandedManagedRoom(roomId)}
+                className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
+              >
+                {isExpanded ? '−' : '+'}
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {isExpanded && hasChildren ? (
+          <ul className="mt-2 space-y-1">
+            {children.map((childRoom) => renderManagedRoomBranch(childRoom, depth + 1))}
+          </ul>
+        ) : null}
+      </li>
+    );
+  }, [
+    activeTheme.subtle,
+    childRoomsByParentId,
+    expandedManagedRooms,
+    handleOpenRoom,
+    handleToggleExpandedManagedRoom,
+    joinedRoomIds
+  ]);
 
   if (loadingHub) {
     return (
@@ -2120,75 +2348,8 @@ function Chat() {
                       </button>
                       {stateChatsOpen ? (
                         <ul id="chat-state-discovery-list" className="mt-2 space-y-1 text-xs">
-                          {stateRoomGroups.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
-                          {stateRoomGroups.map(({ room, cities }) => {
-                            const roomId = String(room._id);
-                            const joinedState = Boolean(joinedRoomIds[roomId]);
-                            const stateExpanded = Boolean(expandedStateRooms[roomId]);
-                            return (
-                              <li key={roomId} className="rounded border px-2 py-1" data-discovery-state={room.name}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleExpandedStateRoom(roomId)}
-                                  className="flex w-full items-center justify-between gap-2 text-left font-medium"
-                                  data-discovery-state-summary={room.name}
-                                  aria-expanded={stateExpanded}
-                                  aria-controls={`chat-state-room-${roomId}`}
-                                >
-                                  <span>{room.name}</span>
-                                  <span aria-hidden="true">{stateExpanded ? '−' : '+'}</span>
-                                </button>
-                                {stateExpanded ? (
-                                  <div id={`chat-state-room-${roomId}`} className="mt-2 space-y-2">
-                                    <div className="flex items-center justify-between gap-2 rounded border px-2 py-1">
-                                      <span>State room</span>
-                                      {!joinedState ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenRoom(room._id)}
-                                          className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
-                                        >
-                                          Join
-                                        </button>
-                                      ) : (
-                                        <span className="opacity-70">Joined</span>
-                                      )}
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-semibold uppercase opacity-80">Cities</p>
-                                      <ul className="mt-1 space-y-1">
-                                        {cities.length === 0 ? <li className="opacity-75">No city chats available.</li> : null}
-                                        {cities.map((cityRoom) => {
-                                          const cityRoomId = String(cityRoom._id);
-                                          const joinedCity = Boolean(joinedRoomIds[cityRoomId]);
-                                          return (
-                                            <li
-                                              key={cityRoomId}
-                                              className="flex items-center justify-between gap-2 rounded border px-2 py-1"
-                                              data-discovery-city={cityRoom.name}
-                                            >
-                                              <span>{cityRoom.name}</span>
-                                              {!joinedCity ? (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleOpenRoom(cityRoom._id)}
-                                                  className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
-                                                >
-                                                  Join
-                                                </button>
-                                              ) : (
-                                                <span className="opacity-70">Joined</span>
-                                              )}
-                                            </li>
-                                          );
-                                        })}
-                                      </ul>
-                                    </div>
-                                  </div>
-                                ) : null}
-                              </li>
-                            );
-                          })}
+                          {managedStateRooms.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
+                          {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
                         </ul>
                       ) : null}
                     </section>
@@ -2205,34 +2366,174 @@ function Chat() {
                       </button>
                       {topicsOpen ? (
                         <ul id="chat-topic-discovery-list" className="mt-2 space-y-1 text-xs">
-                          {topicRooms.length === 0 ? <li className="opacity-75">No topic chats available.</li> : null}
-                          {topicRooms.map((room) => {
-                            const roomId = String(room._id);
-                            const joined = Boolean(joinedRoomIds[roomId]);
-                            return (
-                              <li
-                                key={roomId}
-                                className="flex items-center justify-between gap-2 rounded border px-2 py-1"
-                                data-topic-room={room.name}
-                              >
-                                <span>{room.name}</span>
-                                {!joined ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenRoom(room._id)}
-                                    className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
-                                  >
-                                    Join
-                                  </button>
-                                ) : (
-                                  <span className="opacity-70">Joined</span>
-                                )}
-                              </li>
-                            );
-                          })}
+                          {managedTopicRooms.length === 0 ? <li className="opacity-75">No topic chats available.</li> : null}
+                          {managedTopicRooms.map((room) => (
+                            <React.Fragment key={String(room._id)}>
+                              {React.cloneElement(renderManagedRoomBranch(room), { 'data-topic-room': room.name })}
+                            </React.Fragment>
+                          ))}
                         </ul>
                       ) : null}
                     </section>
+                    {profile?.isAdmin ? (
+                      <section className={`rounded border p-2 ${activeTheme.panelGlass}`} data-testid="chat-admin-control-panel">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Admin control panel</p>
+                            <p className="mt-1 text-xs opacity-75">Add, edit, remove, and reorder state/topic rooms and nested sub-rooms.</p>
+                          </div>
+                          {editingRoomId ? (
+                            <button
+                              type="button"
+                              onClick={resetAdminRoomForm}
+                              className={`rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
+                            >
+                              Cancel edit
+                            </button>
+                          ) : null}
+                        </div>
+                        <form className="mt-2 space-y-2" onSubmit={handleSaveAdminRoom}>
+                          <input
+                            value={adminRoomForm.name}
+                            onChange={(event) => handleAdminRoomFormChange('name', event.target.value)}
+                            className={`w-full rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                            placeholder="Room name"
+                            aria-label="Admin room name"
+                          />
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <select
+                              value={adminRoomForm.discoveryGroup}
+                              onChange={(event) => handleAdminRoomFormChange('discoveryGroup', event.target.value)}
+                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                              aria-label="Admin room list"
+                            >
+                              {ROOM_DISCOVERY_GROUP_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={adminRoomForm.type}
+                              onChange={(event) => handleAdminRoomFormChange('type', event.target.value)}
+                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                              aria-label="Admin room type"
+                            >
+                              {ROOM_DISCOVERY_TYPE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={adminRoomForm.parentRoomId}
+                              onChange={(event) => handleAdminRoomFormChange('parentRoomId', event.target.value)}
+                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                              aria-label="Admin room parent"
+                            >
+                              <option value="">Top-level room</option>
+                              {roomParentOptions.map((room) => (
+                                <option key={String(room._id)} value={String(room._id)}>
+                                  {`${getRoomDiscoveryGroup(room) === 'states' ? 'State' : 'Topic'} · ${room.name}`}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              value={adminRoomForm.state}
+                              onChange={(event) => handleAdminRoomFormChange('state', event.target.value)}
+                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                              placeholder="State code (optional)"
+                              aria-label="Admin room state"
+                            />
+                            <input
+                              value={adminRoomForm.city}
+                              onChange={(event) => handleAdminRoomFormChange('city', event.target.value)}
+                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                              placeholder="City label (optional)"
+                              aria-label="Admin room city"
+                            />
+                            <input
+                              value={adminRoomForm.county}
+                              onChange={(event) => handleAdminRoomFormChange('county', event.target.value)}
+                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                              placeholder="County label (optional)"
+                              aria-label="Admin room county"
+                            />
+                          </div>
+                          <label className="flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={adminRoomForm.defaultLanding}
+                              onChange={(event) => handleAdminRoomFormChange('defaultLanding', event.target.checked)}
+                            />
+                            <span>Use as default room when people open /chat</span>
+                          </label>
+                          <button
+                            type="submit"
+                            className={`w-full rounded border px-3 py-2 text-sm font-semibold ${activeTheme.subtle}`}
+                            disabled={adminRoomSaving}
+                          >
+                            {adminRoomSaving ? 'Saving…' : editingRoomId ? 'Save room changes' : 'Add room'}
+                          </button>
+                        </form>
+                        <div className="mt-3 space-y-3 text-xs">
+                          {[
+                            { title: 'State room order', rooms: managedStateRooms },
+                            { title: 'Topic room order', rooms: managedTopicRooms }
+                          ].map((section) => (
+                            <div key={section.title}>
+                              <p className="font-semibold opacity-80">{section.title}</p>
+                              {section.rooms.length === 0 ? (
+                                <p className="mt-1 opacity-75">No rooms in this list.</p>
+                              ) : (
+                                <ul className="mt-1 space-y-1">
+                                  {section.rooms.map((room) => {
+                                    const roomId = String(room._id);
+                                    const processing = adminProcessingRoomIds.has(roomId);
+                                    return (
+                                      <li key={`admin-${roomId}`} className="rounded border px-2 py-1">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-medium">{room.name}</p>
+                                            <p className="truncate text-[10px] uppercase opacity-70">
+                                              {room.defaultLanding ? 'Default room' : room.type}
+                                            </p>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <button type="button" onClick={() => handleMoveRoom(roomId, 'up')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={processing}>↑</button>
+                                            <button type="button" onClick={() => handleMoveRoom(roomId, 'down')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={processing}>↓</button>
+                                            <button type="button" onClick={() => handleEditRoom(room)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Edit</button>
+                                            <button type="button" onClick={() => handleDeleteRoom(room)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
+                                          </div>
+                                        </div>
+                                        {(childRoomsByParentId[roomId] || []).length > 0 ? (
+                                          <ul className="mt-2 space-y-1 border-l pl-2">
+                                            {(childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder).map((childRoom) => {
+                                              const childId = String(childRoom._id);
+                                              const childProcessing = adminProcessingRoomIds.has(childId);
+                                              return (
+                                                <li key={`admin-child-${childId}`} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
+                                                  <div className="min-w-0">
+                                                    <p className="truncate">{childRoom.name}</p>
+                                                    <p className="truncate text-[10px] uppercase opacity-70">{childRoom.type}</p>
+                                                  </div>
+                                                  <div className="flex items-center gap-1">
+                                                    <button type="button" onClick={() => handleMoveRoom(childId, 'up')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={childProcessing}>↑</button>
+                                                    <button type="button" onClick={() => handleMoveRoom(childId, 'down')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={childProcessing}>↓</button>
+                                                    <button type="button" onClick={() => handleEditRoom(childRoom)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Edit</button>
+                                                    <button type="button" onClick={() => handleDeleteRoom(childRoom)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
+                                                  </div>
+                                                </li>
+                                              );
+                                            })}
+                                          </ul>
+                                        ) : null}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
                   </div>
                 </section>
                 <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>

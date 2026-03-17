@@ -118,6 +118,12 @@ const getLatestDate = (...values) => values.reduce((latest, current) => {
   return latest;
 }, null);
 
+const getDiscoveryGroupForType = (type) => {
+  if (type === 'state') return 'states';
+  if (type === 'topic') return 'topics';
+  return null;
+};
+
 const isDuplicateKeyBulkWriteError = (error) => {
   if (!error) return false;
   if (error?.code === 11000) return true;
@@ -219,6 +225,24 @@ const chatRoomSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  discoveryGroup: {
+    type: String,
+    enum: ['states', 'topics', null],
+    default: null
+  },
+  parentRoomId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ChatRoom',
+    default: null
+  },
+  sortOrder: {
+    type: Number,
+    default: 0
+  },
+  defaultLanding: {
+    type: Boolean,
+    default: false
+  },
   archivedAt: {
     type: Date,
     default: null
@@ -243,24 +267,22 @@ chatRoomSchema.index({ discoverable: 1, type: 1, updatedAt: -1 });
 chatRoomSchema.index({ eventRef: 1, type: 1 });
 chatRoomSchema.index({ autoLifecycle: 1, 'visibilityWindow.endAt': 1 });
 chatRoomSchema.index({ stableKey: 1 }, { unique: true, sparse: true });
+chatRoomSchema.index({ archivedAt: 1, discoveryGroup: 1, parentRoomId: 1, sortOrder: 1 });
 
 const buildDefaultDiscoveryRoomOperations = (now) => {
   const operations = [];
 
-  STATE_DISCOVERY_ROOMS.forEach((stateEntry) => {
+  STATE_DISCOVERY_ROOMS.forEach((stateEntry, index) => {
     operations.push({
       updateOne: {
         filter: { stableKey: `state:${stateEntry.code}` },
         update: {
           $set: {
-            name: stateEntry.name,
             type: 'state',
             state: stateEntry.code,
             country: 'US',
-            location: { type: 'Point', coordinates: [...DEFAULT_DISCOVERY_ROOM_LOCATION.coordinates] },
-            radius: 100,
-            discoverable: true,
-            autoLifecycle: false
+            discoveryGroup: 'states',
+            parentRoomId: null
           },
           $setOnInsert: {
             name: stateEntry.name,
@@ -273,6 +295,10 @@ const buildDefaultDiscoveryRoomOperations = (now) => {
             messageCount: 0,
             discoverable: true,
             autoLifecycle: false,
+            discoveryGroup: 'states',
+            parentRoomId: null,
+            sortOrder: index,
+            defaultLanding: false,
             stableKey: `state:${stateEntry.code}`,
             lastActivity: now
           }
@@ -280,58 +306,19 @@ const buildDefaultDiscoveryRoomOperations = (now) => {
         upsert: true
       }
     });
-
-    stateEntry.cities.forEach((cityName) => {
-      operations.push({
-        updateOne: {
-        filter: { stableKey: `city:${stateEntry.code}:${cityName.toLowerCase()}` },
-        update: {
-          $set: {
-            name: `${cityName}, ${stateEntry.name}`,
-            type: 'city',
-            state: stateEntry.code,
-            country: 'US',
-            city: cityName,
-            location: { type: 'Point', coordinates: [...DEFAULT_DISCOVERY_ROOM_LOCATION.coordinates] },
-            radius: 50,
-            discoverable: true,
-            autoLifecycle: false
-          },
-          $setOnInsert: {
-            name: `${cityName}, ${stateEntry.name}`,
-            type: 'city',
-            state: stateEntry.code,
-            country: 'US',
-            city: cityName,
-            location: { type: 'Point', coordinates: [...DEFAULT_DISCOVERY_ROOM_LOCATION.coordinates] },
-            radius: 50,
-            members: [],
-            messageCount: 0,
-            discoverable: true,
-            autoLifecycle: false,
-              stableKey: `city:${stateEntry.code}:${cityName.toLowerCase()}`,
-              lastActivity: now
-            }
-          },
-          upsert: true
-        }
-      });
-    });
   });
 
-  TOPIC_DISCOVERY_ROOMS.forEach((topicEntry) => {
+  TOPIC_DISCOVERY_ROOMS.forEach((topicEntry, index) => {
     operations.push({
       updateOne: {
         filter: { stableKey: `topic:${topicEntry.key}` },
         update: {
           $set: {
-            name: topicEntry.name,
             type: 'topic',
             country: 'US',
-            location: { type: 'Point', coordinates: [...DEFAULT_DISCOVERY_ROOM_LOCATION.coordinates] },
-            radius: 100,
-            discoverable: true,
-            autoLifecycle: false
+            discoveryGroup: 'topics',
+            parentRoomId: null,
+            defaultLanding: Boolean(topicEntry.defaultLanding)
           },
           $setOnInsert: {
             name: topicEntry.name,
@@ -343,6 +330,10 @@ const buildDefaultDiscoveryRoomOperations = (now) => {
             messageCount: 0,
             discoverable: true,
             autoLifecycle: false,
+            discoveryGroup: 'topics',
+            parentRoomId: null,
+            sortOrder: index,
+            defaultLanding: Boolean(topicEntry.defaultLanding),
             stableKey: `topic:${topicEntry.key}`,
             lastActivity: now
           }
@@ -422,11 +413,25 @@ chatRoomSchema.statics.findNearby = function(longitude, latitude, maxDistanceMil
 chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
   const { type, city, state, country, county, zipCode, coordinates, radius = 50 } = locationData;
   const canonicalDiscoveryRoom = getCanonicalDiscoveryRoomData({ type, city, state, country });
-  const query = buildLocationRoomQuery({ type, city, state, country, county, zipCode });
+  const query = {
+    ...buildLocationRoomQuery({ type, city, state, country, county, zipCode }),
+    archivedAt: null,
+    discoverable: { $ne: false }
+  };
 
   let room = canonicalDiscoveryRoom
-    ? await this.findOne({ stableKey: canonicalDiscoveryRoom.stableKey })
+    ? await this.findOne({ stableKey: canonicalDiscoveryRoom.stableKey, archivedAt: null, discoverable: { $ne: false } })
     : await this.findOne(query);
+
+  if (!room && canonicalDiscoveryRoom) {
+    const archivedCanonicalRoom = await this.findOne({
+      stableKey: canonicalDiscoveryRoom.stableKey,
+      archivedAt: { $ne: null }
+    });
+    if (archivedCanonicalRoom) {
+      return { room: null, created: false };
+    }
+  }
 
   if (!room && canonicalDiscoveryRoom) {
     room = await this.findOne(query);
@@ -483,6 +488,9 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
     radius: canonicalDiscoveryRoom?.radius || radius,
     discoverable: canonicalDiscoveryRoom?.discoverable,
     autoLifecycle: canonicalDiscoveryRoom?.autoLifecycle,
+    discoveryGroup: getDiscoveryGroupForType(type),
+    parentRoomId: null,
+    defaultLanding: false,
     stableKey: canonicalDiscoveryRoom?.stableKey || null,
     members: [],
     messageCount: 0,
