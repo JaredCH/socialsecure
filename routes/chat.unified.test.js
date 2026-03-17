@@ -140,7 +140,7 @@ describe('Unified chat hub routes', () => {
     mockConversationMessage.findOne.mockReturnValue(createSelectLeanOrSort(null));
   });
 
-  it('defaults to user zip room and nearby active zip rooms', async () => {
+  it('returns null zip data and DM/profile conversations', async () => {
     const app = buildApp();
     mockUser.findById
       .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
@@ -150,62 +150,19 @@ describe('Unified chat hub routes', () => {
         zipCode: '02115-1234'
       }));
 
-    mockChatConversation.findOneAndUpdate.mockReturnValue({
-      lean: jest.fn().mockResolvedValue({
-        _id: 'conv-zip',
-        type: 'zip-room',
-        title: 'Zip 02115',
-        zipCode: '02115',
-        participants: [],
-        messageCount: 0,
-        lastMessageAt: new Date('2024-01-01T00:00:00.000Z')
+    mockChatConversation.find.mockImplementation(() => ({
+      sort: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([])
       })
-    });
-
-    mockChatConversation.find.mockImplementation((query) => {
-      if (query?.type === 'zip-room') {
-        return {
-          select: jest.fn().mockReturnValue({
-            sort: jest.fn().mockReturnValue({
-              limit: jest.fn().mockReturnValue({
-                lean: jest.fn().mockResolvedValue([
-                  {
-                    _id: 'nearby-1',
-                    type: 'zip-room',
-                    title: 'Zip 02110',
-                    zipCode: '02110',
-                    messageCount: 5,
-                    lastMessageAt: new Date('2024-01-02T00:00:00.000Z')
-                  },
-                  {
-                    _id: 'far-1',
-                    type: 'zip-room',
-                    title: 'Zip 90210',
-                    zipCode: '90210',
-                    messageCount: 8,
-                    lastMessageAt: new Date('2024-01-03T00:00:00.000Z')
-                  }
-                ])
-              })
-            })
-          })
-        };
-      }
-      return {
-        sort: jest.fn().mockReturnValue({
-          lean: jest.fn().mockResolvedValue([])
-        })
-      };
-    });
+    }));
 
     const response = await request(app)
       .get('/api/chat/conversations')
       .set('Authorization', 'Bearer token');
 
     expect(response.status).toBe(200);
-    expect(response.body.conversations.zip.current.zipCode).toBe('02115');
-    expect(response.body.conversations.zip.nearby).toHaveLength(1);
-    expect(response.body.conversations.zip.nearby[0].zipCode).toBe('02110');
+    expect(response.body.conversations.zip.current).toBeNull();
+    expect(response.body.conversations.zip.nearby).toEqual([]);
   });
 
   it('enforces participant permissions for DM conversations', async () => {

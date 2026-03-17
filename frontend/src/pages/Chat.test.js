@@ -161,7 +161,9 @@ describe('Chat zip room indicator', () => {
       }
     });
     chatAPI.syncLocationRooms.mockResolvedValue({ data: { success: true } });
-    chatAPI.getAllRooms.mockResolvedValue({ data: { rooms: [] } });
+    chatAPI.getAllRooms.mockResolvedValue({ data: { rooms: [
+      { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', defaultLanding: true, sortOrder: 0, stableKey: 'topic:socialsecure' }
+    ] } });
     chatAPI.getQuickAccessRooms.mockResolvedValue({
       data: {
         rooms: {
@@ -297,14 +299,14 @@ describe('Chat zip room indicator', () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
-  it('shows default zip room from chat hub when profile zip is missing', async () => {
+  it('loads the SocialSecure room by default when chat opens', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: null } }
     });
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
@@ -313,7 +315,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    expect(container.textContent).toContain('Zip 02115');
+    expect(container.textContent).toContain('SocialSecure');
   });
 
   it('renders the chat message panel without undefined admin moderation state errors', async () => {
@@ -338,7 +340,7 @@ describe('Chat zip room indicator', () => {
     expect(container.querySelector('[data-testid="chat-message-panel"]')).not.toBeNull();
   });
 
-  it('does not show zip banner when neither profile nor hub has zip information', async () => {
+  it('does not show zip banner in the chat menu bar', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: null } }
     });
@@ -354,7 +356,9 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    expect(container.textContent).not.toContain('Your default zip room:');
+    const menuBar = container.querySelector('[data-chat-menu-bar]');
+    expect(menuBar.textContent).not.toContain('Zip');
+    expect(menuBar.textContent).not.toContain('📍');
   });
 
   it('renders compact theme menu with six readable options', async () => {
@@ -423,11 +427,8 @@ describe('Chat zip room indicator', () => {
       'Direct Messages'
     ]);
 
-    expect(menuBar.textContent).toContain('Zip 02115');
-    expect(menuBar.textContent).toContain('Live conversation');
+    expect(menuBar.textContent).not.toContain('Live conversation');
     expect(menuBar.textContent).not.toContain('Theme-tuned accents');
-    expect(menuBar.querySelector('[data-open-chat-tab="Zip 02115"]')).not.toBeNull();
-    expect(menuBar.textContent).toContain('1/6');
   });
 
   it('renders alphabetical state chats with city rooms and a topics dropdown', async () => {
@@ -463,7 +464,7 @@ describe('Chat zip room indicator', () => {
         rooms: {
           state: { _id: 'state-ma', type: 'state', name: 'Massachusetts' },
           county: { _id: 'county-suffolk', type: 'county', name: 'Suffolk County, Massachusetts' },
-          zip: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' },
+          zip: null,
           cities: [
             { _id: 'city-boston', type: 'city', name: 'Boston (ZIP 02116)', distanceMiles: 2.5 },
             { _id: 'city-cambridge', type: 'city', name: 'Cambridge (ZIP 02139)', distanceMiles: 4.1 }
@@ -476,7 +477,7 @@ describe('Chat zip room indicator', () => {
 
     const quickAccessRooms = Array.from(container.querySelectorAll('[data-quick-access-room]'))
       .map((node) => node.getAttribute('data-quick-access-room'));
-    expect(quickAccessRooms).toEqual(['Zip 02115', 'Massachusetts', 'Suffolk County, Massachusetts']);
+    expect(quickAccessRooms).toEqual(['Massachusetts', 'Suffolk County, Massachusetts']);
     expect(Array.from(container.querySelectorAll('[data-quick-access-city]'))
       .map((node) => node.getAttribute('data-quick-access-city'))).toEqual([
       'Boston (ZIP 02116)',
@@ -945,7 +946,7 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
@@ -971,8 +972,8 @@ describe('Chat zip room indicator', () => {
     const pageHeader = container.querySelector('[data-testid="chat-page-header"]');
     expect(pageHeader).not.toBeNull();
     expect(pageHeader.className).not.toContain('sticky');
-    expect(pageHeader.className).toContain('px-1.5');
-    expect(pageHeader.className).toContain('py-1');
+    expect(pageHeader.className).toContain('px-3');
+    expect(pageHeader.className).toContain('py-2');
 
     const workspacePanel = container.querySelector('[data-testid="chat-workspace-panel"]');
     expect(workspacePanel).not.toBeNull();
@@ -1113,7 +1114,7 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
@@ -1137,14 +1138,15 @@ describe('Chat zip room indicator', () => {
 
     const sendButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Send');
     expect(sendButton).not.toBeUndefined();
+    expect(sendButton.disabled).toBe(false);
     await act(async () => {
-      sendButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      sendButton.click();
       await flush();
     });
 
-    expect(chatAPI.sendConversationMessage).toHaveBeenCalledWith('zip1', {
+    expect(chatAPI.sendMessage).toHaveBeenCalledWith('topic-socialsecure', expect.objectContaining({
       content: 'alpha cries'
-    });
+    }));
   });
 
   it('opens a user context menu with requested actions on right click', async () => {
@@ -1154,13 +1156,13 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationUsers.mockResolvedValue({
+    chatAPI.getRoomUsers.mockResolvedValue({
       data: {
         users: [{ _id: 'u2', username: 'buddy', realName: 'Buddy' }]
       }
@@ -1189,7 +1191,7 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
@@ -1236,13 +1238,13 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({
+    chatAPI.getMessages.mockResolvedValue({
       data: {
         messages: [
           {
@@ -1251,7 +1253,8 @@ describe('Chat zip room indicator', () => {
             userId: { _id: 'u2', username: 'buddy' },
             createdAt: '2024-01-01T00:00:00.000Z'
           }
-        ]
+        ],
+        pagination: { hasMore: false }
       }
     });
 
@@ -1288,13 +1291,13 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({
+    chatAPI.getMessages.mockResolvedValue({
       data: {
         messages: [
           {
@@ -1303,7 +1306,8 @@ describe('Chat zip room indicator', () => {
             userId: { _id: 'u2', username: 'buddy' },
             createdAt: '2024-01-01T00:00:00.000Z'
           }
-        ]
+        ],
+        pagination: { hasMore: false }
       }
     });
 
@@ -1337,13 +1341,13 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({
+    chatAPI.getMessages.mockResolvedValue({
       data: {
         messages: [
           {
@@ -1352,7 +1356,8 @@ describe('Chat zip room indicator', () => {
             userId: { _id: 'u2', username: 'buddy' },
             createdAt: '2024-01-01T00:00:00.000Z'
           }
-        ]
+        ],
+        pagination: { hasMore: false }
       }
     });
 
@@ -1453,13 +1458,13 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({
+    chatAPI.getMessages.mockResolvedValue({
       data: {
         messages: [
           {
@@ -1468,7 +1473,8 @@ describe('Chat zip room indicator', () => {
             userId: { _id: 'u2', username: 'buddy' },
             createdAt: '2024-01-01T00:00:00.000Z'
           }
-        ]
+        ],
+        pagination: { hasMore: false }
       }
     });
 
@@ -1488,13 +1494,13 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({
+    chatAPI.getMessages.mockResolvedValue({
       data: {
         messages: [
           {
@@ -1515,7 +1521,8 @@ describe('Chat zip room indicator', () => {
             userId: { _id: 'u3', username: 'charlie' },
             createdAt: '2024-01-01T00:03:00.000Z'
           }
-        ]
+        ],
+        pagination: { hasMore: false }
       }
     });
 
@@ -1537,7 +1544,7 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
@@ -1906,13 +1913,12 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
 
     await renderChat();
     await act(async () => {
@@ -1928,7 +1934,7 @@ describe('Chat zip room indicator', () => {
       realtimeHandler?.({
         message: {
           _id: 'live-1',
-          conversationId: 'zip1',
+          roomId: 'topic-socialsecure',
           content: 'incoming live message',
           userId: { _id: 'u2', username: 'buddy' },
           createdAt: new Date().toISOString()
@@ -1938,7 +1944,7 @@ describe('Chat zip room indicator', () => {
     });
 
     expect(container.textContent).toContain('incoming live message');
-    expect(chatAPI.getConversationMessages).toHaveBeenCalledTimes(1);
+    expect(chatAPI.getMessages).toHaveBeenCalledTimes(1);
   });
 
   it('shows a live participant list across the DM side panel', async () => {
@@ -2088,20 +2094,21 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({
+    chatAPI.getMessages.mockResolvedValue({
       data: {
         messages: [{
           _id: 'm-react-1',
           content: 'hello',
           userId: { _id: 'u2', username: 'buddy' },
           createdAt: new Date().toISOString()
-        }]
+        }],
+        pagination: { hasMore: false }
       }
     });
 
@@ -2156,13 +2163,13 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({
+    chatAPI.getMessages.mockResolvedValue({
       data: {
         messages: [{
           _id: 'room-m-1',
@@ -2170,10 +2177,11 @@ describe('Chat zip room indicator', () => {
           moderation: { removedByAdmin: false, removedByAdminAt: null },
           userId: { _id: 'u2', username: 'buddy' },
           createdAt: '2024-01-01T13:41:25'
-        }]
+        }],
+        pagination: { hasMore: false }
       }
     });
-    chatAPI.getConversationUsers.mockResolvedValue({
+    chatAPI.getRoomUsers.mockResolvedValue({
       data: {
         users: [
           { _id: 'u1', username: 'alpha', mutedUntil: null },
@@ -2219,7 +2227,7 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    expect(moderationAPI.removeMessageByAdmin).toHaveBeenCalledWith('room-m-1', 'conversation');
+    expect(moderationAPI.removeMessageByAdmin).toHaveBeenCalledWith('room-m-1', 'room');
     expect(container.textContent).toContain('Removed by site Admin');
     expect(container.querySelector('button[aria-label="Undo remove message"]')).not.toBeNull();
 
@@ -2240,7 +2248,7 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    expect(moderationAPI.restoreMessageByAdmin).toHaveBeenCalledWith('room-m-1', 'conversation');
+    expect(moderationAPI.restoreMessageByAdmin).toHaveBeenCalledWith('room-m-1', 'room');
     expect(moderationAPI.unmuteUserByAdmin).toHaveBeenCalledWith('u2');
     expect(container.querySelector('button[aria-label="Remove message"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="Mute user for 2 hours"]')).not.toBeNull();
@@ -2253,13 +2261,13 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({
+    chatAPI.getMessages.mockResolvedValue({
       data: {
         messages: [{
           _id: 'del-m-1',
@@ -2267,10 +2275,11 @@ describe('Chat zip room indicator', () => {
           moderation: { removedByAdmin: false, removedByAdminAt: null },
           userId: { _id: 'u2', username: 'buddy' },
           createdAt: '2024-01-01T13:41:25'
-        }]
+        }],
+        pagination: { hasMore: false }
       }
     });
-    chatAPI.getConversationUsers.mockResolvedValue({
+    chatAPI.getRoomUsers.mockResolvedValue({
       data: {
         users: [
           { _id: 'u1', username: 'alpha', mutedUntil: null },
@@ -2292,7 +2301,7 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    expect(moderationAPI.deleteMessageByAdmin).toHaveBeenCalledWith('del-m-1', 'conversation');
+    expect(moderationAPI.deleteMessageByAdmin).toHaveBeenCalledWith('del-m-1', 'room');
     expect(container.textContent).not.toContain('delete me');
   });
 
@@ -2303,20 +2312,21 @@ describe('Chat zip room indicator', () => {
     chatAPI.getConversations.mockResolvedValue({
       data: {
         conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          zip: { current: null, nearby: [] },
           dm: [],
           profile: []
         }
       }
     });
-    chatAPI.getConversationMessages.mockResolvedValue({
+    chatAPI.getMessages.mockResolvedValue({
       data: {
         messages: [{
           _id: 'm-time-1',
           content: 'timestamp me',
           userId: { _id: 'u2', username: 'buddy' },
           createdAt: '2024-01-01T13:41:25'
-        }]
+        }],
+        pagination: { hasMore: false }
       }
     });
 
