@@ -1387,7 +1387,7 @@ describe('Chat zip room indicator', () => {
     const messageBubble = messageText.closest('div[class*="rounded"]');
     expect(messageBubble).not.toBeNull();
     expect(messageBubble.className).toContain('px-0.5');
-    expect(messageBubble.className).toContain('py-0');
+    expect(messageBubble.className).toContain('py-0.5');
 
     const messageViewport = messageText.closest('div.overflow-y-auto');
     expect(messageViewport).not.toBeNull();

@@ -228,7 +228,7 @@ function ChatMessageItem({
       className="h-full w-full rounded-full object-cover"
     />
   ) : (
-    (isOwnMessage ? author : author).slice(0, 1).toUpperCase()
+    author.slice(0, 1).toUpperCase()
   );
 
   const avatarNode = profileLink ? (
@@ -271,7 +271,7 @@ function ChatMessageItem({
       {reactionPickerOpen ? (
         <div
           className={[
-            'absolute bottom-full z-20 mb-0 flex items-center gap-0.5 rounded-lg border px-1.5 py-1 shadow-sm',
+            'absolute bottom-full z-20 -mb-1 flex items-center gap-0.5 rounded-lg border px-1.5 py-1 shadow-sm',
             'text-sm sm:text-xs sm:gap-1 sm:px-1 sm:py-0.5',
             isOwnMessage ? 'right-0' : 'left-0',
             theme.subtle
@@ -502,7 +502,7 @@ function ChatMessageItem({
                 ) : null}
                 <div
                   tabIndex={0}
-                  className="relative rounded-xl px-0.5 py-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
+                  className="relative rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
                   onMouseOver={() => {
                     if (canHoverForReactions) {
                       openReactionPicker();
