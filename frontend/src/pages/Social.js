@@ -3719,7 +3719,7 @@ const Social = () => {
             {feedError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">{feedError}</div> : null}
             {isAuthenticated && !realtimeEnabled ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Real-time social updates are disabled for this account. Periodic refresh remains active.</div> : null}
             {loadingFeed ? <div className="rounded-xl border bg-slate-50 p-6 text-slate-500">Loading feed…</div> : posts.length === 0 ? renderSoftEmptyState({
-              icon: <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="#0284c7" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>,
+              iconType: 'compose',
               title: isOwnSocialContext ? 'Your timeline is empty' : 'Nothing here yet',
               description: isOwnSocialContext
                 ? 'Share a thought, a photo, or a quick update to get your feed started.'
@@ -3909,7 +3909,7 @@ const Social = () => {
             ) : null}
             {galleryError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{galleryError}</div> : null}
             {galleryLoading ? <div className="rounded-xl border bg-slate-50 p-4 text-sm text-gray-500">Loading gallery…</div> : galleryItems.length === 0 ? renderSoftEmptyState({
-              icon: <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="#d97706" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" /></svg>,
+              iconType: 'image',
               title: isOwnSocialContext ? 'No images yet' : 'Gallery is empty',
               description: isOwnSocialContext
                 ? 'Upload a photo to start building your gallery.'
@@ -4338,19 +4338,22 @@ const Social = () => {
     </section>
   );
 
-  const renderSoftEmptyState = ({ icon, title, description, actionLabel, onAction, tone = 'blue' }) => {
+  const renderSoftEmptyState = ({ iconType, title, description, actionLabel, onAction, tone = 'blue' }) => {
     const toneStyle = SURFACE_TONE_STYLES[tone] || SURFACE_TONE_STYLES.blue;
 
-    const defaultIcon = (
-      <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke={toneStyle.iconStroke} strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-      </svg>
-    );
+    const iconPaths = {
+      compose: 'm16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10',
+      image: 'm2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z',
+      default: 'M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z',
+    };
+    const path = iconPaths[iconType] || iconPaths.default;
 
     return (
       <div className="flex flex-col items-center rounded-[1.5rem] border bg-white/95 px-6 py-10 text-center">
         <div className={`mb-4 flex h-16 w-16 items-center justify-center rounded-full ${toneStyle.iconBg}`}>
-          {icon || defaultIcon}
+          <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke={toneStyle.iconStroke} strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d={path} />
+          </svg>
         </div>
         <p className="text-lg font-semibold text-slate-900">{title}</p>
         <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">{description}</p>
