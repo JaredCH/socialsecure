@@ -30,6 +30,8 @@ const LAYOUT_GRID_COLUMNS = 12;
 const LAYOUT_GRID_ROWS = 20;
 const MEDIA_URL_MAX_LENGTH = 2048;
 const HERO_IMAGE_HISTORY_LIMIT = 3;
+const OPTIONAL_SOCIAL_SECTION_IDS = ['blog', 'resume', 'aboutme'];
+const SOCIAL_SECTION_AUDIENCES = ['public', 'social', 'secure'];
 
 const LEGACY_SECTION_ID_ALIASES = {
   header: 'profile_header',
@@ -248,6 +250,22 @@ const uniqueStrings = (value) => {
   return normalized;
 };
 
+const normalizeEnabledSections = (value = {}, fallback = {}) => OPTIONAL_SOCIAL_SECTION_IDS.reduce((acc, sectionId) => {
+  const next = Object.prototype.hasOwnProperty.call(value || {}, sectionId)
+    ? value[sectionId]
+    : fallback[sectionId];
+  acc[sectionId] = next === true;
+  return acc;
+}, {});
+
+const normalizeSectionAudience = (value = {}, fallback = {}) => OPTIONAL_SOCIAL_SECTION_IDS.reduce((acc, sectionId) => {
+  const requested = Object.prototype.hasOwnProperty.call(value || {}, sectionId)
+    ? value[sectionId]
+    : fallback[sectionId];
+  acc[sectionId] = SOCIAL_SECTION_AUDIENCES.includes(requested) ? requested : 'social';
+  return acc;
+}, {});
+
 const normalizeHexColor = (value, fallback) => {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim();
@@ -393,6 +411,9 @@ const buildDefaultSocialPagePreferences = (profileTheme = 'default') => {
       activeMode: 'desktop'
     },
     activeConfigId: null,
+    enabledSections: normalizeEnabledSections(),
+    sectionAudience: normalizeSectionAudience(),
+    aboutMeContent: '',
     version: SOCIAL_PREFERENCES_VERSION
   };
 };
@@ -725,6 +746,11 @@ const normalizeSocialPagePreferences = (input, {
     bodyBackgroundOverlayAnimation: BODY_BG_OVERLAY_ANIMATIONS.includes(raw.globalStyles?.bodyBackgroundOverlayAnimation) ? raw.globalStyles.bodyBackgroundOverlayAnimation : DEFAULT_GLOBAL_STYLES.bodyBackgroundOverlayAnimation
   };
   const hero = normalizeHeroConfig(raw.hero, defaults.hero || DEFAULT_HERO_CONFIG);
+  const enabledSections = normalizeEnabledSections(raw.enabledSections, defaults.enabledSections);
+  const sectionAudience = normalizeSectionAudience(raw.sectionAudience, defaults.sectionAudience);
+  const aboutMeContent = typeof raw.aboutMeContent === 'string'
+    ? raw.aboutMeContent
+    : defaults.aboutMeContent;
 
   const requestedMode = SOCIAL_LAYOUT_MODES.includes(layoutMode) ? layoutMode : 'desktop';
   const activeLayoutMode = SOCIAL_LAYOUT_MODES.includes(raw.layouts?.activeMode)
@@ -770,6 +796,9 @@ const normalizeSocialPagePreferences = (input, {
       activeMode: activeLayoutMode
     },
     activeConfigId: raw.activeConfigId ? String(raw.activeConfigId) : null,
+    enabledSections,
+    sectionAudience,
+    aboutMeContent,
     version: Number.isInteger(raw.version) && raw.version > 0 ? raw.version : SOCIAL_PREFERENCES_VERSION,
     effective: {
       sectionOrder,
