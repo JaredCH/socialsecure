@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { authAPI, blogAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, getAuthToken, moderationAPI, notificationAPI, resolveUploadMediaUrl, resumeAPI, socialPageAPI } from '../utils/api';
 import CircleManager from '../components/CircleManager';
@@ -3400,11 +3401,23 @@ const Social = () => {
     try {
       const response = await galleryAPI.addGalleryComment(galleryOwnerIdentifier, imageId, content);
       const comment = response.data?.comment || null;
+      const normalizedComment = comment
+        ? {
+          ...comment,
+          username: comment.username
+            || (
+              normalizedCurrentUserId
+              && String(comment.userId || '').trim().toLowerCase() === normalizedCurrentUserId
+              ? (currentUser?.username || null)
+              : null
+            )
+        }
+        : null;
       const commentsCount = typeof response.data?.commentsCount === 'number' ? response.data.commentsCount : null;
 
       setGalleryItems((prev) => prev.map((item) => {
         if (item._id !== imageId) return item;
-        const nextComments = comment ? [...(item.comments || []), comment] : (item.comments || []);
+        const nextComments = normalizedComment ? [...(item.comments || []), normalizedComment] : (item.comments || []);
         return {
           ...item,
           comments: nextComments,
@@ -3420,6 +3433,25 @@ const Social = () => {
   };
 
   const ownerEditingEnabled = isOwnSocialContext && !isGuestPreview;
+  const getGalleryCommentUsername = (comment) => {
+    const explicitUsername = typeof comment?.username === 'string' ? comment.username.trim() : '';
+    if (explicitUsername) return explicitUsername;
+    const userObjectUsername = typeof comment?.userId === 'object' && typeof comment.userId?.username === 'string'
+      ? comment.userId.username.trim()
+      : '';
+    if (userObjectUsername) return userObjectUsername;
+    const commentUserId = typeof comment?.userId === 'string'
+      ? comment.userId
+      : String(comment?.userId?._id || '');
+    if (
+      commentUserId
+      && normalizedCurrentUserId
+      && String(commentUserId).trim().toLowerCase() === normalizedCurrentUserId
+    ) {
+      return String(currentUser?.username || '').trim();
+    }
+    return '';
+  };
 
   const GALLERY_UPLOAD_MAX_FILES = 6;
 
@@ -6217,7 +6249,7 @@ const Social = () => {
         onMoveTopFriend={moveDraftTopFriend}
       />
 
-      {activeGalleryImage ? (
+      {activeGalleryImage ? createPortal(
         <div className="fixed inset-0 z-[1700] bg-black/85 p-3 sm:p-6">
           <button
             type="button"
@@ -6247,7 +6279,7 @@ const Social = () => {
                   <ul className="space-y-2">
                     {(activeGalleryImage.comments || []).map((comment, index) => (
                       <li key={comment._id || `${activeGalleryImage._id}-comment-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm">
-                        <p className="font-medium text-slate-700">@{comment.username || 'Unknown User'}</p>
+                        <p className="font-medium text-slate-700">@{getGalleryCommentUsername(comment) || 'Unknown User'}</p>
                         <p className="whitespace-pre-wrap text-slate-800">{comment.content}</p>
                         <p className="text-[11px] text-slate-500">{formatDate(comment.createdAt)}</p>
                       </li>
@@ -6276,7 +6308,8 @@ const Social = () => {
               </div>
             </aside>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
 
       {/* Gallery Upload Modal */}

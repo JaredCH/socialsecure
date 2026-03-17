@@ -354,6 +354,7 @@ router.get('/:ownerId', optionalAuthenticateToken, async (req, res) => {
 
     const [images, total] = await Promise.all([
       GalleryImage.find(query)
+        .populate('comments.userId', 'username')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
