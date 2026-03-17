@@ -8,6 +8,18 @@ const DM_MESSAGE_TEXT_CLASS = 'text-[13px] leading-5';
 const ROOM_MESSAGE_TEXT_CLASS = 'text-[14px] leading-6';
 const REACTION_CLOSE_DELAY_MS = 300;
 
+const getAvatarInitials = (realName, fallbackLabel) => {
+  const nameParts = String(realName || '').trim().split(/\s+/).filter(Boolean);
+  if (nameParts.length >= 2) {
+    return `${nameParts[0].charAt(0)}${nameParts[nameParts.length - 1].charAt(0)}`.toUpperCase();
+  }
+  if (nameParts.length === 1 && nameParts[0].length > 0) {
+    return nameParts[0].slice(0, 2).toUpperCase();
+  }
+  const fallback = String(fallbackLabel || '').replace(/^@/, '').trim();
+  return fallback.slice(0, 2).toUpperCase() || '?';
+};
+
 const supportsHoverInput = () => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -221,6 +233,7 @@ function ChatMessageItem({
     onOpenUserMenu(event, menuUser, point);
   };
 
+  const avatarInitials = getAvatarInitials(message.userId?.realName, message.userId?.username || author);
   const avatarContent = avatarUrl ? (
     <img
       src={avatarUrl}
@@ -228,7 +241,7 @@ function ChatMessageItem({
       className="h-full w-full rounded-full object-cover"
     />
   ) : (
-    author.slice(0, 1).toUpperCase()
+    avatarInitials
   );
 
   const avatarNode = profileLink ? (
@@ -371,11 +384,9 @@ function ChatMessageItem({
   });
 
   if (isDmConversation) {
-    const showAvatar = !isOwnMessage && !groupedWithNext;
-    const showHeader = !isOwnMessage && !groupedWithPrevious;
-    const dmAvatarNode = isOwnMessage
-      ? null
-      : (showAvatar ? avatarNode : <span className="block h-9 w-9 shrink-0" />);
+    const showAvatar = !groupedWithNext;
+    const showHeader = !groupedWithPrevious;
+    const dmAvatarNode = showAvatar ? avatarNode : <span className="block h-9 w-9 shrink-0" />;
 
     return (
       <article
@@ -406,7 +417,7 @@ function ChatMessageItem({
             {showHeader ? (
               <a
                 href={profileLink || '#'}
-                className={`mb-0.5 truncate text-left text-xs font-semibold ${theme.senderAccent} hover:underline`}
+                className={`mb-0.5 truncate text-xs font-semibold ${isOwnMessage ? 'text-right' : 'text-left'} ${theme.senderAccent} hover:underline`}
                 {...usernameHoverProps(menuUser)}
               >
                 @{author}
@@ -495,7 +506,7 @@ function ChatMessageItem({
                       className={`truncate text-left text-sm font-semibold ${theme.senderAccent} hover:underline`}
                       {...usernameHoverProps(menuUser)}
                     >
-                      {isOwnMessage ? 'You' : `@${author}`}
+                      @{author}
                     </a>
                     <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
                   </div>

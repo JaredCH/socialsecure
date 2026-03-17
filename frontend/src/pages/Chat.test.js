@@ -1394,6 +1394,48 @@ describe('Chat zip room indicator', () => {
     expect(messageViewport.className).toContain('py-3');
   });
 
+  it('shows own sender link and avatar initials in message bubbles', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', realName: 'Alice Zephyr', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: null, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            _id: 'm-own',
+            content: 'sent-by-me',
+            userId: { _id: 'u1', username: 'alpha', realName: 'Alice Zephyr' },
+            createdAt: '2024-01-01T00:00:00.000Z'
+          }
+        ],
+        pagination: { hasMore: false }
+      }
+    });
+
+    await renderChat();
+
+    const ownNameLink = Array.from(container.querySelectorAll('a')).find((node) => node.textContent === '@alpha');
+    expect(ownNameLink).not.toBeUndefined();
+    expect(ownNameLink.getAttribute('href')).toBe('/social?user=alpha');
+
+    const messageArticle = ownNameLink.closest('article[data-chat-message-layout="room"]');
+    expect(messageArticle).not.toBeNull();
+
+    const avatarLink = Array.from(messageArticle.querySelectorAll('a')).find((node) => node.className.includes('h-9') && node.className.includes('w-9'));
+    expect(avatarLink).not.toBeUndefined();
+    expect(avatarLink.getAttribute('href')).toBe('/social?user=alpha');
+    expect(avatarLink.textContent).toContain('AZ');
+  });
+
   it('formats named links and opens user actions from message click', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
