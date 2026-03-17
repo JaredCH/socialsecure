@@ -451,6 +451,49 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).not.toContain('Personal Information');
   });
 
+  it('applies theme-aware contrast styles to calendar preview and partner search modal', async () => {
+    authAPI.getProfile.mockResolvedValueOnce({
+      data: {
+        user: {
+          _id: 'u-1',
+          username: 'alpha',
+          worksAt: 'Acme Labs',
+          profileFieldVisibility: { worksAt: 'social' },
+          socialPagePreferences: {
+            hero: {
+              backgroundImageUseRandomGallery: true
+            },
+            globalStyles: {
+              pageBackgroundColor: '#ffffff',
+              panelColor: '#f8fafc',
+              fontColor: '#111827'
+            }
+          }
+        }
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const pageRoot = container.querySelector('.min-h-screen');
+    expect(pageRoot?.style.color).toContain('17, 24, 39');
+
+    expect(pageRoot?.getAttribute('style')).toContain('--social-text-secondary');
+
+    const partnerButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Add Partner / Spouse'));
+    expect(partnerButton).toBeTruthy();
+    await act(async () => {
+      partnerButton?.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Search your friends to send a partner request.');
+    expect(container.querySelector('input[placeholder="Search friends…"]')).toBeTruthy();
+    expect(pageRoot?.getAttribute('style')).toContain('--social-surface-soft');
+  });
+
   it('does not render personal information panel or security score on the social page', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
     expect(container.textContent).not.toContain('Personal Information');

@@ -3972,6 +3972,9 @@ const Social = () => {
 
   const accentColor = socialPreferences.hero?.menuActiveColor || socialPreferences.globalStyles?.headerColor || '#3b82f6';
   const accentColor2 = socialPreferences.globalStyles?.headerColor || accentColor;
+  const globalPageBackground = socialPreferences.globalStyles?.pageBackgroundColor || '#0d0d14';
+  const globalPanelColor = socialPreferences.globalStyles?.panelColor || 'rgba(255, 255, 255, 0.06)';
+  const globalFontColor = socialPreferences.globalStyles?.fontColor || '#e2e8f0';
   const hubFontFamily = socialPreferences.globalStyles?.fontFamily || socialPreferences.hero?.fontFamily || 'Inter';
   const hubSurfaceStyle = {
     backgroundColor: 'transparent',
@@ -4311,12 +4314,12 @@ const Social = () => {
       case 'calendar':
         return renderGlassPanel(
           'Calendar',
-          <div data-testid="social-calendar-preview-shell" className="mx-auto w-full max-w-3xl space-y-4 overflow-y-auto pr-1 text-sm text-slate-700 [scrollbar-gutter:stable] sm:max-h-[44rem]">
+          <div data-testid="social-calendar-preview-shell" className="mx-auto w-full max-w-3xl space-y-4 overflow-y-auto pr-1 text-sm [scrollbar-gutter:stable] sm:max-h-[44rem]" style={{ color: 'var(--social-text-secondary)' }}>
             {/* Header bar */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3" style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(var(--panel-blur))' }}>
               <div className="flex items-center gap-2">
                 {/* View type toggles */}
-                <div className="flex rounded-xl border border-white/10 p-0.5" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div className="flex rounded-xl border border-white/10 p-0.5" style={{ background: 'var(--social-surface-muted)' }}>
                   {[
                     { key: 'monthly', label: 'Month' },
                     { key: 'weekly', label: 'Week' },
@@ -4348,7 +4351,7 @@ const Social = () => {
                     + New event
                   </button>
                 ) : null}
-                <Link to={socialCalendarPath} className="rounded-2xl border border-white/10 px-3 py-1.5 text-xs font-semibold opacity-70 hover:opacity-100" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <Link to={socialCalendarPath} className="rounded-2xl border border-white/10 px-3 py-1.5 text-xs font-semibold opacity-70 hover:opacity-100" style={{ background: 'var(--social-surface-muted)' }}>
                   Full calendar
                 </Link>
               </div>
@@ -4485,7 +4488,7 @@ const Social = () => {
                                 ? 'border-white/10 hover:border-white/20'
                                 : 'border-transparent opacity-30'
                           }`}
-                          style={isToday ? { borderColor: 'var(--accent)', backgroundColor: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', '--tw-ring-color': 'var(--accent)' } : { background: inMonth ? 'rgba(255,255,255,0.06)' : 'transparent' }}
+                          style={isToday ? { borderColor: 'var(--accent)', backgroundColor: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', '--tw-ring-color': 'var(--accent)' } : { background: inMonth ? 'var(--social-surface-soft)' : 'transparent' }}
                           title={holidays.map((holiday) => holiday.name).join(', ')}
                         >
                           <p>{day.getDate()}</p>
@@ -4567,7 +4570,7 @@ const Social = () => {
                               ? 'text-white'
                               : 'border-white/10 hover:border-white/20'
                           }`}
-                          style={isToday ? { borderColor: 'var(--accent)', backgroundColor: 'var(--accent)' } : { background: 'rgba(255,255,255,0.06)' }}
+                          style={isToday ? { borderColor: 'var(--accent)', backgroundColor: 'var(--accent)' } : { background: 'var(--social-surface-soft)' }}
                         >
                           <p className="text-[10px] uppercase tracking-wide">{CALENDAR_PREVIEW_WEEKDAY_LABELS[day.getDay()]}</p>
                           <p>{day.getDate()}</p>
@@ -4658,7 +4661,7 @@ const Social = () => {
                               ? 'border-white/10'
                               : 'border-transparent hover:border-white/10'
                         }`}
-                        style={isCurrentHour ? { borderColor: 'var(--accent)', backgroundColor: 'color-mix(in srgb, var(--accent) 10%, transparent)', '--tw-ring-color': 'var(--accent)' } : { background: hourEvents.length > 0 ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)' }}
+                        style={isCurrentHour ? { borderColor: 'var(--accent)', backgroundColor: 'color-mix(in srgb, var(--accent) 10%, transparent)', '--tw-ring-color': 'var(--accent)' } : { background: hourEvents.length > 0 ? 'var(--social-surface-soft)' : 'var(--social-surface-muted)' }}
                       >
                         <span className="w-14 shrink-0 text-[11px] font-semibold opacity-40">{hourLabel}</span>
                         <div className="min-w-0 flex-1 space-y-0.5">
@@ -4852,13 +4855,18 @@ const Social = () => {
   const cssCustomProperties = {
     '--accent': accentColor,
     '--accent2': accentColor2,
-    '--bg-base': socialPreferences.globalStyles?.pageBackgroundColor || '#0d0d14',
-    '--bg-panel': 'rgba(255, 255, 255, 0.06)',
+    '--bg-base': globalPageBackground,
+    '--bg-panel': globalPanelColor,
+    '--social-text-primary': globalFontColor,
+    '--social-text-secondary': `color-mix(in srgb, ${globalFontColor} 78%, ${globalPageBackground} 22%)`,
+    '--social-text-muted': `color-mix(in srgb, ${globalFontColor} 56%, ${globalPageBackground} 44%)`,
+    '--social-surface-soft': `color-mix(in srgb, ${globalPanelColor} 90%, ${globalPageBackground} 10%)`,
+    '--social-surface-muted': `color-mix(in srgb, ${globalPanelColor} 80%, ${globalPageBackground} 20%)`,
     '--panel-blur': '16px',
     '--radius-md': '16px',
-    backgroundColor: socialPreferences.globalStyles?.pageBackgroundColor || '#0d0d14',
+    backgroundColor: globalPageBackground,
     fontFamily: `"${hubFontFamily}", "DM Sans", sans-serif`,
-    color: '#e2e8f0'
+    color: globalFontColor
   };
 
   return (
@@ -5129,17 +5137,17 @@ const Social = () => {
             {partnerSearchOpen && isOwnSocialContext && !isGuestPreview ? (
               <div className="fixed inset-0 z-[1500] flex items-center justify-center">
                 <button type="button" onClick={() => setPartnerSearchOpen(false)} className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" aria-label="Close partner search" />
-                <div className="relative z-10 w-full max-w-sm rounded-2xl border border-white/10 p-5 shadow-2xl" style={{ background: 'var(--bg-base, #0d0d14)' }}>
-                  <h3 className="text-sm font-semibold text-slate-200">Add Partner / Spouse</h3>
-                  <p className="mt-1 text-xs text-slate-400">Search your friends to send a partner request.</p>
+                <div className="relative z-10 w-full max-w-sm rounded-2xl border border-white/10 p-5 shadow-2xl" style={{ background: 'var(--bg-panel)' }}>
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--social-text-primary)' }}>Add Partner / Spouse</h3>
+                  <p className="mt-1 text-xs" style={{ color: 'var(--social-text-secondary)' }}>Search your friends to send a partner request.</p>
                   <input
                     type="text"
                     value={partnerSearchQuery}
                     onChange={(e) => { setPartnerSearchQuery(e.target.value); setPartnerConfirmFriend(null); }}
                     placeholder="Search friends…"
                     autoFocus
-                    className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1"
-                    style={{ '--tw-ring-color': 'var(--accent)' }}
+                    className="mt-3 w-full rounded-xl border border-white/10 px-3 py-2 text-sm placeholder:opacity-70 focus:outline-none focus:ring-1"
+                    style={{ '--tw-ring-color': 'var(--accent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-primary)' }}
                   />
                   <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
                     {availablePartnerCandidates
@@ -5149,25 +5157,25 @@ const Social = () => {
                           key={`ps-${friend.friendshipId || friend._id}`}
                           type="button"
                           onClick={() => setPartnerConfirmFriend(friend)}
-                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${partnerConfirmFriend && String(partnerConfirmFriend.friendshipId) === String(friend.friendshipId) ? 'ring-1' : 'hover:bg-white/[0.04]'}`}
-                          style={partnerConfirmFriend && String(partnerConfirmFriend.friendshipId) === String(friend.friendshipId) ? { background: 'rgba(255,255,255,0.06)', '--tw-ring-color': 'var(--accent)' } : undefined}
+                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${partnerConfirmFriend && String(partnerConfirmFriend.friendshipId) === String(friend.friendshipId) ? 'ring-1' : 'hover:bg-[color:var(--social-surface-muted)]'}`}
+                          style={partnerConfirmFriend && String(partnerConfirmFriend.friendshipId) === String(friend.friendshipId) ? { background: 'var(--social-surface-soft)', '--tw-ring-color': 'var(--accent)' } : undefined}
                         >
                           <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
                             {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-slate-200">@{friend.username}</p>
-                            {friend.realName ? <p className="truncate text-xs text-slate-400">{friend.realName}</p> : null}
+                            <p className="truncate text-sm font-semibold" style={{ color: 'var(--social-text-primary)' }}>@{friend.username}</p>
+                            {friend.realName ? <p className="truncate text-xs" style={{ color: 'var(--social-text-secondary)' }}>{friend.realName}</p> : null}
                           </div>
                         </button>
                       ))}
                     {availablePartnerCandidates.filter((f) => !partnerSearchQuery || f.username?.toLowerCase().includes(partnerSearchQuery.toLowerCase()) || f.realName?.toLowerCase().includes(partnerSearchQuery.toLowerCase())).length === 0 ? (
-                      <p className="px-3 py-3 text-center text-xs text-slate-500">{availablePartnerCandidates.length === 0 ? 'No friends available.' : 'No matches found.'}</p>
+                      <p className="px-3 py-3 text-center text-xs" style={{ color: 'var(--social-text-muted)' }}>{availablePartnerCandidates.length === 0 ? 'No friends available.' : 'No matches found.'}</p>
                     ) : null}
                   </div>
                   {partnerConfirmFriend ? (
-                    <div className="mt-3 rounded-xl border border-white/10 p-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                      <p className="text-xs text-slate-400">Send partner request to <span className="font-semibold text-slate-200">@{partnerConfirmFriend.username}</span>?</p>
+                    <div className="mt-3 rounded-xl border border-white/10 p-3" style={{ background: 'var(--social-surface-muted)' }}>
+                      <p className="text-xs" style={{ color: 'var(--social-text-secondary)' }}>Send partner request to <span className="font-semibold" style={{ color: 'var(--social-text-primary)' }}>@{partnerConfirmFriend.username}</span>?</p>
                       <div className="mt-2 flex gap-2">
                         <button
                           type="button"
@@ -5178,11 +5186,11 @@ const Social = () => {
                         >
                           Confirm
                         </button>
-                        <button type="button" onClick={() => setPartnerConfirmFriend(null)} className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200">Cancel</button>
+                        <button type="button" onClick={() => setPartnerConfirmFriend(null)} className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold" style={{ color: 'var(--social-text-secondary)' }}>Cancel</button>
                       </div>
                     </div>
                   ) : null}
-                  <button type="button" onClick={() => setPartnerSearchOpen(false)} className="mt-3 w-full rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200">Close</button>
+                  <button type="button" onClick={() => setPartnerSearchOpen(false)} className="mt-3 w-full rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold" style={{ color: 'var(--social-text-secondary)' }}>Close</button>
                 </div>
               </div>
             ) : null}
