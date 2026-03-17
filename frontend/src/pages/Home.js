@@ -187,57 +187,72 @@ function ParticleGrid({ className }) {
   );
 }
 
-/* ─── Glowing City Dot ─────────────────────────────────────────────────────── */
-const BASE_DOT_SIZE = 6;
-const DOT_POPULATION_SCALE = 18;
+/* ─── Heatmap City Blob ────────────────────────────────────────────────────── */
+const HEATMAP_BASE_RADIUS = 18;
+const HEATMAP_RADIUS_SCALE = 30;
 
 function CityDot({ city, index }) {
-  const size = BASE_DOT_SIZE + city.population * DOT_POPULATION_SCALE;
-  const glowColor =
-    city.population > 0.7
-      ? 'rgba(239, 68, 68, 0.7)'
-      : city.population > 0.5
-        ? 'rgba(168, 85, 247, 0.7)'
-        : 'rgba(59, 130, 246, 0.7)';
+  const radius = HEATMAP_BASE_RADIUS + city.population * HEATMAP_RADIUS_SCALE;
+  /* Intensity drives both brightness and opacity – denser areas glow hotter */
+  const baseOpacity = 0.15 + city.population * 0.55;
+
+  /* Colour ramp: high density → warm red/orange, mid → purple, low → cool blue */
+  let r, g, b;
+  if (city.population > 0.7) {
+    r = 239; g = 68; b = 68;          /* red */
+  } else if (city.population > 0.5) {
+    r = 168; g = 85; b = 247;         /* purple */
+  } else {
+    r = 59; g = 130; b = 246;         /* blue */
+  }
+
+  const gradientId = `heatblob-${city.name.replace(/\s+/g, '')}`;
+  const rgb = `rgb(${r},${g},${b})`;
 
   return (
     <motion.g data-testid="city-dot">
-      {/* Outer glow pulse */}
+      <defs>
+        <radialGradient id={gradientId}>
+          <stop offset="0%" stopColor={rgb} stopOpacity={baseOpacity} />
+          <stop offset="50%" stopColor={rgb} stopOpacity={baseOpacity * 0.5} />
+          <stop offset="100%" stopColor={rgb} stopOpacity={0} />
+        </radialGradient>
+      </defs>
+
+      {/* Soft heatmap glow blob */}
       <motion.circle
         cx={city.x}
         cy={city.y}
-        r={size}
-        fill="none"
-        stroke={glowColor}
-        strokeWidth={1.5}
-        initial={{ opacity: 0, scale: 0 }}
-        animate={{
-          opacity: [0, 0.6, 0],
-          scale: [0.5, 1.5, 2],
-        }}
+        r={radius}
+        fill={`url(#${gradientId})`}
+        filter="url(#heatmapBlur)"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0.7, 1, 0.7] }}
         transition={{
-          delay: index * 0.2 + 0.5,
-          duration: 2.5,
+          delay: index * 0.15 + 0.3,
+          duration: 4,
           repeat: Infinity,
-          repeatDelay: 1,
+          ease: 'easeInOut',
         }}
-        style={{ transformOrigin: `${city.x}px ${city.y}px` }}
       />
-      {/* Core dot */}
+
+      {/* Bright core – gives the "hot centre" look */}
       <motion.circle
         cx={city.x}
         cy={city.y}
-        r={size * 0.4}
-        fill={glowColor}
-        initial={{ opacity: 0, scale: 0 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: index * 0.15 + 0.3, duration: 0.6 }}
-        style={{ transformOrigin: `${city.x}px ${city.y}px` }}
+        r={radius * 0.25}
+        fill={rgb}
+        fillOpacity={Math.min(baseOpacity + 0.25, 1)}
+        filter="url(#heatmapBlur)"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: index * 0.15 + 0.3, duration: 0.8 }}
       />
+
       {/* Label */}
       <motion.text
         x={city.x}
-        y={city.y - size - 4}
+        y={city.y - radius - 2}
         textAnchor="middle"
         fill="rgba(209, 213, 219, 0.8)"
         fontSize="9"
@@ -737,6 +752,9 @@ function Home({ isAuthenticated }) {
                     <stop offset="0%" stopColor="rgba(139,92,246,0.4)" />
                     <stop offset="100%" stopColor="rgba(139,92,246,0)" />
                   </radialGradient>
+                  <filter id="heatmapBlur">
+                    <feGaussianBlur stdDeviation="4" />
+                  </filter>
                 </defs>
 
                 <path
