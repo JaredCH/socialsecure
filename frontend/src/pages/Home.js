@@ -1,840 +1,1375 @@
-import React from 'react';
-import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { motion, useScroll, useTransform, useInView, useReducedMotion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 
-const featureHighlights = [
-  {
-    title: 'Social, secure, and organized in one place',
-    description:
-      'Move between your social feed, circles, calendar, watch parties, maps, and private messaging without juggling separate apps.'
-  },
-  {
-    title: 'Manage every kind of friend connection',
-    description:
-      'Use the Social v Secure system to keep casual updates public, close friends in trusted circles, and sensitive conversations locked down.'
-  },
-  {
-    title: 'Encrypted direct messages with optional BYO PGP',
-    description:
-      'Every direct message is built around encrypted delivery, and advanced users can bring their own PGP keys for extra control.'
-  },
-  {
-    title: 'Local discovery without sacrificing privacy',
-    description:
-      'See what is happening nearby through maps, heatmaps, and community rooms, then choose exactly when to step into private space.'
-  }
+/* ─── US map simplified SVG path ───────────────────────────────────────────── */
+const US_MAP_PATH =
+  'M 150 120 L 160 100 L 200 90 L 240 85 L 280 80 L 310 82 L 340 78 ' +
+  'L 370 80 L 400 75 L 430 78 L 460 80 L 490 82 L 520 78 L 550 80 ' +
+  'L 570 90 L 580 100 L 590 120 L 595 140 L 590 160 L 580 175 L 570 185 ' +
+  'L 565 200 L 560 210 L 570 220 L 575 235 L 580 250 L 570 260 ' +
+  'L 555 265 L 540 260 L 520 265 L 500 270 L 480 275 L 460 270 ' +
+  'L 440 275 L 420 280 L 400 278 L 380 280 L 360 275 L 340 278 ' +
+  'L 320 280 L 300 275 L 280 278 L 260 280 L 240 275 L 220 270 ' +
+  'L 200 265 L 180 260 L 165 250 L 155 240 L 150 225 L 145 210 ' +
+  'L 140 195 L 138 180 L 140 160 L 145 140 Z';
+
+/* ─── City data for heatmap markers ────────────────────────────────────────── */
+const CITIES = [
+  { name: 'New York', x: 555, y: 110, population: 1.0 },
+  { name: 'Los Angeles', x: 165, y: 220, population: 0.85 },
+  { name: 'Chicago', x: 430, y: 115, population: 0.75 },
+  { name: 'Houston', x: 370, y: 270, population: 0.7 },
+  { name: 'Phoenix', x: 215, y: 235, population: 0.55 },
+  { name: 'Philadelphia', x: 555, y: 125, population: 0.55 },
+  { name: 'San Antonio', x: 340, y: 275, population: 0.5 },
+  { name: 'San Diego', x: 170, y: 240, population: 0.5 },
+  { name: 'Dallas', x: 360, y: 250, population: 0.65 },
+  { name: 'Miami', x: 545, y: 275, population: 0.6 },
+  { name: 'Atlanta', x: 500, y: 220, population: 0.5 },
+  { name: 'Seattle', x: 165, y: 90, population: 0.45 },
+  { name: 'Denver', x: 280, y: 170, population: 0.45 },
+  { name: 'Boston', x: 570, y: 95, population: 0.45 },
+  { name: 'Detroit', x: 460, y: 110, population: 0.4 },
 ];
 
-const friendManagementExamples = [
-  {
-    title: 'Inner circle planning',
-    description:
-      'Create a trusted circle for your closest friends, share event plans on the calendar, and move side conversations into encrypted DMs when details matter.'
-  },
-  {
-    title: 'Social vs. secure conversations',
-    description:
-      'Post updates for everyone in your network, then switch to secure one-to-one messaging for addresses, schedules, and other private details.'
-  },
-  {
-    title: 'Projects, family, and local groups',
-    description:
-      'Use circles, watch parties, and room chat to stay organized across hobbies, neighborhood groups, family coordination, and collaborative projects.'
-  }
+/* ─── Encrypted message animation data ─────────────────────────────────────── */
+const ENCRYPTED_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+const MESSAGES = [
+  { plain: 'Hey, are we still meeting at 3pm?', sender: 'Alice' },
+  { plain: "Yes! I'll send the location securely.", sender: 'Bob' },
 ];
 
-const privacyDetails = [
-  'Direct messages are completely encrypted to protect private conversations.',
-  'Bring your own PGP keys if you want to manage personal encryption credentials.',
-  'Keep community discovery public while reserving sensitive details for secure channels.',
-  'Built to make privacy understandable for everyday users and flexible for security-minded members.'
+/* ─── News source labels ───────────────────────────────────────────────────── */
+const NEWS_SOURCES = [
+  { label: 'Local Reports', color: 'from-blue-500 to-cyan-400' },
+  { label: 'National Wire', color: 'from-purple-500 to-pink-400' },
+  { label: 'Community Feed', color: 'from-emerald-500 to-teal-400' },
+  { label: 'Breaking News', color: 'from-red-500 to-orange-400' },
+  { label: 'Tech Updates', color: 'from-indigo-500 to-blue-400' },
+  { label: 'Weather Alerts', color: 'from-yellow-500 to-amber-400' },
 ];
 
-const platformCapabilities = [
-  {
-    title: 'Social feed and circles',
-    description:
-      'Share updates broadly or organize people into smaller trusted groups that match how you actually manage friendships.'
-  },
-  {
-    title: 'Encrypted chat and DMs',
-    description:
-      'Jump from community rooms into private, encrypted direct messages whenever a conversation needs stronger protection.'
-  },
-  {
-    title: 'Maps and heatmaps',
-    description:
-      'Explore activity by place, discover what is happening nearby, and connect local conversations to real communities.'
-  },
-  {
-    title: 'Calendars and event planning',
-    description:
-      'Coordinate gatherings, reminders, and shared plans without leaving the same platform where your friends already talk.'
-  },
-  {
-    title: 'Watch parties and shared moments',
-    description:
-      'Turn passive scrolling into real interaction with watch parties and group experiences that keep people engaged together.'
-  },
-  {
-    title: 'Profiles, resumes, and blogs',
-    description:
-      'Present who you are with custom profiles, professional highlights, and longer-form posts that live alongside your social presence.'
-  }
-];
-
-const mapDensityStats = [
-  {
-    title: 'User convergence',
-    description: 'Ten glowing circles spread across the city grid drift inward; each collision scales glow to 1.5× the total count at center.'
-  },
-  {
-    title: 'Center convergence',
-    description: 'Each new arrival scales the cluster\u2019s glow using (diameter\u00a0×\u00a01.5)\u00a0×\u00a0N—brightness cascades upward and holds until a circle breaks away.'
-  },
-  {
-    title: 'Transparent heat overlay',
-    description: 'The semi-transparent red overlay lets the city grid remain visible, showing density without hiding geography.'
-  }
-];
-
-// Animation duration for one full convergence cycle (seconds).
-const DENSITY_DURATION = 9;
-const DENSITY_CENTER = { x: 50, y: 50 };
-const DENSITY_MERGE_POINT = { x: 22, y: 49 };
-// Diameter in px for each circle – with the radial-gradient glow the visible
-// footprint is roughly 100 ft at the city-block scale shown in the background.
-const DENSITY_GLOW_SIZE = 28;
-const DENSITY_BREAKOFF_HOLD = 0.83; // hold peak until just before break-away
-const DENSITY_BREAKOFF_FRAC = 0.84; // the instant break-off glows detach
-
-// Ten user-density circles with roles that drive the multi-phase animation.
-// 'normal'     – drifts to center and fades into the cluster.
-// 'merge-keep' – collides with the merge-fade circle, absorbs it, then continues.
-// 'merge-fade' – travels to the merge point and disappears into merge-keep.
-// 'break-off'  – converges to center then drifts back outward at the end.
-const densityCircles = [
-  { id: 'glow-0', startX: 12, startY: 15, role: 'break-off', breakX: 15, breakY: 8, convergeFrac: 0.58 },
-  { id: 'glow-1', startX: 82, startY: 12, role: 'normal', convergeFrac: 0.62 },
-  { id: 'glow-2', startX: 15, startY: 62, role: 'merge-keep', convergeFrac: 0.55 },
-  { id: 'glow-3', startX: 78, startY: 68, role: 'normal', convergeFrac: 0.70 },
-  { id: 'glow-4', startX: 42, startY: 22, role: 'normal', convergeFrac: 0.53 },
-  { id: 'glow-5', startX: 65, startY: 80, role: 'normal', convergeFrac: 0.68 },
-  { id: 'glow-6', startX: 30, startY: 35, role: 'merge-fade', convergeFrac: 0.38 },
-  { id: 'glow-7', startX: 72, startY: 35, role: 'normal', convergeFrac: 0.65 },
-  { id: 'glow-8', startX: 88, startY: 52, role: 'normal', convergeFrac: 0.72 },
-  { id: 'glow-9', startX: 50, startY: 88, role: 'break-off', breakX: 78, breakY: 85, convergeFrac: 0.60 }
-];
-
-// Pre-compute how many glows are at the center at each convergeFrac so we can
-// apply the collision formula: NewTotalDiameter = (currentDiameter × 1.5) × N.
-// merge-fade never reaches center (absorbed at the merge point) so it is excluded.
-const _centerConvergeFracs = densityCircles
-  .filter(c => c.role !== 'merge-fade')
-  .map(c => c.convergeFrac)
-  .sort((a, b) => a - b);
-
-function _glowsAtCenter(convergeFrac) {
-  return _centerConvergeFracs.filter(f => f <= convergeFrac).length;
+/* ─── Generate scrambled text ──────────────────────────────────────────────── */
+function scrambleText(text) {
+  return text
+    .split('')
+    .map((ch) =>
+      ch === ' ' ? ' ' : ENCRYPTED_CHARS[Math.floor(Math.random() * ENCRYPTED_CHARS.length)]
+    )
+    .join('');
 }
 
-function getDensityAnimation(circle, reducedMotion) {
-  if (reducedMotion) {
-    return {
-      animate: { left: `${DENSITY_CENTER.x}%`, top: `${DENSITY_CENTER.y}%`, opacity: 0.6, scale: 1 },
-      transition: { duration: 0.01 }
+/* ─── Particle Canvas Background ───────────────────────────────────────────── */
+const PARTICLE_COUNT = 60;
+const GRID_SPACING = 60;
+const MAX_CONNECTION_DISTANCE = 120;
+
+function ParticleGrid({ className }) {
+  const canvasRef = useRef(null);
+  const prefersReduced = useReducedMotion();
+  const animRef = useRef(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || prefersReduced) return;
+    const ctx = canvas.getContext('2d');
+    let w = (canvas.width = canvas.offsetWidth);
+    let h = (canvas.height = canvas.offsetHeight);
+
+    const particles = Array.from({ length: PARTICLE_COUNT }, () => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      r: Math.random() * 1.5 + 0.5,
+    }));
+
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h);
+
+      /* grid lines */
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.06)';
+      ctx.lineWidth = 0.5;
+      for (let gx = 0; gx < w; gx += GRID_SPACING) {
+        ctx.beginPath();
+        ctx.moveTo(gx, 0);
+        ctx.lineTo(gx, h);
+        ctx.stroke();
+      }
+      for (let gy = 0; gy < h; gy += GRID_SPACING) {
+        ctx.beginPath();
+        ctx.moveTo(0, gy);
+        ctx.lineTo(w, gy);
+        ctx.stroke();
+      }
+
+      /* particles */
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > w) p.vx *= -1;
+        if (p.y < 0 || p.y > h) p.vy *= -1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(139, 92, 246, 0.5)';
+        ctx.fill();
+      }
+
+      /* connection lines */
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < MAX_CONNECTION_DISTANCE) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(59, 130, 246, ${0.15 * (1 - dist / MAX_CONNECTION_DISTANCE)})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+      }
+
+      animRef.current = requestAnimationFrame(draw);
     };
-  }
 
-  const { startX, startY, role, convergeFrac, breakX = 0, breakY = 0 } = circle;
-  const cx = DENSITY_CENTER.x;
-  const cy = DENSITY_CENTER.y;
-  const mx = DENSITY_MERGE_POINT.x;
-  const my = DENSITY_MERGE_POINT.y;
+    draw();
 
-  // Collision formula: peakScale = (1 × 1.5) × N  where N = glows at center.
-  const N = _glowsAtCenter(convergeFrac);
-  const peakScale = 1.5 * N;
-
-  switch (role) {
-    case 'merge-keep': {
-      // Absorbs merge-fade at the merge point (2 combining) → scale = 1.5 × 2.
-      // Then continues to center where it joins the cluster at the full formula.
-      // Maintains its peak size for the rest of the cycle (no decay).
-      const mergeScale = 1.5 * 2;
-      const centerScale = Math.max(mergeScale, peakScale);
-      return {
-        animate: {
-          left: [`${startX}%`, `${startX}%`, `${mx}%`, `${cx}%`, `${cx}%`],
-          top: [`${startY}%`, `${startY}%`, `${my}%`, `${cy}%`, `${cy}%`],
-          opacity: [0.5, 0.55, 1.0, 1.0, 1.0],
-          scale: [1, 1, mergeScale, centerScale, centerScale]
-        },
-        transition: {
-          duration: DENSITY_DURATION,
-          times: [0, 0.11, 0.36, convergeFrac, 1],
-          repeat: Infinity,
-          ease: 'easeInOut'
-        }
-      };
-    }
-    case 'merge-fade':
-      // Shrinks into merge-keep at the merge point and disappears.
-      return {
-        animate: {
-          left: [`${startX}%`, `${startX}%`, `${mx}%`, `${mx}%`, `${mx}%`],
-          top: [`${startY}%`, `${startY}%`, `${my}%`, `${my}%`, `${my}%`],
-          opacity: [0.5, 0.55, 0.1, 0, 0],
-          scale: [1, 1, 0.3, 0, 0]
-        },
-        transition: {
-          duration: DENSITY_DURATION,
-          times: [0, 0.11, 0.36, 0.42, 1],
-          repeat: Infinity,
-          ease: 'easeInOut'
-        }
-      };
-    case 'break-off': {
-      // Converges to center at full formula scale, HOLDS that size, then
-      // shrinks sharply only at the instant it breaks away from the cluster.
-      return {
-        animate: {
-          left:    [`${startX}%`, `${startX}%`, `${cx}%`,   `${cx}%`,   `${breakX}%`, `${breakX}%`],
-          top:     [`${startY}%`, `${startY}%`, `${cy}%`,   `${cy}%`,   `${breakY}%`, `${breakY}%`],
-          opacity: [0.5,          0.55,          1.0,         1.0,         0.3,           0.3],
-          scale:   [1,            1,             peakScale,   peakScale,   0.65,          0.65]
-        },
-        transition: {
-          duration: DENSITY_DURATION,
-          times: [0, 0.11, convergeFrac, DENSITY_BREAKOFF_HOLD, DENSITY_BREAKOFF_FRAC, 1],
-          repeat: Infinity,
-          ease: 'easeInOut'
-        }
-      };
-    }
-    default: {
-      // Normal circles grow using the collision formula when they reach center.
-      // Size is maintained for the rest of the cycle – no shrinkage.
-      // Opacity increases for later arrivals (convergeFrac further from 0.5)
-      // to reflect higher density in the cluster.
-      const arrivalFactor = (convergeFrac - 0.5) * 4;
-      const peakOpacity = Math.min(0.82 + arrivalFactor * 0.2, 1.0);
-      return {
-        animate: {
-          left: [`${startX}%`, `${startX}%`, `${cx}%`, `${cx}%`],
-          top: [`${startY}%`, `${startY}%`, `${cy}%`, `${cy}%`],
-          opacity: [0.5, 0.55, peakOpacity, peakOpacity],
-          scale: [1, 1, peakScale, peakScale]
-        },
-        transition: {
-          duration: DENSITY_DURATION,
-          times: [0, 0.11, convergeFrac, 1],
-          repeat: Infinity,
-          ease: 'easeInOut'
-        }
-      };
-    }
-  }
-}
-
-const messagePreview = {
-  plainText: 'Meet me at the center marker at 7:30. I will share the final route here.',
-  encryptedText: '7F-A91C / 4D-223B / 88-LOCK / 2A-77C1',
-  sendCipherRows: ['8X4A 1F77 23CC 9D0E', 'L0CK 77AA 91C2 E4F8', '2C91 A7FF 0E1D 6B20'],
-  unlockCipherRows: ['94AF 00C1 7E22 D4B8', 'KEY? 19AD 44C0 7F10', 'D3CR 7A91 55EF 0AA2']
-};
-
-const dmFlowSteps = ['Type private text', 'Encrypt locally', 'Transmit cipher payload', 'Enter password to decrypt'];
-
-function Home({ isAuthenticated = false }) {
-  const prefersReducedMotion = useReducedMotion();
-  const { scrollYProgress } = useScroll();
-  const backgroundLayerY = useTransform(scrollYProgress, [0, 0.45], [0, prefersReducedMotion ? 0 : -90]);
-  const middleLayerY = useTransform(scrollYProgress, [0, 0.45], [0, prefersReducedMotion ? 0 : 55]);
-  const foregroundLayerY = useTransform(scrollYProgress, [0, 0.45], [0, prefersReducedMotion ? 0 : -35]);
+    const onResize = () => {
+      w = canvas.width = canvas.offsetWidth;
+      h = canvas.height = canvas.offsetHeight;
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [prefersReduced]);
 
   return (
-    <div className="space-y-10 pb-10">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 text-white shadow-xl">
-        <motion.div
-          aria-hidden="true"
-          className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(96,165,250,0.3)_0%,_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(129,140,248,0.28)_0%,_transparent_46%)]"
-          style={{ y: backgroundLayerY }}
-        />
-        <motion.div
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.28)_0%,_transparent_65%)] blur-3xl"
-          style={{ y: middleLayerY }}
-        />
-        <motion.div
-          aria-hidden="true"
-          className="absolute inset-0 opacity-20"
-          style={{ y: foregroundLayerY }}
-        >
-          <div className="h-full w-full bg-[linear-gradient(rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.16)_1px,transparent_1px)] bg-[size:72px_72px]" />
-        </motion.div>
+    <canvas
+      ref={canvasRef}
+      className={className}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+      }}
+      aria-hidden="true"
+    />
+  );
+}
 
-        <div className="relative px-6 py-10 md:px-10 md:py-14 lg:px-16 lg:py-16">
-          <motion.p
-            initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
-            animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
-            transition={{ duration: 0.55 }}
-            className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.2em] text-blue-100"
+/* ─── Glowing City Dot ─────────────────────────────────────────────────────── */
+const BASE_DOT_SIZE = 6;
+const DOT_POPULATION_SCALE = 18;
+
+function CityDot({ city, index }) {
+  const size = BASE_DOT_SIZE + city.population * DOT_POPULATION_SCALE;
+  const glowColor =
+    city.population > 0.7
+      ? 'rgba(239, 68, 68, 0.7)'
+      : city.population > 0.5
+        ? 'rgba(168, 85, 247, 0.7)'
+        : 'rgba(59, 130, 246, 0.7)';
+
+  return (
+    <motion.g data-testid="city-dot">
+      {/* Outer glow pulse */}
+      <motion.circle
+        cx={city.x}
+        cy={city.y}
+        r={size}
+        fill="none"
+        stroke={glowColor}
+        strokeWidth={1.5}
+        initial={{ opacity: 0, scale: 0 }}
+        animate={{
+          opacity: [0, 0.6, 0],
+          scale: [0.5, 1.5, 2],
+        }}
+        transition={{
+          delay: index * 0.2 + 0.5,
+          duration: 2.5,
+          repeat: Infinity,
+          repeatDelay: 1,
+        }}
+        style={{ transformOrigin: `${city.x}px ${city.y}px` }}
+      />
+      {/* Core dot */}
+      <motion.circle
+        cx={city.x}
+        cy={city.y}
+        r={size * 0.4}
+        fill={glowColor}
+        initial={{ opacity: 0, scale: 0 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: index * 0.15 + 0.3, duration: 0.6 }}
+        style={{ transformOrigin: `${city.x}px ${city.y}px` }}
+      />
+      {/* Label */}
+      <motion.text
+        x={city.x}
+        y={city.y - size - 4}
+        textAnchor="middle"
+        fill="rgba(209, 213, 219, 0.8)"
+        fontSize="9"
+        fontFamily="monospace"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: index * 0.15 + 0.8 }}
+      >
+        {city.name}
+      </motion.text>
+    </motion.g>
+  );
+}
+
+/* ─── Encryption Animation Hook ────────────────────────────────────────────── */
+function useEncryptionAnim(plain, active) {
+  const [display, setDisplay] = useState('');
+  const [phase, setPhase] = useState('idle');
+  /* phase: idle | encrypting | encrypted | decrypting | plain */
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (!active) return;
+    let step = 0;
+    const totalSteps = 30;
+
+    setPhase('encrypting');
+    intervalRef.current = setInterval(() => {
+      step++;
+      if (step <= totalSteps / 3) {
+        setDisplay(scrambleText(plain));
+      } else if (step <= (totalSteps * 2) / 3) {
+        setPhase('encrypted');
+        setDisplay(scrambleText(plain));
+      } else if (step <= totalSteps) {
+        setPhase('decrypting');
+        const ratio = (step - (totalSteps * 2) / 3) / (totalSteps / 3);
+        setDisplay(
+          plain
+            .split('')
+            .map((ch, i) =>
+              i < plain.length * ratio
+                ? ch
+                : ENCRYPTED_CHARS[Math.floor(Math.random() * ENCRYPTED_CHARS.length)]
+            )
+            .join('')
+        );
+      } else {
+        setPhase('plain');
+        setDisplay(plain);
+        clearInterval(intervalRef.current);
+      }
+    }, 80);
+
+    return () => clearInterval(intervalRef.current);
+  }, [active, plain]);
+
+  return { display, phase };
+}
+
+/* ─── Encrypted Message Bubble ─────────────────────────────────────────────── */
+function MessageBubble({ message, index, isInView }) {
+  const [active, setActive] = useState(false);
+  const { display, phase } = useEncryptionAnim(message.plain, active);
+  const isSender = index % 2 === 0;
+
+  useEffect(() => {
+    if (!isInView) return;
+    const timer = setTimeout(() => setActive(true), index * 3500 + 500);
+    return () => clearTimeout(timer);
+  }, [isInView, index]);
+
+  const bgClass =
+    phase === 'encrypted' || phase === 'encrypting'
+      ? 'bg-red-900/30 border-red-500/40'
+      : phase === 'decrypting'
+        ? 'bg-yellow-900/20 border-yellow-500/30'
+        : phase === 'plain'
+          ? 'bg-emerald-900/20 border-emerald-500/30'
+          : 'bg-slate-800/50 border-slate-600/30';
+
+  const phaseLabel =
+    phase === 'encrypting'
+      ? '\u{1F512} Encrypting...'
+      : phase === 'encrypted'
+        ? '\u{1F512} Encrypted'
+        : phase === 'decrypting'
+          ? '\u{1F513} Decrypting...'
+          : phase === 'plain'
+            ? '\u2713 Delivered'
+            : '';
+
+  return (
+    <motion.div
+      data-testid="message-bubble"
+      className={`flex ${isSender ? 'justify-start' : 'justify-end'} mb-4`}
+      initial={{ opacity: 0, x: isSender ? -30 : 30 }}
+      animate={active ? { opacity: 1, x: 0 } : {}}
+      transition={{ duration: 0.5 }}
+    >
+      <div
+        className={`max-w-xs md:max-w-sm rounded-xl border px-4 py-3 ${bgClass} backdrop-blur-sm`}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <div
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isSender ? 'bg-blue-600' : 'bg-purple-600'}`}
           >
-            One platform • Social v Secure made simple
+            {message.sender[0]}
+          </div>
+          <span className="text-xs text-slate-400 font-mono">{message.sender}</span>
+          {phaseLabel && <span className="text-xs text-slate-500 ml-auto">{phaseLabel}</span>}
+        </div>
+        <p
+          className={`text-sm font-mono break-all ${
+            phase === 'plain'
+              ? 'text-emerald-300'
+              : phase === 'encrypted' || phase === 'encrypting'
+                ? 'text-red-300'
+                : 'text-yellow-300'
+          }`}
+        >
+          {display || '...'}
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─── Data Packet Animation (between users) ────────────────────────────────── */
+function DataPacketLine({ active }) {
+  return (
+    <div className="relative h-12 flex items-center justify-center my-2" data-testid="data-packet-line">
+      <div className="absolute inset-x-8 h-px bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-blue-500/30" />
+      {active && (
+        <motion.div
+          className="absolute w-3 h-3 rounded-full bg-cyan-400 shadow-lg shadow-cyan-400/50"
+          animate={{ x: [-120, 120] }}
+          transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 0.5, ease: 'easeInOut' }}
+        />
+      )}
+      <div className="relative z-10 px-3 py-1 rounded-full bg-slate-800/80 border border-cyan-500/30 text-xs text-cyan-400 font-mono">
+        End-to-End Encrypted
+      </div>
+    </div>
+  );
+}
+
+/* ─── News Card Component ──────────────────────────────────────────────────── */
+function NewsCard({ source, index, merged }) {
+  const directions = [
+    { x: -200, y: -100 },
+    { x: 200, y: -80 },
+    { x: -150, y: 100 },
+    { x: 200, y: 120 },
+    { x: -100, y: -150 },
+    { x: 150, y: 80 },
+  ];
+  const dir = directions[index % directions.length];
+
+  return (
+    <motion.div
+      data-testid="news-card"
+      className="w-full"
+      initial={{ opacity: 0, x: dir.x, y: dir.y, scale: 0.8 }}
+      animate={
+        merged
+          ? { opacity: 1, x: 0, y: 0, scale: 1 }
+          : { opacity: 0.6, x: dir.x * 0.3, y: dir.y * 0.3, scale: 0.9 }
+      }
+      transition={{ delay: merged ? index * 0.12 : 0, duration: 0.8, ease: 'easeOut' }}
+    >
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-md p-4 hover:border-purple-500/40 transition-colors">
+        <div
+          className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r ${source.color} text-white mb-2`}
+        >
+          {source.label}
+        </div>
+        <div className="h-2 w-3/4 rounded bg-slate-700/50 mb-1.5" />
+        <div className="h-2 w-1/2 rounded bg-slate-700/30" />
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─── Data Flow Node ───────────────────────────────────────────────────────── */
+function DataFlowNode({ label, icon, x, y, delay }) {
+  return (
+    <motion.div
+      className="absolute flex flex-col items-center"
+      style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
+      initial={{ opacity: 0, scale: 0 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true }}
+      transition={{ delay, duration: 0.5 }}
+    >
+      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30 flex items-center justify-center text-2xl backdrop-blur-sm">
+        {icon}
+      </div>
+      <span className="mt-1 text-xs text-slate-400 font-mono whitespace-nowrap">{label}</span>
+    </motion.div>
+  );
+}
+
+/* ─── Section wrapper with scroll animations ───────────────────────────────── */
+function Section({ children, className = '', id, dark = true }) {
+  return (
+    <section
+      id={id}
+      className={`relative py-20 md:py-28 px-4 sm:px-6 lg:px-8 overflow-hidden ${
+        dark ? 'bg-slate-950' : 'bg-slate-900'
+      } ${className}`}
+    >
+      {children}
+    </section>
+  );
+}
+
+/* ─── Glassmorphism Card ───────────────────────────────────────────────────── */
+function GlassCard({ children, className = '', hover = true, ...rest }) {
+  return (
+    <motion.div
+      className={`rounded-2xl border border-slate-700/50 bg-slate-800/30 backdrop-blur-xl p-6 ${
+        hover
+          ? 'hover:border-purple-500/40 hover:bg-slate-800/50 transition-all duration-300'
+          : ''
+      } ${className}`}
+      whileHover={hover ? { y: -4 } : {}}
+      {...rest}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/* ─── Privacy Shield Visual ────────────────────────────────────────────────── */
+function PrivacyShield() {
+  return (
+    <motion.div
+      data-testid="privacy-shield"
+      className="relative w-48 h-48 md:w-64 md:h-64 mx-auto"
+      initial={{ opacity: 0, scale: 0.8 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.8 }}
+    >
+      {/* Outer glow ring */}
+      <motion.div
+        className="absolute inset-0 rounded-full border-2 border-cyan-400/30"
+        animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
+        transition={{ duration: 3, repeat: Infinity }}
+      />
+      {/* Middle ring */}
+      <motion.div
+        className="absolute inset-4 rounded-full border border-blue-400/40"
+        animate={{ scale: [1, 1.08, 1], opacity: [0.4, 0.7, 0.4] }}
+        transition={{ duration: 2.5, repeat: Infinity, delay: 0.3 }}
+      />
+      {/* Shield icon */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="text-6xl md:text-7xl" role="img" aria-label="shield">
+          {'\u{1F6E1}\uFE0F'}
+        </div>
+      </div>
+      {/* Labels */}
+      {['AES-256', 'PGP', 'E2EE', 'Zero-Knowledge'].map((label, i) => (
+        <motion.div
+          key={label}
+          className="absolute px-2 py-0.5 rounded-full bg-slate-800/80 border border-blue-500/30 text-xs text-blue-400 font-mono"
+          style={{
+            left: `${50 + 48 * Math.cos((i * Math.PI * 2) / 4 - Math.PI / 4)}%`,
+            top: `${50 + 48 * Math.sin((i * Math.PI * 2) / 4 - Math.PI / 4)}%`,
+            transform: 'translate(-50%, -50%)',
+          }}
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.5 + i * 0.15 }}
+        >
+          {label}
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  HOME COMPONENT                                                            */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+function Home({ isAuthenticated }) {
+  const prefersReduced = useReducedMotion();
+  const heroRef = useRef(null);
+  const { scrollYProgress } = useScroll({
+    target: heroRef,
+    offset: ['start start', 'end start'],
+  });
+  const heroOpacity = useTransform(scrollYProgress, [0, 1], [1, 0]);
+  const heroY = useTransform(scrollYProgress, [0, 1], [0, 100]);
+
+  /* ─── News aggregation section state ─── */
+  const newsRef = useRef(null);
+  const newsInView = useInView(newsRef, { once: true, margin: '-100px' });
+  const [newsMerged, setNewsMerged] = useState(false);
+
+  useEffect(() => {
+    if (newsInView) {
+      const timer = setTimeout(() => setNewsMerged(true), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [newsInView]);
+
+  /* ─── Encrypted messaging section state ─── */
+  const encryptRef = useRef(null);
+  const encryptInView = useInView(encryptRef, { once: true, margin: '-100px' });
+
+  /* ─── Heatmap section state ─── */
+  const mapRef = useRef(null);
+  const mapInView = useInView(mapRef, { once: true, margin: '-100px' });
+
+  /* ─── Location pins state ─── */
+  const [locationPins, setLocationPins] = useState([]);
+  const locationRef = useRef(null);
+  const locationInView = useInView(locationRef, { once: true, margin: '-100px' });
+
+  useEffect(() => {
+    if (!locationInView) return;
+    const pins = [];
+    const interval = setInterval(() => {
+      if (pins.length >= 8) {
+        clearInterval(interval);
+        return;
+      }
+      pins.push({
+        id: pins.length,
+        x: 15 + Math.random() * 70,
+        y: 15 + Math.random() * 70,
+      });
+      setLocationPins([...pins]);
+    }, 400);
+    return () => clearInterval(interval);
+  }, [locationInView]);
+
+  /* ─── Platform features ─── */
+  const platformFeatures = useMemo(
+    () => [
+      { icon: '\u{1F4E1}', title: 'Real-Time Data', desc: 'Live updates powered by encrypted streams' },
+      { icon: '\u{1F512}', title: 'End-to-End Encryption', desc: 'Every message is encrypted by default' },
+      { icon: '\u{1F5FA}\uFE0F', title: 'Local Intelligence', desc: 'Location-aware data without compromising privacy' },
+      { icon: '\u{1F4F0}', title: 'News Aggregation', desc: 'Real-time news from multiple verified sources' },
+      { icon: '\u{1F465}', title: 'Social Circles', desc: 'Manage connections with granular privacy controls' },
+      { icon: '\u{1F6E1}\uFE0F', title: 'Data Sovereignty', desc: 'You own your data. Always.' },
+    ],
+    []
+  );
+
+  return (
+    <div className="bg-slate-950 text-white min-h-screen" data-testid="landing-page">
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/*  HERO SECTION                                                     */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <section
+        ref={heroRef}
+        className="relative min-h-screen flex items-center justify-center overflow-hidden"
+        data-testid="hero-section"
+      >
+        {/* Animated grid + particles */}
+        <ParticleGrid className="z-0" />
+
+        {/* Gradient overlays */}
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950 z-[1]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-900/10 via-purple-900/10 to-cyan-900/10 z-[1]" />
+
+        {/* US Map background (subtle) */}
+        <div className="absolute inset-0 flex items-center justify-center z-[2] opacity-20">
+          <svg viewBox="100 60 540 260" className="w-full max-w-4xl h-auto">
+            <path
+              d={US_MAP_PATH}
+              fill="none"
+              stroke="rgba(59,130,246,0.3)"
+              strokeWidth="1.5"
+            />
+            {CITIES.slice(0, 8).map((city, i) => (
+              <motion.circle
+                key={city.name}
+                cx={city.x}
+                cy={city.y}
+                r={4 + city.population * 6}
+                fill={
+                  city.population > 0.7
+                    ? 'rgba(139,92,246,0.4)'
+                    : 'rgba(59,130,246,0.3)'
+                }
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0.2, 0.6, 0.2] }}
+                transition={{ duration: 3, repeat: Infinity, delay: i * 0.3 }}
+              />
+            ))}
+          </svg>
+        </div>
+
+        {/* Hero content */}
+        <motion.div
+          className="relative z-10 text-center px-4 max-w-5xl mx-auto"
+          style={{
+            opacity: prefersReduced ? 1 : heroOpacity,
+            y: prefersReduced ? 0 : heroY,
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+          >
+            <span className="inline-block px-4 py-1.5 mb-6 rounded-full border border-blue-500/30 bg-blue-950/50 text-blue-400 text-sm font-mono backdrop-blur-sm">
+              {'\u{1F512}'} Privacy-First Social Platform
+            </span>
+          </motion.div>
+
+          <motion.h1
+            className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-6"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
+          >
+            <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
+              Real Data.
+            </span>{' '}
+            <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
+              Real Privacy.
+            </span>{' '}
+            <br className="hidden sm:block" />
+            <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+              Real Control.
+            </span>
+          </motion.h1>
+
+          <motion.p
+            className="text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto mb-10"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.6 }}
+          >
+            A social platform built on encrypted communication, real-time local intelligence,
+            and transparent data ownership.
           </motion.p>
 
-          <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-center">
-            <motion.div
-              className="lg:col-span-7"
-              initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
-              animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
-              transition={{ duration: 0.65, delay: 0.08 }}
-            >
-              <h1 className="text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
-                One secure home for your people, plans, and private conversations.
-              </h1>
-              <p className="mt-4 max-w-2xl text-base text-blue-100 sm:text-lg">
-                SocialSecure brings your feed, circles, maps, watch parties, calendar, and encrypted direct messages
-                into one platform so you can manage friendships without trading away privacy.
-              </p>
-              <p className="mt-4 max-w-2xl text-sm text-blue-200 sm:text-base">
-                Watch ten user glows drift across a city grid and converge into a shared red heat cluster, then follow a
-                direct message as it encrypts, sends, and unlocks on the other side.
-              </p>
-
-              <div className="mt-7 flex flex-wrap gap-3">
-                {isAuthenticated ? (
-                  <>
-                    <Link
-                      to="/social"
-                      className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                    >
-                      Open Social Feed
-                    </Link>
-                    <Link
-                      to="/chat"
-                      className="rounded-lg border border-white/40 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                    >
-                      Open Chat
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      to="/register"
-                      className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                    >
-                      Sign Up Free
-                    </Link>
-                    <Link
-                      to="/login"
-                      className="rounded-lg border border-white/40 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                    >
-                      Login
-                    </Link>
-                  </>
-                )}
-                <a
-                  href="#platform-overview"
-                  className="rounded-lg border border-transparent px-5 py-3 text-sm font-semibold text-blue-100 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  Explore the platform
-                </a>
-              </div>
-
-              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-blue-100">
-                <span>✓ Completely encrypted direct messages</span>
-                <span>✓ Bring your own PGP support</span>
-                <span>✓ Circles, calendars, maps, and watch parties</span>
-                <span>✓ Social v Secure friend management</span>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="relative lg:col-span-5"
-              initial={prefersReducedMotion ? false : { opacity: 0, y: 26 }}
-              animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.18 }}
-            >
-              <div className="rounded-[2rem] border border-white/20 bg-slate-950/35 p-5 shadow-2xl backdrop-blur">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-200">Map intelligence</p>
-                    <h2 className="mt-2 text-xl font-semibold">Community density map</h2>
-                  </div>
-                  <div className="rounded-full border border-rose-400/30 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-100">
-                    10 users • Heat cluster
-                  </div>
-                </div>
-
-                <div
-                  data-testid="hero-map-system"
-                  className="relative mt-5 h-[22rem] overflow-hidden rounded-[1.75rem] border border-white/10"
-                  style={{
-                    backgroundColor: 'rgb(26, 32, 44)',
-                    backgroundImage: [
-                      'linear-gradient(to right, rgba(100,116,139,0.22) 1px, transparent 1px)',
-                      'linear-gradient(to bottom, rgba(100,116,139,0.22) 1px, transparent 1px)',
-                      'linear-gradient(to right, rgba(120,133,150,0.38) 2px, transparent 2px)',
-                      'linear-gradient(to bottom, rgba(120,133,150,0.38) 2px, transparent 2px)'
-                    ].join(', '),
-                    backgroundSize: '8.33% 8.33%, 8.33% 8.33%, 33.33% 33.33%, 33.33% 33.33%'
-                  }}
-                >
-                  {/* NYC block-grid map overlay with subtle block shading */}
-                  <svg
-                    viewBox="0 0 12 12"
-                    className="absolute inset-0 h-full w-full"
-                    preserveAspectRatio="none"
-                    role="img"
-                    aria-label="New York City block grid with ten user density points converging into a red heat cluster"
-                  >
-                    <rect x="1" y="0" width="1" height="1" fill="rgba(40,48,62,0.45)" />
-                    <rect x="3" y="2" width="1" height="1" fill="rgba(45,53,67,0.35)" />
-                    <rect x="5" y="3" width="2" height="1" fill="rgba(40,60,48,0.2)" />
-                    <rect x="8" y="1" width="1" height="1" fill="rgba(45,53,67,0.3)" />
-                    <rect x="10" y="5" width="1" height="1" fill="rgba(40,48,62,0.35)" />
-                    <rect x="2" y="7" width="1" height="1" fill="rgba(45,53,67,0.3)" />
-                    <rect x="7" y="9" width="1" height="1" fill="rgba(40,48,62,0.4)" />
-                    <rect x="0" y="5" width="1" height="1" fill="rgba(45,53,67,0.3)" />
-                    <rect x="9" y="3" width="1" height="1" fill="rgba(40,48,62,0.35)" />
-                    <rect x="4" y="10" width="2" height="1" fill="rgba(40,60,48,0.18)" />
-                    <rect x="11" y="7" width="1" height="1" fill="rgba(45,53,67,0.25)" />
-                    <rect x="6" y="0" width="1" height="1" fill="rgba(40,48,62,0.3)" />
-                  </svg>
-
-                  {/* Central convergence glow – grows as circles arrive */}
-                  <motion.div
-                    aria-hidden="true"
-                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                    style={{
-                      width: 180,
-                      height: 180,
-                      background:
-                        'radial-gradient(circle, rgba(239,68,68,0.7) 0%, rgba(239,68,68,0.35) 28%, rgba(239,68,68,0.12) 55%, transparent 78%)',
-                      filter: 'blur(10px)',
-                      willChange: 'transform, opacity'
-                    }}
-                    initial={prefersReducedMotion ? false : { opacity: 0.02, scale: 0.1 }}
-                    animate={
-                      prefersReducedMotion
-                        ? { opacity: 0.5, scale: 1 }
-                        : {
-                            opacity: [0.02, 0.06, 0.5, 1.0, 1.0, 0.45],
-                            scale: [0.1, 0.2, 1.8, 4.2, 4.2, 2.5]
-                          }
-                    }
-                    transition={
-                      prefersReducedMotion
-                        ? { duration: 0.01 }
-                        : {
-                            duration: DENSITY_DURATION,
-                            times: [0, 0.2, 0.52, 0.82, DENSITY_BREAKOFF_FRAC, 1],
-                            repeat: Infinity,
-                            ease: 'easeInOut'
-                          }
-                    }
-                  />
-
-                  {/* 10 glowing user-density circles */}
-                  {densityCircles.map((circle) => {
-                    const anim = getDensityAnimation(circle, prefersReducedMotion);
-                    return (
-                      <motion.div
-                        key={circle.id}
-                        data-testid="hero-map-dot"
-                        className="absolute rounded-full"
-                        style={{
-                          left: `${circle.startX}%`,
-                          top: `${circle.startY}%`,
-                          width: DENSITY_GLOW_SIZE,
-                          height: DENSITY_GLOW_SIZE,
-                          marginLeft: -DENSITY_GLOW_SIZE / 2,
-                          marginTop: -DENSITY_GLOW_SIZE / 2,
-                          background:
-                            'radial-gradient(circle, rgba(239,68,68,0.8) 0%, rgba(248,113,113,0.45) 38%, rgba(248,113,113,0.12) 68%, transparent 100%)',
-                          boxShadow: '0 0 20px 6px rgba(239,68,68,0.4)',
-                          willChange: 'transform, opacity'
-                        }}
-                        initial={prefersReducedMotion ? false : { scale: 0.8, opacity: 0.3 }}
-                        animate={anim.animate}
-                        transition={anim.transition}
-                      />
-                    );
-                  })}
-
-                  <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 backdrop-blur">
-                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-200">Converging user density</p>
-                    <p className="mt-2 text-sm text-blue-50">
-                      Ten user glows travel across the city grid—each collision scales glow size by 1.5× the merging count.
-                      As circles converge the cluster grows dramatically, holding peak size until a glow breaks away.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {mapDensityStats.map((item) => (
-                    <div key={item.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <p className="text-sm font-semibold uppercase tracking-[0.22em] text-rose-200">{item.title}</p>
-                      <p className="mt-2 text-sm text-blue-100">{item.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      <section
-        data-testid="encrypted-dm-showcase"
-        className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 text-white shadow-sm"
-      >
-        <motion.div
-          aria-hidden="true"
-          className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,0.18)_0%,_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.2)_0%,_transparent_38%)]"
-          style={{ y: foregroundLayerY }}
-        />
-        <div className="relative grid grid-cols-1 gap-8 px-6 py-8 sm:px-8 lg:grid-cols-[1fr_1.1fr] lg:items-center lg:px-10">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">Animated privacy showcase</p>
-            <h2 className="mt-3 text-2xl font-bold sm:text-3xl">Encrypted direct messaging, presented as a living conversation</h2>
-            <p className="mt-4 max-w-2xl text-sm text-slate-300 sm:text-base">
-              After the map draws people together, the conversation moves into a private channel. This preview now
-              shows the full send-and-open flow: a message is typed, matrix-style ciphering takes over during
-              encryption, the payload arrives, and the receiving user unlocks it back into readable text.
-            </p>
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-semibold text-white">Matrix-style ciphering</p>
-                <p className="mt-2 text-sm text-slate-300">Submission animates through red cipher glyphs so visitors can see readable text turn into an encrypted payload.</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-semibold text-white">Unlock on the other side</p>
-                <p className="mt-2 text-sm text-slate-300">The receiving user sees a new message prompt, enters an encryption password, and watches the text decode in reverse.</p>
-              </div>
-            </div>
-          </div>
-
           <motion.div
-            className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-5 backdrop-blur"
-            initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }}
-            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.12 }}
+            className="flex flex-wrap justify-center gap-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.8 }}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
-              <div>
-                <p className="text-sm font-semibold text-white">Direct message preview</p>
-                <p className="mt-1 text-xs uppercase tracking-[0.22em] text-emerald-200">End-to-end encrypted</p>
-              </div>
-              <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                Message in motion
-              </div>
-            </div>
+            {isAuthenticated ? (
+              <>
+                <Link
+                  to="/social"
+                  className="group relative px-8 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold text-sm shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  Open Social Feed
+                </Link>
+                <Link
+                  to="/chat"
+                  className="px-8 py-3.5 rounded-xl border border-slate-600 text-slate-300 font-semibold text-sm hover:border-purple-500/50 hover:text-white backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  Open Chat
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/register"
+                  className="group relative px-8 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold text-sm shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  Get Started
+                </Link>
+                <a
+                  href="#heatmap-section"
+                  className="px-8 py-3.5 rounded-xl border border-slate-600 text-slate-300 font-semibold text-sm hover:border-purple-500/50 hover:text-white backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  View Live Demo
+                </a>
+              </>
+            )}
+          </motion.div>
 
-            <div className="relative mt-5 space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {dmFlowSteps.map((step, index) => (
-                  <div
-                    key={step}
-                    data-testid="dm-flow-step"
-                    className="rounded-2xl border border-white/10 bg-slate-950/65 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200"
-                  >
-                    {index + 1}. {step}
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+          {/* Scroll indicator */}
+          <motion.div
+            className="absolute bottom-8 left-1/2 -translate-x-1/2"
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            <div className="w-6 h-10 rounded-full border-2 border-slate-600 flex items-start justify-center p-1.5">
               <motion.div
-                data-testid="dm-flow-stage"
-                className="rounded-3xl border border-white/10 bg-slate-900/80 p-4 shadow-lg"
-                initial={prefersReducedMotion ? false : { opacity: 0, x: -18 }}
-                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
-                transition={{ duration: prefersReducedMotion ? 0.01 : 0.6 }}
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">Sender perspective</p>
-                <p className="mt-2 text-sm text-white">Computer A</p>
-                <div className="mt-3 rounded-2xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm text-sky-50">
-                  {messagePreview.plainText}
-                </div>
-                <motion.div
-                  className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100"
-                  initial={prefersReducedMotion ? false : { opacity: 0.3 }}
-                  animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.25, 0.25, 1, 1, 0.45] }}
-                  transition={{
-                    duration: prefersReducedMotion ? 0.01 : 7,
-                    times: [0, 0.2, 0.36, 0.62, 1],
-                    repeat: prefersReducedMotion ? 0 : Infinity,
-                    ease: 'easeInOut'
-                  }}
-                >
-                  Encrypting before send...
-                </motion.div>
-                <div className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-rose-200">Encrypted payload</p>
-                  <div className="mt-3 space-y-2 font-mono text-xs text-rose-100/90">
-                    {messagePreview.sendCipherRows.map((row, index) => (
-                      <motion.p
-                        key={row}
-                        data-testid="dm-cipher-row"
-                        initial={prefersReducedMotion ? false : { opacity: 0.25, x: -10 }}
-                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.3, 1, 0.55], x: [0, 4, 0] }}
-                        transition={{
-                          duration: prefersReducedMotion ? 0.01 : 1.8,
-                          delay: prefersReducedMotion ? 0 : index * 0.2,
-                          repeat: prefersReducedMotion ? 0 : Infinity,
-                          ease: 'easeInOut'
-                        }}
-                      >
-                        {row}
-                      </motion.p>
-                    ))}
-                  </div>
-                  <p className="mt-3 rounded-2xl border border-white/10 bg-slate-950/60 px-3 py-2 font-mono text-xs text-rose-100">
-                    {messagePreview.encryptedText}
-                  </p>
-                </div>
-              </motion.div>
-
-              <div className="relative hidden h-full items-center justify-center lg:flex">
-                <motion.div
-                  className="h-0.5 w-24 rounded-full bg-white/20"
-                  initial={prefersReducedMotion ? false : { opacity: 0.4 }}
-                  animate={prefersReducedMotion ? { opacity: 0.7 } : { opacity: [0.3, 0.9, 0.3] }}
-                  transition={{ duration: prefersReducedMotion ? 0.01 : 3.2, repeat: prefersReducedMotion ? 0 : Infinity }}
-                />
-                <motion.div
-                  aria-hidden="true"
-                  className="absolute rounded-full border border-rose-300/30 bg-rose-400/20 px-3 py-1 font-mono text-[10px] text-rose-100"
-                  initial={prefersReducedMotion ? false : { x: -40, opacity: 0 }}
-                  animate={prefersReducedMotion ? { opacity: 1 } : { x: [-40, -40, 40, 40], opacity: [0, 0, 1, 0] }}
-                  transition={{
-                    duration: prefersReducedMotion ? 0.01 : 7.6,
-                    times: [0, 0.35, 0.72, 1],
-                    repeat: prefersReducedMotion ? 0 : Infinity,
-                    ease: 'easeInOut'
-                  }}
-                >
-                  {messagePreview.encryptedText}
-                </motion.div>
-              </div>
-
-              <motion.div
-                data-testid="dm-flow-stage"
-                className="rounded-3xl border border-white/10 bg-slate-900/80 p-4 shadow-lg"
-                initial={prefersReducedMotion ? false : { opacity: 0, x: 18 }}
-                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
-                transition={{ duration: prefersReducedMotion ? 0.01 : 0.6, delay: prefersReducedMotion ? 0 : 0.08 }}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">Receiver perspective</p>
-                    <p className="mt-1 text-sm text-white">Computer B</p>
-                  </div>
-                  <span className="rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-100">
-                    Incoming encrypted message
-                  </span>
-                </div>
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">New message</p>
-                  <p className="mt-2 font-mono text-xs text-rose-100">{messagePreview.encryptedText}</p>
-                </div>
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">Encryption password required</p>
-                  <div className="mt-3 flex items-center gap-3">
-                    <div className="flex-1 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 font-mono text-sm text-slate-200">
-                      ••••••••
-                    </div>
-                    <button type="button" className="rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-200">
-                      Unlock
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/70 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Decrypting after password entry</p>
-                  <div className="mt-2 space-y-2 font-mono text-xs text-emerald-200/90">
-                    {messagePreview.unlockCipherRows.map((row, index) => (
-                      <motion.p
-                        key={row}
-                        initial={prefersReducedMotion ? false : { opacity: 0.25, x: 10 }}
-                        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.3, 1, 0.6], x: [0, -4, 0] }}
-                        transition={{
-                          duration: prefersReducedMotion ? 0.01 : 1.9,
-                          delay: prefersReducedMotion ? 0 : 0.25 + index * 0.2,
-                          repeat: prefersReducedMotion ? 0 : Infinity,
-                          ease: 'easeInOut'
-                        }}
-                      >
-                        {row}
-                      </motion.p>
-                    ))}
-                  </div>
-                </div>
-                <motion.div
-                  className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3"
-                  initial={prefersReducedMotion ? false : { opacity: 0.35 }}
-                  animate={prefersReducedMotion ? { opacity: 1 } : { opacity: [0.35, 0.35, 0.5, 1, 0.85] }}
-                  transition={{
-                    duration: prefersReducedMotion ? 0.01 : 7.6,
-                    times: [0, 0.58, 0.72, 0.88, 1],
-                    repeat: prefersReducedMotion ? 0 : Infinity,
-                    ease: 'easeInOut'
-                  }}
-                >
-                  <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Plain readable text</p>
-                    <p className="mt-2 text-sm text-emerald-50">{messagePreview.plainText}</p>
-                  </div>
-                </motion.div>
-              </motion.div>
-            </div>
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-3 text-xs text-slate-300">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">🔒 Encrypted by default</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">⌘ Matrix-style encryption preview</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">🗝️ Password-gated message reveal</span>
+                className="w-1.5 h-1.5 rounded-full bg-blue-400"
+                animate={{ y: [0, 16, 0] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              />
             </div>
           </motion.div>
-        </div>
+        </motion.div>
       </section>
 
-      <section id="platform-overview" className="space-y-5" aria-labelledby="feature-heading">
-        <div className="text-center">
-          <h2 id="feature-heading" className="text-2xl font-bold text-slate-900 sm:text-3xl">
-            Everything users need to feel connected and protected
-          </h2>
-          <p className="mx-auto mt-3 max-w-3xl text-sm text-slate-600 sm:text-base">
-            SocialSecure is built to show visitors why staying on one platform is useful: fewer fragmented apps,
-            clearer privacy choices, and better control over how every friendship is managed.
-          </p>
-        </div>
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/*  ANIMATION 1 — POPULATION DENSITY HEATMAP                         */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <Section id="heatmap-section" dark>
+        <div className="max-w-6xl mx-auto" ref={mapRef}>
+          <motion.div
+            className="text-center mb-12"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <span className="inline-block px-3 py-1 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-400 text-xs font-mono mb-4">
+              LIVE DATA VISUALIZATION
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+              <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                Population Density
+              </span>{' '}
+              Intelligence
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Real-time visualization of community activity across the nation. Watch data come
+              alive with our encrypted, privacy-first approach to local intelligence.
+            </p>
+          </motion.div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {featureHighlights.map((feature) => (
-            <article key={feature.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">{feature.title}</h3>
-              <p className="mt-3 text-sm text-slate-600">{feature.description}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+          {/* Interactive US Map */}
+          <GlassCard className="p-2 sm:p-4" hover={false}>
+            <div className="relative" data-testid="heatmap-visualization">
+              <svg
+                viewBox="100 60 540 260"
+                className="w-full h-auto"
+                style={{ filter: 'drop-shadow(0 0 20px rgba(59,130,246,0.1))' }}
+              >
+                {/* Map base */}
+                <defs>
+                  <radialGradient id="heatGlow">
+                    <stop offset="0%" stopColor="rgba(139,92,246,0.4)" />
+                    <stop offset="100%" stopColor="rgba(139,92,246,0)" />
+                  </radialGradient>
+                </defs>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <article className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-6 shadow-sm sm:p-8">
-          <h2 className="text-2xl font-bold text-slate-900">Manage friends with the Social v Secure system</h2>
-          <p className="mt-3 max-w-2xl text-sm text-slate-600 sm:text-base">
-            Not every relationship needs the same visibility. SocialSecure helps you decide what stays social and what
-            moves into secure space so your platform matches real life.
-          </p>
-          <div className="mt-6 space-y-4">
-            {friendManagementExamples.map((example) => (
-              <div key={example.title} className="rounded-2xl border border-blue-100 bg-white p-5">
-                <h3 className="text-lg font-semibold text-slate-900">{example.title}</h3>
-                <p className="mt-2 text-sm text-slate-600">{example.description}</p>
+                <path
+                  d={US_MAP_PATH}
+                  fill="rgba(30,41,59,0.6)"
+                  stroke="rgba(59,130,246,0.4)"
+                  strokeWidth="1.5"
+                />
+
+                {/* Grid overlay on map */}
+                {Array.from({ length: 12 }, (_, i) => (
+                  <line
+                    key={`vg-${i}`}
+                    x1={130 + i * 40}
+                    y1="60"
+                    x2={130 + i * 40}
+                    y2="300"
+                    stroke="rgba(59,130,246,0.06)"
+                    strokeWidth="0.5"
+                  />
+                ))}
+                {Array.from({ length: 7 }, (_, i) => (
+                  <line
+                    key={`hg-${i}`}
+                    x1="100"
+                    y1={70 + i * 35}
+                    x2="640"
+                    y2={70 + i * 35}
+                    stroke="rgba(59,130,246,0.06)"
+                    strokeWidth="0.5"
+                  />
+                ))}
+
+                {/* City dots with heatmap effect */}
+                {mapInView &&
+                  CITIES.map((city, i) => <CityDot key={city.name} city={city} index={i} />)}
+              </svg>
+
+              {/* Live indicator */}
+              <div className="absolute top-3 right-3 flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-emerald-500/30 backdrop-blur-sm">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                <span className="text-xs text-emerald-400 font-mono">LIVE</span>
               </div>
+            </div>
+          </GlassCard>
+
+          {/* Map stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+            {[
+              { label: 'Active Regions', value: '48', icon: '\u{1F5FA}\uFE0F' },
+              { label: 'Live Connections', value: '2.4M', icon: '\u{1F517}' },
+              { label: 'Data Points', value: '18.7B', icon: '\u{1F4CA}' },
+              { label: 'Encrypted Streams', value: '100%', icon: '\u{1F512}' },
+            ].map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                className="rounded-xl border border-slate-700/50 bg-slate-800/30 backdrop-blur-sm p-4 text-center"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+              >
+                <div className="text-2xl mb-1">{stat.icon}</div>
+                <div className="text-xl md:text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                  {stat.value}
+                </div>
+                <div className="text-xs text-slate-500 font-mono mt-1">{stat.label}</div>
+              </motion.div>
             ))}
           </div>
-        </article>
+        </div>
+      </Section>
 
-        <article className="rounded-3xl border border-slate-200 bg-slate-950 p-6 text-white shadow-sm sm:p-8">
-          <h2 className="text-2xl font-bold">Direct messages built for privacy-first communication</h2>
-          <p className="mt-3 text-sm text-slate-300 sm:text-base">
-            Private conversations should feel private by default. SocialSecure keeps direct messaging encrypted and
-            gives advanced users a bring your own PGP path when they want deeper control over key ownership.
-          </p>
-          <ul className="mt-6 space-y-3">
-            {privacyDetails.map((detail) => (
-              <li key={detail} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                {detail}
-              </li>
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/*  ANIMATION 2 — ENCRYPTED COMMUNICATION                            */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <Section dark={false}>
+        <div className="max-w-4xl mx-auto" ref={encryptRef}>
+          <motion.div
+            className="text-center mb-12"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <span className="inline-block px-3 py-1 rounded-full bg-emerald-900/40 border border-emerald-500/30 text-emerald-400 text-xs font-mono mb-4">
+              ENCRYPTED COMMUNICATION
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+              Messages That{' '}
+              <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+                Only You
+              </span>{' '}
+              Can Read
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Watch encryption in action. Every message is scrambled before it leaves your
+              device and only decrypted on the recipient's side.
+            </p>
+          </motion.div>
+
+          {/* Encryption demo */}
+          <GlassCard hover={false} className="overflow-hidden" data-testid="encryption-demo">
+            {/* Header bar */}
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-700/50">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                <div className="w-3 h-3 rounded-full bg-green-500" />
+              </div>
+              <div className="flex items-center gap-2 text-sm text-slate-400 font-mono">
+                <span>{'\u{1F512}'}</span>
+                <span>End-to-End Encrypted</span>
+              </div>
+            </div>
+
+            {/* User avatars and connection */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-bold text-sm">
+                  A
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">Alice</div>
+                  <div className="text-xs text-emerald-400 font-mono">● Online</div>
+                </div>
+              </div>
+              <div className="flex-1 mx-4">
+                <DataPacketLine active={encryptInView} />
+              </div>
+              <div className="flex items-center gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-right">Bob</div>
+                  <div className="text-xs text-emerald-400 font-mono text-right">● Online</div>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center font-bold text-sm">
+                  B
+                </div>
+              </div>
+            </div>
+
+            {/* Message bubbles */}
+            <div className="space-y-2">
+              {MESSAGES.map((msg, i) => (
+                <MessageBubble key={i} message={msg} index={i} isInView={encryptInView} />
+              ))}
+            </div>
+
+            {/* Typing indicator */}
+            <motion.div
+              className="flex items-center gap-2 mt-4 text-xs text-slate-500"
+              initial={{ opacity: 0 }}
+              animate={encryptInView ? { opacity: [0, 1, 0] } : {}}
+              transition={{ delay: 7, duration: 2, repeat: Infinity }}
+            >
+              <div className="flex gap-0.5">
+                <span
+                  className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce"
+                  style={{ animationDelay: '0ms' }}
+                />
+                <span
+                  className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce"
+                  style={{ animationDelay: '150ms' }}
+                />
+                <span
+                  className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce"
+                  style={{ animationDelay: '300ms' }}
+                />
+              </div>
+              <span className="font-mono">Composing encrypted message...</span>
+            </motion.div>
+          </GlassCard>
+        </div>
+      </Section>
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/*  ANIMATION 3 — NEWS AGGREGATION ENGINE                             */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <Section dark>
+        <div className="max-w-5xl mx-auto" ref={newsRef}>
+          <motion.div
+            className="text-center mb-12"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <span className="inline-block px-3 py-1 rounded-full bg-blue-900/40 border border-blue-500/30 text-blue-400 text-xs font-mono mb-4">
+              NEWS AGGREGATION ENGINE
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+              All Sources.{' '}
+              <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                One Intelligent Feed.
+              </span>
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              News from multiple sources aggregated in real-time into a single, verified, and
+              privacy-respecting feed.
+            </p>
+          </motion.div>
+
+          {/* Aggregation visualization */}
+          <div className="relative" data-testid="news-aggregation">
+            {/* Central hub indicator */}
+            <motion.div
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30 z-10 flex items-center justify-center"
+              animate={{ scale: [1, 1.1, 1], opacity: [0.6, 1, 0.6] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              <span className="text-xs text-blue-400 font-mono text-center">
+                Aggregated
+                <br />
+                in Real-Time
+              </span>
+            </motion.div>
+
+            {/* News cards grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {NEWS_SOURCES.map((source, i) => (
+                <NewsCard key={source.label} source={source} index={i} merged={newsMerged} />
+              ))}
+            </div>
+          </div>
+
+          {/* Merged feed preview */}
+          <AnimatePresence>
+            {newsMerged && (
+              <motion.div
+                className="mt-8"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.8, duration: 0.6 }}
+              >
+                <GlassCard hover={false}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-sm text-emerald-400 font-mono">
+                      Unified Feed — Live
+                    </span>
+                  </div>
+                  {NEWS_SOURCES.slice(0, 4).map((source, i) => (
+                    <motion.div
+                      key={source.label}
+                      className="flex items-center gap-3 py-3 border-b border-slate-700/30 last:border-0"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 1 + i * 0.15 }}
+                    >
+                      <div
+                        className={`w-2 h-8 rounded-full bg-gradient-to-b ${source.color}`}
+                      />
+                      <div className="flex-1">
+                        <div className="h-2.5 w-3/4 rounded bg-slate-700/50 mb-1" />
+                        <div className="h-2 w-1/2 rounded bg-slate-700/30" />
+                      </div>
+                      <span className="text-xs text-slate-500 font-mono">{source.label}</span>
+                    </motion.div>
+                  ))}
+                </GlassCard>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </Section>
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/*  DATA FLOW VISUALIZATION                                           */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <Section dark={false}>
+        <div className="max-w-5xl mx-auto">
+          <motion.div
+            className="text-center mb-12"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <span className="inline-block px-3 py-1 rounded-full bg-cyan-900/40 border border-cyan-500/30 text-cyan-400 text-xs font-mono mb-4">
+              DATA FLOW ARCHITECTURE
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+              See How Your{' '}
+              <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                Data Moves
+              </span>
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Transparent data flow between users, locations, and intelligence nodes — all
+              encrypted, all private.
+            </p>
+          </motion.div>
+
+          <GlassCard hover={false} className="relative h-80 sm:h-96" data-testid="data-flow">
+            {/* Connection lines SVG */}
+            <svg
+              className="absolute inset-0 w-full h-full"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+            >
+              {[
+                { x1: 20, y1: 25, x2: 50, y2: 50 },
+                { x1: 80, y1: 25, x2: 50, y2: 50 },
+                { x1: 20, y1: 75, x2: 50, y2: 50 },
+                { x1: 80, y1: 75, x2: 50, y2: 50 },
+                { x1: 50, y1: 10, x2: 50, y2: 50 },
+                { x1: 50, y1: 90, x2: 50, y2: 50 },
+              ].map((line, i) => (
+                <motion.line
+                  key={i}
+                  x1={line.x1}
+                  y1={line.y1}
+                  x2={line.x2}
+                  y2={line.y2}
+                  stroke="rgba(59,130,246,0.2)"
+                  strokeWidth="0.3"
+                  strokeDasharray="2 2"
+                  initial={{ pathLength: 0 }}
+                  whileInView={{ pathLength: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.15, duration: 1 }}
+                />
+              ))}
+            </svg>
+
+            {/* Nodes */}
+            <DataFlowNode label="User A" icon={'\u{1F464}'} x={20} y={25} delay={0.2} />
+            <DataFlowNode label="User B" icon={'\u{1F464}'} x={80} y={25} delay={0.3} />
+            <DataFlowNode label="Location" icon={'\u{1F4CD}'} x={20} y={75} delay={0.4} />
+            <DataFlowNode label="News" icon={'\u{1F4F0}'} x={80} y={75} delay={0.5} />
+            <DataFlowNode label="Cloud" icon={'\u2601\uFE0F'} x={50} y={10} delay={0.6} />
+            <DataFlowNode label="Storage" icon={'\u{1F4BE}'} x={50} y={90} delay={0.7} />
+
+            {/* Central hub */}
+            <motion.div
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+              initial={{ opacity: 0, scale: 0 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.8, type: 'spring' }}
+            >
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-600/30 to-purple-600/30 border-2 border-blue-500/40 flex items-center justify-center backdrop-blur-sm">
+                <div className="text-center">
+                  <div className="text-xl">{'\u{1F510}'}</div>
+                  <div className="text-[10px] text-blue-400 font-mono">Encrypted Hub</div>
+                </div>
+              </div>
+            </motion.div>
+          </GlassCard>
+        </div>
+      </Section>
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/*  PRIVACY SHIELD + LOCATION INTELLIGENCE                            */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <Section dark>
+        <div className="max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* Privacy Shield */}
+            <div>
+              <motion.div
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+              >
+                <span className="inline-block px-3 py-1 rounded-full bg-cyan-900/40 border border-cyan-500/30 text-cyan-400 text-xs font-mono mb-4">
+                  PRIVACY SHIELD
+                </span>
+                <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+                  Your Data,{' '}
+                  <span className="bg-gradient-to-r from-cyan-400 to-emerald-400 bg-clip-text text-transparent">
+                    Protected
+                  </span>
+                </h2>
+                <p className="text-slate-400 mb-6">
+                  Every piece of your data is wrapped in military-grade encryption. From messages
+                  to location data, everything stays under your control with our multi-layered
+                  privacy shield.
+                </p>
+                <ul className="space-y-3">
+                  {[
+                    'AES-256 encryption at rest',
+                    'End-to-end encrypted messaging',
+                    'Optional BYO PGP keys',
+                    'Zero-knowledge architecture',
+                  ].map((item, i) => (
+                    <motion.li
+                      key={item}
+                      className="flex items-center gap-3 text-sm text-slate-300"
+                      initial={{ opacity: 0, x: -20 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.1 }}
+                    >
+                      <span className="text-emerald-400">{'\u2713'}</span>
+                      {item}
+                    </motion.li>
+                  ))}
+                </ul>
+              </motion.div>
+            </div>
+
+            <PrivacyShield />
+          </div>
+
+          {/* Location Intelligence */}
+          <div className="mt-20 grid md:grid-cols-2 gap-12 items-center" ref={locationRef}>
+            <motion.div
+              className="order-2 md:order-1"
+              initial={{ opacity: 0, x: -30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+            >
+              <GlassCard
+                hover={false}
+                className="relative h-64 overflow-hidden"
+                data-testid="location-intelligence"
+              >
+                {/* Mini map background */}
+                <div className="absolute inset-0 opacity-30">
+                  <svg viewBox="100 60 540 260" className="w-full h-full">
+                    <path
+                      d={US_MAP_PATH}
+                      fill="none"
+                      stroke="rgba(59,130,246,0.4)"
+                      strokeWidth="1"
+                    />
+                  </svg>
+                </div>
+
+                {/* Dynamic pins */}
+                {locationPins.map((pin) => (
+                  <motion.div
+                    key={pin.id}
+                    className="absolute"
+                    style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
+                    initial={{ opacity: 0, scale: 0, y: -20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{ type: 'spring', damping: 12 }}
+                    data-testid="location-pin"
+                  >
+                    <div className="w-4 h-4 rounded-full bg-blue-500/60 border border-blue-400/80 shadow-lg shadow-blue-500/30" />
+                    <motion.div
+                      className="absolute inset-0 rounded-full border border-blue-400/30"
+                      animate={{ scale: [1, 2.5], opacity: [0.4, 0] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                    />
+                  </motion.div>
+                ))}
+
+                {/* User location indicator */}
+                <motion.div
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.5 }}
+                >
+                  <div className="w-6 h-6 rounded-full bg-emerald-500/80 border-2 border-white/50 shadow-lg shadow-emerald-500/40" />
+                  <motion.div
+                    className="absolute inset-0 rounded-full border-2 border-emerald-400/50"
+                    animate={{ scale: [1, 3], opacity: [0.5, 0] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                </motion.div>
+              </GlassCard>
+            </motion.div>
+
+            <motion.div
+              className="order-1 md:order-2"
+              initial={{ opacity: 0, x: 30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+            >
+              <span className="inline-block px-3 py-1 rounded-full bg-blue-900/40 border border-blue-500/30 text-blue-400 text-xs font-mono mb-4">
+                LOCATION INTELLIGENCE
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+                Nearby Data,{' '}
+                <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                  On Demand
+                </span>
+              </h2>
+              <p className="text-slate-400">
+                Your location triggers nearby data points dynamically. See what's happening
+                around you without broadcasting your exact position. Privacy-preserving local
+                intelligence at your fingertips.
+              </p>
+            </motion.div>
+          </div>
+        </div>
+      </Section>
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/*  PLATFORM FEATURES GRID                                            */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <Section dark={false}>
+        <div className="max-w-6xl mx-auto">
+          <motion.div
+            className="text-center mb-12"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <span className="inline-block px-3 py-1 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-400 text-xs font-mono mb-4">
+              PLATFORM CAPABILITIES
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+              Everything You Need.{' '}
+              <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Nothing You Don't.
+              </span>
+            </h2>
+          </motion.div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="features-grid">
+            {platformFeatures.map((feature, i) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+              >
+                <GlassCard className="h-full">
+                  <div className="text-3xl mb-3">{feature.icon}</div>
+                  <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
+                  <p className="text-sm text-slate-400">{feature.desc}</p>
+                </GlassCard>
+              </motion.div>
             ))}
-          </ul>
-        </article>
-      </section>
+          </div>
+        </div>
+      </Section>
 
-      <section className="space-y-5" aria-labelledby="capabilities-heading">
-        <div className="text-center">
-          <h2 id="capabilities-heading" className="text-2xl font-bold text-slate-900 sm:text-3xl">
-            All the core features of your network, under one roof
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/*  FINAL CTA                                                         */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <section className="relative py-24 px-4 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 overflow-hidden">
+        {/* Background glow */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-96 h-96 rounded-full bg-blue-600/5 blur-3xl" />
+        </div>
+
+        <motion.div
+          className="relative z-10 max-w-3xl mx-auto text-center"
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+        >
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6">
+            Ready to Take{' '}
+            <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
+              Control
+            </span>
+            ?
           </h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm text-slate-600 sm:text-base">
-            Every feature is designed to reinforce the same promise: easy social connection when you want it, stronger
-            protection when you need it.
+          <p className="text-lg text-slate-400 mb-10 max-w-2xl mx-auto">
+            Join a platform where your privacy isn't a feature — it's the foundation. Real
+            data, real privacy, real control.
           </p>
-        </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {platformCapabilities.map((feature) => (
-            <article key={feature.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">{feature.title}</h3>
-              <p className="mt-3 text-sm text-slate-600">{feature.description}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-center">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">A better first impression for a useful platform</h2>
-            <p className="mt-3 max-w-2xl text-sm text-slate-600 sm:text-base">
-              SocialSecure is more than one feature. It is a complete place to keep up with friends, plan together,
-              explore your community, and protect sensitive conversations without leaving the same experience.
-            </p>
+          <div className="flex flex-wrap justify-center gap-4">
+            {isAuthenticated ? (
+              <>
+                <Link
+                  to="/social"
+                  className="px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  Go to Social
+                </Link>
+                <Link
+                  to="/calendar"
+                  className="px-8 py-4 rounded-xl border border-slate-600 text-slate-300 font-semibold hover:border-purple-500/50 hover:text-white backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  Open Calendar
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/register"
+                  className="px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  Get Started Free
+                </Link>
+                <Link
+                  to="/login"
+                  className="px-8 py-4 rounded-xl border border-slate-600 text-slate-300 font-semibold hover:border-purple-500/50 hover:text-white backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  Sign In
+                </Link>
+              </>
+            )}
           </div>
-          <div className="rounded-2xl bg-slate-50 p-5">
-            <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">Platform promise</p>
-            <p className="mt-3 text-sm text-slate-600">
-              From public updates to encrypted DMs with bring your own PGP support, SocialSecure helps users control
-              how every connection is handled.
-            </p>
-          </div>
-        </div>
+        </motion.div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8">
-        <h2 className="text-2xl font-bold text-slate-900">Ready for a more secure social experience?</h2>
-        <p className="mx-auto mt-3 max-w-2xl text-sm text-slate-600 sm:text-base">
-          Join one platform where you can manage friends, host shared moments, plan events, and keep private
-          conversations completely encrypted.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          {isAuthenticated ? (
-            <>
-              <Link
-                to="/social"
-                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-              >
-                Go to Social
-              </Link>
-              <Link
-                to="/calendar"
-                className="rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-              >
-                Open Calendar
-              </Link>
-            </>
-          ) : (
-            <>
-              <Link
-                to="/register"
-                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-              >
-                Register
-              </Link>
-              <Link
-                to="/login"
-                className="rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-              >
-                Login
-              </Link>
-            </>
-          )}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/*  FOOTER                                                            */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <footer className="border-t border-slate-800 bg-slate-950 py-8 px-4">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-sm text-slate-500 font-mono">
+            © {new Date().getFullYear()} SocialSecure — Privacy-First Social Platform
+          </div>
+          <div className="flex items-center gap-4 text-xs text-slate-600">
+            <span>{'\u{1F512}'} Encrypted</span>
+            <span>{'\u{1F6E1}\uFE0F'} Private</span>
+            <span>{'\u26A1'} Real-Time</span>
+          </div>
         </div>
-      </section>
+      </footer>
     </div>
   );
 }
