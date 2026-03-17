@@ -123,4 +123,23 @@ describe('Friends page request flow', () => {
     const link = container.querySelector('a[href="/social?user=bob"]');
     expect(link).toBeTruthy();
   });
+
+  it('normalizes @username search input before requesting discovery users', async () => {
+    await renderPage();
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button')).find((button) => button.textContent.includes('Find Friends'))?.click();
+    });
+    const input = container.querySelector('input[placeholder="Search by username or name…"]');
+    await act(async () => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      nativeSetter.call(input, '@alice');
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => {
+      Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Search')?.click();
+    });
+
+    expect(discoveryAPI.getUsers).toHaveBeenCalledWith('alice', 1, 25);
+  });
 });

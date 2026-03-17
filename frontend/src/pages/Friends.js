@@ -9,6 +9,7 @@ const TOP_FRIENDS_LIMIT = 5;
 const MAX_CIRCLES = 5;
 const SEARCH_DEFAULT_PAGE = 1;
 const SEARCH_DEFAULT_LIMIT = 25;
+const normalizeUserSearchQuery = (value = '') => String(value).trim().replace(/^@+/, '');
 
 const DEFAULT_COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
 
@@ -205,7 +206,7 @@ export default function Friends({ user }) {
 
   // ─── User search ──────────────────────────────────────────────────────────
   const searchUsers = async () => {
-    const q = userSearchQuery.trim();
+    const q = normalizeUserSearchQuery(userSearchQuery);
     if (!q) return;
     setUserSearching(true);
     try {
