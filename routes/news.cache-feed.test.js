@@ -126,6 +126,8 @@ describe('news cache-backed routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.articles).toHaveLength(1);
     expect(response.body.articles[0]).toMatchObject({ title: 'Health update', category: 'Health' });
+    // Verify the Article collection is also queried for supplemental articles
+    expect(Article.find).toHaveBeenCalledWith({ category: 'health', isActive: true });
   });
 
   it('supplements category feed with articles from the Article collection', async () => {
