@@ -134,8 +134,7 @@ const articleSchema = new mongoose.Schema({
   },
   // Operational fields
   normalizedUrlHash: {
-    type: String,
-    index: true
+    type: String
   },
   contentFingerprint: {
     type: String,

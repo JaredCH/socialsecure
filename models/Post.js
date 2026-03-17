@@ -210,8 +210,7 @@ const postSchema = new mongoose.Schema({
   },
   expiresAt: {
     type: Date,
-    default: null,
-    index: true
+    default: null
   },
   location: {
     type: {
