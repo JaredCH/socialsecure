@@ -132,7 +132,7 @@ describe('Home landing page', () => {
     expect(container.textContent).toContain('One Intelligent Feed.');
   });
 
-  it('renders privacy shield', async () => {
+  it('renders the privacy shield section', async () => {
     await renderHome({ isAuthenticated: false });
 
     expect(container.querySelector('[data-testid="privacy-shield"]')).not.toBeNull();
