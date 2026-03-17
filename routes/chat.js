@@ -587,6 +587,15 @@ const resolveLeanDoc = async (query) => (
     : query
 );
 
+const runChatBestEffort = async (label, operation, fallback = null) => {
+  try {
+    return await operation();
+  } catch (error) {
+    console.error(`${label}:`, error);
+    return fallback;
+  }
+};
+
 const isPrivilegedChatUser = (user) => Boolean(user?.isAdmin || user?.isModerator);
 
 const getLatestChatTimestamp = async (query) => {
@@ -1092,7 +1101,10 @@ router.get('/rooms/events/upcoming', discoveryLimiter, authenticateToken, async 
 // All chat rooms endpoint must be explicitly requested by the user.
 router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) => {
   try {
-    await ChatRoom.ensureDefaultDiscoveryRooms();
+    await runChatBestEffort(
+      'Failed to ensure discovery rooms before loading all rooms',
+      () => ChatRoom.ensureDefaultDiscoveryRooms()
+    );
 
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = parseDiscoveryLimit(req.query.limit);
@@ -1101,7 +1113,10 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
     let total = await ChatRoom.countDocuments(DISCOVERY_ROOM_FILTER);
 
     if (total === 0) {
-      await ChatRoom.ensureDefaultDiscoveryRooms({ force: true });
+      await runChatBestEffort(
+        'Failed to force re-seed discovery rooms before loading all rooms',
+        () => ChatRoom.ensureDefaultDiscoveryRooms({ force: true })
+      );
       total = await ChatRoom.countDocuments(DISCOVERY_ROOM_FILTER);
     }
     const rooms = total > 0 ? await ChatRoom.aggregate(pipeline) : [];
@@ -1122,7 +1137,10 @@ router.get('/rooms/all', allRoomsLimiter, authenticateToken, async (req, res) =>
 
 router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (req, res) => {
   try {
-    await ChatRoom.ensureDefaultDiscoveryRooms();
+    await runChatBestEffort(
+      'Failed to ensure discovery rooms before loading quick-access rooms',
+      () => ChatRoom.ensureDefaultDiscoveryRooms()
+    );
 
     const user = await resolveLeanDoc(
       User.findById(req.user.userId)
@@ -1135,79 +1153,95 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
     const coordinates = getNormalizedCoordinates(user.location);
 
     if (coordinates) {
-      await ChatRoom.syncUserLocationRooms({
-        ...user,
-        location: {
-          ...user.location,
-          coordinates
-        }
-      });
+      await runChatBestEffort(
+        'Failed to sync user location rooms while loading quick-access rooms',
+        () => ChatRoom.syncUserLocationRooms({
+          ...user,
+          location: {
+            ...user.location,
+            coordinates
+          }
+        })
+      );
     }
 
     const normalizedZipCode = normalizeZipCode(user.zipCode);
     const country = user.country || 'US';
     const [stateResult, countyResult, zipConversation] = await Promise.all([
       user.state
-        ? ChatRoom.findOrCreateByLocation({
-          type: 'state',
-          state: user.state,
-          country,
-          coordinates: coordinates ?? undefined
-        })
+        ? runChatBestEffort(
+          'Failed to resolve quick-access state room',
+          () => ChatRoom.findOrCreateByLocation({
+            type: 'state',
+            state: user.state,
+            country,
+            coordinates: coordinates ?? undefined
+          })
+        )
         : Promise.resolve(null),
       user.state && user.county
-        ? ChatRoom.findOrCreateByLocation({
-          type: 'county',
-          state: user.state,
-          country,
-          county: user.county,
-          coordinates: coordinates ?? undefined
-        })
+        ? runChatBestEffort(
+          'Failed to resolve quick-access county room',
+          () => ChatRoom.findOrCreateByLocation({
+            type: 'county',
+            state: user.state,
+            country,
+            county: user.county,
+            coordinates: coordinates ?? undefined
+          })
+        )
         : Promise.resolve(null),
       normalizedZipCode
-        ? resolveLeanDoc(ChatConversation.findOne({ type: 'zip-room', zipCode: normalizedZipCode }))
+        ? runChatBestEffort(
+          'Failed to resolve quick-access zip conversation',
+          () => resolveLeanDoc(ChatConversation.findOne({ type: 'zip-room', zipCode: normalizedZipCode }))
+        )
         : Promise.resolve(null)
     ]);
 
     let nearbyCities = [];
     if (coordinates) {
       const [longitude, latitude] = coordinates;
-      nearbyCities = await ChatRoom.aggregate([
-        {
-          $geoNear: {
-            near: { type: 'Point', coordinates: [longitude, latitude] },
-            distanceField: 'distanceMeters',
-            spherical: true,
-            maxDistance: 100 * METERS_PER_MILE,
-            query: {
-              type: 'city',
-              zipCode: {
-                $exists: true,
-                $nin: [null, '', normalizedZipCode]
-              },
-              ...(user.state ? { state: user.state } : {})
+      nearbyCities = await runChatBestEffort(
+        'Failed to load nearby quick-access city rooms',
+        () => ChatRoom.aggregate([
+          {
+            $geoNear: {
+              near: { type: 'Point', coordinates: [longitude, latitude] },
+              distanceField: 'distanceMeters',
+              spherical: true,
+              maxDistance: 100 * METERS_PER_MILE,
+              query: {
+                type: 'city',
+                zipCode: {
+                  $exists: true,
+                  $nin: [null, '', normalizedZipCode]
+                },
+                ...(user.state ? { state: user.state } : {})
+              }
+            }
+          },
+          { $sort: { distanceMeters: 1, messageCount: -1, lastActivity: -1 } },
+          { $limit: 3 },
+          {
+            $project: {
+              _id: 1,
+              name: 1,
+              type: 1,
+              city: 1,
+              state: 1,
+              country: 1,
+              county: 1,
+              zipCode: 1,
+              members: 1,
+              messageCount: 1,
+              lastActivity: 1,
+              distanceMeters: 1
             }
           }
-        },
-        { $sort: { distanceMeters: 1, messageCount: -1, lastActivity: -1 } },
-        { $limit: 3 },
-        {
-          $project: {
-            _id: 1,
-            name: 1,
-            type: 1,
-            city: 1,
-            state: 1,
-            country: 1,
-            county: 1,
-            zipCode: 1,
-            members: 1,
-            messageCount: 1,
-            lastActivity: 1,
-            distanceMeters: 1
-          }
-        }
-      ]);
+        ]),
+        []
+      );
     }
 
     return res.json({
@@ -2847,16 +2881,23 @@ router.post('/rooms/sync-location', unifiedChatLimiter, authenticateToken, async
       });
     }
     
-    await ChatRoom.ensureDefaultStateRooms();
+    await runChatBestEffort(
+      'Failed to ensure default state rooms before syncing location',
+      () => ChatRoom.ensureDefaultStateRooms()
+    );
 
     // Sync location rooms
-    const result = await ChatRoom.syncUserLocationRooms({
-      ...toPlainDoc(user),
-      location: {
-        ...(toPlainDoc(user.location) || {}),
-        coordinates
-      }
-    });
+    const result = await runChatBestEffort(
+      'Failed to sync user location rooms',
+      () => ChatRoom.syncUserLocationRooms({
+        ...toPlainDoc(user),
+        location: {
+          ...(toPlainDoc(user.location) || {}),
+          coordinates
+        }
+      }),
+      { rooms: [], created: 0 }
+    );
     
     // Get all rooms the user is now a member of (including existing ones)
     const userRooms = await ChatRoom.find({ members: userId })
