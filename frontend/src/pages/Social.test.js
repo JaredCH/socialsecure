@@ -353,8 +353,8 @@ describe('Social page hero background rendering', () => {
     expect(calendarAPI.getMyEvents).toHaveBeenCalled();
     const previewShell = container.querySelector('[data-testid="social-calendar-preview-shell"]');
     expect(previewShell).toBeTruthy();
-    expect(previewShell.className).toContain('max-w-xl');
-    expect(previewShell.className).toContain('sm:max-h-[34rem]');
+    expect(previewShell.className).toContain('max-w-3xl');
+    expect(previewShell.className).toContain('sm:max-h-[44rem]');
     expect(previewShell.className).toContain('overflow-y-auto');
     expect(container.querySelector('[data-testid="social-calendar-preview-grid"]')).toBeTruthy();
     expect(container.textContent).toContain('Upcoming');
@@ -492,49 +492,25 @@ describe('Social page hero background rendering', () => {
     confirmSpy.mockRestore();
   });
 
-  it('persists gallery metadata stripping preference toggle', async () => {
-    authAPI.updateProfile.mockResolvedValue({
-      data: {
-        user: {
-          _id: 'u-1',
-          username: 'alpha',
-          stripImageMetadataOnUpload: true,
-          socialPagePreferences: {
-            hero: {
-              backgroundImageUseRandomGallery: true
-            }
-          }
-        }
-      }
-    });
-
+  it('removes gallery quick-add placeholder panel and keeps a subtle counter', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
+    expect(container.textContent).not.toContain('Your personalized stream');
+    expect(container.textContent).not.toContain('Your personalized timeline.');
+    expect(container.textContent).not.toContain('Pinned visuals and recent uploads');
 
     const galleryTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Gallery'));
     expect(galleryTab).toBeDefined();
     await act(async () => {
       galleryTab?.click();
     });
-
-    const advancedButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Advanced'));
-    if (advancedButton) {
-      await act(async () => {
-        advancedButton.click();
-      });
-    }
-
-    const toggleLabel = Array.from(container.querySelectorAll('label')).find((label) =>
-      label.textContent?.includes('Strip image metadata on upload')
-    );
-    const toggle = toggleLabel?.querySelector('input[type="checkbox"]');
-    expect(toggle).toBeTruthy();
-    await act(async () => {
-      toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(authAPI.updateProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ stripImageMetadataOnUpload: true })
-    );
+    expect(container.textContent).not.toContain('Quick add');
+    expect(container.textContent).not.toContain('Post a visual first. Details can come later.');
+    expect(container.textContent).not.toContain('Keep the panel slim by expanding only the controls you need.');
+    expect(container.textContent).not.toContain('Upload image');
+    expect(container.textContent).not.toContain('Add by URL');
+    expect(container.textContent).not.toContain('Audience: Social');
+    expect(container.textContent).not.toContain('Metadata strip: Off');
+    expect(container.textContent).toContain('0/24');
   });
 
   it('loads profile chat thread/messages for guest viewers when read access allows guests', async () => {

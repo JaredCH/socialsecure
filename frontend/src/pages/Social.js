@@ -534,18 +534,6 @@ const normalizeGalleryItem = (item) => ({
   relationshipAudience: item?.relationshipAudience === 'secure' ? 'secure' : 'social',
 });
 
-const METADATA_STRIP_OUTPUT_EXTENSIONS = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp'
-};
-
-const replaceFileExtension = (fileName = '', extension = '') => {
-  const baseName = String(fileName || '').replace(/\.[^/.]+$/, '');
-  const fallbackBaseName = baseName || 'upload';
-  return `${fallbackBaseName}${extension}`;
-};
-
 const normalizePersonalInfoFieldValue = (profileSource = {}, fieldId) => (
   fieldId === 'hobbies'
     ? (Array.isArray(profileSource?.hobbies) ? profileSource.hobbies.join(', ') : '')
@@ -644,16 +632,8 @@ const Social = () => {
   const [galleryItems, setGalleryItems] = useState([]);
   const [galleryTargetInput, setGalleryTargetInput] = useState(initialGuestUser);
   const [galleryTarget, setGalleryTarget] = useState(initialGuestUser.trim());
-  const [galleryUrlInput, setGalleryUrlInput] = useState('');
-  const [galleryTitleInput, setGalleryTitleInput] = useState('');
-  const [galleryCaptionInput, setGalleryCaptionInput] = useState('');
-  const [galleryRelationshipAudience, setGalleryRelationshipAudience] = useState('social');
-  const [stripImageMetadataOnUpload, setStripImageMetadataOnUpload] = useState(false);
-  const [galleryMetadataPreferenceBusy, setGalleryMetadataPreferenceBusy] = useState(false);
   const [galleryError, setGalleryError] = useState('');
-  const [galleryBusy, setGalleryBusy] = useState(false);
   const [galleryLoading, setGalleryLoading] = useState(false);
-  const [galleryComposerPanels, setGalleryComposerPanels] = useState({ url: false, details: false });
   const [galleryActionLoadingByImage, setGalleryActionLoadingByImage] = useState({});
   const [galleryEditById, setGalleryEditById] = useState({});
   const [heroRandomBackgroundImage, setHeroRandomBackgroundImage] = useState('');
@@ -722,10 +702,6 @@ const Social = () => {
   const composerCodeTextareaRef = useRef(null);
 
   const realtimeEnabled = currentUser?.realtimePreferences?.enabled !== false;
-
-  useEffect(() => {
-    setStripImageMetadataOnUpload(currentUser?.stripImageMetadataOnUpload === true);
-  }, [currentUser?.stripImageMetadataOnUpload]);
 
   const requestedProfileIdentifier = guestUser.trim();
   const normalizedRequestedProfileIdentifier = requestedProfileIdentifier.toLowerCase();
@@ -2965,52 +2941,6 @@ const Social = () => {
     }
   };
 
-  const handleToggleMetadataStripPreference = async (enabled) => {
-    if (!isOwnSocialContext || isGuestPreview) return;
-    setGalleryMetadataPreferenceBusy(true);
-    setGalleryError('');
-    try {
-      const response = await authAPI.updateProfile({ stripImageMetadataOnUpload: enabled });
-      const updatedUser = response.data?.user || null;
-      if (updatedUser) {
-        setCurrentUser(updatedUser);
-      }
-      setStripImageMetadataOnUpload(enabled);
-    } catch (error) {
-      setGalleryError(error.response?.data?.error || 'Failed to update metadata privacy setting.');
-      setStripImageMetadataOnUpload((prev) => !enabled);
-    } finally {
-      setGalleryMetadataPreferenceBusy(false);
-    }
-  };
-
-  const stripMetadataFromImageFile = async (file) => {
-    const outputType = METADATA_STRIP_OUTPUT_EXTENSIONS[file.type] ? file.type : 'image/png';
-    const outputExtension = METADATA_STRIP_OUTPUT_EXTENSIONS[outputType] || '.png';
-
-    const imageBitmap = await createImageBitmap(file);
-    const canvas = document.createElement('canvas');
-    canvas.width = imageBitmap.width;
-    canvas.height = imageBitmap.height;
-    const context = canvas.getContext('2d');
-    if (!context) {
-      imageBitmap.close();
-      throw new Error('Failed to process image.');
-    }
-    context.drawImage(imageBitmap, 0, 0);
-    imageBitmap.close();
-
-    const blob = await new Promise((resolve) => {
-      canvas.toBlob(resolve, outputType, outputType === 'image/jpeg' || outputType === 'image/webp' ? 0.92 : undefined);
-    });
-    if (!blob) {
-      throw new Error('Failed to process image.');
-    }
-
-    const normalizedFileName = replaceFileExtension(file.name, outputExtension);
-    return new File([blob], normalizedFileName, { type: outputType, lastModified: Date.now() });
-  };
-
   const handleDeletePost = async (postId) => {
     if (!postId || !window.confirm('Are you sure you want to delete this?')) return;
     setPostActionLoading(postId, true);
@@ -3038,103 +2968,6 @@ const Social = () => {
       setCalendarPreviewEvents((prev) => prev.filter((event) => String(event?._id || '') !== String(eventId)));
     } catch (error) {
       setCalendarPreviewError(error.response?.data?.error || 'Failed to delete event.');
-    }
-  };
-
-  const handleAddGalleryUrl = async () => {
-    if (!canManageGallery || !galleryOwnerIdentifier) return;
-
-    const value = galleryUrlInput.trim();
-    if (!value) return;
-
-    if (!isRenderableMediaUrl(value)) {
-      setGalleryError('Gallery image URL must be a valid http/https URL.');
-      return;
-    }
-
-    if (galleryItems.length >= GALLERY_MAX_ITEMS) {
-      setGalleryError(`Gallery can contain up to ${GALLERY_MAX_ITEMS} images.`);
-      return;
-    }
-
-    setGalleryBusy(true);
-    setGalleryError('');
-    try {
-      const response = await galleryAPI.createGalleryItem(galleryOwnerIdentifier, {
-        mediaUrl: value,
-        title: galleryTitleInput,
-        caption: galleryCaptionInput,
-        relationshipAudience: galleryRelationshipAudience,
-      });
-
-      const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
-      if (created) {
-        setGalleryItems((prev) => [created, ...prev]);
-      } else {
-        await loadGallery();
-      }
-
-      setGalleryUrlInput('');
-      setGalleryTitleInput('');
-      setGalleryCaptionInput('');
-      setGalleryComposerPanels({ url: false, details: false });
-    } catch (error) {
-      setGalleryError(error.response?.data?.error || 'Failed to add gallery URL.');
-    } finally {
-      setGalleryBusy(false);
-    }
-  };
-
-  const handleUploadGalleryImage = async (event) => {
-    if (!canManageGallery || !galleryOwnerIdentifier) return;
-
-    const [file] = Array.from(event.target.files || []);
-    event.target.value = '';
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setGalleryError('Only image files are supported.');
-      return;
-    }
-
-    if (file.size > GALLERY_MAX_IMAGE_SIZE_BYTES) {
-      setGalleryError('Image file is too large (max 3MB).');
-      return;
-    }
-
-    if (galleryItems.length >= GALLERY_MAX_ITEMS) {
-      setGalleryError(`Gallery can contain up to ${GALLERY_MAX_ITEMS} images.`);
-      return;
-    }
-
-    setGalleryBusy(true);
-    setGalleryError('');
-    try {
-      const uploadFile = stripImageMetadataOnUpload
-        ? await stripMetadataFromImageFile(file)
-        : file;
-      const response = await galleryAPI.uploadGalleryItem(
-        galleryOwnerIdentifier,
-        uploadFile,
-        galleryCaptionInput,
-        galleryRelationshipAudience,
-        galleryTitleInput
-      );
-
-      const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
-      if (created) {
-        setGalleryItems((prev) => [created, ...prev]);
-      } else {
-        await loadGallery();
-      }
-
-      setGalleryTitleInput('');
-      setGalleryCaptionInput('');
-      setGalleryComposerPanels({ url: false, details: false });
-    } catch (error) {
-      setGalleryError(error.response?.data?.error || 'Failed to upload image.');
-    } finally {
-      setGalleryBusy(false);
     }
   };
 
@@ -3712,8 +3545,7 @@ const Social = () => {
       case 'timeline':
         return (
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-slate-500">{(isOwnSocialContext && !isGuestPreview) ? 'Your personalized timeline.' : 'Timeline'}</p>
+            <div className="flex items-center justify-end gap-3">
               <button type="button" onClick={loadFeed} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" disabled={loadingFeed}>{loadingFeed ? 'Refreshing…' : 'Refresh'}</button>
             </div>
             {feedError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700">{feedError}</div> : null}
@@ -3821,90 +3653,15 @@ const Social = () => {
         ) : <p className="text-sm text-slate-500">Moderation status is available only in owner view.</p>;
       case 'gallery':
         return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-slate-500">Gallery items: {galleryItems.length}/{GALLERY_MAX_ITEMS}</p>
-            </div>
+          <div className="relative space-y-4 pt-5">
+            <span className="absolute right-0 top-0 text-[11px] font-medium text-slate-400">{galleryItems.length}/{GALLERY_MAX_ITEMS}</span>
             {!isAuthenticated ? (
               <div className="space-y-2 rounded-xl border bg-slate-50 p-3">
                 <p className="text-sm text-gray-600">Choose a profile to browse gallery media.</p>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input type="text" value={galleryTargetInput} onChange={(event) => setGalleryTargetInput(event.target.value)} placeholder="username or user ID" className="flex-1 rounded-xl border px-3 py-2" />
-                  <button type="button" onClick={() => setGalleryTarget(galleryTargetInput.trim())} disabled={galleryBusy || galleryLoading} className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-100 disabled:opacity-60">Load Gallery</button>
+                  <button type="button" onClick={() => setGalleryTarget(galleryTargetInput.trim())} disabled={galleryLoading} className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-100 disabled:opacity-60">Load Gallery</button>
                 </div>
-              </div>
-            ) : null}
-            {canManageGallery ? (
-              <div className="rounded-[1.5rem] border border-slate-200 bg-white/90 p-3 shadow-sm">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Quick add</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">Post a visual first. Details can come later.</p>
-                    <p className="mt-1 text-sm text-slate-500">Keep the panel slim by expanding only the controls you need.</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100">
-                      <input type="file" accept="image/*" className="hidden" onChange={handleUploadGalleryImage} disabled={galleryBusy} />
-                      {galleryBusy ? 'Uploading…' : 'Upload image'}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setGalleryComposerPanels((prev) => ({ ...prev, url: !prev.url }))}
-                      className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${galleryComposerPanels.url ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-                    >
-                      {galleryComposerPanels.url ? 'Hide URL' : 'Add by URL'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGalleryComposerPanels((prev) => ({ ...prev, details: !prev.details }))}
-                      className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${galleryComposerPanels.details ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-                    >
-                      {galleryComposerPanels.details ? 'Hide advanced' : 'Advanced'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600">Audience: {RELATIONSHIP_AUDIENCE_LABELS[galleryRelationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</span>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600">Metadata strip: {stripImageMetadataOnUpload ? 'On' : 'Off'}</span>
-                </div>
-
-                {galleryComposerPanels.url ? (
-                  <div className="mt-3 rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-3">
-                    <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Image URL</label>
-                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                      <input type="url" value={galleryUrlInput} onChange={(event) => setGalleryUrlInput(event.target.value)} placeholder="https://example.com/photo.jpg" className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
-                      <button type="button" onClick={handleAddGalleryUrl} disabled={galleryBusy} className="rounded-xl border border-sky-500 bg-white px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-50 disabled:opacity-60">{galleryBusy ? 'Adding…' : 'Save URL'}</button>
-                    </div>
-                  </div>
-                ) : null}
-
-                {galleryComposerPanels.details ? (
-                  <div className="mt-3 grid gap-3 rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px]">
-                    <input type="text" value={galleryTitleInput} onChange={(event) => setGalleryTitleInput(event.target.value)} placeholder="Optional title" maxLength={140} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
-                    <input type="text" value={galleryCaptionInput} onChange={(event) => setGalleryCaptionInput(event.target.value)} placeholder="Optional caption" maxLength={280} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700" />
-                    <label className="flex flex-col gap-1 text-sm text-slate-700">
-                      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Audience</span>
-                      <select value={galleryRelationshipAudience} onChange={(event) => setGalleryRelationshipAudience(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                        <option value="social">Social</option>
-                        <option value="secure">Secure</option>
-                      </select>
-                    </label>
-                    <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 lg:col-span-3">
-                      <span>Strip image metadata on upload (EXIF, GPS, camera info)</span>
-                      <input
-                        type="checkbox"
-                        checked={stripImageMetadataOnUpload}
-                        disabled={galleryMetadataPreferenceBusy}
-                        onChange={(event) => {
-                          const enabled = event.target.checked;
-                          setStripImageMetadataOnUpload(enabled);
-                          handleToggleMetadataStripPreference(enabled);
-                        }}
-                      />
-                    </label>
-                  </div>
-                ) : null}
               </div>
             ) : null}
             {galleryError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{galleryError}</div> : null}
@@ -3914,8 +3671,8 @@ const Social = () => {
               description: isOwnSocialContext
                 ? 'Upload a photo to start building your gallery.'
                 : 'This profile hasn\'t added any gallery items visible to you.',
-              actionLabel: isOwnSocialContext && canManageGallery ? 'Add image' : null,
-              onAction: isOwnSocialContext && canManageGallery ? () => setGalleryComposerPanels((prev) => ({ ...prev, details: true })) : null,
+              actionLabel: null,
+              onAction: null,
               tone: 'amber'
             }) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
@@ -4425,7 +4182,7 @@ const Social = () => {
       case 'calendar':
         return renderGlassPanel(
           'Calendar',
-          <div data-testid="social-calendar-preview-shell" className="mx-auto w-full max-w-xl space-y-4 overflow-y-auto pr-1 text-sm text-slate-700 [scrollbar-gutter:stable] sm:max-h-[34rem]">
+          <div data-testid="social-calendar-preview-shell" className="mx-auto w-full max-w-3xl space-y-4 overflow-y-auto pr-1 text-sm text-slate-700 [scrollbar-gutter:stable] sm:max-h-[44rem]">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/55 px-4 py-4">
               <div>
                 <p className="font-semibold text-slate-900">Coordinate upcoming events</p>
@@ -4593,12 +4350,8 @@ const Social = () => {
                 )
               })
             ) : null}
-            {renderGlassPanel('Feed', renderPanelBody('timeline'), {
-              subtitle: (isOwnSocialContext && !isGuestPreview) ? 'Your personalized stream' : null
-            })}
-            {renderGlassPanel('Gallery', renderPanelBody('gallery'), {
-              subtitle: 'Pinned visuals and recent uploads'
-            })}
+            {renderGlassPanel('Feed', renderPanelBody('timeline'))}
+            {renderGlassPanel('Gallery', renderPanelBody('gallery'))}
           </div>
         );
     }
