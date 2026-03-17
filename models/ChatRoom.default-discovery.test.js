@@ -235,6 +235,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
     selectMock.mockReturnValue({ lean: leanMock });
     const findMock = jest.spyOn(ChatRoom, 'find').mockReturnValue({
       select: selectMock,
+      // If reconcile logic awaits the raw query instead of select().lean(), this should fail.
       then: (resolve, reject) => reject(new Error('Cast to [Number] failed for value "{ rejected: true }" at path "coordinates"'))
     });
 

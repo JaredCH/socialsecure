@@ -564,6 +564,7 @@ describe('Chat event room discovery routes', () => {
         zipCode: '02115',
         location: { rejected: true, message: 'UNSUPPORTED_OS' }
       }),
+      // If route code accidentally awaits the raw query instead of using lean(), this should fail.
       then: (resolve, reject) => reject(new Error('Cast to embedded failed for value "{ rejected: true }" at path "location"'))
     };
     User.findById
