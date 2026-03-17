@@ -6218,7 +6218,7 @@ const Social = () => {
       />
 
       {activeGalleryImage ? (
-        <div className="fixed inset-0 z-[130] bg-black/85 p-3 sm:p-6">
+        <div className="fixed inset-0 z-[1700] bg-black/85 p-3 sm:p-6">
           <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-4 lg:flex-row">
             <div className="relative flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-white/20 bg-black/40 p-2 sm:p-4">
               <button
@@ -6280,7 +6280,7 @@ const Social = () => {
 
       {/* Gallery Upload Modal */}
       {showGalleryUploadModal ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/55 px-4 py-6 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[1700] flex items-center justify-center bg-slate-900/55 px-4 py-6 backdrop-blur-sm">
           <div className="flex w-full max-w-2xl flex-col rounded-3xl border border-white/60 bg-white shadow-2xl" style={{ maxHeight: 'calc(100vh - 3rem)' }}>
             {/* Header */}
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
