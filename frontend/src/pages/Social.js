@@ -605,8 +605,8 @@ const Social = () => {
     editorMode: 'design',
     mediaUrlInput: '',
     mediaUrls: [],
-    visibility: 'public',
-    relationshipAudience: 'social',
+    visibility: 'friends',
+    relationshipAudience: 'secure',
     visibleToCircles: [],
     visibleToUsers: [],
     excludeUsers: [],
@@ -634,6 +634,8 @@ const Social = () => {
         linkUrl: '',
       },
     },
+    imageDescriptions: {},
+    imageAudienceOverrides: {},
   });
   const [composerPanels, setComposerPanels] = useState({
     media: false,
@@ -2481,24 +2483,36 @@ const Social = () => {
 
   const handleComposerImageUpload = async (event) => {
     if (!currentUser?._id) return;
-    const [file] = Array.from(event.target.files || []);
+    const files = Array.from(event.target.files || []);
     event.target.value = '';
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setFeedError('Only image files are supported.');
+    if (files.length === 0) return;
+    const remainingSlots = MEDIA_URL_MAX_ITEMS - postForm.mediaUrls.length;
+    const maxFiles = Math.min(6, remainingSlots);
+    if (maxFiles <= 0) {
+      setFeedError(`You can attach up to ${MEDIA_URL_MAX_ITEMS} media items per post.`);
       return;
     }
-    if (file.size > GALLERY_MAX_IMAGE_SIZE_BYTES) {
-      setFeedError('Image file is too large (max 3MB).');
-      return;
+    const filesToUpload = files.slice(0, maxFiles);
+    for (const file of filesToUpload) {
+      if (!file.type.startsWith('image/')) {
+        setFeedError('Only image files are supported.');
+        return;
+      }
+      if (file.size > GALLERY_MAX_IMAGE_SIZE_BYTES) {
+        setFeedError('Image file is too large (max 3MB each).');
+        return;
+      }
     }
     setComposerImageUploading(true);
     setFeedError('');
     try {
-      const response = await galleryAPI.uploadGalleryItem(currentUser._id, file, 'Post image', 'social');
-      const uploadedUrl = response.data?.item?.mediaUrl;
-      if (!appendMediaUrl(uploadedUrl)) {
-        setFeedError('Image uploaded but could not be attached to post.');
+      const audience = postForm.relationshipAudience || 'secure';
+      for (const file of filesToUpload) {
+        const response = await galleryAPI.uploadGalleryItem(currentUser._id, file, '', audience);
+        const uploadedUrl = response.data?.item?.mediaUrl;
+        if (!appendMediaUrl(uploadedUrl)) {
+          setFeedError('Image uploaded but could not be attached to post.');
+        }
       }
     } catch (error) {
       setFeedError(error.response?.data?.error || 'Failed to upload image.');
@@ -2966,8 +2980,8 @@ const Social = () => {
         editorMode: 'design',
         mediaUrlInput: '',
         mediaUrls: [],
-        visibility: 'public',
-        relationshipAudience: 'social',
+        visibility: 'friends',
+        relationshipAudience: 'secure',
         visibleToCircles: [],
         visibleToUsers: [],
         excludeUsers: [],
@@ -2995,6 +3009,8 @@ const Social = () => {
             linkUrl: '',
           },
         },
+        imageDescriptions: {},
+        imageAudienceOverrides: {},
       });
     } catch (error) {
       setFeedError(error.response?.data?.error || 'Failed to publish post.');
@@ -3389,28 +3405,65 @@ const Social = () => {
         );
       case 'composer':
         return isOwnSocialContext && !isGuestPreview ? (
-          <form onSubmit={handleSubmitPost} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
-            {/* ── Header: mode tabs ── */}
-            <div className="flex items-center gap-1 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
-              <div className="flex rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
+          <form onSubmit={handleSubmitPost} className="overflow-hidden rounded-2xl border shadow-md" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)' }}>
+            {/* ── Header row: Post type + audience toggle + editor mode tabs ── */}
+            <div className="flex flex-wrap items-center gap-2 px-4 py-2.5" style={{ borderBottom: '1px solid color-mix(in srgb, var(--social-text-muted) 15%, transparent)', background: 'var(--social-surface-muted)' }}>
+              {/* Post Type dropdown */}
+              <div className="relative">
+                <select
+                  data-testid="composer-post-type"
+                  value={postForm.contentType}
+                  onChange={(event) => setPostForm((prev) => ({ ...prev, contentType: event.target.value }))}
+                  className="appearance-none rounded-xl py-1.5 pl-3 pr-8 text-xs font-semibold shadow-sm transition-colors focus:outline-none focus:ring-2"
+                  style={{ background: 'var(--bg-panel)', color: 'var(--social-text-primary)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', border: '1px solid', '--tw-ring-color': 'var(--accent)' }}
+                >
+                  {COMPOSER_CONTENT_TYPES.map((option) => <option key={option} value={option}>{option.charAt(0).toUpperCase() + option.slice(1)}</option>)}
+                </select>
+                <svg className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: 'var(--social-text-muted)' }} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
+              </div>
+
+              {/* Social / Secure toggle */}
+              <div className="flex rounded-xl p-0.5 shadow-sm" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 25%, transparent)', background: 'var(--bg-panel)' }}>
+                <button
+                  type="button"
+                  data-testid="composer-audience-social"
+                  onClick={() => { handlePostFormField('relationshipAudience', 'social'); handlePostFormField('visibility', 'friends'); }}
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${postForm.relationshipAudience === 'social' ? 'text-white shadow-sm' : 'hover:opacity-80'}`}
+                  style={postForm.relationshipAudience === 'social' ? { backgroundColor: '#0284c7', color: '#fff' } : { color: 'var(--social-text-muted)' }}
+                >
+                  Social
+                </button>
+                <button
+                  type="button"
+                  data-testid="composer-audience-secure"
+                  onClick={() => { handlePostFormField('relationshipAudience', 'secure'); handlePostFormField('visibility', 'friends'); }}
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${postForm.relationshipAudience === 'secure' ? 'text-white shadow-sm' : 'hover:opacity-80'}`}
+                  style={postForm.relationshipAudience === 'secure' ? { backgroundColor: '#d97706', color: '#fff' } : { color: 'var(--social-text-muted)' }}
+                >
+                  Secure
+                </button>
+              </div>
+
+              {/* Editor mode tabs */}
+              <div className="ml-auto flex rounded-xl p-0.5 shadow-sm" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 25%, transparent)', background: 'var(--bg-panel)' }}>
                 {COMPOSER_EDITOR_MODES.map((mode) => (
                   <button
                     key={mode}
                     type="button"
                     onClick={() => handlePostFormField('editorMode', mode)}
-                    className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${postForm.editorMode === mode ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                    className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${postForm.editorMode === mode ? 'shadow-sm' : ''}`}
+                    style={postForm.editorMode === mode ? { backgroundColor: 'var(--accent)', color: '#fff' } : { color: 'var(--social-text-muted)' }}
                   >
-                    {mode === 'design' ? '✦ Design Studio' : '</> Code Mode'}
+                    {mode === 'design' ? '✦ Design' : '</> Code'}
                   </button>
                 ))}
               </div>
-              <span className="ml-auto hidden text-[11px] text-slate-400 sm:block">Text + image by default · everything else optional</span>
             </div>
 
             <div className="space-y-0">
               {/* ── Code Mode: quick action toolbar ── */}
               {postForm.editorMode === 'code' ? (
-                <div className="border-b border-slate-100 bg-slate-50/40 px-3 py-2">
+                <div className="px-3 py-2" style={{ borderBottom: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)', background: 'var(--social-surface-soft)' }}>
                   <div className="flex flex-wrap items-center gap-1">
                     {CODE_MODE_SNIPPETS.map((snippet) => (
                       <button
@@ -3418,36 +3471,36 @@ const Social = () => {
                         type="button"
                         title={snippet.requiresSelection ? `${snippet.description} — highlight text first` : snippet.description}
                         onClick={() => applyComposerSnippet(snippet.value)}
-                        className={`inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md border px-1.5 text-[11px] font-semibold transition-colors ${snippet.requiresSelection ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-100'}`}
+                        className="inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md px-1.5 text-[11px] font-semibold transition-colors"
+                        style={snippet.requiresSelection ? { border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' } : { border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-secondary)' }}
                       >
                         {snippet.icon}
                       </button>
                     ))}
                     <div className="ml-auto flex items-center gap-1">
-                      {/* Desktop MD Guide toggle */}
                       <button
                         type="button"
                         onClick={() => setComposerMdGuideOpen((v) => !v)}
                         title="Toggle Markdown reference guide"
-                        className={`hidden rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors lg:inline-flex ${composerMdGuideOpen ? 'border-blue-300 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                        className="hidden rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors lg:inline-flex"
+                        style={composerMdGuideOpen ? { backgroundColor: 'var(--accent)', color: '#fff' } : { border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', color: 'var(--social-text-muted)' }}
                       >
                         {composerMdGuideOpen ? '✕ Hide Guide' : '? MD Guide'}
                       </button>
-                      {/* Mobile MD Guide button */}
                       <button
                         type="button"
                         onClick={() => setComposerMdMobileOpen(true)}
                         title="Open Markdown reference"
-                        className="inline-flex rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-500 hover:border-blue-300 hover:text-blue-600 lg:hidden"
+                        className="inline-flex rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors lg:hidden"
+                        style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', color: 'var(--social-text-muted)' }}
                       >
                         ? MD Guide
                       </button>
                     </div>
                   </div>
-                  {/* amber key for selection-required items */}
                   {CODE_MODE_HAS_SELECTION_ITEMS ? (
-                    <p className="mt-1.5 text-[10px] text-amber-600">
-                      <span className="rounded bg-amber-50 px-1 py-0.5 text-amber-700">amber</span> = highlight text in editor first
+                    <p className="mt-1.5 text-[10px]" style={{ color: 'var(--accent)' }}>
+                      <span className="rounded px-1 py-0.5" style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}>accent</span> = highlight text in editor first
                     </p>
                   ) : null}
                 </div>
@@ -3455,28 +3508,31 @@ const Social = () => {
 
               {/* ── Design Studio: formatting toolbar ── */}
               {postForm.editorMode === 'design' ? (
-                <div className="border-b border-slate-100 bg-slate-50/40 px-3 py-2">
+                <div className="px-3 py-2" style={{ borderBottom: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)', background: 'var(--social-surface-soft)' }}>
                   <div className="flex flex-wrap items-center gap-1">
-                    <button type="button" title="Bold — highlight text first" onClick={() => applyDesignWrapper('**')} className="inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100">B</button>
-                    <button type="button" title="Italic — highlight text first" onClick={() => applyDesignWrapper('*')} className="inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 text-[11px] italic font-semibold text-slate-700 hover:bg-slate-100">I</button>
-                    <button type="button" title="Code — highlight text first" onClick={() => applyDesignWrapper('`')} className="inline-flex h-7 min-w-[2.5rem] items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 font-mono text-[11px] text-slate-700 hover:bg-slate-100">{`<>`}</button>
-                    <button type="button" title="Text color — highlight text first" onClick={() => applyDesignWrapper('[color=red]', '[/color]')} className="inline-flex h-7 items-center justify-center rounded-md border border-amber-200 bg-amber-50 px-2 text-[11px] font-semibold text-amber-700 hover:bg-amber-100">A</button>
-                    <button type="button" title="Highlight — highlight text first" onClick={() => applyDesignWrapper('[bg=yellow]', '[/bg]')} className="inline-flex h-7 items-center justify-center rounded-md border border-yellow-200 bg-yellow-50 px-2 text-[11px] font-semibold text-yellow-700 hover:bg-yellow-100">BG</button>
-                    <button type="button" title="Vertical callout line — highlight text first" onClick={() => applyDesignWrapper('[vline=4]', '[/vline]')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100">|—</button>
-                    <span className="mx-1 h-4 w-px bg-slate-200" />
-                    <button type="button" title="Heading H1" onClick={() => applyComposerSnippet('\n# Heading\n')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-600 hover:bg-slate-100">H1</button>
-                    <button type="button" title="Heading H2" onClick={() => applyComposerSnippet('\n## Sub heading\n')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100">H2</button>
-                    <button type="button" title="Unordered list item" onClick={() => applyComposerSnippet('\n- List item\n')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 hover:bg-slate-100">•—</button>
-                    <button type="button" title="Blockquote" onClick={() => applyComposerSnippet('\n> Quote\n')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 hover:bg-slate-100">❝</button>
-                    <button type="button" title="Insert link" onClick={() => applyComposerSnippet('[Label](https://example.com)')} className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-600 hover:bg-slate-100">🔗</button>
+                    {[
+                      { title: 'Bold', icon: 'B', action: () => applyDesignWrapper('**'), bold: true },
+                      { title: 'Italic', icon: 'I', action: () => applyDesignWrapper('*'), italic: true },
+                      { title: 'Code', icon: '<>', action: () => applyDesignWrapper('`'), mono: true },
+                    ].map((btn) => (
+                      <button key={btn.title} type="button" title={`${btn.title} — highlight text first`} onClick={btn.action} className={`inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md px-1.5 text-[11px] font-semibold transition-colors ${btn.bold ? 'font-bold' : ''} ${btn.italic ? 'italic' : ''} ${btn.mono ? 'font-mono' : ''}`} style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-secondary)' }}>{btn.icon}</button>
+                    ))}
+                    <button type="button" title="Text color — highlight text first" onClick={() => applyDesignWrapper('[color=red]', '[/color]')} className="inline-flex h-7 items-center justify-center rounded-md px-2 text-[11px] font-semibold transition-colors" style={{ border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' }}>A</button>
+                    <button type="button" title="Highlight — highlight text first" onClick={() => applyDesignWrapper('[bg=yellow]', '[/bg]')} className="inline-flex h-7 items-center justify-center rounded-md px-2 text-[11px] font-semibold transition-colors" style={{ border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' }}>BG</button>
+                    <button type="button" title="Vertical callout line — highlight text first" onClick={() => applyDesignWrapper('[vline=4]', '[/vline]')} className="inline-flex h-7 items-center justify-center rounded-md px-2 text-[11px] font-semibold transition-colors" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-secondary)' }}>|—</button>
+                    <span className="mx-1 h-4 w-px" style={{ background: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)' }} />
+                    <button type="button" title="Heading H1" onClick={() => applyComposerSnippet('\n# Heading\n')} className="inline-flex h-7 items-center justify-center rounded-md px-2 text-[11px] font-bold transition-colors" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-secondary)' }}>H1</button>
+                    <button type="button" title="Heading H2" onClick={() => applyComposerSnippet('\n## Sub heading\n')} className="inline-flex h-7 items-center justify-center rounded-md px-2 text-[11px] font-semibold transition-colors" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-secondary)' }}>H2</button>
+                    <button type="button" title="Unordered list item" onClick={() => applyComposerSnippet('\n- List item\n')} className="inline-flex h-7 items-center justify-center rounded-md px-2 text-[11px] transition-colors" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-secondary)' }}>•—</button>
+                    <button type="button" title="Blockquote" onClick={() => applyComposerSnippet('\n> Quote\n')} className="inline-flex h-7 items-center justify-center rounded-md px-2 text-[11px] transition-colors" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-secondary)' }}>❝</button>
+                    <button type="button" title="Insert link" onClick={() => applyComposerSnippet('[Label](https://example.com)')} className="inline-flex h-7 items-center justify-center rounded-md px-2 text-[11px] transition-colors" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-secondary)' }}>🔗</button>
                   </div>
-                  <p className="mt-1 text-[10px] text-slate-400">Tip: select text before clicking a formatting button to wrap it</p>
+                  <p className="mt-1 text-[10px]" style={{ color: 'var(--social-text-muted)' }}>Tip: select text before clicking a formatting button to wrap it</p>
                 </div>
               ) : null}
 
               {/* ── Main editor area ── */}
               <div className={`flex gap-0 ${postForm.editorMode === 'code' && composerMdGuideOpen ? 'lg:flex-row' : 'flex-col'}`}>
-                {/* Textarea */}
                 <div className="flex-1 p-3">
                   {postForm.editorMode === 'code' ? (
                     <textarea
@@ -3484,7 +3540,8 @@ const Social = () => {
                       value={postForm.codeContent}
                       onChange={(event) => setPostForm((prev) => ({ ...prev, codeContent: event.target.value }))}
                       placeholder={"Write with markdown + custom blocks\n\nExample: **bold**, *italic*, [color=red]colored text[/color]"}
-                      className="min-h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 font-mono text-sm text-slate-800 placeholder-slate-400 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      className="min-h-40 w-full resize-y rounded-xl px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2"
+                      style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }}
                       maxLength={5000}
                     />
                   ) : (
@@ -3493,37 +3550,38 @@ const Social = () => {
                       value={postForm.content}
                       onChange={(event) => setPostForm((prev) => ({ ...prev, content: event.target.value }))}
                       placeholder="What's on your mind?"
-                      className="min-h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      className="min-h-40 w-full resize-y rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                      style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }}
                       maxLength={5000}
                     />
                   )}
                   <div className="mt-1.5 flex justify-end">
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px]" style={{ color: 'var(--social-text-muted)' }}>
                       {(postForm.editorMode === 'code' ? postForm.codeContent : postForm.content).length} / 5000
                     </span>
                   </div>
                 </div>
 
-                {/* Desktop MD Guide side panel — only in code mode when open */}
                 {postForm.editorMode === 'code' && composerMdGuideOpen ? (
-                  <div className="hidden w-72 shrink-0 border-l border-slate-100 bg-slate-50 p-3 lg:flex lg:flex-col">
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Markdown Reference</p>
+                  <div className="hidden w-72 shrink-0 p-3 lg:flex lg:flex-col" style={{ borderLeft: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)', background: 'var(--social-surface-soft)' }}>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--social-text-muted)' }}>Markdown Reference</p>
                     <div className="flex-1 overflow-y-auto">
                       <ul className="space-y-1.5">
                         {CODE_MODE_SNIPPETS.map((snippet) => (
-                          <li key={snippet.label} className="group flex items-start gap-2 rounded-lg p-1.5 hover:bg-white">
+                          <li key={snippet.label} className="group flex items-start gap-2 rounded-lg p-1.5" style={{ '--hover-bg': 'var(--bg-panel)' }}>
                             <div className="min-w-0 flex-1">
-                              <p className="text-[11px] font-semibold text-slate-700">{snippet.label}</p>
-                              <code className="block text-[10px] text-blue-600 break-all">{snippet.syntax}</code>
+                              <p className="text-[11px] font-semibold" style={{ color: 'var(--social-text-primary)' }}>{snippet.label}</p>
+                              <code className="block text-[10px] break-all" style={{ color: 'var(--accent)' }}>{snippet.syntax}</code>
                               {snippet.requiresSelection ? (
-                                <p className="text-[10px] text-amber-600">⚠ Highlight text first</p>
+                                <p className="text-[10px]" style={{ color: 'var(--accent)' }}>⚠ Highlight text first</p>
                               ) : null}
                             </div>
                             <button
                               type="button"
                               title={`Copy: ${snippet.syntax}`}
                               onClick={() => handleCopyMdSyntax(snippet.syntax)}
-                              className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 transition-colors hover:bg-blue-100 hover:text-blue-600"
+                              className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors"
+                              style={{ color: 'var(--social-text-muted)' }}
                             >
                               {copiedMd === snippet.syntax ? '✓' : 'copy'}
                             </button>
@@ -3531,61 +3589,146 @@ const Social = () => {
                         ))}
                       </ul>
                     </div>
-                    <p className="mt-2 text-[10px] text-slate-400">Click any toolbar button above to insert at cursor</p>
+                    <p className="mt-2 text-[10px]" style={{ color: 'var(--social-text-muted)' }}>Click any toolbar button above to insert at cursor</p>
                   </div>
                 ) : null}
               </div>
 
-              {/* ── Image upload + attachments ── */}
-              <div className="border-t border-slate-100 px-3 py-2">
+              {/* ── Image gallery section ── */}
+              <div className="px-3 py-2" style={{ borderTop: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)' }}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:border-blue-300 hover:text-blue-600">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold shadow-sm transition-colors" style={{ border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)', background: 'color-mix(in srgb, var(--accent) 8%, var(--bg-panel))', color: 'var(--accent)' }}>
                     <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8}><rect x="2" y="4" width="16" height="12" rx="2" /><circle cx="7" cy="9" r="1.5" /><path d="M2 14l4-4 4 4 3-3 5 4" /></svg>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleComposerImageUpload} />
-                    {composerImageUploading ? 'Uploading…' : 'Add image'}
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={handleComposerImageUpload} />
+                    {composerImageUploading ? 'Uploading…' : 'Add images'}
                   </label>
                   {postForm.mediaUrls.length > 0 ? (
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-600">
-                      {postForm.mediaUrls.length} attachment{postForm.mediaUrls.length === 1 ? '' : 's'}
+                    <span className="text-[11px] font-medium" style={{ color: 'var(--social-text-muted)' }}>
+                      {postForm.mediaUrls.length} / {MEDIA_URL_MAX_ITEMS} images
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="text-[11px]" style={{ color: 'var(--social-text-muted)' }}>Up to 6 images at once (max 3MB each)</span>
+                  )}
+                  {/* All images audience selector */}
+                  {postForm.mediaUrls.length > 0 ? (() => {
+                    const overrideValues = Object.values(postForm.imageAudienceOverrides);
+                    const allSocial = overrideValues.length > 0 && overrideValues.every((v) => v === 'social');
+                    const allSecure = overrideValues.length > 0 && overrideValues.every((v) => v === 'secure');
+                    return (
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <span className="text-[10px] font-medium" style={{ color: 'var(--social-text-muted)' }}>All images:</span>
+                      <div className="flex rounded-lg p-0.5" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--social-surface-soft)' }}>
+                        <button
+                          type="button"
+                          onClick={() => setPostForm((prev) => {
+                            const overrides = {};
+                            prev.mediaUrls.forEach((_, i) => { overrides[i] = 'social'; });
+                            return { ...prev, imageAudienceOverrides: overrides };
+                          })}
+                          className="rounded-md px-2 py-0.5 text-[10px] font-semibold transition-all"
+                          style={allSocial ? { backgroundColor: '#0284c7', color: '#fff' } : { color: 'var(--social-text-muted)' }}
+                        >
+                          Social
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPostForm((prev) => {
+                            const overrides = {};
+                            prev.mediaUrls.forEach((_, i) => { overrides[i] = 'secure'; });
+                            return { ...prev, imageAudienceOverrides: overrides };
+                          })}
+                          className="rounded-md px-2 py-0.5 text-[10px] font-semibold transition-all"
+                          style={allSecure ? { backgroundColor: '#d97706', color: '#fff' } : { color: 'var(--social-text-muted)' }}
+                        >
+                          Secure
+                        </button>
+                      </div>
+                    </div>
+                    );
+                  })() : null}
                 </div>
+
+                {/* Image previews grid */}
                 {postForm.mediaUrls.length > 0 ? (
-                  <ul className="mt-2 space-y-1">
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {postForm.mediaUrls.map((url, index) => (
-                      <li key={`${url}-${index}`} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-white px-2.5 py-1.5 text-xs">
-                        <svg aria-hidden="true" className="h-3 w-3 shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
-                        <span className="min-w-0 flex-1 truncate text-slate-600">{url}</span>
-                        <button type="button" onClick={() => handleRemoveMediaUrl(index)} className="shrink-0 text-red-400 hover:text-red-600">✕</button>
-                      </li>
+                      <div key={`${url}-${index}`} className="group relative overflow-hidden rounded-xl" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 15%, transparent)', background: 'var(--social-surface-soft)' }}>
+                        <img
+                          src={url}
+                          alt={postForm.imageDescriptions?.[index] || `Image ${index + 1}`}
+                          className="h-28 w-full object-cover"
+                          loading="lazy"
+                        />
+                        {/* Remove button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPostForm((prev) => {
+                              const newDescs = { ...prev.imageDescriptions };
+                              const newOverrides = { ...prev.imageAudienceOverrides };
+                              delete newDescs[index];
+                              delete newOverrides[index];
+                              const reindexDescs = {};
+                              const reindexOverrides = {};
+                              const newMediaUrls = prev.mediaUrls.filter((_, i) => i !== index);
+                              newMediaUrls.forEach((_, newIdx) => {
+                                const oldIdx = newIdx >= index ? newIdx + 1 : newIdx;
+                                if (newDescs[oldIdx] !== undefined) reindexDescs[newIdx] = newDescs[oldIdx];
+                                if (newOverrides[oldIdx] !== undefined) reindexOverrides[newIdx] = newOverrides[oldIdx];
+                              });
+                              return { ...prev, mediaUrls: newMediaUrls, imageDescriptions: reindexDescs, imageAudienceOverrides: reindexOverrides };
+                            });
+                          }}
+                          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          style={{ background: 'rgba(0,0,0,0.6)' }}
+                        >
+                          ✕
+                        </button>
+                        {/* Per-image audience override */}
+                        <div className="absolute left-1 top-1 flex rounded-md p-px opacity-0 transition-opacity group-hover:opacity-100" style={{ background: 'rgba(0,0,0,0.5)' }}>
+                          <button
+                            type="button"
+                            onClick={() => setPostForm((prev) => ({ ...prev, imageAudienceOverrides: { ...prev.imageAudienceOverrides, [index]: 'social' } }))}
+                            className="rounded-l-md px-1.5 py-px text-[9px] font-semibold"
+                            style={(postForm.imageAudienceOverrides[index] || postForm.relationshipAudience) === 'social' ? { backgroundColor: '#0284c7', color: '#fff' } : { color: 'rgba(255,255,255,0.7)' }}
+                          >
+                            S
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPostForm((prev) => ({ ...prev, imageAudienceOverrides: { ...prev.imageAudienceOverrides, [index]: 'secure' } }))}
+                            className="rounded-r-md px-1.5 py-px text-[9px] font-semibold"
+                            style={(postForm.imageAudienceOverrides[index] || postForm.relationshipAudience) === 'secure' ? { backgroundColor: '#d97706', color: '#fff' } : { color: 'rgba(255,255,255,0.7)' }}
+                          >
+                            🔒
+                          </button>
+                        </div>
+                        {/* Description input */}
+                        <input
+                          type="text"
+                          value={postForm.imageDescriptions?.[index] || ''}
+                          onChange={(event) => setPostForm((prev) => ({ ...prev, imageDescriptions: { ...prev.imageDescriptions, [index]: event.target.value } }))}
+                          placeholder="Add description…"
+                          maxLength={140}
+                          className="w-full px-2 py-1.5 text-[11px] focus:outline-none"
+                          style={{ background: 'var(--social-surface-soft)', color: 'var(--social-text-secondary)', borderTop: '1px solid color-mix(in srgb, var(--social-text-muted) 10%, transparent)' }}
+                        />
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 ) : null}
               </div>
 
               {/* ── Advanced expandable section ── */}
-              <div className="border-t border-slate-100">
+              <div style={{ borderTop: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)' }}>
                 <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, media: !prev.media }))} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${composerPanels.media ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`}>
-                    🔗 Links & Media
+                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, privacy: !prev.privacy }))} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors" style={composerPanels.privacy ? { border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' } : { border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', color: 'var(--social-text-muted)' }}>
+                    🔒 Privacy
                   </button>
-                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, privacy: !prev.privacy }))} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${composerPanels.privacy ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`}>
-                    🔒 Audience
-                  </button>
-                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, interaction: !prev.interaction }))} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${composerPanels.interaction ? 'border-violet-300 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`}>
+                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, interaction: !prev.interaction }))} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors" style={composerPanels.interaction ? { border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' } : { border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', color: 'var(--social-text-muted)' }}>
                     ⚡ Advanced
                   </button>
                 </div>
-
-                {composerPanels.media ? (
-                  <div className="mx-3 mb-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                    <label className="block text-xs font-semibold text-slate-600">Optional link / media URL</label>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <input type="url" value={postForm.mediaUrlInput} onChange={(event) => setPostForm((prev) => ({ ...prev, mediaUrlInput: event.target.value }))} placeholder="https://example.com/image.jpg" className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
-                      <button type="button" onClick={handleAddMediaUrl} className="rounded-xl border border-blue-500 bg-white px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50">Add URL</button>
-                    </div>
-                  </div>
-                ) : null}
 
                 {composerPanels.privacy ? (
                   <div className="mx-3 mb-3">
@@ -3594,66 +3737,59 @@ const Social = () => {
                 ) : null}
 
                 {composerPanels.interaction ? (
-                  <div className="mx-3 mb-3 space-y-3 rounded-xl border border-violet-100 bg-violet-50/40 p-3">
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-600">Post Type</label>
-                      <select value={postForm.contentType} onChange={(event) => setPostForm((prev) => ({ ...prev, contentType: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none">
-                        {COMPOSER_CONTENT_TYPES.map((option) => <option key={option} value={option}>{option.charAt(0).toUpperCase() + option.slice(1)}</option>)}
-                      </select>
-                    </div>
-
+                  <div className="mx-3 mb-3 space-y-3 rounded-xl p-3" style={{ border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)', background: 'color-mix(in srgb, var(--accent) 5%, var(--bg-panel))' }}>
                     {postForm.contentType === 'poll' ? (
-                      <div className="space-y-3 rounded-xl border bg-blue-50/40 p-3">
-                        <h4 className="text-sm font-semibold text-gray-700">Poll Settings</h4>
-                        <input type="text" value={postForm.interaction.poll.question} onChange={(event) => updateInteractionField('poll', 'question', event.target.value)} placeholder="Poll question" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                      <div className="space-y-3 rounded-xl p-3" style={{ border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)', background: 'color-mix(in srgb, var(--accent) 5%, transparent)' }}>
+                        <h4 className="text-sm font-semibold" style={{ color: 'var(--social-text-primary)' }}>Poll Settings</h4>
+                        <input type="text" value={postForm.interaction.poll.question} onChange={(event) => updateInteractionField('poll', 'question', event.target.value)} placeholder="Poll question" className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
                         <div className="space-y-2">
                           {postForm.interaction.poll.options.map((option, index) => (
                             <div key={`poll-option-${index}`} className="flex gap-2">
-                              <input type="text" value={option} onChange={(event) => updateInteractionOption('poll', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border px-3 py-2 text-sm" />
-                              <button type="button" onClick={() => removeInteractionOption('poll', index)} className="px-2 text-red-600" disabled={postForm.interaction.poll.options.length <= 2}>Remove</button>
+                              <input type="text" value={option} onChange={(event) => updateInteractionOption('poll', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
+                              <button type="button" onClick={() => removeInteractionOption('poll', index)} className="px-2" style={{ color: '#ef4444' }} disabled={postForm.interaction.poll.options.length <= 2}>Remove</button>
                             </div>
                           ))}
-                          <button type="button" onClick={() => addInteractionOption('poll')} className="text-sm text-blue-700 hover:underline" disabled={postForm.interaction.poll.options.length >= INTERACTION_MAX_OPTIONS}>Add poll option</button>
+                          <button type="button" onClick={() => addInteractionOption('poll')} className="text-sm hover:underline" style={{ color: 'var(--accent)' }} disabled={postForm.interaction.poll.options.length >= INTERACTION_MAX_OPTIONS}>Add poll option</button>
                         </div>
                         <div className="flex flex-col gap-3 sm:flex-row">
-                          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={postForm.interaction.poll.allowMultiple} onChange={(event) => updateInteractionField('poll', 'allowMultiple', event.target.checked)} />Allow multiple selections</label>
-                          <input type="datetime-local" value={postForm.interaction.poll.expiresAt} onChange={(event) => updateInteractionField('poll', 'expiresAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
+                          <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--social-text-secondary)' }}><input type="checkbox" checked={postForm.interaction.poll.allowMultiple} onChange={(event) => updateInteractionField('poll', 'allowMultiple', event.target.checked)} />Allow multiple selections</label>
+                          <input type="datetime-local" value={postForm.interaction.poll.expiresAt} onChange={(event) => updateInteractionField('poll', 'expiresAt', event.target.value)} className="rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
                         </div>
                       </div>
                     ) : null}
 
                     {postForm.contentType === 'quiz' ? (
-                      <div className="space-y-3 rounded-xl border bg-violet-50/40 p-3">
-                        <h4 className="text-sm font-semibold text-gray-700">Quiz Settings</h4>
-                        <input type="text" value={postForm.interaction.quiz.question} onChange={(event) => updateInteractionField('quiz', 'question', event.target.value)} placeholder="Quiz question" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                      <div className="space-y-3 rounded-xl p-3" style={{ border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)', background: 'color-mix(in srgb, var(--accent) 5%, transparent)' }}>
+                        <h4 className="text-sm font-semibold" style={{ color: 'var(--social-text-primary)' }}>Quiz Settings</h4>
+                        <input type="text" value={postForm.interaction.quiz.question} onChange={(event) => updateInteractionField('quiz', 'question', event.target.value)} placeholder="Quiz question" className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
                         <div className="space-y-2">
                           {postForm.interaction.quiz.options.map((option, index) => (
                             <div key={`quiz-option-${index}`} className="flex gap-2">
-                              <input type="text" value={option} onChange={(event) => updateInteractionOption('quiz', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border px-3 py-2 text-sm" />
-                              <button type="button" onClick={() => removeInteractionOption('quiz', index)} className="px-2 text-red-600" disabled={postForm.interaction.quiz.options.length <= 2}>Remove</button>
+                              <input type="text" value={option} onChange={(event) => updateInteractionOption('quiz', index, event.target.value)} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
+                              <button type="button" onClick={() => removeInteractionOption('quiz', index)} className="px-2" style={{ color: '#ef4444' }} disabled={postForm.interaction.quiz.options.length <= 2}>Remove</button>
                             </div>
                           ))}
-                          <button type="button" onClick={() => addInteractionOption('quiz')} className="text-sm text-blue-700 hover:underline" disabled={postForm.interaction.quiz.options.length >= INTERACTION_MAX_OPTIONS}>Add quiz option</button>
+                          <button type="button" onClick={() => addInteractionOption('quiz')} className="text-sm hover:underline" style={{ color: 'var(--accent)' }} disabled={postForm.interaction.quiz.options.length >= INTERACTION_MAX_OPTIONS}>Add quiz option</button>
                         </div>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <select value={postForm.interaction.quiz.correctOptionIndex} onChange={(event) => updateInteractionField('quiz', 'correctOptionIndex', Number(event.target.value))} className="rounded-xl border px-3 py-2 text-sm">
+                          <select value={postForm.interaction.quiz.correctOptionIndex} onChange={(event) => updateInteractionField('quiz', 'correctOptionIndex', Number(event.target.value))} className="rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }}>
                             {postForm.interaction.quiz.options.map((_, index) => <option key={`quiz-correct-${index}`} value={index}>Correct option #{index + 1}</option>)}
                           </select>
-                          <input type="datetime-local" value={postForm.interaction.quiz.expiresAt} onChange={(event) => updateInteractionField('quiz', 'expiresAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
+                          <input type="datetime-local" value={postForm.interaction.quiz.expiresAt} onChange={(event) => updateInteractionField('quiz', 'expiresAt', event.target.value)} className="rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
                         </div>
-                        <textarea value={postForm.interaction.quiz.explanation} onChange={(event) => updateInteractionField('quiz', 'explanation', event.target.value)} placeholder="Explanation shown after answer (optional)" className="w-full rounded-xl border px-3 py-2 text-sm" rows={2} />
+                        <textarea value={postForm.interaction.quiz.explanation} onChange={(event) => updateInteractionField('quiz', 'explanation', event.target.value)} placeholder="Explanation shown after answer (optional)" className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" rows={2} style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
                       </div>
                     ) : null}
 
                     {postForm.contentType === 'countdown' ? (
-                      <div className="space-y-3 rounded-xl border bg-emerald-50/40 p-3">
-                        <h4 className="text-sm font-semibold text-gray-700">Countdown Settings</h4>
-                        <input type="text" value={postForm.interaction.countdown.label} onChange={(event) => updateInteractionField('countdown', 'label', event.target.value)} placeholder="Countdown label" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                      <div className="space-y-3 rounded-xl p-3" style={{ border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)', background: 'color-mix(in srgb, var(--accent) 5%, transparent)' }}>
+                        <h4 className="text-sm font-semibold" style={{ color: 'var(--social-text-primary)' }}>Countdown Settings</h4>
+                        <input type="text" value={postForm.interaction.countdown.label} onChange={(event) => updateInteractionField('countdown', 'label', event.target.value)} placeholder="Countdown label" className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <input type="datetime-local" value={postForm.interaction.countdown.targetAt} onChange={(event) => updateInteractionField('countdown', 'targetAt', event.target.value)} className="rounded-xl border px-3 py-2 text-sm" />
-                          <input type="text" value={postForm.interaction.countdown.timezone} onChange={(event) => updateInteractionField('countdown', 'timezone', event.target.value)} placeholder="Timezone (e.g. UTC)" className="rounded-xl border px-3 py-2 text-sm" />
+                          <input type="datetime-local" value={postForm.interaction.countdown.targetAt} onChange={(event) => updateInteractionField('countdown', 'targetAt', event.target.value)} className="rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
+                          <input type="text" value={postForm.interaction.countdown.timezone} onChange={(event) => updateInteractionField('countdown', 'timezone', event.target.value)} placeholder="Timezone (e.g. UTC)" className="rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
                         </div>
-                        <input type="url" value={postForm.interaction.countdown.linkUrl} onChange={(event) => updateInteractionField('countdown', 'linkUrl', event.target.value)} placeholder="Optional link URL" className="w-full rounded-xl border px-3 py-2 text-sm" />
+                        <input type="url" value={postForm.interaction.countdown.linkUrl} onChange={(event) => updateInteractionField('countdown', 'linkUrl', event.target.value)} placeholder="Optional link URL" className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--bg-panel)', color: 'var(--social-text-primary)', '--tw-ring-color': 'var(--accent)' }} />
                       </div>
                     ) : null}
                   </div>
@@ -3662,18 +3798,19 @@ const Social = () => {
 
               {/* ── Live preview ── */}
               {(postForm.editorMode === 'code' ? postForm.codeContent : postForm.content) ? (
-                <div className="mx-3 mb-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Preview</p>
+                <div className="mx-3 mb-3 rounded-xl px-3 py-2.5 text-sm" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-secondary)' }}>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--social-text-muted)' }}>Preview</p>
                   {renderFormattedPostContent(postForm.editorMode === 'code' ? postForm.codeContent : postForm.content)}
                 </div>
               ) : null}
 
               {/* ── Footer: submit ── */}
-              <div className="border-t border-slate-100 bg-slate-50/60 px-3 py-2.5">
+              <div className="px-3 py-2.5" style={{ borderTop: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)', background: 'var(--social-surface-muted)' }}>
                 <button
                   type="submit"
                   disabled={submittingPost || composerImageUploading}
-                  className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-blue-700 hover:to-blue-600 disabled:opacity-60 sm:w-auto sm:min-w-[140px]"
+                  className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 disabled:opacity-60 sm:w-auto sm:min-w-[140px]"
+                  style={{ background: `linear-gradient(135deg, var(--accent), var(--accent2))` }}
                 >
                   {composerImageUploading ? 'Uploading image…' : submittingPost ? 'Publishing…' : 'Publish Post'}
                 </button>
@@ -3683,24 +3820,25 @@ const Social = () => {
             {/* ── Mobile MD Guide popup ── */}
             {composerMdMobileOpen ? (
               <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 lg:hidden" onClick={() => setComposerMdMobileOpen(false)}>
-                <div className="w-full max-w-lg rounded-t-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                    <p className="font-semibold text-slate-800">Markdown Quick Reference</p>
-                    <button type="button" onClick={() => setComposerMdMobileOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+                <div className="w-full max-w-lg rounded-t-2xl shadow-2xl" style={{ background: 'var(--bg-panel)' }} onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid color-mix(in srgb, var(--social-text-muted) 15%, transparent)' }}>
+                    <p className="font-semibold" style={{ color: 'var(--social-text-primary)' }}>Markdown Quick Reference</p>
+                    <button type="button" onClick={() => setComposerMdMobileOpen(false)} style={{ color: 'var(--social-text-muted)' }}>✕</button>
                   </div>
                   <div className="max-h-[60vh] overflow-y-auto p-4">
                     <ul className="space-y-2">
                       {CODE_MODE_SNIPPETS.map((snippet) => (
-                        <li key={snippet.label} className="flex items-center gap-3 rounded-xl border border-slate-100 p-2.5">
+                        <li key={snippet.label} className="flex items-center gap-3 rounded-xl p-2.5" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)' }}>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold text-slate-700">{snippet.label}</p>
-                            <code className="text-[11px] text-blue-600 break-all">{snippet.syntax}</code>
-                            <p className="text-[11px] text-slate-400">{snippet.description}{snippet.requiresSelection ? ' · ⚠ highlight text first' : ''}</p>
+                            <p className="text-xs font-semibold" style={{ color: 'var(--social-text-primary)' }}>{snippet.label}</p>
+                            <code className="text-[11px] break-all" style={{ color: 'var(--accent)' }}>{snippet.syntax}</code>
+                            <p className="text-[11px]" style={{ color: 'var(--social-text-muted)' }}>{snippet.description}{snippet.requiresSelection ? ' · ⚠ highlight text first' : ''}</p>
                           </div>
                           <button
                             type="button"
                             onClick={() => handleCopyMdSyntax(snippet.syntax)}
-                            className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+                            className="shrink-0 rounded-lg px-3 py-1 text-xs font-semibold transition-colors"
+                            style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--social-surface-soft)', color: 'var(--social-text-secondary)' }}
                           >
                             {copiedMd === snippet.syntax ? '✓ Copied' : 'Copy'}
                           </button>
