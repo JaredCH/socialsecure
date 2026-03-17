@@ -28,10 +28,8 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
               type: 'state'
             }),
             $setOnInsert: expect.objectContaining({
-              discoveryGroup: 'states',
               name: 'Alabama',
-              sortOrder: 0,
-              type: 'state'
+              sortOrder: 0
             })
           })
         })
@@ -46,11 +44,8 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
               type: 'topic'
             }),
             $setOnInsert: expect.objectContaining({
-              defaultLanding: true,
-              discoveryGroup: 'topics',
               name: 'SocialSecure',
-              sortOrder: 0,
-              type: 'topic'
+              sortOrder: 0
             })
           })
         })
@@ -64,9 +59,7 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
               type: 'topic'
             }),
             $setOnInsert: expect.objectContaining({
-              discoveryGroup: 'topics',
-              name: 'AI',
-              type: 'topic'
+              name: 'AI'
             })
           })
         })
@@ -74,6 +67,10 @@ describe('ChatRoom.ensureDefaultDiscoveryRooms', () => {
     ]));
     const californiaOperation = operations.find((entry) => entry?.updateOne?.filter?.stableKey === 'state:CA');
     expect(californiaOperation.updateOne.update.$setOnInsert.sortOrder).toBe(4);
+    const alabamaOperation = operations.find((entry) => entry?.updateOne?.filter?.stableKey === 'state:AL');
+    expect(alabamaOperation.updateOne.update.$setOnInsert).not.toHaveProperty('type');
+    const socialsecureOperation = operations.find((entry) => entry?.updateOne?.filter?.stableKey === 'topic:socialsecure');
+    expect(socialsecureOperation.updateOne.update.$setOnInsert).not.toHaveProperty('type');
   });
 
   it('merges duplicate seeded state and city rooms into the canonical stable-key room', async () => {

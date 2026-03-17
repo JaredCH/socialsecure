@@ -176,10 +176,7 @@ if (isProduction) {
   }
 }
 
-mongoose.connect(mongoUri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(mongoUri)
 .then(async () => {
   console.log('MongoDB connected successfully');
   try {

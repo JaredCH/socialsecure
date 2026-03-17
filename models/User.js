@@ -512,9 +512,6 @@ userSchema.index({ city: 1, state: 1, country: 1 });
 userSchema.index({ zipCode: 1 });
 userSchema.index({ friendCount: -1, createdAt: -1 });
 
-// Compound index to support discovery queries: active users ordered by recency
-userSchema.index({ registrationStatus: 1, createdAt: -1 });
-
 // Hash password before saving
 userSchema.pre('save', async function(next) {
   const looksLikeBcryptHash = typeof this.passwordHash === 'string' && /^\$2[aby]\$\d{2}\$/.test(this.passwordHash);
