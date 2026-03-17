@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import ChatComposerBar from '../components/chat/ChatComposerBar';
 import ChatMessageList from '../components/chat/ChatMessageList';
 import PasswordField from '../components/PasswordField';
-import { authAPI, chatAPI, friendsAPI, moderationAPI } from '../utils/api';
+import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
 import { parseSlashCommand, runSlashCommand } from '../utils/chatCommands';
 import { joinRealtimeRoom, leaveRealtimeRoom, onChatMessage, onFriendPresence, onPresenceUpdate } from '../utils/realtime';
 import { getPresenceMeta } from '../utils/presence';
@@ -522,6 +522,54 @@ function Chat() {
   const decryptingMessageIdsRef = useRef(new Set());
   const participantRefreshTimerRef = useRef(null);
   const lastParticipantRefreshAtRef = useRef(0);
+
+  const [userHoverPopup, setUserHoverPopup] = useState({ visible: false, user: null, rect: null, profileData: null, loading: false });
+  const userHoverTimerRef = useRef(null);
+  const userHoverCancelRef = useRef(false);
+  const HOVER_POPUP_DELAY_MS = 400;
+  const HOVER_POPUP_CLOSE_DELAY_MS = 300;
+
+  const handleUsernameHoverStart = useCallback((user, rect) => {
+    if (!user?.username && !user?._id) return;
+    userHoverCancelRef.current = false;
+    if (userHoverTimerRef.current) clearTimeout(userHoverTimerRef.current);
+    userHoverTimerRef.current = setTimeout(async () => {
+      if (userHoverCancelRef.current) return;
+      setUserHoverPopup((prev) => ({ ...prev, visible: true, user, rect, profileData: null, loading: true }));
+      try {
+        const identifier = user.username || user._id;
+        const response = await userAPI.getByUsername(identifier);
+        if (userHoverCancelRef.current) return;
+        setUserHoverPopup((prev) => prev.user === user ? { ...prev, profileData: response.data?.user || null, loading: false } : prev);
+      } catch {
+        if (userHoverCancelRef.current) return;
+        setUserHoverPopup((prev) => prev.user === user ? { ...prev, loading: false } : prev);
+      }
+    }, HOVER_POPUP_DELAY_MS);
+  }, []);
+
+  const handleUsernameHoverEnd = useCallback(() => {
+    userHoverCancelRef.current = true;
+    if (userHoverTimerRef.current) {
+      clearTimeout(userHoverTimerRef.current);
+      userHoverTimerRef.current = null;
+    }
+    userHoverTimerRef.current = setTimeout(() => {
+      setUserHoverPopup((prev) => ({ ...prev, visible: false, user: null, rect: null, profileData: null, loading: false }));
+    }, HOVER_POPUP_CLOSE_DELAY_MS);
+  }, []);
+
+  const handleHoverPopupMouseEnter = useCallback(() => {
+    userHoverCancelRef.current = false;
+    if (userHoverTimerRef.current) {
+      clearTimeout(userHoverTimerRef.current);
+      userHoverTimerRef.current = null;
+    }
+  }, []);
+
+  const handleHoverPopupMouseLeave = useCallback(() => {
+    handleUsernameHoverEnd();
+  }, [handleUsernameHoverEnd]);
 
   const handleThemeChange = useCallback((nextTheme) => {
     if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
@@ -2696,6 +2744,8 @@ function Chat() {
               onToggleAdminMessageRemoval={handleToggleAdminMessageRemoval}
               onToggleAdminUserMute={handleToggleAdminUserMute}
               onAdminDeleteMessage={handleAdminDeleteMessage}
+              onUsernameHoverStart={handleUsernameHoverStart}
+              onUsernameHoverEnd={handleUsernameHoverEnd}
             />
             {activeConversation?.type === 'dm' && activeConversationId && !dmUnlockedByConversation[String(activeConversationId)] ? (
               <div
@@ -2846,11 +2896,25 @@ function Chat() {
                             }
                           }}
                         >
-                          <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${activeTheme.subtle}`}>
-                            {String(user.username || user.realName || 'user').slice(0, 1).toUpperCase()}
+                          <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden ${activeTheme.subtle}`}>
+                            {user.avatarUrl ? (
+                              <img src={user.avatarUrl} alt={`@${user.username || 'user'}`} className="h-full w-full rounded-full object-cover" />
+                            ) : (
+                              String(user.username || user.realName || 'user').slice(0, 1).toUpperCase()
+                            )}
                           </span>
                           <div className="min-w-0">
-                            <p className="truncate font-semibold">@{user.username || user.realName || 'user'}</p>
+                            <a
+                              href={`/social?user=${encodeURIComponent(user.username || user._id)}`}
+                              className="truncate font-semibold hover:underline block"
+                              onMouseEnter={(event) => {
+                                const rect = event.currentTarget.getBoundingClientRect();
+                                handleUsernameHoverStart(user, rect);
+                              }}
+                              onMouseLeave={handleUsernameHoverEnd}
+                            >
+                              @{user.username || user.realName || 'user'}
+                            </a>
                             <p className="truncate text-[11px] opacity-75">
                               {String(user._id) === String(profile?._id) ? 'You' : 'Available in this conversation'}
                             </p>
@@ -2938,6 +3002,55 @@ function Chat() {
           </button>
         </div>
       ) : null}
+      {userHoverPopup.visible && userHoverPopup.rect ? (() => {
+        const pd = userHoverPopup.profileData;
+        const prefs = pd?.socialPagePreferences || {};
+        const heroPrefs = prefs?.hero || {};
+        const globalStyles = prefs?.globalStyles || {};
+        const panelColor = globalStyles.panelColor || '#ffffff';
+        const headerColor = globalStyles.headerColor || '#0f172a';
+        const fontColor = globalStyles.fontColor || '#0f172a';
+        const heroImg = heroPrefs.backgroundImage || pd?.bannerUrl || '';
+        const profileImg = heroPrefs.profileImage || pd?.avatarUrl || '';
+        const popupLeft = Math.min(userHoverPopup.rect.left, window.innerWidth - 260);
+        const popupTop = userHoverPopup.rect.bottom + 4;
+        const createdDate = pd?.createdAt ? new Date(pd.createdAt).toLocaleDateString() : '';
+        return (
+          <div
+            className="fixed z-[60] w-60 rounded-lg border shadow-xl overflow-hidden"
+            style={{ left: popupLeft, top: Math.min(popupTop, window.innerHeight - 340), backgroundColor: panelColor, color: fontColor }}
+            data-testid="user-hover-popup"
+            onMouseEnter={handleHoverPopupMouseEnter}
+            onMouseLeave={handleHoverPopupMouseLeave}
+          >
+            {userHoverPopup.loading ? (
+              <div className="p-4 text-center text-xs opacity-60">Loading...</div>
+            ) : pd ? (
+              <>
+                <div className="relative h-20 w-full" style={{ backgroundColor: headerColor }}>
+                  {heroImg ? <img src={heroImg} alt="" className="h-full w-full object-cover" /> : null}
+                  <div className="absolute -bottom-5 left-3">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white text-sm font-bold overflow-hidden" style={{ borderColor: panelColor }}>
+                      {profileImg ? <img src={profileImg} alt="" className="h-full w-full rounded-full object-cover" /> : (pd.username || 'U').slice(0, 1).toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+                <div className="px-3 pt-7 pb-3 text-xs" style={{ color: fontColor }}>
+                  <p className="font-bold text-sm truncate">@{pd.username || 'user'}</p>
+                  {pd.realName ? <p className="truncate opacity-75">{pd.realName}</p> : null}
+                  {pd.zipCode ? <p className="mt-1 opacity-60">📍 {pd.zipCode}</p> : null}
+                  {createdDate ? <p className="mt-0.5 opacity-60">Joined {createdDate}</p> : null}
+                  <a href={`/social?user=${encodeURIComponent(pd.username || pd._id)}`} className="mt-2 block text-center rounded border px-2 py-1 text-[11px] font-semibold hover:opacity-80" style={{ borderColor: headerColor, color: headerColor }}>
+                    View Social Page
+                  </a>
+                </div>
+              </>
+            ) : (
+              <div className="p-4 text-center text-xs opacity-60">Could not load profile</div>
+            )}
+          </div>
+        );
+      })() : null}
     </div>
   );
 }
