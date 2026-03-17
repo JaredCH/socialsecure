@@ -158,7 +158,7 @@ describe('App navbar features dropdown', () => {
     const mainNav = container.querySelector('#main-nav-menu');
     expect(mainNav).not.toBeNull();
     expect(mainNav.textContent).not.toContain('Calendar');
-    expect(mainNav.textContent).not.toContain('Discover');
+    expect(mainNav.textContent).toContain('Discover');
     expect(mainNav.textContent).not.toContain('Resume');
   });
 

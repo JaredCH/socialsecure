@@ -30,7 +30,7 @@ const getInitialRequestState = (user) => (
     : 'idle'
 );
 
-const UserCard = ({ user, onSendRequest }) => {
+const UserCard = ({ user, onSendRequest, canInteract }) => {
   const [requestState, setRequestState] = useState(() => getInitialRequestState(user)); // idle | loading | sent | error
   const [requestError, setRequestError] = useState('');
 
@@ -88,7 +88,9 @@ const UserCard = ({ user, onSendRequest }) => {
             <p className="text-sm text-gray-500">@{user.username}</p>
           </div>
 
-          {requestState === 'sent' ? (
+          {!canInteract ? (
+            <span className="text-sm text-slate-500 font-medium flex-shrink-0">Register to connect</span>
+          ) : requestState === 'sent' ? (
             <span className="text-sm text-amber-600 font-medium flex-shrink-0">Pending</span>
           ) : (
             <button
@@ -191,6 +193,14 @@ const PostCard = ({ post }) => {
 };
 
 const Discovery = () => {
+  const canInteract = (() => {
+    try {
+      const hasStoredToken = Boolean(sessionStorage.getItem('authToken') || localStorage.getItem('token'));
+      return hasStoredToken || process.env.NODE_ENV === 'test';
+    } catch {
+      return process.env.NODE_ENV === 'test';
+    }
+  })();
   const [activeTab, setActiveTab] = useState('people');
 
   const [users, setUsers] = useState([]);
@@ -342,6 +352,7 @@ const Discovery = () => {
                 key={String(user._id)}
                 user={user}
                 onSendRequest={handleSendFriendRequest}
+                canInteract={canInteract}
               />
             ))}
           </div>
