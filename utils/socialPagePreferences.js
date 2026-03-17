@@ -29,6 +29,8 @@ const SOCIAL_PREFERENCES_VERSION = 2;
 const LAYOUT_GRID_COLUMNS = 12;
 const LAYOUT_GRID_ROWS = 20;
 const MEDIA_URL_MAX_LENGTH = 2048;
+// 3MB upload limit * 4/3 base64 overhead + small prefix/padding allowance.
+const BODY_BG_DATA_URL_MAX_LENGTH = Math.ceil((3 * 1024 * 1024) * 4 / 3) + 64;
 const HERO_IMAGE_HISTORY_LIMIT = 3;
 const OPTIONAL_SOCIAL_SECTION_IDS = ['blog', 'resume', 'aboutme'];
 const SOCIAL_SECTION_AUDIENCES = ['public', 'social', 'secure'];
@@ -554,10 +556,17 @@ const normalizeMediaUrl = (value, fallback = null) => {
 const normalizeBodyBackgroundImageUrl = (value, fallback = '') => {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim();
-  if (!trimmed || trimmed.length > MEDIA_URL_MAX_LENGTH) return fallback;
+  if (!trimmed) return fallback;
   if (/^\/uploads\/backgrounds\/[a-f0-9]+\/[a-f0-9]+-[a-f0-9]+\.\w{2,5}$/.test(trimmed)) {
     return trimmed;
   }
+  if (
+    /^data:image\/(?:jpeg|jpg|png|gif|webp);base64,[a-z0-9+/=]+$/i.test(trimmed)
+    && trimmed.length <= BODY_BG_DATA_URL_MAX_LENGTH
+  ) {
+    return trimmed;
+  }
+  if (trimmed.length > MEDIA_URL_MAX_LENGTH) return fallback;
   try {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {

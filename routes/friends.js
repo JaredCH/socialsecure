@@ -304,6 +304,17 @@ router.post('/:id/decline', authenticateToken, async (req, res) => {
     friendship.status = 'declined';
     friendship.declinedAt = new Date();
     await friendship.save();
+
+    await createNotification({
+      recipientId: friendship.requester,
+      senderId: friendship.recipient,
+      type: 'system',
+      title: 'Friend request declined',
+      body: `${req.user.username || req.user.realName || 'Someone'} declined your friend request`,
+      data: {
+        url: '/friends'
+      }
+    });
     
     res.json({
       success: true,
@@ -346,6 +357,8 @@ router.delete('/:id', friendMutationLimiter, authenticateToken, async (req, res)
       return res.status(400).json({ error: 'Cannot remove a pending request you did not send' });
     }
     
+    const wasPendingRequest = friendship.status === 'pending';
+
     // If accepted, update friend counts
     if (friendship.status === 'accepted') {
       await User.updateOne(
@@ -385,10 +398,23 @@ router.delete('/:id', friendMutationLimiter, authenticateToken, async (req, res)
     friendship.partnerRequestedBy = null;
     friendship.partnerRequestedAt = null;
     await friendship.save();
+
+    if (wasPendingRequest) {
+      await createNotification({
+        recipientId: friendship.recipient,
+        senderId: friendship.requester,
+        type: 'system',
+        title: 'Friend request canceled',
+        body: `${req.user.username || req.user.realName || 'Someone'} canceled a friend request`,
+        data: {
+          url: '/friends'
+        }
+      });
+    }
     
     res.json({
       success: true,
-      message: 'Friend removed'
+      message: wasPendingRequest ? 'Friend request canceled' : 'Friend removed'
     });
   } catch (error) {
     console.error('Error removing friend:', error);
