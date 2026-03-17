@@ -5445,7 +5445,8 @@ const Social = () => {
                   <button
                     type="button"
                     onClick={() => setComposerVisible(false)}
-                    className="rounded-2xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white/70"
+                    className="rounded-2xl border px-3 py-1.5 text-xs font-semibold"
+                    style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 30%, transparent)', color: 'var(--social-text-secondary)' }}
                   >
                     Hide
                   </button>
@@ -5822,7 +5823,7 @@ const Social = () => {
                     ) : null}
 
                     {!isOwnSocialContext && !activePartnerFriend ? (
-                      <p className="text-sm text-slate-500">No partner listed.</p>
+                      <p className="text-sm" style={{ color: 'var(--social-text-muted)' }}>No partner listed.</p>
                     ) : null}
 
                     {partnerActionError ? <div className="mt-2 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{partnerActionError}</div> : null}
