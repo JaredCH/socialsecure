@@ -2480,7 +2480,7 @@ router.get('/rooms/:roomId/users', roomReadLimiter, authenticateToken, async (re
 });
 
 // Sync user's location rooms - trigger room creation/joining based on current location
-router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
+router.post('/rooms/sync-location', unifiedChatLimiter, authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     
