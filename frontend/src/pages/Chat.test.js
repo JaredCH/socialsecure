@@ -26,6 +26,9 @@ jest.mock('../utils/api', () => ({
     syncLocationRooms: jest.fn(),
     getAllRooms: jest.fn(),
     getQuickAccessRooms: jest.fn(),
+    createManagedRoom: jest.fn(),
+    updateRoom: jest.fn(),
+    moveRoom: jest.fn(),
     joinRoom: jest.fn(),
     getMessages: jest.fn(),
     getRoomUsers: jest.fn(),
@@ -169,6 +172,9 @@ describe('Chat zip room indicator', () => {
         }
       }
     });
+    chatAPI.createManagedRoom.mockResolvedValue({ data: { success: true, room: { _id: 'room-new' } } });
+    chatAPI.updateRoom.mockResolvedValue({ data: { success: true, room: { _id: 'room-edit' } } });
+    chatAPI.moveRoom.mockResolvedValue({ data: { success: true } });
     chatAPI.joinRoom.mockResolvedValue({ data: { success: true } });
     chatAPI.deleteRoom.mockResolvedValue({ data: { success: true } });
     chatAPI.getMessages.mockResolvedValue({ data: { messages: [], pagination: { hasMore: false } } });
@@ -437,14 +443,15 @@ describe('Chat zip room indicator', () => {
     chatAPI.getAllRooms.mockResolvedValue({
       data: {
         rooms: [
-          { _id: 'topic-tech', type: 'topic', name: 'Technology' },
-          { _id: 'state-wy', type: 'state', name: 'Wyoming', state: 'WY' },
-          { _id: 'city-la', type: 'city', name: 'Los Angeles, California', state: 'CA', city: 'Los Angeles', stableKey: 'city:CA:los angeles' },
-          { _id: 'topic-ai', type: 'topic', name: 'AI' },
-          { _id: 'state-ca', type: 'state', name: 'California', state: 'CA' },
-          { _id: 'city-sd', type: 'city', name: 'San Diego, California', state: 'CA', city: 'San Diego', stableKey: 'city:CA:san diego' },
-          { _id: 'state-al', type: 'state', name: 'Alabama', state: 'AL' },
-          { _id: 'city-mobile', type: 'city', name: 'Mobile, Alabama', state: 'AL', city: 'Mobile', stableKey: 'city:AL:mobile' }
+          { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', defaultLanding: true, sortOrder: 0 },
+          { _id: 'topic-tech', type: 'topic', name: 'Technology', discoveryGroup: 'topics', sortOrder: 2 },
+          { _id: 'state-wy', type: 'state', name: 'Wyoming', state: 'WY', discoveryGroup: 'states', sortOrder: 2 },
+          { _id: 'city-la', type: 'city', name: 'Los Angeles, California', state: 'CA', city: 'Los Angeles', parentRoomId: 'state-ca', discoveryGroup: 'states', sortOrder: 0 },
+          { _id: 'topic-ai', type: 'topic', name: 'AI', discoveryGroup: 'topics', sortOrder: 1 },
+          { _id: 'state-ca', type: 'state', name: 'California', state: 'CA', discoveryGroup: 'states', sortOrder: 1 },
+          { _id: 'city-sd', type: 'city', name: 'San Diego, California', state: 'CA', city: 'San Diego', parentRoomId: 'state-ca', discoveryGroup: 'states', sortOrder: 1 },
+          { _id: 'state-al', type: 'state', name: 'Alabama', state: 'AL', discoveryGroup: 'states', sortOrder: 0 },
+          { _id: 'city-mobile', type: 'city', name: 'Mobile, Alabama', state: 'AL', city: 'Mobile', parentRoomId: 'state-al', discoveryGroup: 'states', sortOrder: 0 }
         ]
       }
     });
@@ -490,7 +497,7 @@ describe('Chat zip room indicator', () => {
     const stateSummaries = stateSummaryButtons
       .map((node) => node.getAttribute('data-discovery-state-summary'));
     expect(stateSummaries).toEqual(['Alabama', 'California', 'Wyoming']);
-    expect(stateSummaryButtons.map((node) => node.textContent)).toEqual(['Alabama+', 'California+', 'Wyoming+']);
+    expect(stateSummaryButtons.map((node) => node.textContent)).toEqual(['Alabamastate · 1 sub-room', 'Californiastate · 2 sub-rooms', 'Wyomingstate']);
 
     for (const button of stateSummaryButtons) {
       await act(async () => {
@@ -518,8 +525,9 @@ describe('Chat zip room indicator', () => {
 
     const topicRows = Array.from(container.querySelectorAll('[data-topic-room]'))
       .map((node) => node.getAttribute('data-topic-room'));
-    expect(topicRows).toEqual(['AI', 'Technology']);
+    expect(topicRows).toEqual(['SocialSecure', 'AI', 'Technology']);
     expect(container.textContent).toContain('Topics');
+    expect(container.textContent).toContain('SocialSecure');
   });
 
   it('joins a state room and a topic room from the discovery sections', async () => {
@@ -538,8 +546,8 @@ describe('Chat zip room indicator', () => {
     chatAPI.getAllRooms.mockResolvedValue({
       data: {
         rooms: [
-          { _id: 'state-ca', type: 'state', name: 'California', state: 'CA', members: [] },
-          { _id: 'topic-ai', type: 'topic', name: 'AI', members: [] }
+          { _id: 'state-ca', type: 'state', name: 'California', state: 'CA', discoveryGroup: 'states', members: [] },
+          { _id: 'topic-ai', type: 'topic', name: 'AI', discoveryGroup: 'topics', members: [] }
         ]
       }
     });
@@ -557,17 +565,9 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    // Expand California
-    const caSummary = container.querySelector('[data-discovery-state-summary="California"]');
-    await act(async () => {
-      caSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flush();
-    });
-
     // Click Join on the state room
-    const stateJoinButton = Array.from(
-      container.querySelector('[data-discovery-state="California"]').querySelectorAll('button')
-    ).find((btn) => btn.textContent === 'Join');
+    const stateJoinButton = Array.from(container.querySelectorAll('[data-room-tree-item="California"] button'))
+      .find((btn) => btn.textContent === 'Join');
     expect(stateJoinButton).not.toBeUndefined();
 
     await act(async () => {
@@ -597,6 +597,98 @@ describe('Chat zip room indicator', () => {
     });
 
     expect(chatAPI.joinRoom).toHaveBeenCalledWith('topic-ai');
+  });
+
+  it('loads the SocialSecure topic room by default when chat opens', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', defaultLanding: true, members: [] },
+          { _id: 'state-ca', type: 'state', name: 'California', discoveryGroup: 'states', members: [] }
+        ]
+      }
+    });
+    chatAPI.getMessages.mockResolvedValue({ data: { messages: [], pagination: { hasMore: false } } });
+
+    await renderChat();
+
+    expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-socialsecure', 1, 40);
+    expect(container.textContent).toContain('SocialSecure');
+  });
+
+  it('shows an admin control panel for creating and reordering managed rooms', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115', isAdmin: true } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'state-ca', type: 'state', name: 'California', state: 'CA', discoveryGroup: 'states', sortOrder: 0 },
+          { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', sortOrder: 0, defaultLanding: true }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    expect(container.querySelector('[data-testid="chat-admin-control-panel"]')).not.toBeNull();
+
+    const adminNameInput = container.querySelector('input[aria-label="Admin room name"]');
+    const adminParentSelect = container.querySelector('select[aria-label="Admin room parent"]');
+    expect(adminNameInput).not.toBeNull();
+    expect(adminParentSelect).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(adminNameInput, 'Los Angeles');
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      nativeSetter.call(adminParentSelect, 'state-ca');
+      adminParentSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+
+    const addRoomButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Add room');
+    expect(addRoomButton).not.toBeUndefined();
+
+    await act(async () => {
+      addRoomButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(chatAPI.createManagedRoom).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Los Angeles',
+      parentRoomId: 'state-ca'
+    }));
+
+    const moveDownButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '↓');
+    expect(moveDownButton).not.toBeUndefined();
+
+    await act(async () => {
+      moveDownButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(chatAPI.moveRoom).toHaveBeenCalled();
   });
 
   it('only shows room search results after a query and opens a clicked room by joining it', async () => {

@@ -205,29 +205,34 @@ describe('Chat event room discovery routes', () => {
     expect(ChatRoom.aggregate).toHaveBeenCalledWith([
       {
         $match: {
+          archivedAt: null,
+          discoverable: { $ne: false },
           $or: [
             { type: 'state' },
-            { type: 'city', stableKey: { $exists: true, $ne: null } },
             { type: 'topic' },
+            { parentRoomId: { $ne: null } },
             { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
           ]
         }
       },
       {
         $addFields: {
+          discoveryParentPriority: {
+            $cond: [{ $ifNull: ['$parentRoomId', false] }, 1, 0]
+          },
           discoveryTypePriority: {
             $switch: {
               branches: [
-                { case: { $eq: ['$type', 'state'] }, then: 0 },
-                { case: { $eq: ['$type', 'city'] }, then: 1 },
-                { case: { $eq: ['$type', 'topic'] }, then: 2 }
+                { case: { $eq: ['$discoveryGroup', 'states'] }, then: 0 },
+                { case: { $eq: ['$discoveryGroup', 'topics'] }, then: 1 },
+                { case: { $eq: ['$type', 'city'] }, then: 2 }
               ],
               default: 3
             }
           }
         }
       },
-      { $sort: { discoveryTypePriority: 1, lastActivity: -1, createdAt: -1 } },
+      { $sort: { discoveryTypePriority: 1, discoveryParentPriority: 1, sortOrder: 1, name: 1, lastActivity: -1, createdAt: -1 } },
       { $skip: 0 },
       { $limit: 10 },
       {
@@ -245,6 +250,11 @@ describe('Chat event room discovery routes', () => {
           eventRef: 1,
           stableKey: 1,
           autoLifecycle: 1,
+          discoveryGroup: 1,
+          parentRoomId: 1,
+          sortOrder: 1,
+          defaultLanding: 1,
+          archivedAt: 1,
           members: 1,
           messageCount: 1,
           lastActivity: 1

@@ -87,7 +87,11 @@ describe('ChatRoom.findOrCreateByLocation canonical seeded room reuse', () => {
       coordinates: [-97.7431, 30.2672]
     });
 
-    expect(findOneSpy).toHaveBeenCalledWith({ stableKey: 'state:TX' });
+    expect(findOneSpy).toHaveBeenCalledWith({
+      stableKey: 'state:TX',
+      archivedAt: null,
+      discoverable: { $ne: false }
+    });
     expect(result).toEqual({ room: canonicalRoom, created: false });
   });
 
@@ -101,9 +105,18 @@ describe('ChatRoom.findOrCreateByLocation canonical seeded room reuse', () => {
       members: ['user-1'],
       save: jest.fn().mockResolvedValue(true)
     };
-    const findOneSpy = jest.spyOn(ChatRoom, 'findOne')
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(legacyRoom);
+    const findOneSpy = jest.spyOn(ChatRoom, 'findOne').mockImplementation(async (query) => {
+      if (query?.stableKey === 'state:TX' && query?.archivedAt && query.archivedAt.$ne !== undefined) {
+        return null;
+      }
+      if (query?.stableKey === 'state:TX') {
+        return null;
+      }
+      if (query?.type === 'state' && query?.state === 'TX') {
+        return legacyRoom;
+      }
+      return null;
+    });
 
     const result = await ChatRoom.findOrCreateByLocation({
       type: 'state',
@@ -112,8 +125,19 @@ describe('ChatRoom.findOrCreateByLocation canonical seeded room reuse', () => {
       coordinates: [-97.7431, 30.2672]
     });
 
-    expect(findOneSpy).toHaveBeenNthCalledWith(1, { stableKey: 'state:TX' });
-    expect(findOneSpy).toHaveBeenNthCalledWith(2, { type: 'state', state: 'TX', country: 'US' });
+    expect(findOneSpy).toHaveBeenNthCalledWith(1, {
+      stableKey: 'state:TX',
+      archivedAt: null,
+      discoverable: { $ne: false }
+    });
+    expect(findOneSpy).toHaveBeenNthCalledWith(2, { stableKey: 'state:TX', archivedAt: { $ne: null } });
+    expect(findOneSpy).toHaveBeenNthCalledWith(3, {
+      type: 'state',
+      state: 'TX',
+      country: 'US',
+      archivedAt: null,
+      discoverable: { $ne: false }
+    });
     expect(legacyRoom.name).toBe('Texas');
     expect(legacyRoom.stableKey).toBe('state:TX');
     expect(legacyRoom.radius).toBe(100);

@@ -54,7 +54,8 @@ const STATE_DISCOVERY_ROOMS = Object.freeze([
 ].sort((left, right) => left.name.localeCompare(right.name)));
 
 const TOPIC_LABEL_OVERRIDES = Object.freeze({
-  ai: 'AI'
+  ai: 'AI',
+  socialsecure: 'SocialSecure'
 });
 
 const formatTopicRoomName = (topicKey) => {
@@ -68,12 +69,18 @@ const formatTopicRoomName = (topicKey) => {
     .join(' ');
 };
 
-const TOPIC_DISCOVERY_ROOMS = Object.freeze(
-  CATEGORY_ORDER.map((key) => ({
+const TOPIC_DISCOVERY_ROOMS = Object.freeze([
+  { key: 'socialsecure', name: formatTopicRoomName('socialsecure'), defaultLanding: true },
+  ...CATEGORY_ORDER.map((key) => ({
     key,
-    name: formatTopicRoomName(key)
-  })).sort((left, right) => left.name.localeCompare(right.name))
-);
+    name: formatTopicRoomName(key),
+    defaultLanding: false
+  }))
+].sort((left, right) => {
+  if (left.defaultLanding) return -1;
+  if (right.defaultLanding) return 1;
+  return left.name.localeCompare(right.name);
+}));
 
 module.exports = {
   STATE_DISCOVERY_ROOMS,
