@@ -1344,7 +1344,6 @@ function Chat() {
       } else if (isRoomConversation(activeConversation)) {
         const response = await chatAPI.sendMessage(activeConversationId, {
           content: contentToSend,
-          senderNameColor: nameColor,
           messageType: 'text'
         });
         data = response.data;
@@ -1878,9 +1877,8 @@ function Chat() {
   const activeMenuLabel = useMemo(() => {
     if (activeConversation) return getConversationLabel(activeConversation);
     if (activeChannel === 'dm') return 'Direct Messages';
-    if (resolvedZipCode) return `Zip ${resolvedZipCode}`;
     return 'Secure Chat';
-  }, [activeChannel, activeConversation, resolvedZipCode]);
+  }, [activeChannel, activeConversation]);
   const activeMenuIcon = activeConversation ? getConversationTabIcon(activeConversation) : (activeChannel === 'dm' ? '✉️' : '💬');
   const renderManagedRoomBranch = useCallback((room, depth = 0, extraProps = {}) => {
     const roomId = normalizeId(room?._id);
