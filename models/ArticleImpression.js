@@ -58,7 +58,7 @@ articleImpressionSchema.statics.upsertImpression = async function upsertImpressi
     {
       $inc: { [field]: 1 },
       $set: {
-        article: options.articleId || (!options.articleLink ? articleRef : null),
+        article: options.articleId || articleRef,
         articleKey,
         articleLink: options.articleLink || (typeof articleRef === 'string' ? articleRef : null),
         locationKey: options.locationKey || null,

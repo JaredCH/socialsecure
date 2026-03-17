@@ -292,6 +292,35 @@ describe('Discovery routes', () => {
     expect(rejected.body.error).toMatch(/invalid discovery eventtype/i);
   });
 
+  it('normalizes out-of-range discovery event metadata numbers', async () => {
+    const app = buildApp();
+    mockAuthUser();
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+    const response = await request(app)
+      .post('/api/discovery/events')
+      .set('Authorization', 'Bearer token')
+      .send({
+        eventType: 'social_gallery_opened',
+        metadata: {
+          profile: 'u-1',
+          veryLarge: 9e25,
+          nested: { outOfRange: 9e40 }
+        }
+      });
+
+    expect(response.status).toBe(202);
+    const eventCall = logSpy.mock.calls.find((args) => args[0] === '[discovery-event]');
+    const payload = JSON.parse(eventCall[1]);
+    expect(payload.metadata).toMatchObject({
+      profile: 'u-1',
+      veryLarge: '9e+25',
+      nested: { outOfRange: '9e+40' }
+    });
+
+    logSpy.mockRestore();
+  });
+
   it('returns ranked and paginated post discovery results', async () => {
     const app = buildApp();
     mockAuthUser();
