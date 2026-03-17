@@ -207,7 +207,7 @@ describe('Chat event room discovery routes', () => {
         $match: {
           $or: [
             { type: 'state' },
-            { type: 'county' },
+            { type: 'city', stableKey: { $exists: true, $ne: null } },
             { type: 'topic' },
             { type: 'city', zipCode: { $exists: true, $nin: [null, ''] } }
           ]
@@ -219,7 +219,7 @@ describe('Chat event room discovery routes', () => {
             $switch: {
               branches: [
                 { case: { $eq: ['$type', 'state'] }, then: 0 },
-                { case: { $eq: ['$type', 'county'] }, then: 1 },
+                { case: { $eq: ['$type', 'city'] }, then: 1 },
                 { case: { $eq: ['$type', 'topic'] }, then: 2 }
               ],
               default: 3
