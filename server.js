@@ -224,6 +224,7 @@ registerRoute('/api/discovery', () => require('./routes/discovery'));
 registerRoute('/api/calendar', () => require('./routes/calendar'));
 registerRoute('/api/resume', () => require('./routes/resume'));
 registerRoute('/api/social-page', () => require('./routes/social-page'));
+registerRoute('/api/blog', () => require('./routes/blog'));
 registerRoute('/api/admin', () => require('./routes/admin'));
 
 let newsRoutes = null;

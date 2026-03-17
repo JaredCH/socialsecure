@@ -371,6 +371,8 @@ export const chatAPI = {
   },
   startDM: (targetUserId) => api.post('/chat/dm/start', { targetUserId }),
   deleteConversation: (conversationId) => api.delete(`/chat/conversations/${encodeURIComponent(conversationId)}`),
+  deleteConversationMessage: (conversationId, messageId) =>
+    api.delete(`/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`),
   getProfileThread: (userId) => api.get(`/chat/profile/${encodeURIComponent(userId)}/thread`),
   updateProfileThreadSettings: (userId, payload) =>
     api.put(`/chat/profile/${encodeURIComponent(userId)}/thread/settings`, payload),
@@ -558,6 +560,16 @@ export const socialPageAPI = {
   favoriteShared: (configId) => api.post(`/social-page/shared/${encodeURIComponent(configId)}/favorite`),
   unfavoriteShared: (configId) => api.delete(`/social-page/shared/${encodeURIComponent(configId)}/favorite`),
   cloneShared: (configId, payload) => api.post(`/social-page/shared/${encodeURIComponent(configId)}/clone`, payload),
+};
+
+export const blogAPI = {
+  getMyPosts: () => api.get('/blog/my'),
+  getUserPosts: (username) => api.get(`/blog/user/${encodeURIComponent(username)}`),
+  getUserPost: (username, slug) => api.get(`/blog/user/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`),
+  createPost: (payload) => api.post('/blog', payload),
+  updatePost: (postId, payload) => api.put(`/blog/${encodeURIComponent(postId)}`, payload),
+  deletePost: (postId) => api.delete(`/blog/${encodeURIComponent(postId)}`),
+  reactToPost: (postId, reaction) => api.post(`/blog/${encodeURIComponent(postId)}/react`, { reaction })
 };
 
 export const calendarAPI = {

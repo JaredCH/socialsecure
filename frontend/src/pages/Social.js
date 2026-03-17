@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, getAuthToken, moderationAPI, notificationAPI, resumeAPI, socialPageAPI } from '../utils/api';
+import { authAPI, blogAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, getAuthToken, moderationAPI, notificationAPI, resumeAPI, socialPageAPI } from '../utils/api';
 import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
@@ -724,6 +724,22 @@ const Social = () => {
   const [composerVisible, setComposerVisible] = useState(false);
   const [showProfileCompletionHint, setShowProfileCompletionHint] = useState(false);
   const [showSlimHeader, setShowSlimHeader] = useState(false);
+  const [enabledSections, setEnabledSections] = useState({ blog: false, resume: false, aboutme: false });
+  const [blogPosts, setBlogPosts] = useState([]);
+  const [blogLoading, setBlogLoading] = useState(false);
+  const [blogError, setBlogError] = useState('');
+  const [blogEditing, setBlogEditing] = useState(null);
+  const [blogViewingPost, setBlogViewingPost] = useState(null);
+  const [blogForm, setBlogForm] = useState({ title: '', content: '', excerpt: '', category: 'General', tags: [], audience: 'social', status: 'draft', backgroundImage: '', backgroundColor: '', fontFamily: '', fontSize: 16, fontColor: '' });
+  const [blogFormBusy, setBlogFormBusy] = useState(false);
+  const [blogIndexStyle, setBlogIndexStyle] = useState('date');
+  const [blogCategories, setBlogCategories] = useState([]);
+  const [aboutMeContent, setAboutMeContent] = useState('');
+  const [aboutMeEditing, setAboutMeEditing] = useState(false);
+  const [aboutMeSaving, setAboutMeSaving] = useState(false);
+  const [resumeData, setResumeData] = useState(null);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [resumeEditing, setResumeEditing] = useState(false);
   const localTypingTimeoutsRef = useRef({});
   const remoteTypingTimeoutsRef = useRef({});
   const designDirtyRef = useRef(false);
@@ -757,6 +773,137 @@ const Social = () => {
     ),
     [draftSocialPreferences, activeProfile?.socialPagePreferences, activeProfile?.profileTheme, activeLayoutMode]
   );
+
+  useEffect(() => {
+    const sections = activeProfile?.socialPagePreferences?.enabledSections;
+    if (sections && typeof sections === 'object') {
+      setEnabledSections({
+        blog: Boolean(sections.blog),
+        resume: Boolean(sections.resume),
+        aboutme: Boolean(sections.aboutme)
+      });
+    } else {
+      setEnabledSections({ blog: false, resume: false, aboutme: false });
+    }
+  }, [activeProfile?.socialPagePreferences?.enabledSections]);
+
+  useEffect(() => {
+    if (!enabledSections.blog) { setBlogPosts([]); return; }
+    const username = activeProfile?.username;
+    if (!username) return;
+    setBlogLoading(true);
+    setBlogError('');
+    const loadBlog = isOwnSocialContext && !isGuestPreview
+      ? blogAPI.getMyPosts()
+      : blogAPI.getUserPosts(username);
+    loadBlog.then(({ data }) => {
+      setBlogPosts(Array.isArray(data?.posts) ? data.posts : []);
+      if (data?.indexStyle) setBlogIndexStyle(data.indexStyle);
+      if (Array.isArray(data?.categories)) setBlogCategories(data.categories);
+    }).catch(() => setBlogError('Failed to load blog posts.')).finally(() => setBlogLoading(false));
+  }, [enabledSections.blog, activeProfile?.username, isOwnSocialContext, isGuestPreview]);
+
+  useEffect(() => {
+    if (!enabledSections.resume) { setResumeData(null); return; }
+    const username = activeProfile?.username;
+    if (!username) return;
+    setResumeLoading(true);
+    resumeAPI.getPublicResume(username).then(({ data }) => {
+      setResumeData(data?.resume || null);
+    }).catch(() => setResumeData(null)).finally(() => setResumeLoading(false));
+  }, [enabledSections.resume, activeProfile?.username]);
+
+  useEffect(() => {
+    const aboutMe = activeProfile?.socialPagePreferences?.aboutMeContent || '';
+    setAboutMeContent(aboutMe);
+  }, [activeProfile?.socialPagePreferences?.aboutMeContent]);
+
+  const visibleHeroTabs = useMemo(() => {
+    return SOCIAL_HERO_TABS.filter((tab) => {
+      if (!tab.optional) return true;
+      if (isOwnSocialContext && !isGuestPreview) return true; // Owner sees all tabs
+      return enabledSections[tab.id] === true; // Guest only sees enabled tabs
+    });
+  }, [isOwnSocialContext, isGuestPreview, enabledSections]);
+
+  const handleToggleSection = useCallback(async (sectionId, options = {}) => {
+    if (!isOwnSocialContext) return;
+    const enabling = !enabledSections[sectionId];
+    let audienceChoice = options.audience || null;
+
+    // Ask for Social/Secure audience when enabling resume
+    if (enabling && sectionId === 'resume' && !audienceChoice) {
+      const choice = window.prompt('Should your resume be visible under Social or Secure?\n\nType "social" or "secure":', 'social');
+      if (!choice) return;
+      audienceChoice = choice.trim().toLowerCase() === 'secure' ? 'secure' : 'social';
+    }
+
+    const prev = { ...enabledSections };
+    const next = { ...enabledSections, [sectionId]: enabling };
+    setEnabledSections(next);
+    try {
+      const currentPrefs = draftSocialPreferences || activeProfile?.socialPagePreferences || {};
+      const updates = { ...currentPrefs, enabledSections: next };
+      if (audienceChoice) {
+        updates.sectionAudience = { ...(currentPrefs.sectionAudience || {}), [sectionId]: audienceChoice };
+      }
+      await socialPageAPI.savePreferences(updates);
+      setCurrentUser((prev) => prev ? { ...prev, socialPagePreferences: { ...prev.socialPagePreferences, enabledSections: next, ...(audienceChoice ? { sectionAudience: { ...prev.socialPagePreferences?.sectionAudience, [sectionId]: audienceChoice } } : {}) } } : prev);
+    } catch (error) {
+      setEnabledSections(prev);
+    }
+  }, [isOwnSocialContext, enabledSections, draftSocialPreferences, activeProfile?.socialPagePreferences]);
+
+  const handleBlogSubmit = useCallback(async () => {
+    if (!blogForm.title.trim() || !blogForm.content.trim()) return;
+    setBlogFormBusy(true);
+    try {
+      if (blogEditing) {
+        const { data } = await blogAPI.updatePost(blogEditing, blogForm);
+        setBlogPosts((prev) => prev.map((p) => String(p._id) === String(blogEditing) ? data.post : p));
+      } else {
+        const { data } = await blogAPI.createPost(blogForm);
+        setBlogPosts((prev) => [data.post, ...prev]);
+      }
+      setBlogEditing(null);
+      setBlogForm({ title: '', content: '', excerpt: '', category: 'General', tags: [], audience: 'social', status: 'draft', backgroundImage: '', backgroundColor: '', fontFamily: '', fontSize: 16, fontColor: '' });
+    } catch (error) {
+      setBlogError(error.response?.data?.error || 'Failed to save blog post.');
+    } finally {
+      setBlogFormBusy(false);
+    }
+  }, [blogForm, blogEditing]);
+
+  const handleBlogDelete = useCallback(async (postId) => {
+    if (!window.confirm('Delete this blog post?')) return;
+    try {
+      await blogAPI.deletePost(postId);
+      setBlogPosts((prev) => prev.filter((p) => String(p._id) !== String(postId)));
+    } catch (error) {
+      setBlogError('Failed to delete post.');
+    }
+  }, []);
+
+  const handleBlogReact = useCallback(async (postId, reaction) => {
+    try {
+      const { data } = await blogAPI.reactToPost(postId, reaction);
+      setBlogPosts((prev) => prev.map((p) => String(p._id) === String(postId) ? { ...p, reactionCounts: data.reactions } : p));
+    } catch (error) { /* ignore */ }
+  }, []);
+
+  const handleAboutMeSave = useCallback(async () => {
+    if (!isOwnSocialContext) return;
+    setAboutMeSaving(true);
+    try {
+      const currentPrefs = draftSocialPreferences || activeProfile?.socialPagePreferences || {};
+      await socialPageAPI.savePreferences({ ...currentPrefs, aboutMeContent });
+      setCurrentUser((prev) => prev ? { ...prev, socialPagePreferences: { ...prev.socialPagePreferences, aboutMeContent } } : prev);
+      setAboutMeEditing(false);
+    } catch (error) { /* ignore */ } finally {
+      setAboutMeSaving(false);
+    }
+  }, [isOwnSocialContext, aboutMeContent, draftSocialPreferences, activeProfile?.socialPagePreferences]);
+
   const isSectionVisible = useCallback(
     (sectionId) => socialPreferences.effective?.panels?.[sectionId]?.visible !== false,
     [socialPreferences]
@@ -1137,6 +1284,15 @@ const Social = () => {
   const handleSendProfileChatMessage = useCallback(async () => {
     const content = profileChatInput.trim();
     if (!content || !profileChatThreadId || profileChatSending || !profileChatPermissions.canWrite) return;
+    // Enforce max 2 consecutive messages from same user (client-side check)
+    if (!profileChatPermissions.isOwner && profileChatMessages.length >= 2) {
+      const lastTwo = profileChatMessages.slice(-2);
+      const currentUserId = String(currentUser?._id || '');
+      if (currentUserId && lastTwo.every(m => String(m?.userId?._id || m?.userId) === currentUserId)) {
+        setProfileChatError('You may only send 2 consecutive messages. Please wait for others to interact before continuing.');
+        return;
+      }
+    }
     setProfileChatSending(true);
     setProfileChatError('');
     try {
@@ -1150,7 +1306,17 @@ const Social = () => {
     } finally {
       setProfileChatSending(false);
     }
-  }, [profileChatInput, profileChatThreadId, profileChatSending, profileChatPermissions.canWrite]);
+  }, [profileChatInput, profileChatThreadId, profileChatSending, profileChatPermissions.canWrite, profileChatPermissions.isOwner, profileChatMessages, currentUser?._id]);
+
+  const handleDeleteProfileChatMessage = useCallback(async (messageId) => {
+    if (!profileChatPermissions.isOwner || !profileChatThreadId || !messageId) return;
+    try {
+      await chatAPI.deleteConversationMessage(profileChatThreadId, messageId);
+      setProfileChatMessages((prev) => prev.filter((m) => String(m._id) !== String(messageId)));
+    } catch (error) {
+      setProfileChatError(error.response?.data?.error || 'Failed to delete message.');
+    }
+  }, [profileChatPermissions.isOwner, profileChatThreadId]);
 
   useEffect(() => {
     const el = miniChatViewportRef.current;
@@ -3820,11 +3986,22 @@ const Social = () => {
                         <div
                           key={message._id}
                           data-testid="social-mini-chat-line"
-                          className="flex gap-1.5 border-b border-slate-800/40 px-1 py-[3px] text-slate-100 hover:bg-slate-800/30"
+                          className="group flex gap-1.5 border-b border-slate-800/40 px-1 py-[3px] text-slate-100 hover:bg-slate-800/30"
                         >
                           <span className="shrink-0 text-[11px] leading-5 text-slate-500">{timeStr}</span>
                           <span className="shrink-0 font-semibold leading-5" style={{ color: isOwnMessage ? 'var(--accent, #60a5fa)' : '#94a3b8' }}>{displayName}</span>
-                          <p data-testid="social-mini-chat-message-content" className="min-w-0 whitespace-pre-wrap break-words leading-5">{message?.content || ''}</p>
+                          <p data-testid="social-mini-chat-message-content" className="min-w-0 flex-1 whitespace-pre-wrap break-words leading-5">{message?.content || ''}</p>
+                          {profileChatPermissions.isOwner ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProfileChatMessage(message._id)}
+                              className="shrink-0 rounded px-1 py-0.5 text-[10px] text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/20"
+                              title="Delete message"
+                              aria-label="Delete message"
+                            >
+                              ✕
+                            </button>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -3965,6 +4142,280 @@ const Social = () => {
             ) : null}
           </div>
         );
+      case 'blog_panel': {
+        const isOwnerBlogView = isOwnSocialContext && !isGuestPreview;
+        if (blogLoading) return <div className="p-6 text-center text-sm text-slate-500">Loading blog…</div>;
+        if (blogError) return <div className="p-6 text-center text-sm text-red-400">{blogError}</div>;
+
+        if (isOwnerBlogView && (blogEditing !== null || blogPosts.length === 0)) {
+          // Blog editor form
+          return (
+            <div className="space-y-4 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-300">{blogEditing ? 'Edit Post' : 'New Blog Post'}</h3>
+                {blogEditing ? <button type="button" onClick={() => { setBlogEditing(null); setBlogForm({ title: '', content: '', excerpt: '', category: 'General', tags: [], audience: 'social', status: 'draft', backgroundImage: '', backgroundColor: '', fontFamily: '', fontSize: 16, fontColor: '' }); }} className="text-xs text-slate-400 hover:text-white">Cancel</button> : null}
+              </div>
+              <input type="text" value={blogForm.title} onChange={(e) => setBlogForm(f => ({ ...f, title: e.target.value }))} placeholder="Post title" maxLength={200} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1" style={{ '--tw-ring-color': accentColor }} />
+              <textarea value={blogForm.content} onChange={(e) => setBlogForm(f => ({ ...f, content: e.target.value }))} placeholder="Write your blog post content… (supports rich text formatting)" rows={8} maxLength={50000} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 resize-y" style={{ '--tw-ring-color': accentColor }} />
+              <div className="grid grid-cols-2 gap-3">
+                <input type="text" value={blogForm.excerpt} onChange={(e) => setBlogForm(f => ({ ...f, excerpt: e.target.value }))} placeholder="Excerpt (optional)" maxLength={500} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                <input type="text" value={blogForm.category} onChange={(e) => setBlogForm(f => ({ ...f, category: e.target.value }))} placeholder="Category" maxLength={100} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+              </div>
+              {/* Appearance controls */}
+              <details className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <summary className="cursor-pointer text-xs font-semibold text-slate-400">Appearance Settings</summary>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Background Image URL</label>
+                    <input type="text" value={blogForm.backgroundImage} onChange={(e) => setBlogForm(f => ({ ...f, backgroundImage: e.target.value }))} placeholder="https://..." maxLength={2048} className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Background Color</label>
+                    <input type="text" value={blogForm.backgroundColor} onChange={(e) => setBlogForm(f => ({ ...f, backgroundColor: e.target.value }))} placeholder="#1e293b" maxLength={20} className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Font Family</label>
+                    <input type="text" value={blogForm.fontFamily} onChange={(e) => setBlogForm(f => ({ ...f, fontFamily: e.target.value }))} placeholder="Inter" maxLength={60} className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Font Size ({blogForm.fontSize}px)</label>
+                    <input type="range" min={12} max={32} value={blogForm.fontSize} onChange={(e) => setBlogForm(f => ({ ...f, fontSize: Number(e.target.value) }))} className="w-full" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Font Color</label>
+                    <input type="text" value={blogForm.fontColor} onChange={(e) => setBlogForm(f => ({ ...f, fontColor: e.target.value }))} placeholder="#e2e8f0" maxLength={20} className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none" />
+                  </div>
+                </div>
+              </details>
+              {/* Audience and status */}
+              <div className="flex flex-wrap items-center gap-3">
+                <select value={blogForm.audience} onChange={(e) => setBlogForm(f => ({ ...f, audience: e.target.value }))} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white focus:outline-none">
+                  <option value="social">Social</option>
+                  <option value="secure">Secure</option>
+                </select>
+                <select value={blogForm.status} onChange={(e) => setBlogForm(f => ({ ...f, status: e.target.value }))} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white focus:outline-none">
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                </select>
+                <button type="button" onClick={handleBlogSubmit} disabled={blogFormBusy || !blogForm.title.trim() || !blogForm.content.trim()} className="ml-auto rounded-xl px-5 py-2 text-xs font-semibold text-white transition disabled:opacity-50" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                  {blogFormBusy ? 'Saving…' : (blogEditing ? 'Update' : 'Create Post')}
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        // Blog list/viewer
+        if (blogViewingPost) {
+          const post = blogPosts.find(p => String(p._id) === String(blogViewingPost)) || null;
+          if (!post) { setBlogViewingPost(null); return null; }
+          const postStyle = {
+            ...(post.backgroundImage ? { backgroundImage: `url(${post.backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+            ...(post.backgroundColor ? { backgroundColor: post.backgroundColor } : {}),
+            ...(post.fontFamily ? { fontFamily: post.fontFamily } : {}),
+            ...(post.fontSize ? { fontSize: `${Math.max(12, Math.min(32, post.fontSize))}px` } : {}),
+            ...(post.fontColor ? { color: post.fontColor } : {})
+          };
+          const counts = post.reactionCounts || { like: post.reactions?.like?.length || 0, love: post.reactions?.love?.length || 0, insightful: post.reactions?.insightful?.length || 0 };
+          return (
+            <div className="space-y-4 p-4">
+              <button type="button" onClick={() => setBlogViewingPost(null)} className="text-xs text-slate-400 hover:text-white">← Back to posts</button>
+              <article className="relative rounded-2xl border border-white/10 p-6" style={postStyle}>
+                {post.backgroundImage ? <div className="absolute inset-0 rounded-2xl bg-black/50" /> : null}
+                <div className="relative">
+                  <h2 className="text-xl font-bold text-white">{post.title}</h2>
+                  <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
+                    {post.category ? <span className="rounded-full bg-white/10 px-2 py-0.5">{post.category}</span> : null}
+                    <span className={`rounded-full px-2 py-0.5 ${post.audience === 'secure' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>{post.audience === 'secure' ? 'Secure' : 'Social'}</span>
+                    {post.publishedAt ? <span>{new Date(post.publishedAt).toLocaleDateString()}</span> : null}
+                  </div>
+                  <div className="mt-4 whitespace-pre-wrap text-sm leading-relaxed">{post.content}</div>
+                </div>
+              </article>
+              {/* Reactions */}
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => handleBlogReact(post._id, 'like')} className="flex items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs transition hover:bg-white/5">👍 {counts.like}</button>
+                <button type="button" onClick={() => handleBlogReact(post._id, 'love')} className="flex items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs transition hover:bg-white/5">❤️ {counts.love}</button>
+                <button type="button" onClick={() => handleBlogReact(post._id, 'insightful')} className="flex items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs transition hover:bg-white/5">💡 {counts.insightful}</button>
+              </div>
+            </div>
+          );
+        }
+
+        // Blog post list with sidebar index
+        const publishedPosts = blogPosts.filter(p => p.status === 'published' || isOwnerBlogView);
+        const sortedPosts = blogIndexStyle === 'abc'
+          ? [...publishedPosts].sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+          : blogIndexStyle === 'category'
+            ? [...publishedPosts].sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.title || '').localeCompare(b.title || ''))
+            : [...publishedPosts].sort((a, b) => new Date(b.publishedAt || b.createdAt) - new Date(a.publishedAt || a.createdAt));
+
+        const uniqueCategories = [...new Set(sortedPosts.map(p => p.category || 'General'))];
+
+        return (
+          <div className="flex gap-4 p-4">
+            {/* Sidebar index */}
+            <div className="hidden w-40 shrink-0 space-y-1 border-r border-white/10 pr-3 sm:block">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">{blogIndexStyle === 'category' ? 'Categories' : 'Posts'}</p>
+              {blogIndexStyle === 'category' ? (
+                uniqueCategories.map(cat => (
+                  <p key={cat} className="truncate text-xs text-slate-400">{cat} ({sortedPosts.filter(p => p.category === cat).length})</p>
+                ))
+              ) : (
+                sortedPosts.slice(0, 20).map(post => (
+                  <button key={post._id} type="button" onClick={() => setBlogViewingPost(post._id)} className="block w-full truncate text-left text-xs text-slate-400 hover:text-white">{post.title}</button>
+                ))
+              )}
+            </div>
+            {/* Post cards */}
+            <div className="min-w-0 flex-1 space-y-3">
+              {isOwnerBlogView ? (
+                <button type="button" onClick={() => { setBlogEditing('new'); setBlogForm({ title: '', content: '', excerpt: '', category: 'General', tags: [], audience: 'social', status: 'draft', backgroundImage: '', backgroundColor: '', fontFamily: '', fontSize: 16, fontColor: '' }); }} className="flex w-full items-center gap-2 rounded-xl border border-dashed border-white/10 p-3 text-xs text-slate-400 transition hover:border-white/20 hover:text-white">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>+</span>
+                  New blog post
+                </button>
+              ) : null}
+              {sortedPosts.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-500">No blog posts yet.</p>
+              ) : sortedPosts.map(post => {
+                const counts = post.reactionCounts || { like: post.reactions?.like?.length || 0, love: post.reactions?.love?.length || 0, insightful: post.reactions?.insightful?.length || 0 };
+                return (
+                  <div key={post._id} className="rounded-xl border border-white/10 p-4 transition hover:bg-white/[0.02]" style={post.backgroundColor ? { backgroundColor: post.backgroundColor } : {}}>
+                    <div className="flex items-start justify-between gap-2">
+                      <button type="button" onClick={() => setBlogViewingPost(post._id)} className="min-w-0 flex-1 text-left">
+                        <h4 className="font-semibold text-white">{post.title}</h4>
+                        <p className="mt-1 line-clamp-2 text-xs text-slate-400">{post.excerpt || post.content?.substring(0, 200)}</p>
+                      </button>
+                      {isOwnerBlogView ? (
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button type="button" onClick={() => { setBlogEditing(post._id); setBlogForm({ title: post.title, content: post.content || '', excerpt: post.excerpt || '', category: post.category || 'General', tags: post.tags || [], audience: post.audience || 'social', status: post.status || 'draft', backgroundImage: post.backgroundImage || '', backgroundColor: post.backgroundColor || '', fontFamily: post.fontFamily || '', fontSize: post.fontSize || 16, fontColor: post.fontColor || '' }); }} className="rounded border border-white/10 px-2 py-1 text-[10px] text-slate-400 hover:text-white">Edit</button>
+                          <button type="button" onClick={() => handleBlogDelete(post._id)} className="rounded border border-red-500/20 px-2 py-1 text-[10px] text-red-400 hover:bg-red-500/10">Del</button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-500">
+                      {post.category ? <span className="rounded-full bg-white/10 px-2 py-0.5">{post.category}</span> : null}
+                      <span className={`rounded-full px-2 py-0.5 ${post.audience === 'secure' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>{post.audience === 'secure' ? 'Secure' : 'Social'}</span>
+                      {post.status === 'draft' ? <span className="rounded-full bg-slate-500/20 px-2 py-0.5 text-slate-400">Draft</span> : null}
+                      {post.publishedAt ? <span>{new Date(post.publishedAt).toLocaleDateString()}</span> : null}
+                      <span className="ml-auto flex gap-2">👍 {counts.like} ❤️ {counts.love} 💡 {counts.insightful}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
+      case 'resume_panel': {
+        if (resumeLoading) return <div className="p-6 text-center text-sm text-slate-500">Loading resume…</div>;
+        if (!resumeData) {
+          return (
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <p className="text-sm text-slate-500">No resume available yet.</p>
+              {isOwnSocialContext && !isGuestPreview ? (
+                <Link to="/settings" className="mt-3 rounded-xl px-5 py-2 text-xs font-semibold text-white transition" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                  Build your resume
+                </Link>
+              ) : null}
+            </div>
+          );
+        }
+        const basics = resumeData.basics || {};
+        return (
+          <div className="space-y-4 p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">{basics.fullName || activeProfile?.realName || activeProfile?.username}</h2>
+                {basics.headline ? <p className="text-sm text-slate-400">{basics.headline}</p> : null}
+                <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                  {basics.email ? <span>{basics.email}</span> : null}
+                  {basics.phone ? <span>· {basics.phone}</span> : null}
+                  {basics.city || basics.state ? <span>· {[basics.city, basics.state].filter(Boolean).join(', ')}</span> : null}
+                </div>
+              </div>
+              {isOwnSocialContext && !isGuestPreview ? (
+                <Link to="/settings" className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 hover:text-white" title="Edit resume in settings">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                </Link>
+              ) : null}
+            </div>
+            {resumeData.summary ? (
+              <div className="rounded-xl border border-white/10 p-4">
+                <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">Summary</h3>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{resumeData.summary}</p>
+              </div>
+            ) : null}
+            {Array.isArray(resumeData.experience) && resumeData.experience.length > 0 ? (
+              <div className="rounded-xl border border-white/10 p-4">
+                <h3 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">Experience</h3>
+                <div className="space-y-3">
+                  {resumeData.experience.map((exp, i) => (
+                    <div key={i} className="border-l-2 border-white/10 pl-3">
+                      <p className="font-semibold text-sm text-white">{exp.title}</p>
+                      <p className="text-xs text-slate-400">{exp.employer}{exp.location ? ` · ${exp.location}` : ''}</p>
+                      <p className="text-[10px] text-slate-500">{exp.startDate ? new Date(exp.startDate).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : ''} – {exp.isCurrent ? 'Present' : (exp.endDate ? new Date(exp.endDate).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '')}</p>
+                      {Array.isArray(exp.bullets) ? exp.bullets.map((b, j) => <p key={j} className="mt-1 text-xs text-slate-400">• {b}</p>) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {Array.isArray(resumeData.education) && resumeData.education.length > 0 ? (
+              <div className="rounded-xl border border-white/10 p-4">
+                <h3 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">Education</h3>
+                <div className="space-y-2">
+                  {resumeData.education.map((edu, i) => (
+                    <div key={i} className="border-l-2 border-white/10 pl-3">
+                      <p className="font-semibold text-sm text-white">{edu.institution}</p>
+                      <p className="text-xs text-slate-400">{edu.degree}{edu.fieldOfStudy ? ` in ${edu.fieldOfStudy}` : ''}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {Array.isArray(resumeData.skills) && resumeData.skills.length > 0 ? (
+              <div className="rounded-xl border border-white/10 p-4">
+                <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">Skills</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {resumeData.skills.map((skill, i) => (
+                    <span key={i} className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-slate-300">{skill}</span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        );
+      }
+      case 'aboutme_panel': {
+        const isOwnerView = isOwnSocialContext && !isGuestPreview;
+        return (
+          <div className="space-y-4 p-5">
+            {isOwnerView && aboutMeEditing ? (
+              <>
+                <textarea value={aboutMeContent} onChange={(e) => setAboutMeContent(e.target.value)} placeholder="Tell visitors about yourself…" rows={8} maxLength={5000} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 resize-y" style={{ '--tw-ring-color': accentColor }} />
+                <div className="flex gap-2">
+                  <button type="button" onClick={handleAboutMeSave} disabled={aboutMeSaving} className="rounded-xl px-5 py-2 text-xs font-semibold text-white transition disabled:opacity-50" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>{aboutMeSaving ? 'Saving…' : 'Save'}</button>
+                  <button type="button" onClick={() => { setAboutMeEditing(false); setAboutMeContent(activeProfile?.socialPagePreferences?.aboutMeContent || ''); }} className="rounded-xl border border-white/10 px-4 py-2 text-xs text-slate-400 hover:text-white">Cancel</button>
+                </div>
+              </>
+            ) : (
+              <>
+                {aboutMeContent ? (
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{aboutMeContent}</div>
+                ) : (
+                  <p className="py-8 text-center text-sm text-slate-500">{isOwnerView ? 'Click edit to add your about me content.' : 'No about me content shared yet.'}</p>
+                )}
+                {isOwnerView ? (
+                  <button type="button" onClick={() => setAboutMeEditing(true)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 hover:text-white">
+                    {aboutMeContent ? 'Edit' : 'Write About Me'}
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
+        );
+      }
       default:
         return <div className="text-sm text-slate-500">{SOCIAL_PANEL_LABELS[panelId] || panelId}</div>;
     }
@@ -4751,6 +5202,63 @@ const Social = () => {
           </div>,
           { subtitle: null }
         );
+      case 'blog': {
+        const isBlogEnabled = enabledSections.blog;
+        if (!isBlogEnabled && isOwnSocialContext && !isGuestPreview) {
+          return renderGlassPanel('Blog', (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5">
+                <svg className="h-8 w-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
+              </div>
+              <h3 className="text-lg font-semibold text-slate-300">Blog</h3>
+              <p className="mt-1 text-sm text-slate-500">Create and share blog posts with your visitors.</p>
+              <button type="button" onClick={() => handleToggleSection('blog')} className="mt-4 rounded-xl px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                Enable Blog
+              </button>
+            </div>
+          ), { subtitle: 'Not yet enabled' });
+        }
+        if (!isBlogEnabled) return null;
+        return renderGlassPanel('Blog', renderPanelBody('blog_panel'), { subtitle: 'Posts and articles' });
+      }
+      case 'resume': {
+        const isResumeEnabled = enabledSections.resume;
+        if (!isResumeEnabled && isOwnSocialContext && !isGuestPreview) {
+          return renderGlassPanel('Resume', (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5">
+                <svg className="h-8 w-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              </div>
+              <h3 className="text-lg font-semibold text-slate-300">Resume</h3>
+              <p className="mt-1 text-sm text-slate-500">Show your professional resume to visitors.</p>
+              <button type="button" onClick={() => handleToggleSection('resume')} className="mt-4 rounded-xl px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                Enable Resume
+              </button>
+            </div>
+          ), { subtitle: 'Not yet enabled' });
+        }
+        if (!isResumeEnabled) return null;
+        return renderGlassPanel('Resume', renderPanelBody('resume_panel'), { subtitle: 'Professional profile' });
+      }
+      case 'aboutme': {
+        const isAboutMeEnabled = enabledSections.aboutme;
+        if (!isAboutMeEnabled && isOwnSocialContext && !isGuestPreview) {
+          return renderGlassPanel('About Me', (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5">
+                <svg className="h-8 w-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+              </div>
+              <h3 className="text-lg font-semibold text-slate-300">About Me</h3>
+              <p className="mt-1 text-sm text-slate-500">Share more about yourself with your visitors.</p>
+              <button type="button" onClick={() => handleToggleSection('aboutme')} className="mt-4 rounded-xl px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                Enable About Me
+              </button>
+            </div>
+          ), { subtitle: 'Not yet enabled' });
+        }
+        if (!isAboutMeEnabled) return null;
+        return renderGlassPanel('About Me', renderPanelBody('aboutme_panel'), { subtitle: 'Personal introduction' });
+      }
       case 'main':
       default:
         return (
@@ -4769,6 +5277,16 @@ const Social = () => {
                   </button>
                 )
               })
+            ) : null}
+            {ownerEditingEnabled && !isGuestPreview && !composerVisible ? (
+              <button
+                type="button"
+                onClick={() => setComposerVisible(true)}
+                className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-white/10 px-4 py-3 text-sm text-slate-400 transition-all hover:border-white/20 hover:bg-white/[0.03] hover:text-slate-300"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>+</span>
+                <span className="font-medium">Compose a new post</span>
+              </button>
             ) : null}
             {renderGlassPanel('Feed', renderPanelBody('timeline'))}
             {renderGlassPanel('Gallery', renderPanelBody('gallery'))}
@@ -4882,7 +5400,6 @@ const Social = () => {
         </>
       ) : null}
       <div className="relative z-10">
-    >
       {/* Guest Preview Notice */}
       {isGuestPreview ? (
         <GuestPreviewNotice
@@ -4899,7 +5416,7 @@ const Social = () => {
             <div className="flex items-center justify-between gap-4 rounded-b-2xl border border-white/10 px-4 py-3 text-white shadow-lg" style={{ background: 'rgba(13,13,20,0.92)', backdropFilter: 'blur(20px)' }}>
               <p className="truncate text-sm font-semibold">{heroProfile?.name || activeProfile?.realName || activeProfile?.username || 'Social'}</p>
               <div className="flex items-center gap-1">
-                {SOCIAL_HERO_TABS.map((tab) => (
+                {visibleHeroTabs.map((tab) => (
                   <button
                     key={`slim-tab-${tab.id}`}
                     type="button"
@@ -4936,42 +5453,44 @@ const Social = () => {
       <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 p-1.5" style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}>
           <div className="flex flex-wrap gap-1.5">
-            {SOCIAL_HERO_TABS.map((tab) => (
-              <button
-                key={`pill-tab-${tab.id}`}
-                type="button"
-                onClick={() => handleHeroTabChange(tab.id)}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${activeHeroTab === tab.id ? 'text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
-                style={activeHeroTab === tab.id ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {visibleHeroTabs.map((tab) => {
+              const isDisabled = tab.optional && !enabledSections[tab.id] && isOwnSocialContext && !isGuestPreview;
+              return (
+                <div key={`pill-tab-${tab.id}`} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => handleHeroTabChange(tab.id)}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${isDisabled ? 'opacity-40 hover:opacity-60' : ''} ${activeHeroTab === tab.id && !isDisabled ? 'text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
+                    style={activeHeroTab === tab.id && !isDisabled ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
+                    title={isDisabled ? 'Click to enable and setup!' : undefined}
+                  >
+                    {tab.label}
+                  </button>
+                  {isDisabled ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-600 text-[8px] text-slate-300" title="Click to enable and setup!">
+                      <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
           {ownerEditingEnabled ? (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                {isGuestPreview ? 'Owner View' : 'Guest View'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setComposerVisible((prev) => !prev)}
-                className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
-              >
-                {composerVisible ? 'Hide Compose' : 'Compose'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDesignStudioOpen(true)}
-                className="rounded-full border border-slate-300 bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
-              >
-                Stage Settings
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleGuestPreviewToggle(!isGuestPreview)}
+              className={`relative flex items-center gap-2 rounded-full px-1 py-1 text-xs font-semibold transition-all duration-300 ${isGuestPreview ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40' : 'bg-white/10 text-slate-300 ring-1 ring-white/10 hover:bg-white/15'}`}
+              title={isGuestPreview ? 'Switch to Owner View' : 'Preview as Guest'}
+            >
+              <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all duration-300 ${!isGuestPreview ? 'bg-white/15 text-white shadow-sm' : 'text-slate-400'}`}>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                Owner
+              </span>
+              <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all duration-300 ${isGuestPreview ? 'bg-amber-500/25 text-amber-200 shadow-sm' : 'text-slate-400'}`}>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-.274.886-.672 1.72-1.18 2.478m-2.14 2.584A9.956 9.956 0 0112 19c-4.478 0-8.268-2.943-9.542-7a10.025 10.025 0 012.32-3.78" /></svg>
+                Guest
+              </span>
+            </button>
           ) : null}
         </div>
       </div>

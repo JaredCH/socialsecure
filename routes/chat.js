@@ -3499,6 +3499,16 @@ router.post(
       if (!permissions.canWrite) {
         return res.status(403).json({ error: 'Write access denied for this conversation' });
       }
+      // Enforce max 2 consecutive messages from same user in profile-thread
+      if (!permissions.isOwner) {
+        const recentMessages = await ConversationMessage.find({
+          conversationId: conversation._id,
+          messageType: 'text'
+        }).sort({ createdAt: -1 }).limit(2).select('userId').lean();
+        if (recentMessages.length >= 2 && recentMessages.every(m => String(m.userId) === userId)) {
+          return res.status(429).json({ error: 'You may only send 2 consecutive messages. Please wait for others to interact before continuing.' });
+        }
+      }
     } else if (!canAccessConversation(conversation, userId)) {
       return res.status(403).json({ error: 'Access denied for this conversation' });
     }
@@ -3687,6 +3697,46 @@ router.post(
     console.error('Error starting DM thread:', error);
     return res.status(500).json({ error: 'Failed to start DM thread' });
   }
+  }
+);
+
+router.delete(
+  '/conversations/:conversationId/messages/:messageId',
+  unifiedChatLimiter,
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const userId = String(req.user.userId);
+      const { conversationId, messageId } = req.params;
+
+      const conversation = await ChatConversation.findById(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+
+      if (conversation.type !== 'profile-thread') {
+        return res.status(400).json({ error: 'Message deletion is only supported for profile chat rooms' });
+      }
+
+      const permissions = await resolveProfileThreadPermissions(conversation, userId);
+      if (!permissions.isOwner) {
+        return res.status(403).json({ error: 'Only the profile chat room owner can delete messages' });
+      }
+
+      const message = await ConversationMessage.findOne({
+        _id: messageId,
+        conversationId: conversation._id
+      });
+      if (!message) {
+        return res.status(404).json({ error: 'Message not found' });
+      }
+
+      await message.deleteOne();
+      return res.json({ success: true, deletedMessageId: messageId });
+    } catch (error) {
+      console.error('Error deleting conversation message:', error);
+      return res.status(500).json({ error: 'Failed to delete message' });
+    }
   }
 );
 

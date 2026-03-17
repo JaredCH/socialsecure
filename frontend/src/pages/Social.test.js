@@ -266,9 +266,9 @@ describe('Social page hero background rendering', () => {
 
     await expect(renderPage()).resolves.toBeUndefined();
 
-    const guestViewButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Guest View');
-    expect(guestViewButton).toBeTruthy();
-    expect(container.textContent).toContain('Compose');
+    const ownerGuestToggle = Array.from(container.querySelectorAll('button')).find((button) => /Owner/.test(button.textContent) && /Guest/.test(button.textContent));
+    expect(ownerGuestToggle).toBeTruthy();
+    expect(container.textContent).toContain('Compose a new post');
     expect(container.textContent).not.toContain('Post publishing is available only in owner view.');
   });
 
@@ -436,10 +436,10 @@ describe('Social page hero background rendering', () => {
 
   it('surfaces owner controls inline with the social tab strip', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
-    const guestViewButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Guest View');
-    expect(guestViewButton).toBeTruthy();
+    const ownerGuestToggle = Array.from(container.querySelectorAll('button')).find((button) => /Owner/.test(button.textContent) && /Guest/.test(button.textContent));
+    expect(ownerGuestToggle).toBeTruthy();
     expect(container.textContent).not.toContain('Social stage');
-    expect(container.textContent).toContain('Stage Settings');
+    expect(container.textContent).not.toContain('Stage Settings');
     expect(container.textContent).not.toContain('✦ Design Studio');
   });
 
