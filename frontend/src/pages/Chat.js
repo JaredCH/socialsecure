@@ -1089,6 +1089,29 @@ function Chat() {
     quickAccessRooms.state?._id
   ]);
 
+  useEffect(() => {
+    if (allChatRoomsLoading) return;
+    const quickAccessRoomIds = [
+      normalizeId(quickAccessRooms.state?._id),
+      normalizeId(quickAccessRooms.county?._id)
+    ].filter((roomId) => roomId && joinedRoomIds[roomId]);
+    if (quickAccessRoomIds.length === 0) return;
+
+    setOpenChatTabIds((prev) => {
+      const existingIds = new Set(prev.map((entryId) => String(entryId)));
+      const roomIdsToOpen = quickAccessRoomIds.filter((roomId) => !existingIds.has(roomId));
+      if (roomIdsToOpen.length === 0) return prev;
+      const next = [...prev, ...roomIdsToOpen];
+      if (next.length <= MAX_OPEN_CHAT_TABS) return next;
+      return next.slice(next.length - MAX_OPEN_CHAT_TABS);
+    });
+  }, [
+    allChatRoomsLoading,
+    joinedRoomIds,
+    quickAccessRooms.county?._id,
+    quickAccessRooms.state?._id
+  ]);
+
   const loadLatestConversationMessages = useCallback(async (conversationId) => {
     const request = isRoomConversation(activeConversation)
       ? chatAPI.getMessages(conversationId, 1, INITIAL_MESSAGES_PAGE_SIZE)
