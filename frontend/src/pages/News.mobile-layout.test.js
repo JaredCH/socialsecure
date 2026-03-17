@@ -12,6 +12,7 @@ jest.mock('../utils/api', () => ({
     getSportsTeams: jest.fn(),
     getFeed: jest.fn(),
     getWeather: jest.fn(),
+    reportImpressions: jest.fn(),
   }
 }));
 
@@ -47,6 +48,7 @@ describe('News mobile persistent header layout', () => {
       }
     });
     newsAPI.getWeather.mockResolvedValue({ data: { locations: [] } });
+    newsAPI.reportImpressions.mockResolvedValue({ data: { ok: true } });
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -110,5 +112,27 @@ describe('News mobile persistent header layout', () => {
     expect(mobileFilterShell).not.toBeNull();
     expect(mobileFilterShell.className).toContain('relative');
     expect(mobileFilterShell.className).toContain('z-40');
+  });
+
+  it('renders the mobile article drawer above global navigation layers', async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <News />
+        </MemoryRouter>
+      );
+    });
+    await act(async () => Promise.resolve());
+
+    const articleRows = Array.from(container.querySelectorAll('article'));
+    expect(articleRows.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      articleRows[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const drawerPanel = document.body.querySelector('[data-testid="article-drawer-panel"]');
+    expect(drawerPanel).not.toBeNull();
+    expect(drawerPanel.className).toContain('z-[1320]');
   });
 });
