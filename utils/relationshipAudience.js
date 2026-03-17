@@ -1,11 +1,13 @@
 const Friendship = require('../models/Friendship');
 
-const RELATIONSHIP_AUDIENCE_VALUES = ['social', 'secure'];
+const RELATIONSHIP_AUDIENCE_VALUES = ['public', 'social', 'secure'];
 const DEFAULT_RELATIONSHIP_AUDIENCE = 'social';
 
-const normalizeRelationshipAudience = (value) => (
-  value === 'secure' ? 'secure' : DEFAULT_RELATIONSHIP_AUDIENCE
-);
+const normalizeRelationshipAudience = (value) => {
+  if (value === 'secure') return 'secure';
+  if (value === 'public') return 'public';
+  return DEFAULT_RELATIONSHIP_AUDIENCE;
+};
 
 const socialOrUnsetAudienceQuery = (fieldName = 'relationshipAudience') => ({
   $or: [

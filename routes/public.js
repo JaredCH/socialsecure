@@ -10,7 +10,11 @@ const Resume = require('../models/Resume');
 const Friendship = require('../models/Friendship');
 const SiteContentFilter = require('../models/SiteContentFilter');
 const { toPublicSocialPagePreferences } = require('../utils/socialPagePreferences');
-const { normalizeRelationshipAudience, socialOrUnsetAudienceQuery } = require('../utils/relationshipAudience');
+const {
+  normalizeRelationshipAudience,
+  socialOrUnsetAudienceQuery,
+  ownerCategorizedViewerAsSecure
+} = require('../utils/relationshipAudience');
 const { censorMaturityText, normalizeFilterWords } = require('../utils/contentFilter');
 
 const DEFAULT_PAGE = 1;
@@ -265,18 +269,17 @@ const getViewerFriendContext = async (viewerId, targetId) => {
       { requester: normalizedViewerId, recipient: normalizedTargetId },
       { requester: normalizedTargetId, recipient: normalizedViewerId }
     ]
-  }).select('requester requesterCategory recipientCategory').lean();
+  }).select(
+    'status requester recipient requesterRelationshipAudience recipientRelationshipAudience requesterAudience recipientAudience requesterCategory recipientCategory'
+  ).lean();
 
   if (!friendship) {
     return { isFriend: false, isSecureFriend: false };
   }
 
-  const viewerCategory = String(friendship.requester || '') === normalizedViewerId
-    ? friendship.requesterCategory
-    : friendship.recipientCategory;
   return {
     isFriend: true,
-    isSecureFriend: viewerCategory === 'secure'
+    isSecureFriend: ownerCategorizedViewerAsSecure(friendship, normalizedTargetId, normalizedViewerId)
   };
 };
 
@@ -364,10 +367,6 @@ router.get('/users/:username', publicReadLimiter, async (req, res) => {
     }
 
     const viewerId = getViewerIdFromAuthHeader(req);
-    const [contentFilter, censorEnabled] = await Promise.all([
-      getContentFilterConfig(),
-      getViewerContentFilterPreference(viewerId)
-    ]);
     const blocked = await hasBlockRelationship(viewerId, user._id);
     const isOwner = viewerId && String(viewerId) === String(user._id);
     const privateProfile = isPrivateProfile(user) && !isOwner;
@@ -543,18 +542,23 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
       });
     }
 
-    const query = publicPostQuery(user._id);
+    const candidatePosts = await Post.find({
+      targetFeedId: user._id,
+      $or: [
+        { expiresAt: null },
+        { expiresAt: { $gt: new Date() } }
+      ]
+    })
+      .sort({ createdAt: -1 })
+      .select('_id authorId targetFeedId content visibility relationshipAudience visibleToCircles visibleToUsers excludeUsers locationRadius expiresAt mediaUrls likes comments createdAt updatedAt')
+      .populate(publicPostPopulate);
 
-    const [posts, total] = await Promise.all([
-      Post.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .select('_id authorId targetFeedId content visibility relationshipAudience visibleToCircles locationRadius expiresAt mediaUrls likes comments createdAt updatedAt')
-        .populate(publicPostPopulate)
-        .lean(),
-      Post.countDocuments(query)
-    ]);
+    const visiblePosts = candidatePosts.filter((post) => post.canView(viewerId, {
+      isFriend: relationshipContext.isFriend,
+      isSecureFriend: relationshipContext.isSecureFriend
+    }));
+    const pagedPosts = visiblePosts.slice(skip, skip + limit);
+    const total = visiblePosts.length;
 
     return res.json({
       success: true,
@@ -562,9 +566,9 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
         ...toPublicUserProfile(user, relationshipContext),
         ...(resumeMeta || { hasPublicResume: false })
       },
-      posts: posts.map((post) => toPublicPost(post, {
-        maturityWords: contentFilter.maturityCensoredWords,
-        censorEnabled
+      posts: pagedPosts.map((post) => toPublicPost(post.toObject ? post.toObject() : post, {
+        maturityWords: [],
+        censorEnabled: true
       })),
       pagination: {
         page,

@@ -1,11 +1,22 @@
 const Post = require('./Post');
 
 describe('Post relationshipAudience visibility', () => {
-  test('treats missing relationshipAudience as social for legacy posts', () => {
+  test('treats missing relationshipAudience as social for legacy posts and blocks guests', () => {
     const post = new Post({
       authorId: '507f1f77bcf86cd799439011',
       targetFeedId: '507f1f77bcf86cd799439011',
       visibility: 'public'
+    });
+
+    expect(post.canView(null)).toBe(false);
+  });
+
+  test('allows guest access to explicit public audience posts', () => {
+    const post = new Post({
+      authorId: '507f1f77bcf86cd799439011',
+      targetFeedId: '507f1f77bcf86cd799439012',
+      visibility: 'public',
+      relationshipAudience: 'public'
     });
 
     expect(post.canView(null)).toBe(true);

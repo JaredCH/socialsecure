@@ -40,7 +40,7 @@ describe('Gallery relationship audience enforcement', () => {
     jest.clearAllMocks();
   });
 
-  it('filters unauthenticated gallery lists to social audience', async () => {
+  it('filters unauthenticated gallery lists to public audience', async () => {
     const app = buildApp();
     mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
     mockGalleryImage.find.mockReturnValue({
@@ -55,7 +55,7 @@ describe('Gallery relationship audience enforcement', () => {
     expect(response.status).toBe(200);
     expect(mockGalleryImage.find).toHaveBeenCalledWith(expect.objectContaining({
       ownerId: 'owner-1',
-      $or: expect.any(Array)
+      relationshipAudience: 'public'
     }));
   });
 

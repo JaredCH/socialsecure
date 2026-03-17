@@ -185,7 +185,7 @@ const postSchema = new mongoose.Schema({
   },
   relationshipAudience: {
     type: String,
-    enum: ['social', 'secure'],
+    enum: ['public', 'social', 'secure'],
     default: 'social',
     index: true
   },
@@ -295,7 +295,7 @@ postSchema.index({ createdAt: -1, visibility: 1, authorId: 1 });
 // Method to check if user can view post
 postSchema.methods.canView = function(viewerId, context = {}) {
   const relationshipAudience = normalizeRelationshipAudience(this.relationshipAudience);
-  if (!viewerId) return this.visibility === 'public' && relationshipAudience !== 'secure';
+  if (!viewerId) return this.visibility === 'public' && relationshipAudience === 'public';
 
   const viewer = String(viewerId);
   const author = String(this.authorId);

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { authAPI, blogAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, getAuthToken, moderationAPI, notificationAPI, resumeAPI, socialPageAPI } from '../utils/api';
-import PrivacySelector from '../components/PrivacySelector';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
@@ -91,6 +90,7 @@ const PRIVACY_BADGE_LABELS = {
   private: 'Private'
 };
 const RELATIONSHIP_AUDIENCE_LABELS = {
+  public: 'Public',
   social: 'Social',
   secure: 'Secure'
 };
@@ -537,7 +537,9 @@ const normalizePost = (post) => {
       typeof post.commentsCount === 'number'
         ? post.commentsCount
         : normalizedComments.length,
-    relationshipAudience: post.relationshipAudience === 'secure' ? 'secure' : 'social',
+    relationshipAudience: post.relationshipAudience === 'secure'
+      ? 'secure'
+      : (post.relationshipAudience === 'public' ? 'public' : 'social'),
     mediaUrls: normalizeMediaUrls(post.mediaUrls),
     interaction: post.interaction
       ? {
@@ -556,7 +558,9 @@ const normalizeGalleryItem = (item) => ({
   title: item?.title || '',
   caption: item?.caption || '',
   mediaType: item?.mediaType || 'url',
-  relationshipAudience: item?.relationshipAudience === 'secure' ? 'secure' : 'social',
+  relationshipAudience: item?.relationshipAudience === 'secure'
+    ? 'secure'
+    : (item?.relationshipAudience === 'public' ? 'public' : 'social'),
 });
 
 const normalizePersonalInfoFieldValue = (profileSource = {}, fieldId) => (
@@ -638,12 +642,6 @@ const Social = () => {
     },
     imageDescriptions: {},
     imageAudienceOverrides: {},
-  });
-  const [composerPanels, setComposerPanels] = useState({
-    media: false,
-    formatting: false,
-    privacy: false,
-    interaction: false
   });
   const [composerMdGuideOpen, setComposerMdGuideOpen] = useState(false);
   const [composerMdMobileOpen, setComposerMdMobileOpen] = useState(false);
@@ -2649,52 +2647,26 @@ const Social = () => {
   const handlePostFormField = (field, value) => {
     setPostForm((prev) => {
       if (field === 'relationshipAudience') {
-        const relationshipAudience = value === 'secure' ? 'secure' : 'social';
+        const relationshipAudience = value === 'secure'
+          ? 'secure'
+          : (value === 'public' ? 'public' : 'social');
         return {
           ...prev,
           relationshipAudience,
-          visibility: relationshipAudience === 'secure' ? 'friends' : prev.visibility,
+          visibility: relationshipAudience === 'public' ? 'public' : 'friends',
         };
       }
       if (field === 'visibility') {
         return {
           ...prev,
           visibility: value,
-          relationshipAudience: value === 'public' || value === 'circles' ? 'social' : prev.relationshipAudience,
+          relationshipAudience: value === 'public'
+            ? 'public'
+            : (value === 'friends' && prev.relationshipAudience === 'public' ? 'social' : prev.relationshipAudience),
         };
       }
       return { ...prev, [field]: value };
     });
-  };
-
-  const toggleStringInArray = (list, value) => {
-    if (list.includes(value)) {
-      return list.filter((entry) => entry !== value);
-    }
-    return [...list, value];
-  };
-
-  const handleToggleCircle = (circleName) => {
-    setPostForm((prev) => ({
-      ...prev,
-      visibleToCircles: toggleStringInArray(prev.visibleToCircles, circleName)
-    }));
-  };
-
-  const handleAddExcludeUser = (userId) => {
-    setPostForm((prev) => ({
-      ...prev,
-      excludeUsers: prev.excludeUsers.includes(userId)
-        ? prev.excludeUsers
-        : [...prev.excludeUsers, userId]
-    }));
-  };
-
-  const handleRemoveExcludeUser = (userId) => {
-    setPostForm((prev) => ({
-      ...prev,
-      excludeUsers: prev.excludeUsers.filter((entry) => entry !== userId)
-    }));
   };
 
   const applyComposerSnippet = (snippet) => {
@@ -3472,12 +3444,12 @@ const Social = () => {
                 <svg className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: 'var(--social-text-muted)' }} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
               </div>
 
-              {/* Social / Secure toggle */}
+              {/* Social / Secure / Public toggle */}
               <div className="flex rounded-xl p-0.5 shadow-sm" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 25%, transparent)', background: 'var(--bg-panel)' }}>
                 <button
                   type="button"
                   data-testid="composer-audience-social"
-                  onClick={() => { handlePostFormField('relationshipAudience', 'social'); handlePostFormField('visibility', 'friends'); }}
+                  onClick={() => handlePostFormField('relationshipAudience', 'social')}
                   className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${postForm.relationshipAudience === 'social' ? 'text-white shadow-sm' : 'hover:opacity-80'}`}
                   style={postForm.relationshipAudience === 'social' ? { backgroundColor: '#0284c7', color: '#fff' } : { color: 'var(--social-text-muted)' }}
                 >
@@ -3486,11 +3458,20 @@ const Social = () => {
                 <button
                   type="button"
                   data-testid="composer-audience-secure"
-                  onClick={() => { handlePostFormField('relationshipAudience', 'secure'); handlePostFormField('visibility', 'friends'); }}
+                  onClick={() => handlePostFormField('relationshipAudience', 'secure')}
                   className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${postForm.relationshipAudience === 'secure' ? 'text-white shadow-sm' : 'hover:opacity-80'}`}
                   style={postForm.relationshipAudience === 'secure' ? { backgroundColor: '#d97706', color: '#fff' } : { color: 'var(--social-text-muted)' }}
                 >
                   Secure
+                </button>
+                <button
+                  type="button"
+                  data-testid="composer-audience-public"
+                  onClick={() => handlePostFormField('relationshipAudience', 'public')}
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${postForm.relationshipAudience === 'public' ? 'text-white shadow-sm' : 'hover:opacity-80'}`}
+                  style={postForm.relationshipAudience === 'public' ? { backgroundColor: '#16a34a', color: '#fff' } : { color: 'var(--social-text-muted)' }}
+                >
+                  Public
                 </button>
               </div>
 
@@ -3769,25 +3750,9 @@ const Social = () => {
                 ) : null}
               </div>
 
-              {/* ── Advanced expandable section ── */}
-              <div style={{ borderTop: '1px solid color-mix(in srgb, var(--social-text-muted) 12%, transparent)' }}>
-                <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, privacy: !prev.privacy }))} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors" style={composerPanels.privacy ? { border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' } : { border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', color: 'var(--social-text-muted)' }}>
-                    🔒 Privacy
-                  </button>
-                  <button type="button" onClick={() => setComposerPanels((prev) => ({ ...prev, interaction: !prev.interaction }))} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors" style={composerPanels.interaction ? { border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' } : { border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', color: 'var(--social-text-muted)' }}>
-                    ⚡ Advanced
-                  </button>
-                </div>
-
-                {composerPanels.privacy ? (
-                  <div className="mx-3 mb-3">
-                    <PrivacySelector form={postForm} circles={circles} friends={friends} onChange={handlePostFormField} onToggleCircle={handleToggleCircle} onAddExcludeUser={handleAddExcludeUser} onRemoveExcludeUser={handleRemoveExcludeUser} />
-                  </div>
-                ) : null}
-
-                {composerPanels.interaction ? (
-                  <div className="mx-3 mb-3 space-y-3 rounded-xl p-3" style={{ border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)', background: 'color-mix(in srgb, var(--accent) 5%, var(--bg-panel))' }}>
+              {/* ── Interaction settings (shown for interactive post types) ── */}
+              {postForm.contentType !== 'standard' ? (
+                <div className="mx-3 mb-3 mt-2 space-y-3 rounded-xl p-3" style={{ border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)', background: 'color-mix(in srgb, var(--accent) 5%, var(--bg-panel))' }}>
                     {postForm.contentType === 'poll' ? (
                       <div className="space-y-3 rounded-xl p-3" style={{ border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)', background: 'color-mix(in srgb, var(--accent) 5%, transparent)' }}>
                         <h4 className="text-sm font-semibold" style={{ color: 'var(--social-text-primary)' }}>Poll Settings</h4>
@@ -3843,8 +3808,7 @@ const Social = () => {
                       </div>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
+              ) : null}
 
               {/* ── Live preview ── */}
               {(postForm.editorMode === 'code' ? postForm.codeContent : postForm.content) ? (
