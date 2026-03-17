@@ -423,11 +423,8 @@ describe('Chat zip room indicator', () => {
       'Direct Messages'
     ]);
 
-    expect(menuBar.textContent).toContain('Zip 02115');
-    expect(menuBar.textContent).toContain('Live conversation');
+    expect(menuBar.textContent).not.toContain('Live conversation');
     expect(menuBar.textContent).not.toContain('Theme-tuned accents');
-    expect(menuBar.querySelector('[data-open-chat-tab="Zip 02115"]')).not.toBeNull();
-    expect(menuBar.textContent).toContain('1/6');
   });
 
   it('renders alphabetical state chats with city rooms and a topics dropdown', async () => {
@@ -463,7 +460,7 @@ describe('Chat zip room indicator', () => {
         rooms: {
           state: { _id: 'state-ma', type: 'state', name: 'Massachusetts' },
           county: { _id: 'county-suffolk', type: 'county', name: 'Suffolk County, Massachusetts' },
-          zip: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' },
+          zip: null,
           cities: [
             { _id: 'city-boston', type: 'city', name: 'Boston (ZIP 02116)', distanceMiles: 2.5 },
             { _id: 'city-cambridge', type: 'city', name: 'Cambridge (ZIP 02139)', distanceMiles: 4.1 }
@@ -476,7 +473,7 @@ describe('Chat zip room indicator', () => {
 
     const quickAccessRooms = Array.from(container.querySelectorAll('[data-quick-access-room]'))
       .map((node) => node.getAttribute('data-quick-access-room'));
-    expect(quickAccessRooms).toEqual(['Zip 02115', 'Massachusetts', 'Suffolk County, Massachusetts']);
+    expect(quickAccessRooms).toEqual(['Massachusetts', 'Suffolk County, Massachusetts']);
     expect(Array.from(container.querySelectorAll('[data-quick-access-city]'))
       .map((node) => node.getAttribute('data-quick-access-city'))).toEqual([
       'Boston (ZIP 02116)',
