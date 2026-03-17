@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { authAPI, newsAPI, evaluateRegisterPassword } from '../utils/api';
 import { unlockOrCreateVault } from '../utils/e2ee';
 import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
+import PasswordField from './PasswordField';
 
 const TOTAL_STEPS = 3;
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
@@ -588,8 +589,7 @@ function OnboardingWizard({
               <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                 Encryption password already configured for this account.
               </div>
-              <input
-                type="password"
+              <PasswordField
                 value={encryptionPassword}
                 onChange={(event) => setEncryptionPassword(event.target.value)}
                 className="w-full border border-slate-300 rounded-lg p-2.5 bg-white"
@@ -602,8 +602,7 @@ function OnboardingWizard({
             </>
           ) : (
             <>
-              <input
-                type="password"
+              <PasswordField
                 value={encryptionPassword}
                 onChange={(event) => setEncryptionPassword(event.target.value)}
                 className="w-full border border-slate-300 rounded-lg p-2.5 bg-white"
@@ -611,8 +610,7 @@ function OnboardingWizard({
                 minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
                 required
               />
-              <input
-                type="password"
+              <PasswordField
                 value={confirmEncryptionPassword}
                 onChange={(event) => setConfirmEncryptionPassword(event.target.value)}
                 className="w-full border border-slate-300 rounded-lg p-2.5 bg-white"

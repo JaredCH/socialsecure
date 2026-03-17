@@ -6,6 +6,7 @@ import { generatePGPKeyPair, validatePublicKey } from '../utils/pgp';
 import FriendsManager from '../components/FriendsManager';
 import RecoveryKitManager from '../components/RecoveryKitManager';
 import SecurityScore from '../components/SecurityScore';
+import PasswordField from '../components/PasswordField';
 
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;
 const MAX_PGP_PUBLIC_KEY_LENGTH = 20000;
@@ -655,8 +656,7 @@ function UserSettings({
                 </div>
               ) : null}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <input
-                  type="password"
+                <PasswordField
                   name="currentPassword"
                   placeholder="Current password"
                   value={passwordForm.currentPassword}
@@ -665,8 +665,7 @@ function UserSettings({
                   autoComplete="current-password"
                   required
                 />
-                <input
-                  type="password"
+                <PasswordField
                   name="newPassword"
                   placeholder="New password"
                   value={passwordForm.newPassword}
@@ -676,8 +675,7 @@ function UserSettings({
                   minLength={8}
                   required
                 />
-                <input
-                  type="password"
+                <PasswordField
                   name="confirmPassword"
                   placeholder="Confirm new password"
                   value={passwordForm.confirmPassword}
@@ -717,8 +715,7 @@ function UserSettings({
               {hasEncryptionPassword ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Current Encryption Password</label>
-                  <input
-                    type="password"
+                  <PasswordField
                     name="currentEncryptionPassword"
                     value={encryptionForm.currentEncryptionPassword}
                     onChange={handleEncryptionFieldChange}
@@ -733,8 +730,7 @@ function UserSettings({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {hasEncryptionPassword ? 'New Encryption Password' : 'Encryption Password'}
                 </label>
-                <input
-                  type="password"
+                <PasswordField
                   name="encryptionPassword"
                   value={encryptionForm.encryptionPassword}
                   onChange={handleEncryptionFieldChange}
@@ -749,8 +745,7 @@ function UserSettings({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {hasEncryptionPassword ? 'Confirm New Encryption Password' : 'Confirm Encryption Password'}
                 </label>
-                <input
-                  type="password"
+                <PasswordField
                   name="confirmEncryptionPassword"
                   value={encryptionForm.confirmEncryptionPassword}
                   onChange={handleEncryptionFieldChange}

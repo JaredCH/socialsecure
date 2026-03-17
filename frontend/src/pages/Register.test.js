@@ -18,7 +18,7 @@ jest.mock('../utils/api', () => ({
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('Register minimal onboarding-first flow', () => {
+describe('Register flow', () => {
   let container;
   let root;
 
@@ -64,7 +64,7 @@ describe('Register minimal onboarding-first flow', () => {
     root = null;
   });
 
-  it('renders only the required registration fields', async () => {
+  it('renders required registration fields including password and confirmation', async () => {
     await renderRegister();
 
     expect(container.textContent).toContain('Basic details');
@@ -72,8 +72,27 @@ describe('Register minimal onboarding-first flow', () => {
     expect(container.querySelector('input[name="lastName"]')).not.toBeNull();
     expect(container.querySelector('input[name="username"]')).not.toBeNull();
     expect(container.querySelector('input[name="email"]')).not.toBeNull();
-    expect(container.querySelector('input[name="password"]')).toBeNull();
+    expect(container.querySelector('input[name="password"]')).not.toBeNull();
+    expect(container.querySelector('input[name="confirmPassword"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="register-submit-footer"]')).not.toBeNull();
+  });
+
+  it('toggles registration password visibility', async () => {
+    await renderRegister();
+
+    const passwordInput = container.querySelector('input[name="password"]');
+    const toggleButton = Array.from(container.querySelectorAll('button')).find((button) => (
+      button.getAttribute('aria-label') === 'View password'
+    ));
+
+    expect(passwordInput.getAttribute('type')).toBe('password');
+
+    await act(async () => {
+      toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(passwordInput.getAttribute('type')).toBe('text');
+    expect(toggleButton.getAttribute('aria-label')).toBe('Hide password');
   });
 
   it('checks username availability live and only enables submit when available', async () => {

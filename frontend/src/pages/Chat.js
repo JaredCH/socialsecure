@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast';
 import ChatComposerBar from '../components/chat/ChatComposerBar';
 import ChatMessageList from '../components/chat/ChatMessageList';
+import PasswordField from '../components/PasswordField';
 import { authAPI, chatAPI, friendsAPI, moderationAPI } from '../utils/api';
 import { parseSlashCommand, runSlashCommand } from '../utils/chatCommands';
 import { joinRealtimeRoom, leaveRealtimeRoom, onChatMessage, onFriendPresence, onPresenceUpdate } from '../utils/realtime';
@@ -2725,9 +2726,8 @@ function Chat() {
                   <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.16em]" htmlFor="dm-unlock-password">
                     Encryption password
                   </label>
-                  <input
+                  <PasswordField
                     id="dm-unlock-password"
-                    type="password"
                     value={passwordInput}
                     onChange={(event) => setPasswordInput(event.target.value)}
                     className="mt-2 w-full rounded-xl border border-red-200/45 bg-red-950/40 px-3 py-2 text-sm text-red-50 placeholder:text-red-200/60"
