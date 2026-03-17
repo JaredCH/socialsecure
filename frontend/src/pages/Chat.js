@@ -1457,11 +1457,13 @@ function Chat() {
 
       let messageForState = data?.message || null;
       if (messageForState) {
+        const currentProfileId = String(profile?._id || '');
         const senderId = String(messageForState.userId?._id || messageForState.userId || '');
-        if (senderId && senderId === String(profile?._id || '')) {
+        if (senderId && senderId === currentProfileId) {
+          const rawUserId = messageForState.userId;
           const existingUser = (typeof messageForState.userId === 'object' && messageForState.userId !== null)
             ? messageForState.userId
-            : { _id: messageForState.userId };
+            : (rawUserId ? { _id: rawUserId } : {});
           messageForState = {
             ...messageForState,
             userId: {

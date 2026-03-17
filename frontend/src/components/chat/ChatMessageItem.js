@@ -415,12 +415,12 @@ function ChatMessageItem({
           {dmAvatarNode}
           <div className={`flex min-w-0 flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}>
             {showHeader ? (
-                <a
-                  href={profileLink || '#'}
-                  className={`mb-0.5 truncate text-xs font-semibold ${isOwnMessage ? 'text-right' : 'text-left'} ${theme.senderAccent} hover:underline`}
-                  {...usernameHoverProps(menuUser)}
-                >
-                  @{author}
+              <a
+                href={profileLink || '#'}
+                className={`mb-0.5 truncate text-xs font-semibold ${isOwnMessage ? 'text-right' : 'text-left'} ${theme.senderAccent} hover:underline`}
+                {...usernameHoverProps(menuUser)}
+              >
+                @{author}
               </a>
             ) : null}
             <div

@@ -45,6 +45,8 @@ const HERO_IMAGE_HISTORY_LIMIT = 3;
 const HERO_RANDOM_BACKGROUND_ROTATION_INTERVAL_MS = 12000;
 const FEED_POLL_INTERVAL_MS = 30000;
 const TOP_FRIENDS_LIMIT = 5;
+const DESKTOP_LAYOUT_BREAKPOINT_PX = 1024;
+const MINI_CHAT_MIN_VIEWPORT_HEIGHT_PX = 288;
 const MAX_HOBBIES = 10;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
@@ -1954,7 +1956,7 @@ const Social = () => {
     }
 
     const updateMiniChatHeight = () => {
-      if (window.innerWidth < 1024) {
+      if (window.innerWidth < DESKTOP_LAYOUT_BREAKPOINT_PX) {
         setMiniChatDesktopViewportMaxHeight(null);
         return;
       }
@@ -1972,12 +1974,11 @@ const Social = () => {
         setMiniChatDesktopViewportMaxHeight(null);
         return;
       }
-      const nextHeight = Math.max(288, availableViewportHeight);
+      const nextHeight = Math.max(MINI_CHAT_MIN_VIEWPORT_HEIGHT_PX, availableViewportHeight);
       setMiniChatDesktopViewportMaxHeight((prev) => (prev === nextHeight ? prev : nextHeight));
     };
 
     updateMiniChatHeight();
-    const animationFrame = window.requestAnimationFrame(updateMiniChatHeight);
     window.addEventListener('resize', updateMiniChatHeight);
 
     let resizeObserver;
@@ -1988,11 +1989,10 @@ const Social = () => {
     }
 
     return () => {
-      window.cancelAnimationFrame(animationFrame);
       window.removeEventListener('resize', updateMiniChatHeight);
       if (resizeObserver) resizeObserver.disconnect();
     };
-  }, [activeHeroTab, profileChatMessages.length, profileChatControlsExpanded, profileChatError, profileChatInput, profileChatPermissions.canRead]);
+  }, [activeHeroTab]);
 
   useEffect(() => {
     if (isGuestPreview || !isOwnSocialContext || activeHeroTab !== 'main') {
