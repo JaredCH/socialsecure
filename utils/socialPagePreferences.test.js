@@ -106,4 +106,24 @@ describe('socialPagePreferences utility', () => {
       'https://example.com/old-3.jpg'
     ]);
   });
+
+  it('persists optional social section visibility fields used by blog, resume, and about me', () => {
+    const normalized = normalizeSocialPagePreferences({
+      enabledSections: { blog: true, resume: true, aboutme: false },
+      sectionAudience: { resume: 'secure' },
+      aboutMeContent: 'I build secure systems.'
+    }, { strict: true });
+
+    expect(normalized.value.enabledSections).toEqual({
+      blog: true,
+      resume: true,
+      aboutme: false
+    });
+    expect(normalized.value.sectionAudience).toEqual({
+      blog: 'social',
+      resume: 'secure',
+      aboutme: 'social'
+    });
+    expect(normalized.value.aboutMeContent).toBe('I build secure systems.');
+  });
 });
