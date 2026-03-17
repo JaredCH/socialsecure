@@ -6,7 +6,6 @@ import toast from 'react-hot-toast';
 
 const TOP_FRIENDS_LIMIT = 5;
 const MAX_CIRCLES = 5;
-const COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
 const DEFAULT_COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
 
@@ -109,14 +108,33 @@ export default function Friends({ user }) {
   // ─── Friend actions ───────────────────────────────────────────────────────
   const removeFriend = async (friendshipId) => {
     if (!window.confirm('Remove this friend?')) return;
-    try { await friendsAPI.removeFriend(friendshipId); toast.success('Friend removed'); loadFriends(); loadCircles(); } catch { toast.error('Failed to remove friend'); }
+    try {
+      await friendsAPI.removeFriend(friendshipId);
+      toast.success('Friend removed');
+      loadFriends();
+      loadCircles();
+    } catch {
+      toast.error('Failed to remove friend');
+    }
   };
 
   const acceptRequest = async (id) => {
-    try { await friendsAPI.acceptRequest(id); toast.success('Accepted'); loadFriends(); } catch { toast.error('Failed to accept'); }
+    try {
+      await friendsAPI.acceptRequest(id);
+      toast.success('Accepted');
+      loadFriends();
+    } catch {
+      toast.error('Failed to accept');
+    }
   };
   const declineRequest = async (id) => {
-    try { await friendsAPI.declineRequest(id); toast.success('Declined'); loadFriends(); } catch { toast.error('Failed to decline'); }
+    try {
+      await friendsAPI.declineRequest(id);
+      toast.success('Declined');
+      loadFriends();
+    } catch {
+      toast.error('Failed to decline');
+    }
   };
 
   const updateCategory = async (friendshipId, category) => {
@@ -129,7 +147,14 @@ export default function Friends({ user }) {
 
   // ─── Top Friends ──────────────────────────────────────────────────────────
   const saveTopFriends = async (ids) => {
-    try { await friendsAPI.updateTopFriends(ids); const res = await friendsAPI.getTopFriends(user.username); setTopFriends(res.data.topFriends || []); toast.success('Top friends updated'); } catch (e) { toast.error(e?.response?.data?.error || 'Failed to update'); }
+    try {
+      await friendsAPI.updateTopFriends(ids);
+      const res = await friendsAPI.getTopFriends(user.username);
+      setTopFriends(res.data.topFriends || []);
+      toast.success('Top friends updated');
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to update');
+    }
   };
 
   const addToTop = (friend) => {
@@ -154,11 +179,21 @@ export default function Friends({ user }) {
     try {
       const res = await userAPI.search(q);
       setUserSearchResults(res.data.users || []);
-    } catch { toast.error('Search failed'); } finally { setUserSearching(false); }
+    } catch {
+      toast.error('Search failed');
+    } finally {
+      setUserSearching(false);
+    }
   };
 
   const sendRequest = async (userId) => {
-    try { await friendsAPI.sendRequest(userId); toast.success('Friend request sent'); loadFriends(); } catch (e) { toast.error(e?.response?.data?.error || 'Failed to send request'); }
+    try {
+      await friendsAPI.sendRequest(userId);
+      toast.success('Friend request sent');
+      loadFriends();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to send request');
+    }
   };
 
   // ─── Circles ──────────────────────────────────────────────────────────────
@@ -181,20 +216,45 @@ export default function Friends({ user }) {
   };
 
   const updateCircle = async (circleName, data) => {
-    try { await circlesAPI.updateCircle(circleName, data); toast.success('Circle updated'); loadCircles(); setEditingCircle(null); } catch (e) { toast.error(e?.response?.data?.error || 'Failed to update circle'); }
+    try {
+      await circlesAPI.updateCircle(circleName, data);
+      toast.success('Circle updated');
+      loadCircles();
+      setEditingCircle(null);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to update circle');
+    }
   };
 
   const deleteCircle = async (circleName) => {
     if (!window.confirm(`Delete circle "${circleName}"?`)) return;
-    try { await circlesAPI.deleteCircle(circleName); toast.success('Circle deleted'); loadCircles(); } catch { toast.error('Failed to delete circle'); }
+    try {
+      await circlesAPI.deleteCircle(circleName);
+      toast.success('Circle deleted');
+      loadCircles();
+    } catch {
+      toast.error('Failed to delete circle');
+    }
   };
 
   const addCircleMember = async (circleName, userId) => {
-    try { await circlesAPI.addMember(circleName, userId); toast.success('Added to circle'); loadCircles(); } catch (e) { toast.error(e?.response?.data?.error || 'Failed to add'); }
+    try {
+      await circlesAPI.addMember(circleName, userId);
+      toast.success('Added to circle');
+      loadCircles();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to add');
+    }
   };
 
   const removeCircleMember = async (circleName, userId) => {
-    try { await circlesAPI.removeMember(circleName, userId); toast.success('Removed from circle'); loadCircles(); } catch { toast.error('Failed to remove'); }
+    try {
+      await circlesAPI.removeMember(circleName, userId);
+      toast.success('Removed from circle');
+      loadCircles();
+    } catch {
+      toast.error('Failed to remove');
+    }
   };
 
   // ─── Derived data ─────────────────────────────────────────────────────────
