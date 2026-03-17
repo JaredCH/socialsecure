@@ -194,7 +194,7 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200/70 overflow-hidden">
+    <div className="min-h-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200/70">
       <div className="px-4 py-3 border-b border-gray-100">
         <div className="flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -204,7 +204,7 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
         </div>
       </div>
       
-      <div className="px-4 py-3 space-y-3 max-h-[21.5rem] overflow-y-auto">
+      <div className="space-y-3 px-4 py-3">
         {loading && (
           <div className="flex items-center justify-center py-4">
             <div className="w-5 h-5 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />

@@ -23,6 +23,7 @@ jest.mock('../utils/api', () => ({
     refreshSourceHealth: jest.fn(),
     getWeather: jest.fn(),
     getSportsTeams: jest.fn(),
+    getSportsSchedules: jest.fn(),
     geocodeWeatherLocations: jest.fn(),
     getArticle: jest.fn(),
     addWeatherLocation: jest.fn(),
@@ -144,6 +145,7 @@ describe('News inline preferences updates', () => {
         ]
       }
     });
+    newsAPI.getSportsSchedules.mockResolvedValue({ data: { schedules: {}, leagueStatuses: {} } });
     newsAPI.geocodeWeatherLocations.mockResolvedValue({ data: { suggestions: [] } });
     newsAPI.updatePreferences.mockResolvedValue({ data: { preferences: basePreferences } });
     newsAPI.addLocation.mockResolvedValue({ data: { preferences: basePreferences } });
@@ -429,6 +431,59 @@ describe('News inline preferences updates', () => {
       && el.className.includes('overflow-y-auto')
     ));
     expect(feedScroller).toBeTruthy();
+
+    const leftPanel = container.querySelector('aside');
+    expect(leftPanel?.className).toContain('h-full');
+    expect(leftPanel?.className).toContain('min-h-0');
+    expect(leftPanel?.className).toContain('overflow-y-auto');
+  });
+
+  it('lets the right desktop rail own overflow instead of a fixed sports panel scroller', async () => {
+    newsAPI.getPreferences.mockResolvedValueOnce({
+      data: {
+        preferences: {
+          ...basePreferences,
+          followedSportsTeams: ['nfl:dallas-cowboys']
+        }
+      }
+    });
+    newsAPI.getSportsSchedules.mockResolvedValueOnce({
+      data: {
+        schedules: {
+          'nfl:dallas-cowboys': {
+            league: 'NFL',
+            nextGame: {
+              date: '2026-03-20T20:00:00.000Z',
+              opponent: 'Philadelphia Eagles',
+              isHome: true
+            }
+          }
+        },
+        leagueStatuses: {
+          NFL: { isInSeason: true }
+        }
+      }
+    });
+
+    await renderNews();
+
+    const rightPanel = Array.from(container.querySelectorAll('div')).find((el) => (
+      typeof el.className === 'string'
+      && el.className.includes('w-[320px]')
+      && el.className.includes('overflow-y-auto')
+    ));
+    expect(rightPanel?.className).toContain('min-h-0');
+
+    const sportsList = Array.from(container.querySelectorAll('div')).find((el) => (
+      typeof el.className === 'string'
+      && el.className.includes('space-y-3')
+      && el.className.includes('px-4')
+      && el.className.includes('py-3')
+      && el.textContent.includes('Dallas Cowboys')
+    ));
+    expect(sportsList).toBeTruthy();
+    expect(sportsList.className).not.toContain('max-h-[21.5rem]');
+    expect(sportsList.className).not.toContain('overflow-y-auto');
   });
 
   it('renders redesigned briefing surfaces for mobile and desktop', async () => {

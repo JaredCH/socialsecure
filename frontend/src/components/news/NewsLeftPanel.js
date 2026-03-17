@@ -48,7 +48,7 @@ export default function NewsLeftPanel({
   const isAllActive = activeCategories.length === 0;
 
   return (
-    <aside className="w-[260px] shrink-0 flex flex-col h-full bg-white border-r border-gray-100 overflow-y-auto">
+    <aside className="w-[260px] shrink-0 flex h-full min-h-0 flex-col overflow-y-auto border-r border-gray-100 bg-white">
       {/* Search */}
       <div className="px-3 pt-4 pb-2">
         <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 focus-within:ring-2 focus-within:ring-blue-500">
