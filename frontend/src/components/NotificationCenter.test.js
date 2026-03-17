@@ -203,4 +203,27 @@ describe('NotificationCenter corner behavior', () => {
     expect(container.textContent).toContain('No notifications yet.');
     expect(container.textContent).not.toContain('Old follow request');
   });
+
+  it('renders a logout action at the bottom of the dropdown when provided', async () => {
+    const onLogout = jest.fn();
+    await renderCenter({ onLogout });
+
+    const toggleButton = container.querySelector('button[aria-label="Notifications"]');
+    await act(async () => {
+      toggleButton.click();
+      await Promise.resolve();
+    });
+
+    const logoutButton = container.querySelector('[data-testid="notification-dropdown-logout"]');
+    expect(logoutButton).not.toBeNull();
+    expect(logoutButton.className).toContain('bg-red-600');
+
+    await act(async () => {
+      logoutButton.click();
+      await Promise.resolve();
+    });
+
+    expect(onLogout).toHaveBeenCalled();
+    expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
+  });
 });
