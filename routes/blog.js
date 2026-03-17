@@ -1,11 +1,28 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 const BlogPost = require('../models/BlogPost');
 const User = require('../models/User');
-const { authenticateToken } = require('../utils/auth');
 
 const router = express.Router();
+
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  return jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = decoded;
+    return next();
+  });
+};
 
 const blogLimiter = rateLimit({
   windowMs: 60 * 1000,
