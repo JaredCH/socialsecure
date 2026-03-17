@@ -107,13 +107,23 @@ describe('socialPagePreferences utility', () => {
     ]);
   });
 
-  it('accepts data URL body background images for persisted uploads', () => {
+  it('persists optional social section visibility fields used by blog, resume, and about me', () => {
     const normalized = normalizeSocialPagePreferences({
-      globalStyles: {
-        bodyBackgroundImage: 'data:image/png;base64,aGVsbG8='
-      }
-    });
+      enabledSections: { blog: true, resume: true, aboutme: false },
+      sectionAudience: { resume: 'secure' },
+      aboutMeContent: 'I build secure systems.'
+    }, { strict: true });
 
-    expect(normalized.value.globalStyles.bodyBackgroundImage).toBe('data:image/png;base64,aGVsbG8=');
+    expect(normalized.value.enabledSections).toEqual({
+      blog: true,
+      resume: true,
+      aboutme: false
+    });
+    expect(normalized.value.sectionAudience).toEqual({
+      blog: 'social',
+      resume: 'secure',
+      aboutme: 'social'
+    });
+    expect(normalized.value.aboutMeContent).toBe('I build secure systems.');
   });
 });
