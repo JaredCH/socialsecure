@@ -107,6 +107,18 @@ describe('socialPagePreferences utility', () => {
     ]);
   });
 
+  it('keeps uploaded hero media paths so gallery-hosted images continue to load', () => {
+    const normalized = normalizeSocialPagePreferences({
+      hero: {
+        backgroundImage: '/uploads/gallery/user-1/photo-1.jpg',
+        profileImage: '/uploads/gallery/user-1/photo-2.jpg'
+      }
+    });
+
+    expect(normalized.value.hero.backgroundImage).toBe('/uploads/gallery/user-1/photo-1.jpg');
+    expect(normalized.value.hero.profileImage).toBe('/uploads/gallery/user-1/photo-2.jpg');
+  });
+
   it('persists optional social section visibility fields used by blog, resume, and about me', () => {
     const normalized = normalizeSocialPagePreferences({
       enabledSections: { blog: true, resume: true, aboutme: false },

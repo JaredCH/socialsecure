@@ -18,7 +18,7 @@ const {
 
 const router = express.Router();
 
-const MAX_GALLERY_ITEMS = 24;
+const MAX_GALLERY_ITEMS = 50;
 const URL_MAX_LENGTH = 2048;
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -43,6 +43,7 @@ const upload = multer({
 });
 
 const galleryUploadRoot = path.join(__dirname, '..', 'uploads', 'gallery');
+const SERVER_UPLOAD_PATH_REGEX = /^\/uploads\/\S+/i;
 
 const isHttpUrl = (value) => {
   if (typeof value !== 'string') return false;
@@ -160,6 +161,19 @@ const isPrivateProfile = (ownerDoc) => (
 
 const toGalleryItem = (image, viewerId) => {
   const { likesCount, dislikesCount } = image.getReactionCounts();
+  const comments = Array.isArray(image.comments)
+    ? image.comments.map((comment) => ({
+      _id: comment?._id || null,
+      userId: typeof comment?.userId === 'string'
+        ? comment.userId
+        : String(comment?.userId?._id || comment?.userId || ''),
+      username: typeof comment?.userId === 'object' && comment?.userId?.username
+        ? comment.userId.username
+        : null,
+      content: comment?.content || '',
+      createdAt: comment?.createdAt || null
+    }))
+    : [];
 
   return {
     _id: image._id,
@@ -171,10 +185,28 @@ const toGalleryItem = (image, viewerId) => {
     likesCount,
     dislikesCount,
     viewerReaction: image.getViewerReaction(viewerId),
+    comments,
+    commentsCount: comments.length,
     relationshipAudience: normalizeRelationshipAudience(image.relationshipAudience),
     createdAt: image.createdAt,
     updatedAt: image.updatedAt
   };
+};
+
+const resolveRequestOrigin = (req) => {
+  const host = (req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+  if (!host) return '';
+  const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim().toLowerCase();
+  const protocol = forwardedProto || req.protocol || 'https';
+  return `${protocol}://${host}`;
+};
+
+const resolveStoredMediaUrl = (url, req) => {
+  const normalized = typeof url === 'string' ? url.trim() : '';
+  if (!normalized) return '';
+  if (!SERVER_UPLOAD_PATH_REGEX.test(normalized)) return normalized;
+  const origin = resolveRequestOrigin(req);
+  return origin ? `${origin}${normalized}` : normalized;
 };
 
 const getGalleryViewerContext = async (ownerId, viewerId) => {
@@ -240,6 +272,10 @@ const optionalAuthenticateToken = (req, res, next) => {
 };
 
 const ensureOwnerAccess = (ownerId, requesterUserId) => String(ownerId) === String(requesterUserId || '');
+const normalizeCommentContent = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, 1000);
+};
 
 router.get('/:ownerId', optionalAuthenticateToken, async (req, res) => {
   try {
@@ -317,7 +353,10 @@ router.get('/:ownerId', optionalAuthenticateToken, async (req, res) => {
     return res.json({
       success: true,
       owner,
-      items: images.map((image) => toGalleryItem(image, viewerId)),
+      items: images.map((image) => ({
+        ...toGalleryItem(image, viewerId),
+        mediaUrl: resolveStoredMediaUrl(image.mediaUrl, req)
+      })),
       pagination: {
         page,
         limit,
@@ -389,7 +428,7 @@ router.post(
 
         await fs.writeFile(absolutePath, req.file.buffer);
 
-        mediaUrl = `/uploads/gallery/${String(owner._id)}/${fileName}`;
+        mediaUrl = resolveStoredMediaUrl(`/uploads/gallery/${String(owner._id)}/${fileName}`, req);
         mediaType = 'upload';
         storageFileName = fileName;
       } else {
@@ -424,7 +463,10 @@ router.post(
 
       return res.status(201).json({
         success: true,
-        item: toGalleryItem(created, requesterId)
+        item: {
+          ...toGalleryItem(created, requesterId),
+          mediaUrl: resolveStoredMediaUrl(created.mediaUrl, req)
+        }
       });
     } catch (error) {
       if (error?.code === 11000) {
@@ -507,7 +549,10 @@ router.patch(
 
       return res.json({
         success: true,
-        item: toGalleryItem(image, requesterId)
+        item: {
+          ...toGalleryItem(image, requesterId),
+          mediaUrl: resolveStoredMediaUrl(image.mediaUrl, req)
+        }
       });
     } catch (error) {
       if (error?.code === 11000) {
@@ -562,6 +607,62 @@ router.delete('/:ownerId/:imageId', authenticateToken, async (req, res) => {
     return res.status(500).json({ error: 'Failed to delete gallery image' });
   }
 });
+
+router.post(
+  '/:ownerId/:imageId/comment',
+  authenticateToken,
+  [body('content').isString().isLength({ min: 1, max: 1000 }).withMessage('Comment content is required')],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const owner = await findOwnerByIdentifier(req.params.ownerId);
+      if (!owner) {
+        return res.status(404).json({ error: 'Gallery owner not found' });
+      }
+
+      const image = await GalleryImage.findOne({ _id: req.params.imageId, ownerId: owner._id });
+      if (!image) {
+        return res.status(404).json({ error: 'Gallery image not found' });
+      }
+
+      const userId = String(req.user.userId || '');
+      const viewerContext = await getGalleryViewerContext(owner._id, userId);
+      if (!image.canView(userId, viewerContext)) {
+        return res.status(404).json({ error: 'Gallery image not found' });
+      }
+
+      const content = normalizeCommentContent(req.body.content);
+      if (!content) {
+        return res.status(400).json({ error: 'Comment content is required' });
+      }
+
+      image.comments.push({ userId, content, createdAt: new Date() });
+      await image.save();
+
+      const savedComment = image.comments[image.comments.length - 1];
+      const commenter = await User.findById(userId).select('username').lean();
+
+      return res.status(201).json({
+        success: true,
+        comment: {
+          _id: savedComment?._id || null,
+          userId,
+          username: commenter?.username || null,
+          content: savedComment?.content || content,
+          createdAt: savedComment?.createdAt || new Date().toISOString()
+        },
+        commentsCount: image.comments.length
+      });
+    } catch (error) {
+      console.error('Error adding gallery comment:', error);
+      return res.status(500).json({ error: 'Failed to add gallery comment' });
+    }
+  }
+);
 
 router.post(
   '/:ownerId/:imageId/reaction',

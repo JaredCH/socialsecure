@@ -543,6 +543,12 @@ const normalizeMediaUrl = (value, fallback = null) => {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > MEDIA_URL_MAX_LENGTH) return fallback;
+  if (/^\/uploads\/\S+/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^data:image\/(?:jpeg|jpg|png|gif|webp);base64,[a-z0-9+/=]+$/i.test(trimmed)) {
+    return trimmed;
+  }
   try {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {

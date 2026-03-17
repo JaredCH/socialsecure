@@ -5,16 +5,23 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn()
 }));
 
-const mockUser = { findOne: jest.fn() };
+const mockUser = { findOne: jest.fn(), findById: jest.fn() };
 const mockGalleryImage = {
   find: jest.fn(),
   countDocuments: jest.fn(),
   create: jest.fn(),
   findOne: jest.fn()
 };
+const mockFriendship = { findOne: jest.fn() };
 
 jest.mock('../models/User', () => mockUser);
 jest.mock('../models/GalleryImage', () => mockGalleryImage);
+jest.mock('../models/Friendship', () => mockFriendship);
+jest.mock('fs/promises', () => ({
+  mkdir: jest.fn().mockResolvedValue(undefined),
+  writeFile: jest.fn().mockResolvedValue(undefined),
+  unlink: jest.fn().mockResolvedValue(undefined)
+}));
 
 const jwt = require('jsonwebtoken');
 const galleryRouter = require('./gallery');
@@ -37,6 +44,11 @@ const mockOwnerLookup = (owner) => {
 describe('Gallery routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFriendship.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null)
+      })
+    });
   });
 
   it('returns gallery items with reaction counts', async () => {
@@ -210,6 +222,44 @@ describe('Gallery routes', () => {
     );
   });
 
+  it('stores uploaded gallery image URLs using the request origin', async () => {
+    const app = buildApp();
+    jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
+    mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
+    mockGalleryImage.countDocuments.mockResolvedValue(0);
+
+    const createdDoc = {
+      _id: 'img-upload',
+      ownerId: 'owner-1',
+      mediaUrl: 'http://127.0.0.1:3000/uploads/gallery/owner-1/file.png',
+      mediaType: 'upload',
+      title: '',
+      caption: '',
+      comments: [],
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      getReactionCounts: jest.fn().mockReturnValue({ likesCount: 0, dislikesCount: 0 }),
+      getViewerReaction: jest.fn().mockReturnValue(null)
+    };
+    mockGalleryImage.create.mockResolvedValue(createdDoc);
+
+    const response = await request(app)
+      .post('/api/gallery/owner-1')
+      .set('Authorization', 'Bearer token')
+      .attach('image', Buffer.from('fake-image-bytes'), {
+        filename: 'sample.png',
+        contentType: 'image/png'
+      });
+
+    expect(response.status).toBe(201);
+    expect(mockGalleryImage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mediaUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/uploads\/gallery\/owner-1\//),
+        mediaType: 'upload'
+      })
+    );
+  });
+
   it('rejects create for blocked host URL', async () => {
     const app = buildApp();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
@@ -297,5 +347,42 @@ describe('Gallery routes', () => {
       dislikesCount: 0
     });
     expect(imageDoc.applyReaction).toHaveBeenCalledWith('viewer-1', 'like');
+  });
+
+  it('adds a comment to a gallery image', async () => {
+    const app = buildApp();
+    const ownerId = '507f1f77bcf86cd799439012';
+    const viewerId = '507f1f77bcf86cd799439011';
+    jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: viewerId }));
+    mockOwnerLookup({ _id: ownerId, username: 'owner' });
+    mockUser.findById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ username: 'viewer' })
+      })
+    });
+
+    const imageDoc = {
+      comments: [],
+      canView: jest.fn().mockReturnValue(true),
+      save: jest.fn().mockResolvedValue(true)
+    };
+    mockGalleryImage.findOne.mockResolvedValue(imageDoc);
+
+    const response = await request(app)
+      .post(`/api/gallery/${ownerId}/image-1/comment`)
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'Nice photo!' });
+
+    expect(response.status).toBe(201);
+    expect(imageDoc.comments).toHaveLength(1);
+    expect(imageDoc.comments[0]).toEqual(expect.objectContaining({
+      userId: viewerId,
+      content: 'Nice photo!'
+    }));
+    expect(response.body.comment).toEqual(expect.objectContaining({
+      userId: viewerId,
+      username: 'viewer',
+      content: 'Nice photo!'
+    }));
   });
 });

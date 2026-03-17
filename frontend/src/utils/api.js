@@ -269,6 +269,8 @@ export const galleryAPI = {
     api.patch(`/gallery/${encodeURIComponent(ownerIdOrUsername)}/${encodeURIComponent(imageId)}`, data),
   deleteGalleryItem: (ownerIdOrUsername, imageId) =>
     api.delete(`/gallery/${encodeURIComponent(ownerIdOrUsername)}/${encodeURIComponent(imageId)}`),
+  addGalleryComment: (ownerIdOrUsername, imageId, content) =>
+    api.post(`/gallery/${encodeURIComponent(ownerIdOrUsername)}/${encodeURIComponent(imageId)}/comment`, { content }),
   reactToGalleryImage: (ownerIdOrUsername, imageId, type) =>
     api.post(`/gallery/${encodeURIComponent(ownerIdOrUsername)}/${encodeURIComponent(imageId)}/reaction`, {
       type,

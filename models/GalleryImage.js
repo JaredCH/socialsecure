@@ -20,6 +20,24 @@ const galleryReactionSchema = new mongoose.Schema({
   _id: false
 });
 
+const galleryCommentSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  content: {
+    type: String,
+    trim: true,
+    maxlength: 1000,
+    required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
 const galleryImageSchema = new mongoose.Schema({
   ownerId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -62,6 +80,10 @@ const galleryImageSchema = new mongoose.Schema({
   },
   reactions: {
     type: [galleryReactionSchema],
+    default: []
+  },
+  comments: {
+    type: [galleryCommentSchema],
     default: []
   }
 }, {
