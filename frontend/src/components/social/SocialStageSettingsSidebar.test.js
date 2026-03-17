@@ -60,7 +60,7 @@ describe('SocialStageSettingsSidebar', () => {
 
     const overlay = container.querySelector('.fixed.inset-0');
     expect(overlay).toBeTruthy();
-    expect(overlay.className).toContain('z-[1400]');
+    expect(overlay.className).toContain('z-[1700]');
   });
 
   it('applies hero background URL, history revert, and random gallery toggle', async () => {
