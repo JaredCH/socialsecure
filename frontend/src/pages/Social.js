@@ -439,6 +439,14 @@ const CALENDAR_HOUR_LABELS = Array.from({ length: 24 }, (_, index) => {
   return `${hour}:00 ${period}`;
 });
 
+const MINI_CHAT_MESSAGE_GROUP_THRESHOLD_MS = 5 * 60 * 1000;
+
+const toCalendarDateTimeLocalString = (date) => {
+  const d = new Date(date);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const formatCalendarDayKey = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -3800,7 +3808,7 @@ const Social = () => {
                       const groupedWithPrev = Boolean(
                         prevMessage
                         && String(prevMessage?.userId?._id || '') === String(message?.userId?._id || '')
-                        && (new Date(message?.createdAt || 0).getTime() - new Date(prevMessage?.createdAt || 0).getTime()) < 5 * 60 * 1000
+                        && (new Date(message?.createdAt || 0).getTime() - new Date(prevMessage?.createdAt || 0).getTime()) < MINI_CHAT_MESSAGE_GROUP_THRESHOLD_MS
                       );
                       return (
                         <div
@@ -3888,7 +3896,7 @@ const Social = () => {
 
               {/* Owner access controls (expanded) */}
               {profileChatPermissions.isOwner && profileChatControlsExpanded ? (
-                <div className="border-t border-slate-800 bg-slate-900/90 p-2.5 space-y-2">
+                <div className="border-t border-slate-800 bg-slate-900/90 space-y-2 p-2.5">
                   {[
                     { field: 'readRoles', label: 'Read access' },
                     { field: 'writeRoles', label: 'Write access' }
@@ -4160,32 +4168,22 @@ const Social = () => {
 
   const openCalendarCreateModal = useCallback((defaults = {}) => {
     const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const toLocalDateTimeString = (date) => {
-      const d = new Date(date);
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    };
     setCalendarEventModal({
       mode: 'create',
       title: '',
-      startAt: toLocalDateTimeString(defaults.startAt || now),
-      endAt: toLocalDateTimeString(defaults.endAt || new Date(now.getTime() + 60 * 60 * 1000)),
+      startAt: toCalendarDateTimeLocalString(defaults.startAt || now),
+      endAt: toCalendarDateTimeLocalString(defaults.endAt || new Date(now.getTime() + 60 * 60 * 1000)),
       location: ''
     });
   }, []);
 
   const openCalendarEditModal = useCallback((event) => {
-    const pad = (n) => String(n).padStart(2, '0');
-    const toLocalDateTimeString = (isoString) => {
-      const d = new Date(isoString);
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    };
     setCalendarEventModal({
       mode: 'edit',
       eventId: String(event._id),
       title: event.title || '',
-      startAt: toLocalDateTimeString(event.startAt),
-      endAt: toLocalDateTimeString(event.endAt || event.startAt),
+      startAt: toCalendarDateTimeLocalString(event.startAt),
+      endAt: toCalendarDateTimeLocalString(event.endAt || event.startAt),
       location: event.location || ''
     });
   }, []);
@@ -4640,7 +4638,7 @@ const Social = () => {
                     {calendarPreviewLoading ? 'Loading…' : 'Live'}
                   </span>
                 </div>
-                <div className="max-h-[26rem] overflow-y-auto space-y-0.5 [scrollbar-gutter:stable]">
+                <div className="max-h-[26rem] space-y-0.5 overflow-y-auto [scrollbar-gutter:stable]">
                   {CALENDAR_HOUR_LABELS.map((hourLabel, hourIndex) => {
                     const hourStart = new Date(calendarPreviewAnchorDate);
                     hourStart.setHours(hourIndex, 0, 0, 0);
