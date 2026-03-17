@@ -2,8 +2,6 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const path = require('path');
-const crypto = require('crypto');
-const fs = require('fs/promises');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const { v4: uuidv4 } = require('uuid');
@@ -22,7 +20,6 @@ const router = express.Router();
 const BG_UPLOAD_MAX_BYTES = 3 * 1024 * 1024;
 const BG_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 const BG_ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
-const bgUploadRoot = path.join(__dirname, '..', 'uploads', 'backgrounds');
 const bgUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: BG_UPLOAD_MAX_BYTES, files: 1 }
@@ -258,16 +255,7 @@ router.post('/body-background-upload', bgUploadLimiter, authenticateToken, bgUpl
       return res.status(400).json({ error: 'Image file is too large (max 3MB).' });
     }
 
-    const userId = String(req.user._id);
-    const userDir = path.join(bgUploadRoot, userId);
-    await fs.mkdir(userDir, { recursive: true });
-
-    const randomPart = crypto.randomBytes(8).toString('hex');
-    const fileName = `${Date.now()}-${randomPart}${ext}`;
-    const filePath = path.join(userDir, fileName);
-    await fs.writeFile(filePath, req.file.buffer);
-
-    const mediaUrl = `/uploads/backgrounds/${userId}/${fileName}`;
+    const mediaUrl = `data:${mimeType};base64,${req.file.buffer.toString('base64')}`;
 
     return res.json({ success: true, mediaUrl, fileSize: req.file.size, mimeType });
   } catch (error) {

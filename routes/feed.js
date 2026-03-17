@@ -35,6 +35,9 @@ const INTERACTION_MAX_QUESTION_LENGTH = 280;
 const INTERACTION_MAX_EXPLANATION_LENGTH = 1000;
 const INTERACTION_MAX_COUNTDOWN_LABEL_LENGTH = 180;
 const INTERACTION_MAX_TIMEZONE_LENGTH = 80;
+const getDefaultRelationshipAudienceForVisibility = (visibility) => (
+  visibility === 'public' ? 'public' : 'social'
+);
 const interactionRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
@@ -730,7 +733,10 @@ router.post('/post', [
       : [];
     const normalizedVisibleToUsers = normalizeObjectIdArray(visibleToUsers).slice(0, 200);
     const normalizedExcludeUsers = normalizeObjectIdArray(excludeUsers).slice(0, 200);
-    const normalizedRelationshipAudience = normalizeRelationshipAudience(relationshipAudience);
+    const hasExplicitRelationshipAudience = typeof relationshipAudience === 'string' && relationshipAudience.trim().length > 0;
+    const normalizedRelationshipAudience = hasExplicitRelationshipAudience
+      ? normalizeRelationshipAudience(relationshipAudience)
+      : getDefaultRelationshipAudienceForVisibility(visibility);
 
     if (
       normalizedRelationshipAudience === 'secure'
