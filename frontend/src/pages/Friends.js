@@ -7,6 +7,8 @@ import toast from 'react-hot-toast';
 
 const TOP_FRIENDS_LIMIT = 5;
 const MAX_CIRCLES = 5;
+const SEARCH_DEFAULT_PAGE = 1;
+const SEARCH_DEFAULT_LIMIT = 25;
 
 const DEFAULT_COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
 
@@ -160,7 +162,7 @@ export default function Friends({ user }) {
   const cancelOutgoingRequest = async (id) => {
     try {
       await friendsAPI.removeFriend(id);
-      toast.success('Request cancelled');
+      toast.success('Request canceled');
       loadFriends();
     } catch {
       toast.error('Failed to cancel request');
@@ -204,9 +206,10 @@ export default function Friends({ user }) {
   // ─── User search ──────────────────────────────────────────────────────────
   const searchUsers = async () => {
     const q = userSearchQuery.trim();
+    if (!q) return;
     setUserSearching(true);
     try {
-      const res = await discoveryAPI.getUsers(q, 1, 25);
+      const res = await discoveryAPI.getUsers(q, SEARCH_DEFAULT_PAGE, SEARCH_DEFAULT_LIMIT);
       setUserSearchResults(res.data.users || []);
     } catch {
       toast.error('Search failed');

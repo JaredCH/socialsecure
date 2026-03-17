@@ -104,6 +104,12 @@ describe('Friends page request flow', () => {
     await act(async () => {
       Array.from(container.querySelectorAll('button')).find((button) => button.textContent.includes('Find Friends'))?.click();
     });
+    const input = container.querySelector('input[placeholder="Search by username or name…"]');
+    await act(async () => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      nativeSetter.call(input, 'bob');
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     await act(async () => {
       Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Search')?.click();
     });
@@ -111,7 +117,7 @@ describe('Friends page request flow', () => {
       Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Add Friend')?.click();
     });
 
-    expect(discoveryAPI.getUsers).toHaveBeenCalledWith('', 1, 25);
+    expect(discoveryAPI.getUsers).toHaveBeenCalledWith('bob', 1, 25);
     expect(friendsAPI.sendRequest).toHaveBeenCalledWith('u-2');
 
     const link = container.querySelector('a[href="/social?user=bob"]');
