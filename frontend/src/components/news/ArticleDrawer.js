@@ -145,7 +145,7 @@ const ArticleDrawer = ({ article, onClose, variant = 'drawer', anchorPosition = 
   );
 
   const drawer = isPopup ? (
-    <div className="fixed inset-0 z-[220] pointer-events-none">
+    <div className="fixed inset-0 z-[1320] pointer-events-none">
       <div
         ref={popupRef}
         data-testid="article-popup-preview"
@@ -173,7 +173,7 @@ const ArticleDrawer = ({ article, onClose, variant = 'drawer', anchorPosition = 
   ) : (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-[210] bg-black/40" onClick={onClose} />
+      <div className="fixed inset-0 z-[1310] bg-black/40" onClick={onClose} />
 
       {/* Drawer */}
       <div
@@ -181,7 +181,7 @@ const ArticleDrawer = ({ article, onClose, variant = 'drawer', anchorPosition = 
         role="dialog"
         aria-modal="true"
         aria-label="Article Detail"
-        className="fixed inset-y-0 right-0 z-[220] w-full max-w-lg overflow-y-auto bg-white shadow-2xl"
+        className="fixed inset-y-0 right-0 z-[1320] w-full max-w-lg overflow-y-auto bg-white shadow-2xl"
       >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
