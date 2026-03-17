@@ -9,6 +9,7 @@ export const SOCIAL_MODULE_IDS = ['marketplaceShortcut', 'calendarShortcut', 'se
 export const SOCIAL_PANEL_SHAPES = ['rectangle', 'square', 'wide', 'tall', 'l-shape', 't-shape', 'z-shape'];
 export const BODY_BG_DISPLAY_MODES = ['cover', 'repeat', 'fixed'];
 export const BODY_BG_OVERLAY_ANIMATIONS = ['none', 'snow', 'easter-eggs', 'halloween-ghosts', 'valentines-hearts', 'fireworks'];
+const BODY_BG_DATA_URL_MAX_LENGTH = 6 * 1024 * 1024;
 export const SOCIAL_PANEL_SHAPE_MASKS = {
   rectangle: [[1, 1], [1, 1]],
   square: [[1, 1], [1, 1]],
@@ -570,8 +571,13 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default', requ
   const normalizeBodyBgUrl = (val) => {
     if (typeof val !== 'string') return '';
     const trimmed = val.trim();
-    if (!trimmed || trimmed.length > 2048) return '';
+    if (!trimmed) return '';
     if (/^\/uploads\/backgrounds\/[a-f0-9]+\/[a-f0-9]+-[a-f0-9]+\.\w{2,5}$/.test(trimmed)) return trimmed;
+    if (
+      /^data:image\/(?:jpeg|jpg|png|gif|webp);base64,[a-z0-9+/=]+$/i.test(trimmed)
+      && trimmed.length <= BODY_BG_DATA_URL_MAX_LENGTH
+    ) return trimmed;
+    if (trimmed.length > 2048) return '';
     try {
       const parsed = new URL(trimmed);
       if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.toString();

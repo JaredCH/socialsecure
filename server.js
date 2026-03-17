@@ -279,12 +279,14 @@ if (process.env.NODE_ENV !== 'test') {
 const frontendBuildPath = path.join(__dirname, 'frontend', 'build');
 const frontendIndexPath = path.join(frontendBuildPath, 'index.html');
 const hasFrontendBuild = fs.existsSync(frontendIndexPath);
+const isAssetRequestPath = (requestPath = '') => Boolean(path.extname(requestPath || ''));
 
 if (isProduction || hasFrontendBuild) {
   app.use(express.static(frontendBuildPath));
 
   app.get(/^\/(?!api|health).*/, (req, res, next) => {
     if (!hasFrontendBuild) return next();
+    if (isAssetRequestPath(req.path)) return next();
     return res.sendFile(frontendIndexPath);
   });
 } else {
@@ -310,7 +312,7 @@ app.use('/api/*', (req, res) => {
 });
 
 app.use((req, res) => {
-  if ((isProduction || hasFrontendBuild) && req.method === 'GET') {
+  if ((isProduction || hasFrontendBuild) && req.method === 'GET' && !isAssetRequestPath(req.path)) {
     return res.sendFile(frontendIndexPath);
   }
   return res.status(404).json({ error: 'Route not found' });

@@ -730,7 +730,10 @@ router.post('/post', [
       : [];
     const normalizedVisibleToUsers = normalizeObjectIdArray(visibleToUsers).slice(0, 200);
     const normalizedExcludeUsers = normalizeObjectIdArray(excludeUsers).slice(0, 200);
-    const normalizedRelationshipAudience = normalizeRelationshipAudience(relationshipAudience);
+    const hasExplicitRelationshipAudience = typeof relationshipAudience === 'string' && relationshipAudience.trim().length > 0;
+    const normalizedRelationshipAudience = hasExplicitRelationshipAudience
+      ? normalizeRelationshipAudience(relationshipAudience)
+      : (visibility === 'public' ? 'public' : 'social');
 
     if (
       normalizedRelationshipAudience === 'secure'

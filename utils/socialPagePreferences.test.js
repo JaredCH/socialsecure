@@ -106,4 +106,14 @@ describe('socialPagePreferences utility', () => {
       'https://example.com/old-3.jpg'
     ]);
   });
+
+  it('accepts data URL body background images for persisted uploads', () => {
+    const normalized = normalizeSocialPagePreferences({
+      globalStyles: {
+        bodyBackgroundImage: 'data:image/png;base64,aGVsbG8='
+      }
+    });
+
+    expect(normalized.value.globalStyles.bodyBackgroundImage).toBe('data:image/png;base64,aGVsbG8=');
+  });
 });

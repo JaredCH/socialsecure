@@ -52,4 +52,14 @@ describe('socialPagePreferences layout normalization', () => {
     expect(SOCIAL_LAYOUT_PRESETS.map((preset) => preset.id)).toEqual(expect.arrayContaining(['compact', 'balanced', 'content-first']));
     expect(SOCIAL_THEME_STYLE_PRESETS.map((preset) => preset.id)).toEqual(expect.arrayContaining(['oceanic', 'midnight', 'sunrise']));
   });
+
+  it('keeps data URL body background images from design preferences', () => {
+    const normalized = normalizeSocialPreferences({
+      globalStyles: {
+        bodyBackgroundImage: 'data:image/webp;base64,aGVsbG8='
+      }
+    });
+
+    expect(normalized.globalStyles.bodyBackgroundImage).toBe('data:image/webp;base64,aGVsbG8=');
+  });
 });
