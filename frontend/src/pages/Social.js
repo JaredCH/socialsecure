@@ -1137,6 +1137,15 @@ const Social = () => {
   const handleSendProfileChatMessage = useCallback(async () => {
     const content = profileChatInput.trim();
     if (!content || !profileChatThreadId || profileChatSending || !profileChatPermissions.canWrite) return;
+    // Enforce max 2 consecutive messages from same user (client-side check)
+    if (!profileChatPermissions.isOwner && profileChatMessages.length >= 2) {
+      const lastTwo = profileChatMessages.slice(-2);
+      const currentUserId = String(currentUser?._id || '');
+      if (currentUserId && lastTwo.every(m => String(m?.userId?._id || m?.userId) === currentUserId)) {
+        setProfileChatError('You may only send 2 consecutive messages. Please wait for others to interact before continuing.');
+        return;
+      }
+    }
     setProfileChatSending(true);
     setProfileChatError('');
     try {
@@ -1150,7 +1159,17 @@ const Social = () => {
     } finally {
       setProfileChatSending(false);
     }
-  }, [profileChatInput, profileChatThreadId, profileChatSending, profileChatPermissions.canWrite]);
+  }, [profileChatInput, profileChatThreadId, profileChatSending, profileChatPermissions.canWrite, profileChatPermissions.isOwner, profileChatMessages, currentUser?._id]);
+
+  const handleDeleteProfileChatMessage = useCallback(async (messageId) => {
+    if (!profileChatPermissions.isOwner || !profileChatThreadId || !messageId) return;
+    try {
+      await chatAPI.deleteConversationMessage(profileChatThreadId, messageId);
+      setProfileChatMessages((prev) => prev.filter((m) => String(m._id) !== String(messageId)));
+    } catch (error) {
+      setProfileChatError(error.response?.data?.error || 'Failed to delete message.');
+    }
+  }, [profileChatPermissions.isOwner, profileChatThreadId]);
 
   useEffect(() => {
     const el = miniChatViewportRef.current;
@@ -3820,11 +3839,22 @@ const Social = () => {
                         <div
                           key={message._id}
                           data-testid="social-mini-chat-line"
-                          className="flex gap-1.5 border-b border-slate-800/40 px-1 py-[3px] text-slate-100 hover:bg-slate-800/30"
+                          className="group flex gap-1.5 border-b border-slate-800/40 px-1 py-[3px] text-slate-100 hover:bg-slate-800/30"
                         >
                           <span className="shrink-0 text-[11px] leading-5 text-slate-500">{timeStr}</span>
                           <span className="shrink-0 font-semibold leading-5" style={{ color: isOwnMessage ? 'var(--accent, #60a5fa)' : '#94a3b8' }}>{displayName}</span>
-                          <p data-testid="social-mini-chat-message-content" className="min-w-0 whitespace-pre-wrap break-words leading-5">{message?.content || ''}</p>
+                          <p data-testid="social-mini-chat-message-content" className="min-w-0 flex-1 whitespace-pre-wrap break-words leading-5">{message?.content || ''}</p>
+                          {profileChatPermissions.isOwner ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProfileChatMessage(message._id)}
+                              className="shrink-0 rounded px-1 py-0.5 text-[10px] text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/20"
+                              title="Delete message"
+                              aria-label="Delete message"
+                            >
+                              ✕
+                            </button>
+                          ) : null}
                         </div>
                       );
                     })}
