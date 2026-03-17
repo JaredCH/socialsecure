@@ -761,6 +761,7 @@ const normalizeSocialPagePreferences = (input, {
     bodyBackgroundDisplayMode: BODY_BG_DISPLAY_MODES.includes(raw.globalStyles?.bodyBackgroundDisplayMode) ? raw.globalStyles.bodyBackgroundDisplayMode : DEFAULT_GLOBAL_STYLES.bodyBackgroundDisplayMode,
     bodyBackgroundOverlayAnimation: BODY_BG_OVERLAY_ANIMATIONS.includes(raw.globalStyles?.bodyBackgroundOverlayAnimation) ? raw.globalStyles.bodyBackgroundOverlayAnimation : DEFAULT_GLOBAL_STYLES.bodyBackgroundOverlayAnimation
   };
+  const resolvedGlobalPanelStyles = normalizePanelStyles(globalStyles, globalStyles);
   const hero = normalizeHeroConfig(raw.hero, defaults.hero || DEFAULT_HERO_CONFIG);
   const enabledSections = normalizeEnabledSections(raw.enabledSections, defaults.enabledSections);
   const sectionAudience = normalizeSectionAudience(raw.sectionAudience, defaults.sectionAudience);
@@ -778,7 +779,9 @@ const normalizeSocialPagePreferences = (input, {
     const basePanel = sourcePanels[panelId] || normalizePanelEntry({}, DEFAULT_PANEL_LAYOUTS[panelId]);
     effectivePanels[panelId] = {
       ...basePanel,
-      resolvedStyles: basePanel.useCustomStyles ? normalizePanelStyles(basePanel.styles, globalStyles) : globalStyles
+      resolvedStyles: basePanel.useCustomStyles
+        ? normalizePanelStyles(basePanel.styles, globalStyles)
+        : { ...resolvedGlobalPanelStyles }
     };
   }
 
@@ -788,7 +791,9 @@ const normalizeSocialPagePreferences = (input, {
       const basePanel = panelsByMode[panelId] || normalizePanelEntry({}, DEFAULT_PANEL_LAYOUTS[panelId]);
       resolved[panelId] = {
         ...basePanel,
-        resolvedStyles: basePanel.useCustomStyles ? normalizePanelStyles(basePanel.styles, globalStyles) : globalStyles
+        resolvedStyles: basePanel.useCustomStyles
+          ? normalizePanelStyles(basePanel.styles, globalStyles)
+          : { ...resolvedGlobalPanelStyles }
       };
     }
     return resolved;

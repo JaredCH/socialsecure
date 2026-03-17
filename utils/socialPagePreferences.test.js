@@ -148,4 +148,16 @@ describe('socialPagePreferences utility', () => {
 
     expect(normalized.value.globalStyles.bodyBackgroundImage).toBe('/uploads/backgrounds/User_123/20260317-hero-BG.WebP');
   });
+
+  it('does not copy body background media into resolved panel styles', () => {
+    const normalized = normalizeSocialPagePreferences({
+      globalStyles: {
+        bodyBackgroundImage: 'data:image/png;base64,aGVsbG8='
+      }
+    });
+
+    const timelineResolved = normalized.value.panels.timeline.resolvedStyles;
+    expect(timelineResolved.bodyBackgroundImage).toBeUndefined();
+    expect(timelineResolved.panelColor).toBe(normalized.value.globalStyles.panelColor);
+  });
 });
