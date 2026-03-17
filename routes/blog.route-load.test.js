@@ -26,4 +26,29 @@ describe('blog route module', () => {
     expect(response.status).toBe(401);
     expect(response.body).toEqual({ error: 'Authentication required' });
   });
+
+  it('returns 500 for protected create endpoint when JWT secret is missing', async () => {
+    const originalJwtSecret = process.env.JWT_SECRET;
+    let response;
+    try {
+      delete process.env.JWT_SECRET;
+      const app = buildApp();
+      response = await request(app)
+        .post('/api/blog')
+        .set('Authorization', 'Bearer some-token')
+        .send({
+          title: 'Test title',
+          content: 'Test content'
+        });
+    } finally {
+      if (originalJwtSecret === undefined) {
+        delete process.env.JWT_SECRET;
+      } else {
+        process.env.JWT_SECRET = originalJwtSecret;
+      }
+    }
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'JWT configuration is missing' });
+  });
 });

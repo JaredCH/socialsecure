@@ -10,12 +10,17 @@ const router = express.Router();
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1];
+  const jwtSecret = process.env.JWT_SECRET;
 
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  return jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', (err, decoded) => {
+  if (!jwtSecret) {
+    return res.status(500).json({ error: 'JWT configuration is missing' });
+  }
+
+  jwt.verify(token, jwtSecret, (err, decoded) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
