@@ -57,6 +57,7 @@ function News() {
   // ── UI state ───────────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen]       = useState(false);
   const [selectedArticle, setSelectedArticle] = useState(null);
+  const [desktopArticlePreview, setDesktopArticlePreview] = useState(null);
   const desktopFeedRef = useRef(null);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
@@ -146,6 +147,16 @@ function News() {
       desktopFeedRef.current?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(id);
+  }, []);
+
+  const handleMobileArticleSelect = useCallback((article) => {
+    setDesktopArticlePreview(null);
+    setSelectedArticle(article);
+  }, []);
+
+  const handleDesktopArticleSelect = useCallback((article, anchorPosition) => {
+    setSelectedArticle(null);
+    setDesktopArticlePreview({ article, anchorPosition });
   }, []);
 
   // ── Keyword handlers ───────────────────────────────────────────────────────
@@ -300,7 +311,7 @@ function News() {
               activeRegion={activeRegion}
               activeDate={activeDate}
               searchQuery={searchQuery}
-              onArticle={setSelectedArticle}
+              onArticle={handleMobileArticleSelect}
               prefetchedFeed={prefetchedFeed}
             />
           </div>
@@ -363,7 +374,7 @@ function News() {
               activeRegion={activeRegion}
               activeDate={activeDate}
               searchQuery={searchQuery}
-              onArticle={setSelectedArticle}
+              onArticle={handleDesktopArticleSelect}
               prefetchedFeed={prefetchedFeed}
             />
           </div>
@@ -383,6 +394,12 @@ function News() {
       <ArticleDrawer
         article={selectedArticle}
         onClose={() => setSelectedArticle(null)}
+      />
+      <ArticleDrawer
+        article={desktopArticlePreview?.article || null}
+        variant="popup"
+        anchorPosition={desktopArticlePreview?.anchorPosition || null}
+        onClose={() => setDesktopArticlePreview(null)}
       />
 
       <SettingsDrawer
