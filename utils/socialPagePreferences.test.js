@@ -126,4 +126,14 @@ describe('socialPagePreferences utility', () => {
     });
     expect(normalized.value.aboutMeContent).toBe('I build secure systems.');
   });
+
+  it('keeps uploaded body background paths with mixed casing and nested folders', () => {
+    const normalized = normalizeSocialPagePreferences({
+      globalStyles: {
+        bodyBackgroundImage: '/uploads/backgrounds/User_123/20260317-hero-BG.WebP'
+      }
+    });
+
+    expect(normalized.value.globalStyles.bodyBackgroundImage).toBe('/uploads/backgrounds/User_123/20260317-hero-BG.WebP');
+  });
 });

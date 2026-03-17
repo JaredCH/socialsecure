@@ -32,6 +32,7 @@ const MEDIA_URL_MAX_LENGTH = 2048;
 // 3MB upload limit * 4/3 base64 overhead + small prefix/padding allowance.
 const BODY_BG_DATA_URL_MAX_LENGTH = Math.ceil((3 * 1024 * 1024) * 4 / 3) + 64;
 const HERO_IMAGE_HISTORY_LIMIT = 3;
+const BODY_BG_UPLOAD_PATH_REGEX = /^\/uploads\/backgrounds\/(?:[a-z0-9_-]+\/)*[a-z0-9_-]+\.(?:jpe?g|png|gif|webp)$/i;
 const OPTIONAL_SOCIAL_SECTION_IDS = ['blog', 'resume', 'aboutme'];
 const SOCIAL_SECTION_AUDIENCES = ['public', 'social', 'secure'];
 
@@ -557,7 +558,7 @@ const normalizeBodyBackgroundImageUrl = (value, fallback = '') => {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim();
   if (!trimmed) return fallback;
-  if (/^\/uploads\/backgrounds\/[a-f0-9]+\/[a-f0-9]+-[a-f0-9]+\.\w{2,5}$/.test(trimmed)) {
+  if (BODY_BG_UPLOAD_PATH_REGEX.test(trimmed)) {
     return trimmed;
   }
   if (
