@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const SIDEBAR_OVERLAY_Z_INDEX_CLASS = 'z-[1700]';
 const SIDEBAR_PANEL_SHADOW_CLASS = 'shadow-[0_30px_90px_rgba(15,23,42,0.35)]';
@@ -90,7 +91,7 @@ const SocialStageSettingsSidebar = ({
     setBodyBgDraft(bodyBackgroundImage || '');
   }, [bodyBackgroundImage]);
 
-  return (
+  return createPortal(
     <div className={`fixed inset-0 ${SIDEBAR_OVERLAY_Z_INDEX_CLASS} pointer-events-none`}>
       <button
         type="button"
@@ -542,7 +543,8 @@ const SocialStageSettingsSidebar = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

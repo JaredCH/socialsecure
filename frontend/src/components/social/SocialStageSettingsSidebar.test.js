@@ -39,7 +39,7 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
-    const selector = container.querySelector('select');
+    const selector = document.body.querySelector('select');
     expect(selector).toBeTruthy();
     expect(selector.value).toBe('default');
     const optionLabels = Array.from(selector.querySelectorAll('option')).map((option) => option.textContent);
@@ -58,9 +58,19 @@ describe('SocialStageSettingsSidebar', () => {
       root.render(<SocialStageSettingsSidebar isOpen />);
     });
 
-    const overlay = container.querySelector('.fixed.inset-0');
+    const overlay = document.body.querySelector('.fixed.inset-0');
     expect(overlay).toBeTruthy();
     expect(overlay.className).toContain('z-[1700]');
+  });
+
+  it('renders via portal as a direct child of document.body', async () => {
+    await act(async () => {
+      root.render(<SocialStageSettingsSidebar isOpen />);
+    });
+
+    const overlay = document.body.querySelector(':scope > .fixed.inset-0');
+    expect(overlay).toBeTruthy();
+    expect(container.querySelector('.fixed.inset-0')).toBeNull();
   });
 
   it('applies hero background URL, history revert, and random gallery toggle', async () => {
@@ -78,23 +88,23 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
-    const urlInput = container.querySelector('input[placeholder="https://example.com/hero-image.jpg"]');
+    const urlInput = document.body.querySelector('input[placeholder="https://example.com/hero-image.jpg"]');
     expect(urlInput).toBeTruthy();
     expect(urlInput.value).toBe('https://example.com/new-hero.jpg');
 
-    const setUrlButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Set URL');
+    const setUrlButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === 'Set URL');
     await act(async () => {
       setUrlButton.click();
     });
     expect(onHeroBackgroundImageChange).toHaveBeenCalledWith('https://example.com/new-hero.jpg');
 
-    const historyButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Use recent 1');
+    const historyButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === 'Use recent 1');
     await act(async () => {
       historyButton.click();
     });
     expect(onHeroBackgroundImageChange).toHaveBeenCalledWith('https://example.com/old-hero.jpg');
 
-    const randomizeToggle = container.querySelector('input[type="checkbox"]');
+    const randomizeToggle = document.body.querySelector('input[type="checkbox"]');
     await act(async () => {
       randomizeToggle.click();
     });
@@ -114,7 +124,7 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
-    const modeSelector = container.querySelector('[data-testid="display-mode-selector"]');
+    const modeSelector = document.body.querySelector('[data-testid="display-mode-selector"]');
     expect(modeSelector).toBeTruthy();
     const buttons = Array.from(modeSelector.querySelectorAll('button'));
     expect(buttons.map((b) => b.textContent)).toEqual(['Stretched', 'Repeating', 'Fixed']);
@@ -140,7 +150,7 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
-    const animSelector = container.querySelector('[data-testid="overlay-animation-selector"]');
+    const animSelector = document.body.querySelector('[data-testid="overlay-animation-selector"]');
     expect(animSelector).toBeTruthy();
     const buttons = Array.from(animSelector.querySelectorAll('button'));
     expect(buttons.length).toBe(6);
@@ -164,7 +174,7 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
-    const modeSelector = container.querySelector('[data-testid="display-mode-selector"]');
+    const modeSelector = document.body.querySelector('[data-testid="display-mode-selector"]');
     expect(modeSelector).toBeNull();
   });
 
@@ -179,7 +189,7 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
-    const uploadBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Upload image');
+    const uploadBtn = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent === 'Upload image');
     expect(uploadBtn).toBeTruthy();
     expect(uploadBtn.disabled).toBe(false);
   });
