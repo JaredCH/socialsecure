@@ -116,7 +116,7 @@ const normalizeDiscoveryMetadata = (metadata) => {
   const seen = new WeakSet();
   const normalize = (value, depth = 0) => {
     if (depth > 6) return null;
-    if (value == null) return null;
+    if (value === null || value === undefined) return null;
     if (typeof value === 'number') {
       if (Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER) {
         return value;
@@ -131,7 +131,7 @@ const normalizeDiscoveryMetadata = (metadata) => {
     seen.add(value);
     const output = {};
     Object.entries(value).slice(0, 50).forEach(([key, nestedValue]) => {
-      const normalizedKey = String(key || '').trim();
+      const normalizedKey = String(key ?? '').trim();
       if (!normalizedKey) return;
       output[normalizedKey] = normalize(nestedValue, depth + 1);
     });
