@@ -653,6 +653,26 @@ function Chat() {
     () => new Map(dmFriends.map((friend) => [normalizeId(friend?._id), friend?.presence || null])),
     [dmFriends]
   );
+  const friendIdSet = useMemo(
+    () => new Set(dmFriends.map((f) => normalizeId(f?._id)).filter(Boolean)),
+    [dmFriends]
+  );
+  const sortedRoomUsers = useMemo(() => {
+    if (!roomUsers.length) return { friends: [], others: [] };
+    const getName = (u) => (u.username || u.realName || '').toLowerCase();
+    const friends = [];
+    const others = [];
+    for (const user of roomUsers) {
+      if (friendIdSet.has(normalizeId(user?._id))) {
+        friends.push(user);
+      } else {
+        others.push(user);
+      }
+    }
+    friends.sort((a, b) => getName(a).localeCompare(getName(b)));
+    others.sort((a, b) => getName(a).localeCompare(getName(b)));
+    return { friends, others };
+  }, [roomUsers, friendIdSet]);
   const getConversationUserPresence = useCallback((conversation) => {
     if (!conversation) return null;
     const targetUser = conversation.type === 'dm' ? conversation.peer : conversation.profileUser;
@@ -2884,117 +2904,167 @@ function Chat() {
         </section>
 
         <aside className={`hidden min-h-0 flex-col rounded-2xl border p-2 md:p-3 lg:flex ${activeTheme.panel}`}>
-          <div className={`sticky top-0 z-10 rounded border p-3 ${activeTheme.panelGlass}`}>
-            <h3 className="font-semibold uppercase tracking-[0.1em]">
-              {activeConversation?.type === 'dm' ? 'Participants' : 'Conversation Details'}
-            </h3>
-            {activeConversation ? (
-              <>
-                <p className="text-xs opacity-80">{getConversationLabel(activeConversation)}</p>
-                <p className="mt-1 text-[11px] font-mono opacity-80">
-                  {activeConversation?.type === 'dm'
-                    ? `${roomUsers.length || (Array.isArray(activeConversation?.participants) ? activeConversation.participants.length : 0) || 0} participants`
-                    : `Status: ${conversationPresence.label}`}
-                </p>
-              </>
-            ) : (
-              <p className="text-xs opacity-80">Select a room to view details.</p>
-            )}
-            {activeConversation?.type === 'dm' ? (
-              <p className="mt-2 text-xs opacity-80">This panel stays focused on everyone inside the direct message.</p>
-            ) : null}
-          </div>
-
-          <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
-            <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-              <h4 className="text-sm font-semibold">
-                {activeConversation?.type === 'dm' ? 'People in this DM' : 'Users in Room'}
-              </h4>
-              <p className="mt-1 text-[11px] opacity-80">
-                Click, right-click, or long-press a user for quick actions.
-              </p>
-              <div className={`mt-2 rounded border overflow-auto ${activeConversation?.type === 'dm' ? 'h-full min-h-[20rem]' : 'max-h-56'}`}>
-                {roomUsersLoading ? (
-                  <p className="p-2 text-xs opacity-80">Loading users...</p>
-                ) : roomUsers.length === 0 ? (
-                  <p className="p-2 text-xs opacity-80">No users to display.</p>
+          {activeConversation?.type === 'dm' ? (
+            <>
+              <div className={`sticky top-0 z-10 rounded border p-3 ${activeTheme.panelGlass}`}>
+                <h3 className="font-semibold uppercase tracking-[0.1em]">Participants</h3>
+                {activeConversation ? (
+                  <>
+                    <p className="text-xs opacity-80">{getConversationLabel(activeConversation)}</p>
+                    <p className="mt-1 text-[11px] font-mono opacity-80">
+                      {`${roomUsers.length || (Array.isArray(activeConversation?.participants) ? activeConversation.participants.length : 0) || 0} participants`}
+                    </p>
+                  </>
                 ) : (
-                  <ul className="divide-y">
-                    {roomUsers.map((user) => {
-                      const presenceState = getPresenceState(user.presence, presenceReferenceTime);
-                      return (
-                        <li
-                          key={String(user._id)}
-                          className="flex cursor-pointer items-center gap-3 p-2 text-sm"
-                          onClick={(event) => openUserContextMenu(event, user)}
-                          onContextMenu={(event) => openUserContextMenu(event, user)}
-                          onTouchStart={(event) => {
-                            const touch = event.touches?.[0];
-                            if (!touch) return;
-                            if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
-                            userLongPressTimerRef.current = setTimeout(() => {
-                              openUserContextMenu(event, user, { x: touch.clientX, y: touch.clientY });
-                            }, LONG_PRESS_DELAY_MS);
-                          }}
-                          onTouchEnd={() => {
-                            if (userLongPressTimerRef.current) {
-                              clearTimeout(userLongPressTimerRef.current);
-                              userLongPressTimerRef.current = null;
-                            }
-                          }}
-                        >
-                          <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden ${activeTheme.subtle}`}>
-                            {user.avatarUrl ? (
-                              <img src={user.avatarUrl} alt={`@${user.username || 'user'}`} className="h-full w-full rounded-full object-cover" />
-                            ) : (
-                              String(user.username || user.realName || 'user').slice(0, 1).toUpperCase()
-                            )}
-                          </span>
-                          <div className="min-w-0">
-                            <a
-                              href={`/social?user=${encodeURIComponent(user.username || user._id)}`}
-                              className="truncate font-semibold hover:underline block"
-                              onMouseEnter={(event) => {
-                                const rect = event.currentTarget.getBoundingClientRect();
-                                handleUsernameHoverStart(user, rect);
+                  <p className="text-xs opacity-80">Select a conversation to view details.</p>
+                )}
+                <p className="mt-2 text-xs opacity-80">This panel stays focused on everyone inside the direct message.</p>
+              </div>
+
+              <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
+                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                  <h4 className="text-sm font-semibold">People in this DM</h4>
+                  <p className="mt-1 text-[11px] opacity-80">
+                    Click, right-click, or long-press a user for quick actions.
+                  </p>
+                  <div className="mt-2 rounded border overflow-auto h-full min-h-[20rem]">
+                    {roomUsersLoading ? (
+                      <p className="p-2 text-xs opacity-80">Loading users...</p>
+                    ) : roomUsers.length === 0 ? (
+                      <p className="p-2 text-xs opacity-80">No users to display.</p>
+                    ) : (
+                      <ul className="divide-y">
+                        {roomUsers.map((user) => {
+                          const presenceState = getPresenceState(user.presence, presenceReferenceTime);
+                          return (
+                            <li
+                              key={String(user._id)}
+                              className="flex cursor-pointer items-center gap-3 p-2 text-sm"
+                              onClick={(event) => openUserContextMenu(event, user)}
+                              onContextMenu={(event) => openUserContextMenu(event, user)}
+                              onTouchStart={(event) => {
+                                const touch = event.touches?.[0];
+                                if (!touch) return;
+                                if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
+                                userLongPressTimerRef.current = setTimeout(() => {
+                                  openUserContextMenu(event, user, { x: touch.clientX, y: touch.clientY });
+                                }, LONG_PRESS_DELAY_MS);
                               }}
-                              onMouseLeave={handleUsernameHoverEnd}
+                              onTouchEnd={() => {
+                                if (userLongPressTimerRef.current) {
+                                  clearTimeout(userLongPressTimerRef.current);
+                                  userLongPressTimerRef.current = null;
+                                }
+                              }}
                             >
-                              @{user.username || user.realName || 'user'}
-                            </a>
-                            <p className="truncate text-[11px] opacity-75">
-                              {String(user._id) === String(profile?._id) ? 'You' : 'Available in this conversation'}
-                            </p>
-                            <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] opacity-75">
-                              <span className={`h-2 w-2 rounded-full ${presenceState.tone}`} />
-                              <span>{presenceState.description}</span>
-                            </p>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                              <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden ${activeTheme.subtle}`}>
+                                {user.avatarUrl ? (
+                                  <img src={user.avatarUrl} alt={`@${user.username || 'user'}`} className="h-full w-full rounded-full object-cover" />
+                                ) : (
+                                  String(user.username || user.realName || 'user').slice(0, 1).toUpperCase()
+                                )}
+                              </span>
+                              <div className="min-w-0">
+                                <a
+                                  href={`/social?user=${encodeURIComponent(user.username || user._id)}`}
+                                  className="truncate font-semibold hover:underline block"
+                                  onMouseEnter={(event) => {
+                                    const rect = event.currentTarget.getBoundingClientRect();
+                                    handleUsernameHoverStart(user, rect);
+                                  }}
+                                  onMouseLeave={handleUsernameHoverEnd}
+                                >
+                                  @{user.username || user.realName || 'user'}
+                                </a>
+                                <p className="truncate text-[11px] opacity-75">
+                                  {String(user._id) === String(profile?._id) ? 'You' : 'Available in this conversation'}
+                                </p>
+                                <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] opacity-75">
+                                  <span className={`h-2 w-2 rounded-full ${presenceState.tone}`} />
+                                  <span>{presenceState.description}</span>
+                                </p>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={`sticky top-0 z-10 rounded border p-2 ${activeTheme.panelGlass}`}>
+                <h3 className="text-sm font-semibold uppercase tracking-[0.1em]">Users in Room</h3>
+                {activeConversation ? (
+                  <p className="mt-1 text-[11px] opacity-80">
+                    {getConversationLabel(activeConversation)} &middot; {roomUsers.length} {roomUsers.length === 1 ? 'user' : 'users'}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] opacity-80">Select a room to see who's here.</p>
                 )}
               </div>
-            </section>
 
-            {activeConversation?.type === 'dm' ? null : (
-              <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                <h4 className="text-sm font-semibold">Shared Media / Links</h4>
-                {sharedMediaSnippets.length === 0 ? (
-                  <p className="mt-2 text-xs opacity-80">No shared media yet.</p>
+              <div className="mt-2 min-h-0 flex-1 overflow-y-auto" data-testid="room-user-list">
+                {roomUsersLoading ? (
+                  <p className="px-2 py-3 text-xs opacity-80">Loading users…</p>
+                ) : roomUsers.length === 0 ? (
+                  <p className="px-2 py-3 text-xs opacity-80">No users to display.</p>
                 ) : (
-                  <ul className="mt-2 space-y-1 text-xs">
-                    {sharedMediaSnippets.map((message) => (
-                      <li key={String(message._id)} className="rounded border px-2 py-1">
-                        {(message.content || '').slice(0, 70)}
+                  <ul>
+                    {sortedRoomUsers.friends.map((user) => (
+                      <li
+                        key={String(user._id)}
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-black/5"
+                        onClick={(event) => openUserContextMenu(event, user)}
+                        onContextMenu={(event) => openUserContextMenu(event, user)}
+                      >
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPresenceState(user.presence, presenceReferenceTime).tone}`} />
+                        <a
+                          href={`/social?user=${encodeURIComponent(user.username || user._id)}`}
+                          className="truncate hover:underline"
+                          onMouseEnter={(event) => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            handleUsernameHoverStart(user, rect);
+                          }}
+                          onMouseLeave={handleUsernameHoverEnd}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {user.username || user.realName || 'user'}
+                        </a>
+                      </li>
+                    ))}
+                    {sortedRoomUsers.friends.length > 0 && sortedRoomUsers.others.length > 0 ? (
+                      <li aria-hidden="true" className="my-1 border-b opacity-30" />
+                    ) : null}
+                    {sortedRoomUsers.others.map((user) => (
+                      <li
+                        key={String(user._id)}
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-black/5"
+                        onClick={(event) => openUserContextMenu(event, user)}
+                        onContextMenu={(event) => openUserContextMenu(event, user)}
+                      >
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPresenceState(user.presence, presenceReferenceTime).tone}`} />
+                        <a
+                          href={`/social?user=${encodeURIComponent(user.username || user._id)}`}
+                          className="truncate hover:underline"
+                          onMouseEnter={(event) => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            handleUsernameHoverStart(user, rect);
+                          }}
+                          onMouseLeave={handleUsernameHoverEnd}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {user.username || user.realName || 'user'}
+                        </a>
                       </li>
                     ))}
                   </ul>
                 )}
-              </section>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </aside>
       </div>
       {userContextMenu.open && userContextMenu.user ? (
