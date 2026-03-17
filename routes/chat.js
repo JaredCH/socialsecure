@@ -2509,7 +2509,7 @@ router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
           country: room.country,
           location: room.location,
           radius: room.radius,
-          memberCount: room.memberCount || (room.members ? room.members.length : 0),
+          memberCount: Number(room.memberCount || 0),
           lastActivity: room.lastActivity
         }))
       });
@@ -2549,7 +2549,7 @@ router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
         country: room.country,
         location: room.location,
         radius: room.radius,
-        memberCount: room.memberCount || (room.members ? room.members.length : 0),
+        memberCount: Number(room.memberCount || 0),
         lastActivity: room.lastActivity
       }))
     });
