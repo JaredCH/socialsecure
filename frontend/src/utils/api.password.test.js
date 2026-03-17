@@ -7,7 +7,7 @@ jest.mock('axios', () => ({
   })
 }));
 
-import { evaluateRegisterPassword, normalizeApiBaseUrl } from './api';
+import { evaluateRegisterPassword, normalizeApiBaseUrl, resolveUploadMediaUrl } from './api';
 
 describe('evaluateRegisterPassword', () => {
   it('marks all requirements unmet for an empty password', () => {
@@ -60,5 +60,19 @@ describe('normalizeApiBaseUrl', () => {
 
   it('preserves protocol-relative URLs', () => {
     expect(normalizeApiBaseUrl('//example.com/api')).toBe('//example.com/api');
+  });
+});
+
+describe('resolveUploadMediaUrl', () => {
+  it('keeps non-upload URLs unchanged', () => {
+    expect(resolveUploadMediaUrl('https://cdn.example.com/image.jpg', 'https://api.example.com/api')).toBe('https://cdn.example.com/image.jpg');
+  });
+
+  it('resolves /uploads paths against an absolute API base URL', () => {
+    expect(resolveUploadMediaUrl('/uploads/gallery/user-1/image.jpg', 'https://api.example.com/api')).toBe('https://api.example.com/uploads/gallery/user-1/image.jpg');
+  });
+
+  it('resolves /uploads paths to the current origin when API base URL is relative', () => {
+    expect(resolveUploadMediaUrl('/uploads/gallery/user-1/image.jpg', '/api')).toBe('http://localhost/uploads/gallery/user-1/image.jpg');
   });
 });

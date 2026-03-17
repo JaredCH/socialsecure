@@ -60,6 +60,7 @@ jest.mock('../utils/api', () => {
       getMyResume: jest.fn()
     },
     getAuthToken: jest.fn(() => 'token'),
+    resolveUploadMediaUrl: jest.fn((value) => value),
     socialPageAPI: {
       getConfigs: jest.fn(),
       getSharedByUser: jest.fn()
