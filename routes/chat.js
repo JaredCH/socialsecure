@@ -2405,9 +2405,17 @@ router.post('/rooms/admin', roomWriteLimiter, authenticateToken, [
 
   try {
     const parentRoomId = String(req.body.parentRoomId || '').trim() || null;
-    const parentRoom = parentRoomId
-      ? await ChatRoom.findById(parentRoomId).select('_id discoveryGroup state country archivedAt')
-      : null;
+    let parentRoom = null;
+    if (parentRoomId) {
+      try {
+        parentRoom = await ChatRoom.findById(parentRoomId).select('_id discoveryGroup state country archivedAt');
+      } catch (error) {
+        if (error?.name === 'CastError') {
+          return res.status(404).json({ error: 'Parent chat room not found' });
+        }
+        throw error;
+      }
+    }
 
     if (parentRoomId && (!parentRoom || isArchivedRoom(parentRoom))) {
       return res.status(404).json({ error: 'Parent chat room not found' });
@@ -2498,9 +2506,17 @@ router.put('/rooms/:roomId', roomWriteLimiter, authenticateToken, [
       return res.status(400).json({ error: 'A room cannot be nested under itself' });
     }
 
-    const parentRoom = parentRoomId
-      ? await ChatRoom.findById(parentRoomId).select('_id discoveryGroup state country archivedAt')
-      : null;
+    let parentRoom = null;
+    if (parentRoomId) {
+      try {
+        parentRoom = await ChatRoom.findById(parentRoomId).select('_id discoveryGroup state country archivedAt');
+      } catch (error) {
+        if (error?.name === 'CastError') {
+          return res.status(404).json({ error: 'Parent chat room not found' });
+        }
+        throw error;
+      }
+    }
     if (parentRoomId && (!parentRoom || isArchivedRoom(parentRoom))) {
       return res.status(404).json({ error: 'Parent chat room not found' });
     }
