@@ -40,7 +40,7 @@ const galleryImageSchema = new mongoose.Schema({
   },
   relationshipAudience: {
     type: String,
-    enum: ['social', 'secure'],
+    enum: ['public', 'social', 'secure'],
     default: 'social',
     index: true
   },
@@ -139,6 +139,9 @@ galleryImageSchema.methods.canView = function canView(viewerId, context = {}) {
   const relationshipAudience = normalizeRelationshipAudience(this.relationshipAudience);
   if (relationshipAudience === 'secure') {
     return Boolean(context.isSecureFriend);
+  }
+  if (relationshipAudience === 'social') {
+    return Boolean(context.isFriend || context.isSecureFriend);
   }
 
   return true;

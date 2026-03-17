@@ -8,11 +8,11 @@ const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const GalleryImage = require('../models/GalleryImage');
+const Friendship = require('../models/Friendship');
 const {
   RELATIONSHIP_AUDIENCE_VALUES,
   normalizeRelationshipAudience,
-  socialOrUnsetAudienceQuery,
-  isViewerSecureFriendOfOwner,
+  ownerCategorizedViewerAsSecure,
   logRelationshipAudienceEvent
 } = require('../utils/relationshipAudience');
 
@@ -181,14 +181,30 @@ const getGalleryViewerContext = async (ownerId, viewerId) => {
   const normalizedOwnerId = String(ownerId || '');
   const normalizedViewerId = String(viewerId || '');
   if (!normalizedViewerId) {
-    return { isOwner: false, isSecureFriend: false };
+    return { isOwner: false, isFriend: false, isSecureFriend: false };
   }
   if (normalizedOwnerId && normalizedOwnerId === normalizedViewerId) {
-    return { isOwner: true, isSecureFriend: true };
+    return { isOwner: true, isFriend: true, isSecureFriend: true };
   }
 
-  const isSecureFriend = await isViewerSecureFriendOfOwner(normalizedViewerId, normalizedOwnerId);
-  return { isOwner: false, isSecureFriend };
+  const friendship = await Friendship.findOne({
+    status: 'accepted',
+    $or: [
+      { requester: normalizedViewerId, recipient: normalizedOwnerId },
+      { requester: normalizedOwnerId, recipient: normalizedViewerId }
+    ]
+  }).select(
+    'status requester recipient requesterRelationshipAudience recipientRelationshipAudience requesterAudience recipientAudience requesterCategory recipientCategory'
+  ).lean();
+
+  const isFriend = Boolean(friendship);
+  return {
+    isOwner: false,
+    isFriend,
+    isSecureFriend: friendship
+      ? ownerCategorizedViewerAsSecure(friendship, normalizedOwnerId, normalizedViewerId)
+      : false
+  };
 };
 
 const authenticateToken = (req, res, next) => {
@@ -260,11 +276,20 @@ router.get('/:ownerId', optionalAuthenticateToken, async (req, res) => {
     }
 
     const query = {
-      ownerId: owner._id,
-      ...(!viewerContext.isOwner && !viewerContext.isSecureFriend
-        ? socialOrUnsetAudienceQuery('relationshipAudience')
-        : {})
+      ownerId: owner._id
     };
+    if (!viewerContext.isOwner && !viewerContext.isSecureFriend) {
+      if (viewerContext.isFriend) {
+        query.$or = [
+          { relationshipAudience: 'public' },
+          { relationshipAudience: 'social' },
+          { relationshipAudience: { $exists: false } },
+          { relationshipAudience: null }
+        ];
+      } else {
+        query.relationshipAudience = 'public';
+      }
+    }
 
     const [images, total] = await Promise.all([
       GalleryImage.find(query)

@@ -740,6 +740,22 @@ router.post('/post', [
         error: 'Secure audience currently supports only friends visibility'
       });
     }
+    if (
+      normalizedRelationshipAudience === 'public'
+      && visibility !== 'public'
+    ) {
+      return res.status(400).json({
+        error: 'Public audience currently supports only public visibility'
+      });
+    }
+    if (
+      visibility === 'public'
+      && normalizedRelationshipAudience !== 'public'
+    ) {
+      return res.status(400).json({
+        error: 'Public visibility currently supports only public audience'
+      });
+    }
 
     let effectiveVisibleToUsers = normalizedVisibleToUsers;
 

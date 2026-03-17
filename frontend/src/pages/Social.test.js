@@ -401,6 +401,23 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).not.toContain('Publish Post');
   });
 
+  it('shows a 3-way Social/Secure/Public audience toggle and removes privacy chips', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const revealComposerButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Compose a new post'));
+    expect(revealComposerButton).toBeTruthy();
+
+    await act(async () => {
+      revealComposerButton?.click();
+    });
+
+    expect(container.querySelector('[data-testid="composer-audience-social"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="composer-audience-secure"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="composer-audience-public"]')).toBeTruthy();
+    expect(container.textContent).not.toContain('🔒 Privacy');
+    expect(container.textContent).not.toContain('⚡ Advanced');
+  });
+
   it('keeps owner chat access controls collapsed behind a compact toggle', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
 

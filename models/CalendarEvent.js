@@ -82,7 +82,7 @@ const calendarEventSchema = new mongoose.Schema({
   },
   relationshipAudience: {
     type: String,
-    enum: ['social', 'secure'],
+    enum: ['public', 'social', 'secure'],
     default: 'social'
   },
   isDeleted: {

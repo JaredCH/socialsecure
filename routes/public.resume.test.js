@@ -49,15 +49,26 @@ const resolvedQuery = (value) => ({
 
 const resolvedPostQuery = (value) => ({
   sort: jest.fn().mockReturnValue({
-    skip: jest.fn().mockReturnValue({
-      limit: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          populate: jest.fn().mockReturnValue({
-            lean: jest.fn().mockResolvedValue(value)
-          })
-        })
-      })
+    select: jest.fn().mockReturnValue({
+      populate: jest.fn().mockResolvedValue(value)
     })
+  })
+});
+
+const buildVisiblePost = ({ canView = true, relationshipAudience = 'public' } = {}) => ({
+  canView: jest.fn().mockReturnValue(canView),
+  toObject: () => ({
+    _id: 'post-1',
+    authorId: { _id: '507f1f77bcf86cd799439011', username: 'alice', realName: 'Alice Doe' },
+    targetFeedId: { _id: '507f1f77bcf86cd799439011', username: 'alice', realName: 'Alice Doe' },
+    content: 'Hello',
+    visibility: 'public',
+    relationshipAudience,
+    mediaUrls: [],
+    likes: [],
+    comments: [],
+    createdAt: new Date('2026-03-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-03-01T00:00:00.000Z')
   })
 });
 
@@ -228,5 +239,61 @@ describe('Public resume routes', () => {
     const visibleFieldIds = response.body.user.personalInfo.map((entry) => entry.id);
     expect(visibleFieldIds).not.toContain('hobbies');
     expect(visibleFieldIds).not.toContain('streetAddress');
+  });
+
+  it('hides social audience posts from unauthenticated guests on public feed route', async () => {
+    const app = buildApp();
+    mockPost.find.mockReturnValue(resolvedPostQuery([
+      buildVisiblePost({ canView: false, relationshipAudience: 'social' })
+    ]));
+
+    const response = await request(app).get('/api/public/users/alice/feed');
+
+    expect(response.status).toBe(200);
+    expect(response.body.posts).toHaveLength(0);
+  });
+
+  it('shows social audience posts to authenticated friends on public feed route', async () => {
+    const app = buildApp();
+    jwt.verify.mockReturnValue({ userId: 'viewer-1' });
+    mockFriendship.findOne.mockReturnValue(resolvedQuery({
+      requester: 'viewer-1',
+      recipient: '507f1f77bcf86cd799439011',
+      requesterRelationshipAudience: 'social',
+      recipientRelationshipAudience: 'social'
+    }));
+    mockPost.find.mockReturnValue(resolvedPostQuery([
+      buildVisiblePost({ canView: true, relationshipAudience: 'social' })
+    ]));
+
+    const response = await request(app)
+      .get('/api/public/users/alice/feed')
+      .set('Authorization', 'Bearer viewer-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.posts).toHaveLength(1);
+    expect(response.body.posts[0].relationshipAudience).toBe('social');
+  });
+
+  it('shows secure audience posts to authenticated secure friends on public feed route', async () => {
+    const app = buildApp();
+    jwt.verify.mockReturnValue({ userId: 'viewer-1' });
+    mockFriendship.findOne.mockReturnValue(resolvedQuery({
+      requester: '507f1f77bcf86cd799439011',
+      recipient: 'viewer-1',
+      requesterRelationshipAudience: 'secure',
+      recipientRelationshipAudience: 'social'
+    }));
+    mockPost.find.mockReturnValue(resolvedPostQuery([
+      buildVisiblePost({ canView: true, relationshipAudience: 'secure' })
+    ]));
+
+    const response = await request(app)
+      .get('/api/public/users/alice/feed')
+      .set('Authorization', 'Bearer secure-viewer-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.posts).toHaveLength(1);
+    expect(response.body.posts[0].relationshipAudience).toBe('secure');
   });
 });
