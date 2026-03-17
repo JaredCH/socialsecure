@@ -3610,7 +3610,11 @@ const Social = () => {
                     <span className="text-[11px]" style={{ color: 'var(--social-text-muted)' }}>Up to 6 images at once (max 3MB each)</span>
                   )}
                   {/* All images audience selector */}
-                  {postForm.mediaUrls.length > 0 ? (
+                  {postForm.mediaUrls.length > 0 ? (() => {
+                    const overrideValues = Object.values(postForm.imageAudienceOverrides);
+                    const allSocial = overrideValues.length > 0 && overrideValues.every((v) => v === 'social');
+                    const allSecure = overrideValues.length > 0 && overrideValues.every((v) => v === 'secure');
+                    return (
                     <div className="ml-auto flex items-center gap-1.5">
                       <span className="text-[10px] font-medium" style={{ color: 'var(--social-text-muted)' }}>All images:</span>
                       <div className="flex rounded-lg p-0.5" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 20%, transparent)', background: 'var(--social-surface-soft)' }}>
@@ -3622,7 +3626,7 @@ const Social = () => {
                             return { ...prev, imageAudienceOverrides: overrides };
                           })}
                           className="rounded-md px-2 py-0.5 text-[10px] font-semibold transition-all"
-                          style={Object.values(postForm.imageAudienceOverrides).length > 0 && Object.values(postForm.imageAudienceOverrides).every((v) => v === 'social') ? { backgroundColor: '#0284c7', color: '#fff' } : { color: 'var(--social-text-muted)' }}
+                          style={allSocial ? { backgroundColor: '#0284c7', color: '#fff' } : { color: 'var(--social-text-muted)' }}
                         >
                           Social
                         </button>
@@ -3634,13 +3638,14 @@ const Social = () => {
                             return { ...prev, imageAudienceOverrides: overrides };
                           })}
                           className="rounded-md px-2 py-0.5 text-[10px] font-semibold transition-all"
-                          style={Object.values(postForm.imageAudienceOverrides).length > 0 && Object.values(postForm.imageAudienceOverrides).every((v) => v === 'secure') ? { backgroundColor: '#d97706', color: '#fff' } : { color: 'var(--social-text-muted)' }}
+                          style={allSecure ? { backgroundColor: '#d97706', color: '#fff' } : { color: 'var(--social-text-muted)' }}
                         >
                           Secure
                         </button>
                       </div>
                     </div>
-                  ) : null}
+                    );
+                  })() : null}
                 </div>
 
                 {/* Image previews grid */}
@@ -3658,7 +3663,6 @@ const Social = () => {
                         <button
                           type="button"
                           onClick={() => {
-                            handleRemoveMediaUrl(index);
                             setPostForm((prev) => {
                               const newDescs = { ...prev.imageDescriptions };
                               const newOverrides = { ...prev.imageAudienceOverrides };
@@ -3666,12 +3670,13 @@ const Social = () => {
                               delete newOverrides[index];
                               const reindexDescs = {};
                               const reindexOverrides = {};
-                              prev.mediaUrls.filter((_, i) => i !== index).forEach((_, newIdx) => {
+                              const newMediaUrls = prev.mediaUrls.filter((_, i) => i !== index);
+                              newMediaUrls.forEach((_, newIdx) => {
                                 const oldIdx = newIdx >= index ? newIdx + 1 : newIdx;
                                 if (newDescs[oldIdx] !== undefined) reindexDescs[newIdx] = newDescs[oldIdx];
                                 if (newOverrides[oldIdx] !== undefined) reindexOverrides[newIdx] = newOverrides[oldIdx];
                               });
-                              return { ...prev, imageDescriptions: reindexDescs, imageAudienceOverrides: reindexOverrides };
+                              return { ...prev, mediaUrls: newMediaUrls, imageDescriptions: reindexDescs, imageAudienceOverrides: reindexOverrides };
                             });
                           }}
                           className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100"
