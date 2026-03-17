@@ -11,6 +11,7 @@ export const BODY_BG_DISPLAY_MODES = ['cover', 'repeat', 'fixed'];
 export const BODY_BG_OVERLAY_ANIMATIONS = ['none', 'snow', 'easter-eggs', 'halloween-ghosts', 'valentines-hearts', 'fireworks'];
 // 3MB upload limit * 4/3 base64 overhead + small prefix/padding allowance.
 const BODY_BG_DATA_URL_MAX_LENGTH = Math.ceil((3 * 1024 * 1024) * 4 / 3) + 64;
+const BODY_BG_UPLOAD_PATH_REGEX = /^\/uploads\/backgrounds\/(?:[a-z0-9_-]+\/)*[a-z0-9_-]+\.(?:jpe?g|png|gif|webp)$/i;
 export const SOCIAL_PANEL_SHAPE_MASKS = {
   rectangle: [[1, 1], [1, 1]],
   square: [[1, 1], [1, 1]],
@@ -573,7 +574,7 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default', requ
     if (typeof val !== 'string') return '';
     const trimmed = val.trim();
     if (!trimmed) return '';
-    if (/^\/uploads\/backgrounds\/[a-f0-9]+\/[a-f0-9]+-[a-f0-9]+\.\w{2,5}$/.test(trimmed)) return trimmed;
+    if (BODY_BG_UPLOAD_PATH_REGEX.test(trimmed)) return trimmed;
     if (
       /^data:image\/(?:jpeg|jpg|png|gif|webp);base64,[a-z0-9+/=]+$/i.test(trimmed)
       && trimmed.length <= BODY_BG_DATA_URL_MAX_LENGTH

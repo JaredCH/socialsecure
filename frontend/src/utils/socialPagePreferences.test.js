@@ -62,4 +62,14 @@ describe('socialPagePreferences layout normalization', () => {
 
     expect(normalized.globalStyles.bodyBackgroundImage).toBe('data:image/webp;base64,aGVsbG8=');
   });
+
+  it('keeps uploaded body background paths with mixed casing and nested folders', () => {
+    const normalized = normalizeSocialPreferences({
+      globalStyles: {
+        bodyBackgroundImage: '/uploads/backgrounds/User_123/20260317-hero-BG.WebP'
+      }
+    });
+
+    expect(normalized.globalStyles.bodyBackgroundImage).toBe('/uploads/backgrounds/User_123/20260317-hero-BG.WebP');
+  });
 });
