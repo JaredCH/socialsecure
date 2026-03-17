@@ -94,6 +94,16 @@ const RELATIONSHIP_AUDIENCE_LABELS = {
   social: 'Social',
   secure: 'Secure'
 };
+const RELATIONSHIP_AUDIENCE_COLORS = {
+  social: '#0284c7',
+  secure: '#d97706',
+  public: '#16a34a'
+};
+const RELATIONSHIP_AUDIENCE_ICONS = {
+  social: 'S',
+  secure: '🔒',
+  public: '🌐'
+};
 const PROFILE_CHAT_ROLE_OPTIONS = [
   { value: 'friends', label: 'Friends' },
   { value: 'circles', label: 'Circles' },
@@ -3336,6 +3346,18 @@ const Social = () => {
 
   const GALLERY_UPLOAD_MAX_FILES = 6;
 
+  const galleryUploadMaxSlots = Math.min(GALLERY_UPLOAD_MAX_FILES, GALLERY_MAX_ITEMS - galleryItems.length);
+
+  const reindexAfterRemoval = (map, removedIndex) => {
+    const next = {};
+    Object.keys(map).forEach((k) => {
+      const ki = Number(k);
+      if (ki < removedIndex) next[ki] = map[ki];
+      else if (ki > removedIndex) next[ki - 1] = map[ki];
+    });
+    return next;
+  };
+
   const handleGalleryUploadOpen = () => {
     setGalleryUploadPreviews([]);
     setGalleryUploadDescriptions({});
@@ -3358,7 +3380,7 @@ const Social = () => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
     if (files.length === 0) return;
-    const remainingSlots = Math.min(GALLERY_UPLOAD_MAX_FILES, GALLERY_MAX_ITEMS - galleryItems.length) - galleryUploadPreviews.length;
+    const remainingSlots = galleryUploadMaxSlots - galleryUploadPreviews.length;
     if (remainingSlots <= 0) return;
     const accepted = [];
     for (const file of files.slice(0, remainingSlots)) {
@@ -3377,24 +3399,8 @@ const Social = () => {
       if (item?.objectUrl) URL.revokeObjectURL(item.objectUrl);
       return prev.filter((_, i) => i !== index);
     });
-    setGalleryUploadDescriptions((prev) => {
-      const next = {};
-      Object.keys(prev).forEach((k) => {
-        const ki = Number(k);
-        if (ki < index) next[ki] = prev[ki];
-        else if (ki > index) next[ki - 1] = prev[ki];
-      });
-      return next;
-    });
-    setGalleryUploadAudienceOverrides((prev) => {
-      const next = {};
-      Object.keys(prev).forEach((k) => {
-        const ki = Number(k);
-        if (ki < index) next[ki] = prev[ki];
-        else if (ki > index) next[ki - 1] = prev[ki];
-      });
-      return next;
-    });
+    setGalleryUploadDescriptions((prev) => reindexAfterRemoval(prev, index));
+    setGalleryUploadAudienceOverrides((prev) => reindexAfterRemoval(prev, index));
   };
 
   const handleGalleryUploadSubmit = async () => {
@@ -6175,7 +6181,7 @@ const Social = () => {
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Add to Gallery</h3>
-                <p className="text-sm text-slate-500">Select up to {Math.min(GALLERY_UPLOAD_MAX_FILES, GALLERY_MAX_ITEMS - galleryItems.length)} images with optional descriptions.</p>
+                <p className="text-sm text-slate-500">Select up to {galleryUploadMaxSlots} images with optional descriptions.</p>
               </div>
               <button type="button" onClick={handleGalleryUploadClose} className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
                 <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
@@ -6190,7 +6196,7 @@ const Social = () => {
                   <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryUploadFileSelect} disabled={galleryUploading} />
                   Select images
                 </label>
-                <span className="text-[11px] font-medium text-slate-400">{galleryUploadPreviews.length} / {Math.min(GALLERY_UPLOAD_MAX_FILES, GALLERY_MAX_ITEMS - galleryItems.length)} selected</span>
+                <span className="text-[11px] font-medium text-slate-400">{galleryUploadPreviews.length} / {galleryUploadMaxSlots} selected</span>
                 {/* Batch audience toggle */}
                 <div className="ml-auto flex items-center gap-1.5">
                   <span className="text-[10px] font-medium text-slate-400">All images:</span>
@@ -6205,7 +6211,7 @@ const Social = () => {
                         }}
                         className="rounded-md px-2 py-0.5 text-[10px] font-semibold transition-all"
                         style={galleryUploadDefaultAudience === aud && Object.keys(galleryUploadAudienceOverrides).length === 0
-                          ? { backgroundColor: aud === 'secure' ? '#d97706' : aud === 'public' ? '#16a34a' : '#0284c7', color: '#fff' }
+                          ? { backgroundColor: RELATIONSHIP_AUDIENCE_COLORS[aud], color: '#fff' }
                           : { color: '#94a3b8' }
                         }
                       >
@@ -6242,16 +6248,16 @@ const Social = () => {
                               onClick={() => setGalleryUploadAudienceOverrides((prev) => ({ ...prev, [index]: aud }))}
                               className={`px-1.5 py-px text-[9px] font-semibold ${aud === 'social' ? 'rounded-l-md' : aud === 'public' ? 'rounded-r-md' : ''}`}
                               style={effectiveAudience === aud
-                                ? { backgroundColor: aud === 'secure' ? '#d97706' : aud === 'public' ? '#16a34a' : '#0284c7', color: '#fff' }
+                                ? { backgroundColor: RELATIONSHIP_AUDIENCE_COLORS[aud], color: '#fff' }
                                 : { color: 'rgba(255,255,255,0.7)' }
                               }
                             >
-                              {aud === 'social' ? 'S' : aud === 'secure' ? '🔒' : '🌐'}
+                              {RELATIONSHIP_AUDIENCE_ICONS[aud]}
                             </button>
                           ))}
                         </div>
-                        {/* Audience badge */}
-                        <span className={`absolute bottom-[calc(100%-6.5rem)] right-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${effectiveAudience === 'secure' ? 'bg-amber-100 text-amber-800' : effectiveAudience === 'public' ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800'}`}>
+                        {/* Audience badge - positioned at the bottom of the image area */}
+                        <span className={`absolute right-1 top-[6rem] rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${effectiveAudience === 'secure' ? 'bg-amber-100 text-amber-800' : effectiveAudience === 'public' ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800'}`}>
                           {RELATIONSHIP_AUDIENCE_LABELS[effectiveAudience]}
                         </span>
                         {/* Description input */}
@@ -6271,8 +6277,8 @@ const Social = () => {
               ) : (
                 <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-10 text-center">
                   <svg className="mb-2 h-10 w-10 text-slate-300" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.2}><rect x="2" y="4" width="16" height="12" rx="2" /><circle cx="7" cy="9" r="1.5" /><path d="M2 14l4-4 4 4 3-3 5 4" /></svg>
-                  <p className="text-sm font-medium text-slate-400">Click "Select images" to choose photos</p>
-                  <p className="mt-1 text-[11px] text-slate-400">Up to {Math.min(GALLERY_UPLOAD_MAX_FILES, GALLERY_MAX_ITEMS - galleryItems.length)} images, max 3MB each</p>
+                  <p className="text-sm font-medium text-slate-400">Click &quot;Select images&quot; to choose photos</p>
+                  <p className="mt-1 text-[11px] text-slate-400">Up to {galleryUploadMaxSlots} images, max 3MB each</p>
                 </div>
               )}
             </div>
