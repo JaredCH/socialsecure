@@ -72,8 +72,16 @@ function normalizeCategory(value) {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return null;
   if (CATEGORY_ALIASES.has(normalized)) return CATEGORY_ALIASES.get(normalized);
+  const normalizedWords = normalized.replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normalizedWords) return null;
+  const paddedWords = ` ${normalizedWords} `;
+  const wordSet = new Set(normalizedWords.split(/\s+/));
   for (const [alias, category] of CATEGORY_ALIASES.entries()) {
-    if (normalized.includes(alias)) return category;
+    if (alias.includes(' ')) {
+      if (paddedWords.includes(` ${alias} `)) return category;
+      continue;
+    }
+    if (wordSet.has(alias)) return category;
   }
   return null;
 }
