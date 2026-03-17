@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs/promises');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const { v4: uuidv4 } = require('uuid');
 const User = require('../models/User');
 const SocialPageConfig = require('../models/SocialPageConfig');
@@ -25,6 +26,11 @@ const bgUploadRoot = path.join(__dirname, '..', 'uploads', 'backgrounds');
 const bgUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: BG_UPLOAD_MAX_BYTES, files: 1 }
+});
+const bgUploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many background uploads, please try again later.' }
 });
 
 const authenticateToken = (req, res, next) => {
@@ -233,7 +239,7 @@ router.put('/preferences', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/body-background-upload', authenticateToken, bgUpload.single('image'), async (req, res) => {
+router.post('/body-background-upload', bgUploadLimiter, authenticateToken, bgUpload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file provided' });
