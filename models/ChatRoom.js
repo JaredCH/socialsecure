@@ -118,6 +118,15 @@ const getLatestDate = (...values) => values.reduce((latest, current) => {
   return latest;
 }, null);
 
+const isDuplicateKeyBulkWriteError = (error) => {
+  if (!error) return false;
+  if (error?.code === 11000) return true;
+  if (Array.isArray(error?.writeErrors) && error.writeErrors.length > 0) {
+    return error.writeErrors.every((entry) => entry?.code === 11000);
+  }
+  return false;
+};
+
 const chatRoomSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -375,7 +384,13 @@ chatRoomSchema.statics.ensureDefaultDiscoveryRooms = async function(options = {}
   const operations = buildDefaultDiscoveryRoomOperations(now);
 
   if (operations.length > 0) {
-    await this.bulkWrite(operations, { ordered: false });
+    try {
+      await this.bulkWrite(operations, { ordered: false });
+    } catch (error) {
+      if (!isDuplicateKeyBulkWriteError(error)) {
+        throw error;
+      }
+    }
   }
   await this.reconcileDefaultDiscoveryRoomDuplicates();
   lastDefaultDiscoveryRoomEnsureAt = nowTs;
