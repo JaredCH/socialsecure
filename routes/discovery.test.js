@@ -230,6 +230,39 @@ describe('Discovery routes', () => {
     });
   });
 
+  it('normalizes @username query prefixes for user discovery search', async () => {
+    const app = buildApp();
+    mockAuthUser();
+    mockFriendAndBlockLookups({ accepted: [], pending: [] });
+
+    mockUser.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue([])
+          })
+        })
+      })
+    });
+
+    const response = await request(app)
+      .get('/api/discovery/users?q=%40alice&page=1&limit=10')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(mockUser.find).toHaveBeenCalledWith(expect.objectContaining({
+      $or: expect.arrayContaining([
+        expect.objectContaining({
+          username: expect.any(RegExp)
+        })
+      ])
+    }));
+
+    const queryFilter = mockUser.find.mock.calls[0][0];
+    expect(queryFilter.$or[0].username.source).toBe('alice');
+    expect(queryFilter.$or[1].realName.source).toBe('alice');
+  });
+
   it('accepts click analytics events and rejects invalid event types', async () => {
     const app = buildApp();
     mockAuthUser();

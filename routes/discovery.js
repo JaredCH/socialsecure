@@ -170,7 +170,7 @@ const discoveryLimiter = rateLimit({
 router.get('/users', authenticateToken, discoveryLimiter, async (req, res) => {
   try {
     const viewerId = String(req.user.userId);
-    const query = String(req.query.q || '').trim();
+    const query = String(req.query.q || '').trim().replace(/^@+/, '');
     const { page, limit } = parsePagination(req.query);
     const cacheKey = `users:${viewerId}:${query}:${page}:${limit}`;
 
