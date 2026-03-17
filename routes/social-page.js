@@ -1,6 +1,10 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const path = require('path');
+const crypto = require('crypto');
+const fs = require('fs/promises');
+const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const User = require('../models/User');
 const SocialPageConfig = require('../models/SocialPageConfig');
@@ -13,6 +17,15 @@ const {
 } = require('../utils/socialPagePreferences');
 
 const router = express.Router();
+
+const BG_UPLOAD_MAX_BYTES = 3 * 1024 * 1024;
+const BG_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const BG_ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+const bgUploadRoot = path.join(__dirname, '..', 'uploads', 'backgrounds');
+const bgUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: BG_UPLOAD_MAX_BYTES, files: 1 }
+});
 
 const authenticateToken = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -217,6 +230,43 @@ router.put('/preferences', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error saving social page preferences:', error);
     return res.status(500).json({ error: 'Failed to save social page preferences' });
+  }
+});
+
+router.post('/body-background-upload', authenticateToken, bgUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const mimeType = String(req.file.mimetype || '').toLowerCase();
+    const ext = path.extname(String(req.file.originalname || '')).toLowerCase();
+
+    if (!BG_ALLOWED_MIME_TYPES.has(mimeType)) {
+      return res.status(400).json({ error: 'Unsupported image type. Use JPEG, PNG, GIF, or WebP.' });
+    }
+    if (!BG_ALLOWED_EXTENSIONS.has(ext)) {
+      return res.status(400).json({ error: 'Unsupported file extension.' });
+    }
+    if (req.file.size > BG_UPLOAD_MAX_BYTES) {
+      return res.status(400).json({ error: 'Image file is too large (max 3MB).' });
+    }
+
+    const userId = String(req.user._id);
+    const userDir = path.join(bgUploadRoot, userId);
+    await fs.mkdir(userDir, { recursive: true });
+
+    const randomPart = crypto.randomBytes(8).toString('hex');
+    const fileName = `${Date.now()}-${randomPart}${ext}`;
+    const filePath = path.join(userDir, fileName);
+    await fs.writeFile(filePath, req.file.buffer);
+
+    const mediaUrl = `/uploads/backgrounds/${userId}/${fileName}`;
+
+    return res.json({ success: true, mediaUrl, fileSize: req.file.size, mimeType });
+  } catch (error) {
+    console.error('Error uploading body background:', error);
+    return res.status(500).json({ error: 'Failed to upload background image' });
   }
 });
 

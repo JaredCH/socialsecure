@@ -5369,6 +5369,20 @@ const Social = () => {
   const bodyBgOverlay = socialPreferences.globalStyles?.bodyBackgroundOverlay || 0;
   const bodyBgGrain = socialPreferences.globalStyles?.bodyBackgroundGrain || 0;
   const bodyBgBlur = socialPreferences.globalStyles?.bodyBackgroundBlur || 0;
+  const bodyBgDisplayMode = socialPreferences.globalStyles?.bodyBackgroundDisplayMode || 'cover';
+  const bodyBgOverlayAnimation = socialPreferences.globalStyles?.bodyBackgroundOverlayAnimation || 'none';
+
+  const bodyBgStyles = (() => {
+    if (!bodyBgImage) return {};
+    const base = { backgroundImage: `url(${bodyBgImage})` };
+    if (bodyBgDisplayMode === 'repeat') {
+      return { ...base, backgroundRepeat: 'repeat', backgroundSize: 'auto', backgroundPosition: 'top left' };
+    }
+    if (bodyBgDisplayMode === 'fixed') {
+      return { ...base, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' };
+    }
+    return { ...base, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' };
+  })();
 
   const cssCustomProperties = {
     '--accent': accentColor,
@@ -5394,10 +5408,43 @@ const Social = () => {
     >
       {bodyBgImage ? (
         <>
-          <div className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url(${bodyBgImage})`, filter: bodyBgBlur ? `blur(${bodyBgBlur}px)` : undefined, transform: bodyBgBlur ? 'scale(1.05)' : undefined }} />
+          <div className="pointer-events-none fixed inset-0 z-0" style={{ ...bodyBgStyles, filter: bodyBgBlur ? `blur(${bodyBgBlur}px)` : undefined, transform: bodyBgBlur ? 'scale(1.05)' : undefined }} />
           {bodyBgOverlay > 0 ? <div className="pointer-events-none fixed inset-0 z-0" style={{ backgroundColor: `rgba(0,0,0,${bodyBgOverlay})` }} /> : null}
           {bodyBgGrain > 0 ? <div className="pointer-events-none fixed inset-0 z-0" style={{ opacity: bodyBgGrain, backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.5\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat', backgroundSize: '128px 128px' }} /> : null}
         </>
+      ) : null}
+      {bodyBgOverlayAnimation !== 'none' ? (
+        <div className="pointer-events-none fixed inset-0 z-[5] overflow-hidden" aria-hidden="true" data-testid="overlay-animation">
+          <style>{`
+            @keyframes socialBgFall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(360deg); opacity: 0.3; } }
+            @keyframes socialBgFloat { 0% { transform: translateY(110vh) scale(0.8); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(-10vh) scale(1.2); opacity: 0; } }
+            @keyframes socialBgBurst { 0% { transform: scale(0) translateY(0); opacity: 1; } 50% { opacity: 1; } 100% { transform: scale(1.5) translateY(-30vh); opacity: 0; } }
+            .social-overlay-particle { position: absolute; animation-timing-function: linear; animation-iteration-count: infinite; will-change: transform; }
+          `}</style>
+          {Array.from({ length: 12 }).map((_, i) => {
+            const left = `${(i * 8.3) % 100}%`;
+            const delay = `${(i * 1.7) % 8}s`;
+            const dur = `${6 + (i % 5) * 2}s`;
+            const size = 12 + (i % 4) * 4;
+            const overlayMap = {
+              snow: { char: '❄', anim: 'socialBgFall' },
+              'easter-eggs': { char: '🥚', anim: 'socialBgFall' },
+              'halloween-ghosts': { char: '👻', anim: 'socialBgFloat' },
+              'valentines-hearts': { char: '💕', anim: 'socialBgFloat' },
+              fireworks: { char: '✦', anim: 'socialBgBurst' }
+            };
+            const cfg = overlayMap[bodyBgOverlayAnimation] || overlayMap.snow;
+            return (
+              <span
+                key={i}
+                className="social-overlay-particle"
+                style={{ left, top: cfg.anim === 'socialBgFloat' ? 'auto' : '-5%', bottom: cfg.anim === 'socialBgFloat' ? '-5%' : 'auto', fontSize: `${size}px`, animationName: cfg.anim, animationDuration: dur, animationDelay: delay, opacity: 0.7 }}
+              >
+                {cfg.char}
+              </span>
+            );
+          })}
+        </div>
       ) : null}
       <div className="relative z-10">
       {/* Guest Preview Notice */}
@@ -5815,10 +5862,19 @@ const Social = () => {
         bodyBackgroundOverlay={socialPreferences.globalStyles?.bodyBackgroundOverlay || 0}
         bodyBackgroundGrain={socialPreferences.globalStyles?.bodyBackgroundGrain || 0}
         bodyBackgroundBlur={socialPreferences.globalStyles?.bodyBackgroundBlur || 0}
+        bodyBackgroundDisplayMode={socialPreferences.globalStyles?.bodyBackgroundDisplayMode || 'cover'}
+        bodyBackgroundOverlayAnimation={socialPreferences.globalStyles?.bodyBackgroundOverlayAnimation || 'none'}
         onBodyBackgroundImageChange={(value) => updateGlobalStyles({ bodyBackgroundImage: value })}
         onBodyBackgroundOverlayChange={(value) => updateGlobalStyles({ bodyBackgroundOverlay: value })}
         onBodyBackgroundGrainChange={(value) => updateGlobalStyles({ bodyBackgroundGrain: value })}
         onBodyBackgroundBlurChange={(value) => updateGlobalStyles({ bodyBackgroundBlur: value })}
+        onBodyBackgroundDisplayModeChange={(value) => updateGlobalStyles({ bodyBackgroundDisplayMode: value })}
+        onBodyBackgroundOverlayAnimationChange={(value) => updateGlobalStyles({ bodyBackgroundOverlayAnimation: value })}
+        onBodyBackgroundUpload={async (file) => {
+          const response = await socialPageAPI.uploadBodyBackground(file);
+          const url = response.data?.mediaUrl;
+          if (url) updateGlobalStyles({ bodyBackgroundImage: url });
+        }}
         themePreset={socialPreferences.themePreset || 'default'}
         themeOptions={STAGE_THEME_OPTIONS}
         accentColor={accentColor}

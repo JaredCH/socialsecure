@@ -61,6 +61,9 @@ const THEME_TO_ALLOWED_ACCENTS = {
   forest: ['emerald', 'blue', 'amber']
 };
 
+const BODY_BG_DISPLAY_MODES = ['cover', 'repeat', 'fixed'];
+const BODY_BG_OVERLAY_ANIMATIONS = ['none', 'snow', 'easter-eggs', 'halloween-ghosts', 'valentines-hearts', 'fireworks'];
+
 const DEFAULT_GLOBAL_STYLES = Object.freeze({
   panelColor: '#ffffff',
   headerColor: '#0f172a',
@@ -72,7 +75,13 @@ const DEFAULT_GLOBAL_STYLES = Object.freeze({
     subHeader: 'xl',
     regular: 'base',
     small: 'sm'
-  }
+  },
+  bodyBackgroundImage: '',
+  bodyBackgroundOverlay: 0,
+  bodyBackgroundGrain: 0,
+  bodyBackgroundBlur: 0,
+  bodyBackgroundDisplayMode: 'cover',
+  bodyBackgroundOverlayAnimation: 'none'
 });
 const DEFAULT_HERO_CONFIG = Object.freeze({
   backgroundColor: '#1e293b',
@@ -521,6 +530,36 @@ const normalizeMediaUrl = (value, fallback = null) => {
   }
 };
 
+const normalizeBodyBackgroundImageUrl = (value, fallback = '') => {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MEDIA_URL_MAX_LENGTH) return fallback;
+  if (/^\/uploads\/backgrounds\/[a-f0-9]+\/[a-f0-9]+-[a-f0-9]+\.\w{2,5}$/.test(trimmed)) {
+    return trimmed;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return fallback;
+    }
+    return parsed.toString();
+  } catch {
+    return fallback;
+  }
+};
+
+const normalizeBodyBackgroundOverlay = (value, fallback = 0) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(0, Math.min(1, Math.round(num * 20) / 20));
+};
+
+const normalizeBodyBackgroundBlur = (value, fallback = 0) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(0, Math.min(20, Math.round(num)));
+};
+
 const normalizeHeroImageHistory = (value, currentValue) => {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
@@ -677,7 +716,13 @@ const normalizeSocialPagePreferences = (input, {
     fontFamily: normalizeFontFamily(raw.globalStyles?.fontFamily, DEFAULT_GLOBAL_STYLES.fontFamily),
     fontColor: normalizeHexColor(raw.globalStyles?.fontColor, DEFAULT_GLOBAL_STYLES.fontColor),
     pageBackgroundColor: normalizeHexColor(raw.globalStyles?.pageBackgroundColor, DEFAULT_GLOBAL_STYLES.pageBackgroundColor),
-    fontSizes: normalizeFontSizeMap(raw.globalStyles?.fontSizes, DEFAULT_GLOBAL_STYLES.fontSizes)
+    fontSizes: normalizeFontSizeMap(raw.globalStyles?.fontSizes, DEFAULT_GLOBAL_STYLES.fontSizes),
+    bodyBackgroundImage: normalizeBodyBackgroundImageUrl(raw.globalStyles?.bodyBackgroundImage, DEFAULT_GLOBAL_STYLES.bodyBackgroundImage),
+    bodyBackgroundOverlay: normalizeBodyBackgroundOverlay(raw.globalStyles?.bodyBackgroundOverlay, DEFAULT_GLOBAL_STYLES.bodyBackgroundOverlay),
+    bodyBackgroundGrain: normalizeBodyBackgroundOverlay(raw.globalStyles?.bodyBackgroundGrain, DEFAULT_GLOBAL_STYLES.bodyBackgroundGrain),
+    bodyBackgroundBlur: normalizeBodyBackgroundBlur(raw.globalStyles?.bodyBackgroundBlur, DEFAULT_GLOBAL_STYLES.bodyBackgroundBlur),
+    bodyBackgroundDisplayMode: BODY_BG_DISPLAY_MODES.includes(raw.globalStyles?.bodyBackgroundDisplayMode) ? raw.globalStyles.bodyBackgroundDisplayMode : DEFAULT_GLOBAL_STYLES.bodyBackgroundDisplayMode,
+    bodyBackgroundOverlayAnimation: BODY_BG_OVERLAY_ANIMATIONS.includes(raw.globalStyles?.bodyBackgroundOverlayAnimation) ? raw.globalStyles.bodyBackgroundOverlayAnimation : DEFAULT_GLOBAL_STYLES.bodyBackgroundOverlayAnimation
   };
   const hero = normalizeHeroConfig(raw.hero, defaults.hero || DEFAULT_HERO_CONFIG);
 
@@ -766,6 +811,8 @@ module.exports = {
   DEFAULT_GLOBAL_STYLES,
   DEFAULT_HERO_CONFIG,
   DEFAULT_PANEL_LAYOUTS,
+  BODY_BG_DISPLAY_MODES,
+  BODY_BG_OVERLAY_ANIMATIONS,
   buildDefaultSocialPagePreferences,
   mergeDesignPatch,
   normalizeSocialPagePreferences,

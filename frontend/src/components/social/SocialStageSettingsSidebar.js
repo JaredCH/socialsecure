@@ -3,6 +3,21 @@ import React, { useEffect, useRef, useState } from 'react';
 const SIDEBAR_OVERLAY_Z_INDEX_CLASS = 'z-[1400]';
 const SIDEBAR_PANEL_SHADOW_CLASS = 'shadow-[0_30px_90px_rgba(15,23,42,0.35)]';
 
+const DISPLAY_MODE_OPTIONS = [
+  { value: 'cover', label: 'Stretched', description: 'Image covers the full page' },
+  { value: 'repeat', label: 'Repeating', description: 'Image tiles across the page' },
+  { value: 'fixed', label: 'Fixed', description: 'Image stays fixed while scrolling' }
+];
+
+const OVERLAY_ANIMATION_OPTIONS = [
+  { value: 'none', label: 'None', emoji: '' },
+  { value: 'snow', label: 'Christmas Snow', emoji: '❄️' },
+  { value: 'easter-eggs', label: 'Easter Eggs', emoji: '🥚' },
+  { value: 'halloween-ghosts', label: 'Halloween Ghosts', emoji: '👻' },
+  { value: 'valentines-hearts', label: "Valentine's Hearts", emoji: '💕' },
+  { value: 'fireworks', label: 'Fireworks', emoji: '🎆' }
+];
+
 const SocialStageSettingsSidebar = ({
   isOpen,
   onClose,
@@ -21,10 +36,15 @@ const SocialStageSettingsSidebar = ({
   bodyBackgroundOverlay,
   bodyBackgroundGrain,
   bodyBackgroundBlur,
+  bodyBackgroundDisplayMode,
+  bodyBackgroundOverlayAnimation,
   onBodyBackgroundImageChange,
   onBodyBackgroundOverlayChange,
   onBodyBackgroundGrainChange,
   onBodyBackgroundBlurChange,
+  onBodyBackgroundDisplayModeChange,
+  onBodyBackgroundOverlayAnimationChange,
+  onBodyBackgroundUpload,
   themePreset,
   themeOptions,
   accentColor,
@@ -55,6 +75,8 @@ const SocialStageSettingsSidebar = ({
   const [heroBackgroundDraft, setHeroBackgroundDraft] = useState(heroBackgroundImage);
   const [heroProfileDraft, setHeroProfileDraft] = useState(heroProfileImage);
   const [bodyBgDraft, setBodyBgDraft] = useState(bodyBackgroundImage || '');
+  const [bgUploading, setBgUploading] = useState(false);
+  const [bgUploadStatus, setBgUploadStatus] = useState('');
 
   useEffect(() => {
     setHeroBackgroundDraft(heroBackgroundImage);
@@ -245,7 +267,7 @@ const SocialStageSettingsSidebar = ({
               />
               <button
                 type="button"
-                onClick={() => onBodyBackgroundImageChange(bodyBgDraft)}
+                onClick={() => { onBodyBackgroundImageChange(bodyBgDraft); setBgUploadStatus(''); }}
                 className="rounded-2xl border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
               >
                 Set
@@ -254,39 +276,82 @@ const SocialStageSettingsSidebar = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                disabled={bgUploading}
                 onClick={() => bodyBgFileInputRef.current?.click()}
-                className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
               >
-                Upload image
+                {bgUploading ? 'Uploading…' : 'Upload image'}
               </button>
               <input
                 ref={bodyBgFileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/gif,image/webp"
                 className="hidden"
-                onChange={(event) => {
+                onChange={async (event) => {
                   const file = event.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = () => { onBodyBackgroundImageChange(reader.result); };
-                    reader.readAsDataURL(file);
+                  event.target.value = '';
+                  if (!file) return;
+                  if (!file.type.startsWith('image/')) {
+                    setBgUploadStatus('Only image files are supported.');
+                    return;
+                  }
+                  if (file.size > 3 * 1024 * 1024) {
+                    setBgUploadStatus('Image is too large (max 3 MB).');
+                    return;
+                  }
+                  setBgUploading(true);
+                  setBgUploadStatus('');
+                  try {
+                    if (onBodyBackgroundUpload) {
+                      await onBodyBackgroundUpload(file);
+                      setBgUploadStatus('✓ Image uploaded and applied');
+                    }
+                  } catch (err) {
+                    setBgUploadStatus(err?.response?.data?.error || 'Upload failed.');
+                  } finally {
+                    setBgUploading(false);
                   }
                 }}
               />
               {bodyBackgroundImage ? (
                 <button
                   type="button"
-                  onClick={() => { onBodyBackgroundImageChange(''); setBodyBgDraft(''); }}
+                  onClick={() => { onBodyBackgroundImageChange(''); setBodyBgDraft(''); setBgUploadStatus(''); }}
                   className="rounded-2xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
                 >
                   Remove
                 </button>
               ) : null}
             </div>
+            {bgUploadStatus ? (
+              <p className={`text-xs font-medium ${bgUploadStatus.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
+                {bgUploadStatus}
+              </p>
+            ) : null}
             {bodyBackgroundImage ? (
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex h-20 items-center justify-center overflow-hidden rounded-xl bg-slate-200">
                   <img src={bodyBackgroundImage} alt="Body background preview" className="h-full w-full object-cover" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">Display Mode</label>
+                  <div className="flex gap-1.5" data-testid="display-mode-selector">
+                    {DISPLAY_MODE_OPTIONS.map((mode) => (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        onClick={() => onBodyBackgroundDisplayModeChange(mode.value)}
+                        className={`flex-1 rounded-xl px-2 py-1.5 text-xs font-semibold transition ${
+                          (bodyBackgroundDisplayMode || 'cover') === mode.value
+                            ? 'border border-blue-300 bg-blue-50 text-blue-700'
+                            : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        }`}
+                        title={mode.description}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
@@ -335,6 +400,29 @@ const SocialStageSettingsSidebar = ({
                 </div>
               </div>
             ) : null}
+          </section>
+
+          <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Seasonal Overlay</h3>
+              <p className="mt-1 text-xs text-slate-500">Add a lightweight seasonal animation overlay to your page.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5" data-testid="overlay-animation-selector">
+              {OVERLAY_ANIMATION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => onBodyBackgroundOverlayAnimationChange(opt.value)}
+                  className={`rounded-xl px-2 py-2 text-xs font-semibold transition ${
+                    (bodyBackgroundOverlayAnimation || 'none') === opt.value
+                      ? 'border border-blue-300 bg-blue-50 text-blue-700'
+                      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt.emoji ? `${opt.emoji} ` : ''}{opt.label}
+                </button>
+              ))}
+            </div>
           </section>
 
           <section className="space-y-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
@@ -468,6 +556,8 @@ SocialStageSettingsSidebar.defaultProps = {
   bodyBackgroundOverlay: 0,
   bodyBackgroundGrain: 0,
   bodyBackgroundBlur: 0,
+  bodyBackgroundDisplayMode: 'cover',
+  bodyBackgroundOverlayAnimation: 'none',
   themePreset: 'default',
   themeOptions: [],
   accentColor: '#3b82f6',
@@ -492,6 +582,9 @@ SocialStageSettingsSidebar.defaultProps = {
   onBodyBackgroundOverlayChange: () => {},
   onBodyBackgroundGrainChange: () => {},
   onBodyBackgroundBlurChange: () => {},
+  onBodyBackgroundDisplayModeChange: () => {},
+  onBodyBackgroundOverlayAnimationChange: () => {},
+  onBodyBackgroundUpload: null,
   onThemePresetChange: () => {},
   onAccentColorChange: () => {},
   onFontFamilyChange: () => {},
