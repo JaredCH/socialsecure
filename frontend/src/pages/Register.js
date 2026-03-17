@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { authAPI } from '../utils/api';
+import PasswordField from '../components/PasswordField';
 
 const inputClassName = 'mt-1 min-h-[44px] w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200';
 const sectionClassName = 'space-y-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5';
@@ -21,6 +22,8 @@ function Register({ onSuccess }) {
     lastName: '',
     username: '',
     email: '',
+    password: '',
+    confirmPassword: '',
     zipCode: '',
     referralCode: token || ''
   });
@@ -110,6 +113,10 @@ function Register({ onSuccess }) {
       toast.error('Please choose an available username before continuing.');
       return;
     }
+    if (form.password !== form.confirmPassword) {
+      toast.error('Password confirmation does not match.');
+      return;
+    }
 
     setSubmitting(true);
 
@@ -119,6 +126,7 @@ function Register({ onSuccess }) {
         lastName: form.lastName.trim(),
         username: form.username.trim().toLowerCase(),
         email: form.email.trim().toLowerCase(),
+        password: form.password,
         zipCode: trimmedZip,
         referralCode: form.referralCode || undefined
       };
@@ -231,6 +239,33 @@ function Register({ onSuccess }) {
                 required
               />
               {fieldErrors.email && <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Password</label>
+                <PasswordField
+                  name="password"
+                  value={form.password}
+                  onChange={handleChange}
+                  className={inputClassName}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Confirm password</label>
+                <PasswordField
+                  name="confirmPassword"
+                  value={form.confirmPassword}
+                  onChange={handleChange}
+                  className={inputClassName}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+              </div>
             </div>
 
             <div>

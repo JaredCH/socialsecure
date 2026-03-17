@@ -105,6 +105,24 @@ describe('Login mobile-first layout', () => {
     expect(passwordInput.value).toBe('LongerPass1');
   });
 
+  it('toggles login password visibility', async () => {
+    await renderLogin();
+
+    const passwordInput = container.querySelector('input[name="password"]');
+    const toggleButton = Array.from(container.querySelectorAll('button')).find((button) => (
+      button.getAttribute('aria-label') === 'View password'
+    ));
+
+    expect(passwordInput.getAttribute('type')).toBe('password');
+
+    await act(async () => {
+      toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(passwordInput.getAttribute('type')).toBe('text');
+    expect(toggleButton.getAttribute('aria-label')).toBe('Hide password');
+  });
+
   it('redirects successful logins to the news page', async () => {
     authAPI.login.mockResolvedValueOnce({
       data: {
