@@ -318,7 +318,7 @@ chatMessageSchema.statics.getRoomMessages = async function(roomId, page = 1, lim
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(normalizedLimit)
-    .populate('userId', 'username realName')
+    .populate('userId', 'username realName avatarUrl')
     .lean();
   
   return messages.reverse().map((message) => this.toPublicMessageShape(message)); // Return in chronological order
@@ -338,7 +338,7 @@ chatMessageSchema.statics.getRoomMessagesByCursor = async function(roomId, optio
   const docs = await this.find(filter)
     .sort({ createdAt: -1, _id: -1 })
     .limit(normalizedLimit + 1)
-    .populate('userId', 'username realName')
+    .populate('userId', 'username realName avatarUrl')
     .lean();
 
   const hasMore = docs.length > normalizedLimit;

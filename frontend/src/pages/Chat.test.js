@@ -1427,10 +1427,14 @@ describe('Chat zip room indicator', () => {
     expect(namedLink).not.toBeUndefined();
     expect(namedLink.getAttribute('href')).toBe('https://example.com/product/guide');
 
-    const authorAction = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === '@buddy');
+    const authorAction = Array.from(container.querySelectorAll('a')).find((node) => node.textContent === '@buddy');
     expect(authorAction).not.toBeUndefined();
+    expect(authorAction.getAttribute('href')).toBe('/social?user=buddy');
+
+    const messageArticle = authorAction.closest('article[data-chat-message-layout="room"]');
+    expect(messageArticle).not.toBeNull();
     await act(async () => {
-      authorAction.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      messageArticle.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
       await flush();
     });
 
@@ -1540,7 +1544,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const authorAction = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === '@buddy');
+    const authorAction = Array.from(container.querySelectorAll('a')).find((node) => node.textContent === '@buddy');
     expect(authorAction).not.toBeUndefined();
     expect(authorAction.className).toContain('text-sm');
     expect(authorAction.className).toContain('font-semibold');
@@ -1592,7 +1596,7 @@ describe('Chat zip room indicator', () => {
     expect(roomMessages).toHaveLength(3);
     expect(roomMessages[0].getAttribute('data-chat-grouped')).toBe('false');
     expect(roomMessages[1].getAttribute('data-chat-grouped')).toBe('true');
-    expect(Array.from(container.querySelectorAll('button')).filter((node) => node.textContent === '@buddy')).toHaveLength(1);
+    expect(Array.from(container.querySelectorAll('a')).filter((node) => node.textContent === '@buddy')).toHaveLength(1);
   });
 
   it('opens a direct message when loaded with a social deep link target', async () => {

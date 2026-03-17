@@ -804,7 +804,7 @@ const createRoomEventMessage = async ({ roomId, userId, content, messageType = '
   });
 
   await eventMessage.save();
-  await eventMessage.populate('userId', 'username realName');
+  await eventMessage.populate('userId', 'username realName avatarUrl');
   return eventMessage;
 };
 
@@ -1470,7 +1470,7 @@ router.post('/rooms/:roomId/messages', [
     await room.addMember(userId);
     
     // Populate user info for response
-    await savedMessage.populate('userId', 'username realName');
+    await savedMessage.populate('userId', 'username realName avatarUrl');
 
     const senderLabel = user.username || user.realName || 'Someone';
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message: savedMessage });
@@ -1767,7 +1767,7 @@ router.post('/rooms/:roomId/messages/e2ee', [
 
     await room.incrementMessageCount();
     await room.addMember(userId);
-    await savedMessage.populate('userId', 'username realName');
+    await savedMessage.populate('userId', 'username realName avatarUrl');
 
     const senderLabel = user.username || user.realName || 'Someone';
     await notifyRoomMembers({ room, senderId: userId, senderLabel, message: savedMessage });
@@ -2304,7 +2304,7 @@ router.post('/rooms/:roomId/messages/:messageId/migrate-e2ee', [
     };
 
     await message.save();
-    await message.populate('userId', 'username realName');
+    await message.populate('userId', 'username realName avatarUrl');
 
     return res.status(200).json({
       success: true,
@@ -2817,7 +2817,7 @@ router.get('/rooms/:roomId/users', roomReadLimiter, authenticateToken, async (re
     const memberIds = Array.isArray(room.members) ? room.members : [];
     const [users, presenceMap] = await Promise.all([
       memberIds.length > 0
-        ? User.find({ _id: { $in: memberIds } }).select('_id username realName mutedUntil realtimePreferences').lean()
+        ? User.find({ _id: { $in: memberIds } }).select('_id username realName avatarUrl mutedUntil realtimePreferences').lean()
         : [],
       getPresenceMapForUsers(memberIds)
     ]);
@@ -2827,6 +2827,7 @@ router.get('/rooms/:roomId/users', roomReadLimiter, authenticateToken, async (re
           _id: u._id,
           username: u.username || null,
           realName: u.realName || null,
+          avatarUrl: u.avatarUrl || null,
           mutedUntil: u.mutedUntil || null,
           presence: buildPresencePayload(u._id, presenceMap.get(String(u._id)), u.realtimePreferences)
         }))
@@ -3092,7 +3093,7 @@ router.get('/conversations/:conversationId/messages', unifiedChatLimiter, option
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('userId', '_id username realName')
+      .populate('userId', '_id username realName avatarUrl')
       .lean();
 
     const total = await ConversationMessage.countDocuments({ conversationId });
@@ -3602,7 +3603,7 @@ router.post(
     conversation.lastMessageAt = new Date();
     conversation.messageCount = (conversation.messageCount || 0) + 1;
     await conversation.save();
-    await message.populate('userId', '_id username realName');
+    await message.populate('userId', '_id username realName avatarUrl');
     const publicMessage = message.toPublicMessage({ conversationType: conversation.type });
     const targetUserIds = getConversationParticipantIds(conversation);
     emitChatMessage({

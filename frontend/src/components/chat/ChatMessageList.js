@@ -27,7 +27,9 @@ function ChatMessageList({
   adminProcessingUserIds,
   onToggleAdminMessageRemoval,
   onToggleAdminUserMute,
-  onAdminDeleteMessage
+  onAdminDeleteMessage,
+  onUsernameHoverStart,
+  onUsernameHoverEnd
 }) {
   const scrollRef = useRef(null);
   const previousConversationIdRef = useRef(String(conversationId || ''));
@@ -186,6 +188,8 @@ function ChatMessageList({
                onToggleAdminMessageRemoval={onToggleAdminMessageRemoval}
                onToggleAdminUserMute={onToggleAdminUserMute}
                onAdminDeleteMessage={onAdminDeleteMessage}
+               onUsernameHoverStart={onUsernameHoverStart}
+               onUsernameHoverEnd={onUsernameHoverEnd}
              />
            ))
          )}

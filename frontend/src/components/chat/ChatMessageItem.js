@@ -6,6 +6,7 @@ const DEFAULT_LONG_PRESS_DELAY_MS = 550;
 const LINK_PREVIEW_PERCENTAGE = 0.25;
 const DM_MESSAGE_TEXT_CLASS = 'text-[13px] leading-5';
 const ROOM_MESSAGE_TEXT_CLASS = 'text-[14px] leading-6';
+const REACTION_CLOSE_DELAY_MS = 300;
 
 const supportsHoverInput = () => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
@@ -155,7 +156,9 @@ function ChatMessageItem({
   adminProcessingUserIds,
   onToggleAdminMessageRemoval,
   onToggleAdminUserMute,
-  onAdminDeleteMessage
+  onAdminDeleteMessage,
+  onUsernameHoverStart,
+  onUsernameHoverEnd
 }) {
   const author = message.userId?.username || message.userId?.realName || 'user';
   const usernameForProfileLink = typeof message.userId?.username === 'string' ? message.userId.username.trim() : '';
@@ -165,8 +168,11 @@ function ChatMessageItem({
   const longPressTimerRef = useRef(null);
   const normalizedCurrentUserId = String(currentUserId || '');
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const reactionCloseTimerRef = useRef(null);
   const isDmConversation = conversationType === 'dm';
   const canHoverForReactions = supportsHoverInput();
+  const isSystemMessage = message.messageType === 'system';
+  const avatarUrl = message.userId?.avatarUrl || '';
   const menuUser = message.userId?._id ? {
     _id: message.userId._id,
     username: message.userId.username,
@@ -187,7 +193,27 @@ function ChatMessageItem({
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+    if (reactionCloseTimerRef.current) {
+      clearTimeout(reactionCloseTimerRef.current);
+      reactionCloseTimerRef.current = null;
+    }
   }, []);
+
+  const openReactionPicker = () => {
+    if (reactionCloseTimerRef.current) {
+      clearTimeout(reactionCloseTimerRef.current);
+      reactionCloseTimerRef.current = null;
+    }
+    setReactionPickerOpen(true);
+  };
+
+  const scheduleCloseReactionPicker = (event) => {
+    if (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget)) {
+      reactionCloseTimerRef.current = setTimeout(() => {
+        setReactionPickerOpen(false);
+      }, REACTION_CLOSE_DELAY_MS);
+    }
+  };
 
   const triggerUserMenu = (event, point) => {
     if (!menuUser || typeof onOpenUserMenu !== 'function') return;
@@ -195,22 +221,32 @@ function ChatMessageItem({
     onOpenUserMenu(event, menuUser, point);
   };
 
+  const avatarContent = avatarUrl ? (
+    <img
+      src={avatarUrl}
+      alt={isOwnMessage ? 'You' : `@${author}`}
+      className="h-full w-full rounded-full object-cover"
+    />
+  ) : (
+    author.slice(0, 1).toUpperCase()
+  );
+
   const avatarNode = profileLink ? (
     <a
       href={profileLink}
-      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 ${theme.subtle}`}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 ${theme.subtle}`}
       aria-label={isOwnMessage ? 'View your social profile' : `View @${author} social profile`}
     >
-      {(isOwnMessage ? 'Y' : author).slice(0, 1).toUpperCase()}
+      {avatarContent}
     </a>
   ) : (
-    <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${theme.subtle}`}>
-      {(isOwnMessage ? 'Y' : author).slice(0, 1).toUpperCase()}
+    <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden ${theme.subtle}`}>
+      {avatarContent}
     </span>
   );
 
   const reactionsMarkup = (
-    <div className="mt-1 flex flex-wrap items-center gap-1">
+    <div className="mt-0.5 flex flex-wrap items-center gap-1">
       {reactionOptions.map((reaction) => {
         const actors = Array.isArray(reactionsByType?.[reaction.key]) ? reactionsByType[reaction.key] : [];
         if (actors.length === 0) return null;
@@ -235,11 +271,15 @@ function ChatMessageItem({
       {reactionPickerOpen ? (
         <div
           className={[
-            'absolute bottom-full z-20 mb-1 flex items-center gap-1 rounded border px-1 py-1 text-[10px] shadow-sm',
+            'absolute bottom-full z-20 -mb-1 flex items-center gap-0.5 rounded-lg border px-1.5 py-1 shadow-sm',
+            'text-sm sm:text-xs sm:gap-1 sm:px-1 sm:py-0.5',
             isOwnMessage ? 'right-0' : 'left-0',
             theme.subtle
           ].join(' ')}
           data-chat-no-user-menu="true"
+          data-testid="reaction-picker-popup"
+          onMouseEnter={openReactionPicker}
+          onMouseLeave={scheduleCloseReactionPicker}
         >
           {reactionOptions.map((reaction) => (
             <button
@@ -251,7 +291,7 @@ function ChatMessageItem({
                 setReactionPickerOpen(false);
               }}
               data-chat-no-user-menu="true"
-              className="rounded border px-1 py-0.5 text-[10px] hover:opacity-100"
+              className="rounded px-1.5 py-1 sm:px-1 sm:py-0.5 text-base sm:text-[10px] hover:opacity-100 transition-transform hover:scale-110"
               aria-label={`Add ${reaction.label} reaction`}
               title={reaction.label}
             >
@@ -308,6 +348,28 @@ function ChatMessageItem({
     </div>
   ) : null;
 
+  if (isSystemMessage) {
+    return (
+      <div className="my-0.5 flex items-center justify-center" data-chat-message-layout="system" data-testid="system-message">
+        <span className="text-[11px] italic opacity-40">{displayContent || message.content}</span>
+      </div>
+    );
+  }
+
+  const usernameHoverProps = (user) => ({
+    onMouseEnter: (event) => {
+      if (typeof onUsernameHoverStart === 'function' && user) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        onUsernameHoverStart(user, rect);
+      }
+    },
+    onMouseLeave: () => {
+      if (typeof onUsernameHoverEnd === 'function') {
+        onUsernameHoverEnd();
+      }
+    }
+  });
+
   if (isDmConversation) {
     const showAvatar = !isOwnMessage && !groupedWithNext;
     const showHeader = !isOwnMessage && !groupedWithPrevious;
@@ -317,7 +379,7 @@ function ChatMessageItem({
 
     return (
       <article
-        className={`group flex ${isOwnMessage ? 'justify-end' : 'justify-start'} ${groupedWithPrevious ? 'mt-1' : 'mt-3'}`}
+        className={`group flex ${isOwnMessage ? 'justify-end' : 'justify-start'} ${groupedWithPrevious ? 'mt-0.5' : 'mt-2'}`}
         data-chat-message-layout="dm"
         data-chat-grouped={groupedWithPrevious ? 'true' : 'false'}
         onClick={(event) => triggerUserMenu(event)}
@@ -342,19 +404,18 @@ function ChatMessageItem({
           {dmAvatarNode}
           <div className={`flex min-w-0 flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}>
             {showHeader ? (
-              <button
-                type="button"
-                className={`mb-1 truncate text-left text-xs font-semibold ${theme.senderAccent} hover:opacity-80`}
-                onClick={(event) => triggerUserMenu(event)}
-                onContextMenu={(event) => triggerUserMenu(event)}
+              <a
+                href={profileLink || '#'}
+                className={`mb-0.5 truncate text-left text-xs font-semibold ${theme.senderAccent} hover:underline`}
+                {...usernameHoverProps(menuUser)}
               >
                 @{author}
-              </button>
+              </a>
             ) : null}
             <div
               tabIndex={0}
               className={[
-                'relative px-3 py-2 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1',
+                'relative px-2 py-1 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1',
                 isOwnMessage
                   ? [
                     'rounded-[1.35rem] rounded-r-[1.35rem]',
@@ -370,12 +431,12 @@ function ChatMessageItem({
               ].join(' ')}
               onMouseOver={() => {
                 if (canHoverForReactions) {
-                  setReactionPickerOpen(true);
+                  openReactionPicker();
                 }
               }}
               onMouseLeave={(event) => {
-                if (canHoverForReactions && (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget))) {
-                  setReactionPickerOpen(false);
+                if (canHoverForReactions) {
+                  scheduleCloseReactionPicker(event);
                 }
               }}
               onClick={(event) => {
@@ -389,7 +450,7 @@ function ChatMessageItem({
               {reactionsMarkup}
             </div>
             {timestamp ? (
-              <span className="mt-1 px-2 text-[10px] font-mono opacity-65">{timestamp}</span>
+              <span className="mt-0.5 px-2 text-[10px] font-mono opacity-65">{timestamp}</span>
             ) : null}
           </div>
         </div>
@@ -399,7 +460,7 @@ function ChatMessageItem({
 
   return (
     <article
-      className={`group rounded-xl px-2 py-1 ${groupedWithPrevious ? 'mt-0.5' : 'mt-3'} ${theme.roomHover || ''}`}
+      className={`group rounded-xl px-2 py-0.5 ${groupedWithPrevious ? 'mt-0' : 'mt-2'} ${theme.roomHover || ''}`}
       data-chat-message-layout="room"
       data-chat-grouped={groupedWithPrevious ? 'true' : 'false'}
       onClick={(event) => triggerUserMenu(event)}
@@ -420,7 +481,7 @@ function ChatMessageItem({
         }
       }}
     >
-      <div className="flex gap-3">
+      <div className="flex gap-2">
         <div className="w-9 shrink-0">
           {groupedWithPrevious ? <span className="block h-9 w-9" /> : avatarNode}
         </div>
@@ -428,15 +489,14 @@ function ChatMessageItem({
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
                 {!groupedWithPrevious ? (
-                  <div className="mb-0.5 flex items-baseline gap-2">
-                    <button
-                      type="button"
-                      className={`truncate text-left text-sm font-semibold ${theme.senderAccent} hover:opacity-80`}
-                      onClick={(event) => triggerUserMenu(event)}
-                      onContextMenu={(event) => triggerUserMenu(event)}
+                  <div className="mb-0 flex items-baseline gap-2">
+                    <a
+                      href={profileLink || '#'}
+                      className={`truncate text-left text-sm font-semibold ${theme.senderAccent} hover:underline`}
+                      {...usernameHoverProps(menuUser)}
                     >
                       {isOwnMessage ? 'You' : `@${author}`}
-                    </button>
+                    </a>
                     <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
                   </div>
                 ) : null}
@@ -445,12 +505,12 @@ function ChatMessageItem({
                   className="relative rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
                   onMouseOver={() => {
                     if (canHoverForReactions) {
-                      setReactionPickerOpen(true);
+                      openReactionPicker();
                     }
                   }}
                   onMouseLeave={(event) => {
-                    if (canHoverForReactions && (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget))) {
-                      setReactionPickerOpen(false);
+                    if (canHoverForReactions) {
+                      scheduleCloseReactionPicker(event);
                     }
                   }}
                   onClick={(event) => {
@@ -463,7 +523,7 @@ function ChatMessageItem({
                   <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(displayContent)}</p>
                   {reactionsMarkup}
                 </div>
-                {timestamp ? <span className="mt-1 block text-[10px] font-mono opacity-60">{timestamp}</span> : null}
+                {timestamp ? <span className="mt-0.5 block text-[10px] font-mono opacity-60">{timestamp}</span> : null}
               </div>
               {adminActionsMarkup}
             </div>
