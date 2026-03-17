@@ -8,7 +8,8 @@ const cachedArticleSchema = new mongoose.Schema({
   tier: { type: String, enum: ['local', 'state', 'national'], required: true },
   normalizedTitle: { type: String, default: '' },
   imageUrl: { type: String, default: null },
-  description: { type: String, default: '' }
+  description: { type: String, default: '' },
+  categories: { type: [String], default: [] }
 }, { _id: false });
 
 const fetchErrorSchema = new mongoose.Schema({
