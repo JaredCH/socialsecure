@@ -6245,7 +6245,7 @@ const Social = () => {
                   <ul className="space-y-2">
                     {(activeGalleryImage.comments || []).map((comment, index) => (
                       <li key={comment._id || `${activeGalleryImage._id}-comment-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm">
-                        <p className="font-medium text-slate-700">@{comment.username || comment.userId || 'user'}</p>
+                        <p className="font-medium text-slate-700">@{comment.username || 'Unknown User'}</p>
                         <p className="whitespace-pre-wrap text-slate-800">{comment.content}</p>
                         <p className="text-[11px] text-slate-500">{formatDate(comment.createdAt)}</p>
                       </li>

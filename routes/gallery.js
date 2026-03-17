@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs/promises');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
@@ -41,9 +42,17 @@ const upload = multer({
     files: 1
   }
 });
+const galleryCommentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many gallery comments, please try again later.' }
+});
 
 const galleryUploadRoot = path.join(__dirname, '..', 'uploads', 'gallery');
 const SERVER_UPLOAD_PATH_REGEX = /^\/uploads\/\S+/i;
+const SAFE_HOST_HEADER_REGEX = /^[a-z0-9.-]+(?::\d{1,5})?$/i;
 
 const isHttpUrl = (value) => {
   if (typeof value !== 'string') return false;
@@ -194,10 +203,13 @@ const toGalleryItem = (image, viewerId) => {
 };
 
 const resolveRequestOrigin = (req) => {
-  const host = (req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
-  if (!host) return '';
+  const host = (req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim().toLowerCase();
+  if (!host || !SAFE_HOST_HEADER_REGEX.test(host)) return '';
   const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim().toLowerCase();
-  const protocol = forwardedProto || req.protocol || 'https';
+  const requestProtocol = String(req.protocol || '').toLowerCase();
+  const protocol = forwardedProto === 'http' || forwardedProto === 'https'
+    ? forwardedProto
+    : (requestProtocol === 'http' || requestProtocol === 'https' ? requestProtocol : 'https');
   return `${protocol}://${host}`;
 };
 
@@ -610,6 +622,7 @@ router.delete('/:ownerId/:imageId', authenticateToken, async (req, res) => {
 
 router.post(
   '/:ownerId/:imageId/comment',
+  galleryCommentLimiter,
   authenticateToken,
   [body('content').isString().isLength({ min: 1, max: 1000 }).withMessage('Comment content is required')],
   async (req, res) => {
@@ -653,7 +666,7 @@ router.post(
           userId,
           username: commenter?.username || null,
           content: savedComment?.content || content,
-          createdAt: savedComment?.createdAt || new Date().toISOString()
+          createdAt: savedComment.createdAt
         },
         commentsCount: image.comments.length
       });

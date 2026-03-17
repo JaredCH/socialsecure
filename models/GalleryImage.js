@@ -28,7 +28,6 @@ const galleryCommentSchema = new mongoose.Schema({
   },
   content: {
     type: String,
-    trim: true,
     maxlength: 1000,
     required: true
   },
