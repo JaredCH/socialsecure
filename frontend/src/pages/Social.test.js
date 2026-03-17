@@ -594,10 +594,10 @@ describe('Social page hero background rendering', () => {
     await expect(renderPage()).resolves.toBeUndefined();
     await switchToTab('Gallery');
 
-    const galleryImage = Array.from(container.querySelectorAll('img')).find((image) => image.getAttribute('alt') === 'Gallery item');
-    expect(galleryImage).toBeTruthy();
+    const galleryThumbnail = container.querySelector('img.cursor-zoom-in');
+    expect(galleryThumbnail).toBeTruthy();
     await act(async () => {
-      galleryImage?.closest('button')?.click();
+      galleryThumbnail?.closest('button')?.click();
     });
 
     const closeButton = Array.from(container.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'Close gallery viewer');
