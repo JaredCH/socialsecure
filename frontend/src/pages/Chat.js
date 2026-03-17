@@ -2296,8 +2296,9 @@ function Chat() {
               </>
             ) : (
               <>
-                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Quick links</p>
+                {/* ── Quick Access ────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
+                  <h3 className="text-sm font-semibold">Quick Access</h3>
                   <div className="mt-2 space-y-1">
                     {hubData?.zip?.current ? (
                       <button
@@ -2305,7 +2306,7 @@ function Chat() {
                         onClick={() => {
                           openConversationById(String(hubData.zip.current._id));
                         }}
-                        className={`w-full rounded border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
+                        className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
                         data-quick-access-room={getConversationLabel(hubData.zip.current)}
                       >
                         {getConversationLabel(hubData.zip.current)}
@@ -2316,7 +2317,7 @@ function Chat() {
                         key={String(room._id)}
                         type="button"
                         onClick={() => handleOpenRoom(room)}
-                        className={`w-full rounded border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
+                        className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
                         data-quick-access-room={room.name}
                       >
                         <span className="block font-medium">{room.name}</span>
@@ -2324,7 +2325,7 @@ function Chat() {
                       </button>
                     ))}
                     {nearbyCityQuickRooms.length > 0 ? (
-                      <div className={`rounded border p-1.5 ${activeTheme.panel}`}>
+                      <div className={`mt-1 rounded-lg border p-2 ${activeTheme.panel}`}>
                         <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Nearby cities</p>
                         <div className="mt-2 space-y-1">
                           {nearbyCityQuickRooms.map((room) => (
@@ -2332,7 +2333,7 @@ function Chat() {
                               key={String(room._id)}
                               type="button"
                               onClick={() => handleOpenRoom(room)}
-                              className={`w-full rounded border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
+                              className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
                               data-quick-access-city={room.name}
                             >
                               <span className="block font-medium">{room.name}</span>
@@ -2344,230 +2345,21 @@ function Chat() {
                         </div>
                       </div>
                     ) : null}
-                    <section className={`rounded border p-1.5 ${activeTheme.panel}`}>
-                      <button
-                        type="button"
-                        onClick={() => setStateChatsOpen((open) => !open)}
-                        className="flex w-full items-center justify-between gap-2 text-left text-xs font-semibold"
-                        aria-expanded={stateChatsOpen}
-                        aria-controls="chat-state-discovery-list"
-                      >
-                        <span>State Chats</span>
-                        <span aria-hidden="true">{stateChatsOpen ? '−' : '+'}</span>
-                      </button>
-                      {stateChatsOpen ? (
-                        <ul id="chat-state-discovery-list" className="mt-2 space-y-1 text-xs">
-                          {managedStateRooms.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
-                          {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
-                        </ul>
-                      ) : null}
-                    </section>
-                    <section className={`rounded border p-1.5 ${activeTheme.panel}`}>
-                      <button
-                        type="button"
-                        onClick={() => setTopicsOpen((open) => !open)}
-                        className="flex w-full items-center justify-between gap-2 text-left text-xs font-semibold"
-                        aria-expanded={topicsOpen}
-                        aria-controls="chat-topic-discovery-list"
-                      >
-                        <span>Topics</span>
-                        <span aria-hidden="true">{topicsOpen ? '−' : '+'}</span>
-                      </button>
-                      {topicsOpen ? (
-                        <ul id="chat-topic-discovery-list" className="mt-2 space-y-1 text-xs">
-                          {managedTopicRooms.length === 0 ? <li className="opacity-75">No topic chats available.</li> : null}
-                          {managedTopicRooms.map((room) => (
-                            <React.Fragment key={String(room._id)}>
-                              {renderManagedRoomBranch(room, 0, { 'data-topic-room': room.name })}
-                            </React.Fragment>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </section>
-                    {profile?.isAdmin ? (
-                      <section className={`rounded border p-2 ${activeTheme.panelGlass}`} data-testid="chat-admin-control-panel">
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Admin control panel</p>
-                            <p className="mt-1 text-xs opacity-75">Add, edit, remove, and reorder state/topic rooms and nested sub-rooms.</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setAdminPanelOpen((open) => !open)}
-                              className={`rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
-                              aria-expanded={adminPanelOpen}
-                              aria-controls="chat-admin-control-panel-body"
-                            >
-                              {adminPanelOpen ? 'Hide controls' : 'Show controls'}
-                            </button>
-                            {editingRoomId ? (
-                              <button
-                                type="button"
-                                onClick={resetAdminRoomForm}
-                                className={`rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
-                              >
-                                Cancel edit
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                        {adminPanelOpen ? (
-                        <div id="chat-admin-control-panel-body">
-                        <form className="mt-2 space-y-2" onSubmit={handleSaveAdminRoom}>
-                          <input
-                            value={adminRoomForm.name}
-                            onChange={(event) => handleAdminRoomFormChange('name', event.target.value)}
-                            className={`w-full rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                            placeholder="Room name"
-                            aria-label="Admin room name"
-                          />
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <select
-                              value={adminRoomForm.discoveryGroup}
-                              onChange={(event) => handleAdminRoomFormChange('discoveryGroup', event.target.value)}
-                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                              aria-label="Admin room list"
-                            >
-                              {ROOM_DISCOVERY_GROUP_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={adminRoomForm.type}
-                              onChange={(event) => handleAdminRoomFormChange('type', event.target.value)}
-                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                              aria-label="Admin room type"
-                            >
-                              {ROOM_DISCOVERY_TYPE_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={adminRoomForm.parentRoomId}
-                              onChange={(event) => handleAdminRoomFormChange('parentRoomId', event.target.value)}
-                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                              aria-label="Admin room parent"
-                            >
-                              <option value="">Top-level room</option>
-                              {roomParentOptions.map((room) => (
-                                <option key={String(room._id)} value={String(room._id)}>
-                                  {`${getRoomDiscoveryGroup(room) === 'states' ? 'State' : 'Topic'} · ${room.name}`}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              value={adminRoomForm.state}
-                              onChange={(event) => handleAdminRoomFormChange('state', event.target.value)}
-                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                              placeholder="State code (optional)"
-                              aria-label="Admin room state"
-                            />
-                            <input
-                              value={adminRoomForm.city}
-                              onChange={(event) => handleAdminRoomFormChange('city', event.target.value)}
-                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                              placeholder="City label (optional)"
-                              aria-label="Admin room city"
-                            />
-                            <input
-                              value={adminRoomForm.county}
-                              onChange={(event) => handleAdminRoomFormChange('county', event.target.value)}
-                              className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                              placeholder="County label (optional)"
-                              aria-label="Admin room county"
-                            />
-                          </div>
-                          <label className="flex items-center gap-2 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={adminRoomForm.defaultLanding}
-                              onChange={(event) => handleAdminRoomFormChange('defaultLanding', event.target.checked)}
-                            />
-                            <span>Use as default room when people open /chat</span>
-                          </label>
-                          <button
-                            type="submit"
-                            className={`w-full rounded border px-3 py-2 text-sm font-semibold ${activeTheme.subtle}`}
-                            disabled={adminRoomSaving}
-                          >
-                            {adminRoomSaving ? 'Saving…' : editingRoomId ? 'Save room changes' : 'Add room'}
-                          </button>
-                        </form>
-                        <div className="mt-3 space-y-3 text-xs">
-                          {[
-                            { title: 'State room order', rooms: managedStateRooms },
-                            { title: 'Topic room order', rooms: managedTopicRooms }
-                          ].map((section) => (
-                            <div key={section.title}>
-                              <p className="font-semibold opacity-80">{section.title}</p>
-                              {section.rooms.length === 0 ? (
-                                <p className="mt-1 opacity-75">No rooms in this list.</p>
-                              ) : (
-                                <ul className="mt-1 space-y-1">
-                                  {section.rooms.map((room) => {
-                                    const roomId = String(room._id);
-                                    const processing = adminProcessingRoomIds.has(roomId);
-                                    return (
-                                      <li key={`admin-${roomId}`} className="rounded border px-2 py-1">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-medium">{room.name}</p>
-                                            <p className="truncate text-[10px] uppercase opacity-70">
-                                              {room.defaultLanding ? 'Default room' : room.type}
-                                            </p>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <button type="button" onClick={() => handleMoveRoom(roomId, 'up')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={processing}>↑</button>
-                                            <button type="button" onClick={() => handleMoveRoom(roomId, 'down')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={processing}>↓</button>
-                                            <button type="button" onClick={() => handleEditRoom(room)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Edit</button>
-                                            <button type="button" onClick={() => handleDeleteRoom(room)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
-                                          </div>
-                                        </div>
-                                        {(childRoomsByParentId[roomId] || []).length > 0 ? (
-                                          <ul className="mt-2 space-y-1 border-l pl-2">
-                                            {(childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder).map((childRoom) => {
-                                              const childId = String(childRoom._id);
-                                              const childProcessing = adminProcessingRoomIds.has(childId);
-                                              return (
-                                                <li key={`admin-child-${childId}`} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
-                                                  <div className="min-w-0">
-                                                    <p className="truncate">{childRoom.name}</p>
-                                                    <p className="truncate text-[10px] uppercase opacity-70">{childRoom.type}</p>
-                                                  </div>
-                                                  <div className="flex items-center gap-1">
-                                                    <button type="button" onClick={() => handleMoveRoom(childId, 'up')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={childProcessing}>↑</button>
-                                                    <button type="button" onClick={() => handleMoveRoom(childId, 'down')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={childProcessing}>↓</button>
-                                                    <button type="button" onClick={() => handleEditRoom(childRoom)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Edit</button>
-                                                    <button type="button" onClick={() => handleDeleteRoom(childRoom)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
-                                                  </div>
-                                                </li>
-                                              );
-                                            })}
-                                          </ul>
-                                        ) : null}
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        </div>
-                        ) : null}
-                      </section>
-                    ) : null}
                   </div>
                 </section>
-                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                  <label className="text-xs font-semibold block">Search all chat rooms</label>
-                  <input
-                    value={roomQuery}
-                    onChange={(event) => setRoomQuery(event.target.value)}
-                    className={`mt-1 w-full rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                    placeholder="Search by room or location..."
-                  />
+
+                {/* ── Find Room ───────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
+                  <h3 className="text-sm font-semibold">Find Room</h3>
+                  <div className="relative mt-2">
+                    <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs opacity-50" aria-hidden="true">🔍</span>
+                    <input
+                      value={roomQuery}
+                      onChange={(event) => setRoomQuery(event.target.value)}
+                      className={`w-full rounded-lg border py-2 pl-8 pr-3 text-sm ${activeTheme.input}`}
+                      placeholder="Search by room or location..."
+                    />
+                  </div>
                   {allChatRoomsLoading ? <p className="mt-2 text-xs opacity-80">Loading rooms...</p> : null}
                   {favoriteRooms.length > 0 ? (
                     <div className="mt-2">
@@ -2636,8 +2428,224 @@ function Chat() {
                     </ul>
                   )}
                 </section>
-                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Zip Rooms</p>
+
+                {/* ── State Rooms ─────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
+                  <button
+                    type="button"
+                    onClick={() => setStateChatsOpen((open) => !open)}
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    aria-expanded={stateChatsOpen}
+                    aria-controls="chat-state-discovery-list"
+                  >
+                    <h3 className="text-sm font-semibold">State Rooms</h3>
+                    <span className="text-xs opacity-70" aria-hidden="true">{stateChatsOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {stateChatsOpen ? (
+                    <ul id="chat-state-discovery-list" className="mt-2 space-y-1 text-xs">
+                      {managedStateRooms.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
+                      {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
+                    </ul>
+                  ) : null}
+                </section>
+
+                {/* ── Topics ──────────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
+                  <button
+                    type="button"
+                    onClick={() => setTopicsOpen((open) => !open)}
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    aria-expanded={topicsOpen}
+                    aria-controls="chat-topic-discovery-list"
+                  >
+                    <h3 className="text-sm font-semibold">Topics</h3>
+                    <span className="text-xs opacity-70" aria-hidden="true">{topicsOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {topicsOpen ? (
+                    <ul id="chat-topic-discovery-list" className="mt-2 space-y-1 text-xs">
+                      {managedTopicRooms.length === 0 ? <li className="opacity-75">No topic chats available.</li> : null}
+                      {managedTopicRooms.map((room) => (
+                        <React.Fragment key={String(room._id)}>
+                          {renderManagedRoomBranch(room, 0, { 'data-topic-room': room.name })}
+                        </React.Fragment>
+                      ))}
+                    </ul>
+                  ) : null}
+                </section>
+
+                {/* ── Admin Panel ─────────────────────────────── */}
+                {profile?.isAdmin ? (
+                  <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`} data-testid="chat-admin-control-panel">
+                    <button
+                      type="button"
+                      onClick={() => setAdminPanelOpen((open) => !open)}
+                      className="flex w-full items-center justify-between gap-2 text-left"
+                      aria-expanded={adminPanelOpen}
+                      aria-controls="chat-admin-control-panel-body"
+                    >
+                      <h3 className="text-sm font-semibold">Admin Panel</h3>
+                      <span className="text-xs opacity-70" aria-hidden="true">{adminPanelOpen ? '▾' : '▸'}</span>
+                    </button>
+                    <p className="mt-1 text-xs opacity-75">Add, edit, remove, and reorder state/topic rooms and nested sub-rooms.</p>
+                    {editingRoomId ? (
+                      <button
+                        type="button"
+                        onClick={resetAdminRoomForm}
+                        className={`mt-1 rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
+                      >
+                        Cancel edit
+                      </button>
+                    ) : null}
+                    {adminPanelOpen ? (
+                    <div id="chat-admin-control-panel-body">
+                    <form className="mt-2 space-y-2" onSubmit={handleSaveAdminRoom}>
+                      <input
+                        value={adminRoomForm.name}
+                        onChange={(event) => handleAdminRoomFormChange('name', event.target.value)}
+                        className={`w-full rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                        placeholder="Room name"
+                        aria-label="Admin room name"
+                      />
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <select
+                          value={adminRoomForm.discoveryGroup}
+                          onChange={(event) => handleAdminRoomFormChange('discoveryGroup', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                          aria-label="Admin room list"
+                        >
+                          {ROOM_DISCOVERY_GROUP_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={adminRoomForm.type}
+                          onChange={(event) => handleAdminRoomFormChange('type', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                          aria-label="Admin room type"
+                        >
+                          {ROOM_DISCOVERY_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={adminRoomForm.parentRoomId}
+                          onChange={(event) => handleAdminRoomFormChange('parentRoomId', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                          aria-label="Admin room parent"
+                        >
+                          <option value="">Top-level room</option>
+                          {roomParentOptions.map((room) => (
+                            <option key={String(room._id)} value={String(room._id)}>
+                              {`${getRoomDiscoveryGroup(room) === 'states' ? 'State' : 'Topic'} · ${room.name}`}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={adminRoomForm.state}
+                          onChange={(event) => handleAdminRoomFormChange('state', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                          placeholder="State code (optional)"
+                          aria-label="Admin room state"
+                        />
+                        <input
+                          value={adminRoomForm.city}
+                          onChange={(event) => handleAdminRoomFormChange('city', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                          placeholder="City label (optional)"
+                          aria-label="Admin room city"
+                        />
+                        <input
+                          value={adminRoomForm.county}
+                          onChange={(event) => handleAdminRoomFormChange('county', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
+                          placeholder="County label (optional)"
+                          aria-label="Admin room county"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={adminRoomForm.defaultLanding}
+                          onChange={(event) => handleAdminRoomFormChange('defaultLanding', event.target.checked)}
+                        />
+                        <span>Use as default room when people open /chat</span>
+                      </label>
+                      <button
+                        type="submit"
+                        className={`w-full rounded border px-3 py-2 text-sm font-semibold ${activeTheme.subtle}`}
+                        disabled={adminRoomSaving}
+                      >
+                        {adminRoomSaving ? 'Saving…' : editingRoomId ? 'Save room changes' : 'Add room'}
+                      </button>
+                    </form>
+                    <div className="mt-3 space-y-3 text-xs">
+                      {[
+                        { title: 'State room order', rooms: managedStateRooms },
+                        { title: 'Topic room order', rooms: managedTopicRooms }
+                      ].map((section) => (
+                        <div key={section.title}>
+                          <p className="font-semibold opacity-80">{section.title}</p>
+                          {section.rooms.length === 0 ? (
+                            <p className="mt-1 opacity-75">No rooms in this list.</p>
+                          ) : (
+                            <ul className="mt-1 space-y-1">
+                              {section.rooms.map((room) => {
+                                const roomId = String(room._id);
+                                const processing = adminProcessingRoomIds.has(roomId);
+                                return (
+                                  <li key={`admin-${roomId}`} className="rounded border px-2 py-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="truncate font-medium">{room.name}</p>
+                                        <p className="truncate text-[10px] uppercase opacity-70">
+                                          {room.defaultLanding ? 'Default room' : room.type}
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <button type="button" onClick={() => handleMoveRoom(roomId, 'up')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={processing}>↑</button>
+                                        <button type="button" onClick={() => handleMoveRoom(roomId, 'down')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={processing}>↓</button>
+                                        <button type="button" onClick={() => handleEditRoom(room)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Edit</button>
+                                        <button type="button" onClick={() => handleDeleteRoom(room)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
+                                      </div>
+                                    </div>
+                                    {(childRoomsByParentId[roomId] || []).length > 0 ? (
+                                      <ul className="mt-2 space-y-1 border-l pl-2">
+                                        {(childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder).map((childRoom) => {
+                                          const childId = String(childRoom._id);
+                                          const childProcessing = adminProcessingRoomIds.has(childId);
+                                          return (
+                                            <li key={`admin-child-${childId}`} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
+                                              <div className="min-w-0">
+                                                <p className="truncate">{childRoom.name}</p>
+                                                <p className="truncate text-[10px] uppercase opacity-70">{childRoom.type}</p>
+                                              </div>
+                                              <div className="flex items-center gap-1">
+                                                <button type="button" onClick={() => handleMoveRoom(childId, 'up')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={childProcessing}>↑</button>
+                                                <button type="button" onClick={() => handleMoveRoom(childId, 'down')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={childProcessing}>↓</button>
+                                                <button type="button" onClick={() => handleEditRoom(childRoom)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Edit</button>
+                                                <button type="button" onClick={() => handleDeleteRoom(childRoom)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
+                                              </div>
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    ) : null}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    </div>
+                    ) : null}
+                  </section>
+                ) : null}
+
+                {/* ── Zip Rooms ───────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
+                  <h3 className="text-sm font-semibold">Zip Rooms</h3>
                   {conversationList.length === 0 ? (
                     <p className="mt-2 text-xs opacity-80">No conversations available here yet.</p>
                   ) : (

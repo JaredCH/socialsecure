@@ -488,7 +488,7 @@ describe('Chat zip room indicator', () => {
     expect(container.querySelectorAll('[data-topic-room]')).toHaveLength(0);
 
     const stateChatsToggle = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('State Chats'));
+      .find((button) => button.textContent.includes('State Rooms'));
     expect(stateChatsToggle).not.toBeNull();
 
     await act(async () => {
@@ -562,7 +562,7 @@ describe('Chat zip room indicator', () => {
 
     // Expand state chats
     const stateChatsToggle = Array.from(container.querySelectorAll('button'))
-      .find((btn) => btn.textContent.includes('State Chats'));
+      .find((btn) => btn.textContent.includes('State Rooms'));
     await act(async () => {
       stateChatsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -658,7 +658,7 @@ describe('Chat zip room indicator', () => {
     expect(container.querySelector('[data-testid="chat-admin-control-panel"]')).not.toBeNull();
     expect(container.querySelector('input[aria-label="Admin room name"]')).toBeNull();
 
-    const toggleAdminControls = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Show controls');
+    const toggleAdminControls = Array.from(container.querySelectorAll('button')).find((button) => button.textContent.includes('Admin Panel'));
     expect(toggleAdminControls).not.toBeUndefined();
 
     await act(async () => {
