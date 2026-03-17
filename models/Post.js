@@ -227,9 +227,9 @@ const postSchema = new mongoose.Schema({
     type: String,
     validate: {
       validator: function(v) {
-        return /^https?:\/\/.+/.test(v);
+        return /^(https?:\/\/.+|\/uploads\/\S+)$/i.test(v);
       },
-      message: 'Media URL must be a valid HTTP/HTTPS URL'
+      message: 'Media URL must be a valid HTTP/HTTPS URL or server upload path'
     }
   }],
   likes: [{
