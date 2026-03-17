@@ -128,13 +128,17 @@ async function resolveFeedLocationForUser(userId, overrideLocation = null) {
     return normalizeLocationInput(overrideLocation);
   }
 
-  const prefs = await NewsPreferences.findOne({ user: userId }).lean();
+  // Single parallel fetch — both queries are independent
+  const [prefs, user] = await Promise.all([
+    NewsPreferences.findOne({ user: userId }).lean(),
+    User.findById(userId).select('city state zipCode country').lean()
+  ]);
+
   const primaryLocation = (prefs?.locations || []).find((location) => location.isPrimary) || (prefs?.locations || [])[0] || null;
   if (primaryLocation) {
     return resolvePrimaryLocation(primaryLocation, null);
   }
 
-  const user = await User.findById(userId).select('city state zipCode country').lean();
   return resolvePrimaryLocation(null, user);
 }
 

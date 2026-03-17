@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const LRU = require('lru-cache');
 const Parser = require('rss-parser');
 const LocationNewsCache = require('../models/LocationNewsCache');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
@@ -10,7 +11,10 @@ const { deduplicateArticles } = require('./articleDeduplicator');
 const { extractRssImageUrl } = require('./newsRssImage');
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
-const parser = new Parser({ timeout: 12000, headers: { 'User-Agent': 'SocialSecure-NewsCache/1.0' } });
+const parser = new Parser({ timeout: 5000, headers: { 'User-Agent': 'SocialSecure-NewsCache/1.0' } });
+
+// In-memory LRU cache for hot locations — avoids MongoDB round-trip on every hit
+const memoryCache = new LRU({ max: 200, maxAge: 5 * 60 * 1000 });
 
 function createArticleId(article = {}) {
   return crypto
@@ -118,21 +122,80 @@ async function updateLocationCache(locationKey, normalized, allArticles, fetchEr
   );
 }
 
+// Background refresh: fetches RSS, updates DB + memory cache. Does NOT throw.
+async function refreshLocationInBackground(locationKey, normalized) {
+  try {
+    const urls = buildFeedUrls(normalized);
+    const results = await Promise.allSettled([
+      fetchAndParseRSS(urls.local, 'local'),
+      fetchAndParseRSS(urls.state, 'state'),
+      fetchAndParseRSS(urls.national, 'national')
+    ]);
+
+    const fetchErrors = [];
+    const fulfilledArticles = [];
+    ['local', 'state', 'national'].forEach((tier, index) => {
+      const result = results[index];
+      if (result.status === 'fulfilled') {
+        fulfilledArticles.push(...result.value);
+        return;
+      }
+      fetchErrors.push({ tier, error: String(result.reason?.message || result.reason || 'Unknown fetch error'), at: new Date() });
+    });
+
+    const allArticles = deduplicateArticles(fulfilledArticles);
+    if (allArticles.length > 0) {
+      await updateLocationCache(locationKey, normalized, allArticles, fetchErrors);
+      const hydrated = hydrateArticles(allArticles, locationKey);
+      const freshResult = { articles: hydrated, cacheHit: false, locationKey, normalizedLocation: normalized };
+      memoryCache.set(locationKey, freshResult);
+      await logCacheEvent('cache_background_refresh', { locationKey, cacheHit: false, articleCount: hydrated.length, fetchErrors });
+    }
+  } catch (err) {
+    // Background refresh is best-effort; do not propagate errors.
+  }
+}
+
 async function getArticlesForLocation(locationKey, options = {}) {
   const now = Date.now();
-  const cached = await LocationNewsCache.findOne({ locationKey }).lean();
   const forceRefresh = options.forceRefresh === true;
 
-  if (
-    cached?.lastFetchedAt &&
-    !forceRefresh &&
-    (now - new Date(cached.lastFetchedAt).getTime()) < CACHE_TTL_MS
-  ) {
-    const hydrated = hydrateArticles(cached.articles || [], locationKey);
-    await logCacheEvent('cache_hit', { locationKey, cacheHit: true, articleCount: hydrated.length });
-    return { articles: hydrated, cacheHit: true, locationKey, normalizedLocation: parseLocationKey(locationKey) };
+  // 1. Check in-memory LRU cache first (avoids DB round-trip entirely)
+  const memCached = memoryCache.get(locationKey);
+  if (memCached && !forceRefresh) {
+    return memCached;
   }
 
+  // 2. Check MongoDB cache
+  const cached = await LocationNewsCache.findOne({ locationKey }).lean();
+  const cacheAge = cached?.lastFetchedAt ? (now - new Date(cached.lastFetchedAt).getTime()) : Infinity;
+  const isFresh = cacheAge < CACHE_TTL_MS;
+
+  // 3. Fresh cache — return immediately, populate memory cache
+  if (cached?.lastFetchedAt && !forceRefresh && isFresh) {
+    const hydrated = hydrateArticles(cached.articles || [], locationKey);
+    await logCacheEvent('cache_hit', { locationKey, cacheHit: true, articleCount: hydrated.length });
+    const result = { articles: hydrated, cacheHit: true, locationKey, normalizedLocation: parseLocationKey(locationKey) };
+    memoryCache.set(locationKey, result);
+    return result;
+  }
+
+  // 4. Stale cache — return stale data immediately, refresh in background
+  if (cached?.articles?.length && !forceRefresh) {
+    const hydrated = hydrateArticles(cached.articles, locationKey);
+    await logCacheEvent('cache_stale_serve', { locationKey, cacheHit: true, articleCount: hydrated.length, stale: true });
+    const staleResult = { articles: hydrated, cacheHit: true, stale: true, locationKey, normalizedLocation: parseLocationKey(locationKey) };
+    memoryCache.set(locationKey, staleResult);
+
+    // Kick off background refresh (don't await)
+    const normalized = options.normalizedLocation || parseLocationKey(locationKey);
+    if (normalized) {
+      refreshLocationInBackground(locationKey, normalized);
+    }
+    return staleResult;
+  }
+
+  // 5. No cache at all (or forceRefresh) — blocking fetch from RSS
   const normalized = options.normalizedLocation || parseLocationKey(locationKey);
   if (!normalized) {
     return { articles: [], cacheHit: false, locationKey, normalizedLocation: null };
@@ -162,7 +225,9 @@ async function getArticlesForLocation(locationKey, options = {}) {
     await updateLocationCache(locationKey, normalized, allArticles, fetchErrors);
     const hydrated = hydrateArticles(allArticles, locationKey);
     await logCacheEvent('cache_refresh', { locationKey, cacheHit: false, articleCount: hydrated.length, fetchErrors });
-    return { articles: hydrated, cacheHit: false, locationKey, normalizedLocation: normalized };
+    const freshResult = { articles: hydrated, cacheHit: false, locationKey, normalizedLocation: normalized };
+    memoryCache.set(locationKey, freshResult);
+    return freshResult;
   }
 
   if (cached?.articles?.length) {
@@ -237,5 +302,6 @@ module.exports = {
   getArticlesForLocation,
   getCacheMetrics,
   hydrateArticles,
+  memoryCache,
   searchCachedArticles
 };

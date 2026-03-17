@@ -19,7 +19,7 @@ const IMPRESSION_FLUSH_INTERVAL = 5000; // ms
 const IMPRESSION_FLUSH_COUNT    = 10;   // flush when buffer reaches N
 const REGISTRATION_PREFETCH_STATUS_KEY = 'registrationNewsPrefetchStatus';
 const EMPTY_FEED_RETRY_DELAY_MS = 4000;
-const EMPTY_FEED_RETRY_LIMIT = 4;
+const EMPTY_FEED_RETRY_LIMIT = 2;       // Reduced: 2 retries max to avoid long skeleton waits
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
 function SkeletonRow() {
@@ -54,6 +54,7 @@ export default function AlgorithmicFeed({
   activeDate,
   searchQuery,
   onArticle,
+  prefetchedFeed,
 }) {
   const [articles, setArticles]             = useState([]);
   const [loading, setLoading]               = useState(true);
@@ -67,11 +68,20 @@ export default function AlgorithmicFeed({
   const impressionBuffer = useRef([]);
   const flushTimerRef    = useRef(null);
   const retryTimerRef    = useRef(null);
+  const prefetchConsumed = useRef(false);
 
   const hasRegistrationPrefetchSeed = useCallback(() => {
     if (typeof window === 'undefined') return false;
     try {
-      return Boolean(window.sessionStorage.getItem(REGISTRATION_PREFETCH_STATUS_KEY));
+      const raw = window.sessionStorage.getItem(REGISTRATION_PREFETCH_STATUS_KEY);
+      if (!raw) return false;
+      // Only honor the seed for genuinely new registrations (set within 2 minutes)
+      const parsed = JSON.parse(raw);
+      if (parsed?.timestamp && (Date.now() - parsed.timestamp) > 2 * 60 * 1000) {
+        window.sessionStorage.removeItem(REGISTRATION_PREFETCH_STATUS_KEY);
+        return false;
+      }
+      return true;
     } catch {
       return false;
     }
@@ -142,10 +152,25 @@ export default function AlgorithmicFeed({
       setPage(1);
 
       try {
-        const res = await newsAPI.getFeed(buildFeedParams(1));
-        if (cancelled) return;
+        // Use prefetched data on first mount if no filters are active
+        let data;
+        if (
+          !prefetchConsumed.current &&
+          prefetchedFeed &&
+          attempt === 0 &&
+          !activeCategory &&
+          !activeRegion &&
+          activeDate === 'all'
+        ) {
+          data = prefetchedFeed;
+          prefetchConsumed.current = true;
+        } else {
+          const res = await newsAPI.getFeed(buildFeedParams(1));
+          if (cancelled) return;
+          data = res.data || {};
+        }
 
-        const { sections, feed, articles: pageArticles, triggeredIngest } = res.data || {};
+        const { sections, feed, articles: pageArticles, triggeredIngest } = data;
         const initialArticles = Array.isArray(pageArticles) && pageArticles.length > 0 ? pageArticles : (feed || []);
         const ordered = buildAlgorithmicSequence(sections || {}, initialArticles, categories);
         setArticles(ordered);
@@ -185,7 +210,7 @@ export default function AlgorithmicFeed({
       cancelled = true;
       clearTimeout(retryTimerRef.current);
     };
-}, [activeCategory, activeRegion, activeDate, buildFeedParams, categories, clearRegistrationPrefetchSeed, hasRegistrationPrefetchSeed]);
+}, [activeCategory, activeRegion, activeDate, buildFeedParams, categories, clearRegistrationPrefetchSeed, hasRegistrationPrefetchSeed, prefetchedFeed]);
 
   // ── Infinite scroll sentinel ─────────────────────────────────────────────────
   const sentinelRef = useRef(null);
