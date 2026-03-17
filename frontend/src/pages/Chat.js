@@ -3002,7 +3002,7 @@ function Chat() {
                     {getConversationLabel(activeConversation)} &middot; {roomUsers.length} {roomUsers.length === 1 ? 'user' : 'users'}
                   </p>
                 ) : (
-                  <p className="mt-1 text-[11px] opacity-80">Select a room to see who&rsquo;s here.</p>
+                  <p className="mt-1 text-[11px] opacity-80">Select a room to see who's here.</p>
                 )}
               </div>
 
