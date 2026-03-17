@@ -108,6 +108,25 @@ describe('news cache-backed routes', () => {
     expect(getArticlesForLocation).toHaveBeenCalledWith('san_marcos_tx_us', expect.objectContaining({ normalizedLocation: expect.any(Object) }));
   });
 
+  it('filters cache-backed feed by category case-insensitively', async () => {
+    getArticlesForLocation.mockResolvedValueOnce({
+      cacheHit: true,
+      locationKey: 'san_marcos_tx_us',
+      articles: [
+        { _id: '1', title: 'Health update', link: 'https://example.com/health', url: 'https://example.com/health', tier: 'local', category: 'Health', locationKey: 'san_marcos_tx_us' },
+        { _id: '2', title: 'Sports update', link: 'https://example.com/sports', url: 'https://example.com/sports', tier: 'state', category: 'sports', locationKey: 'san_marcos_tx_us' }
+      ]
+    });
+
+    const response = await request(buildApp())
+      .get('/api/news/feed?category=health')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.articles).toHaveLength(1);
+    expect(response.body.articles[0]).toMatchObject({ title: 'Health update', category: 'Health' });
+  });
+
   it('tracks impressions using article links and location keys', async () => {
     const response = await request(buildApp())
       .post('/api/news/impressions')

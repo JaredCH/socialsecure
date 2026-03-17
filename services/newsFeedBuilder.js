@@ -5,11 +5,20 @@ const User = require('../models/User');
 const { getArticlesForLocation } = require('./locationCacheService');
 const { resolvePrimaryLocation } = require('./locationNormalizer');
 
+function normalizeCategoryKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function filterArticles(articles = [], { tier = null, category = null, maxAgeHours = null } = {}) {
   const now = Date.now();
+  const normalizedCategory = normalizeCategoryKey(category);
   return articles.filter((article) => {
     if (tier && article.tier !== tier) return false;
-    if (category && category !== 'all' && article.category && article.category !== category) return false;
+    if (
+      normalizedCategory &&
+      normalizedCategory !== 'all' &&
+      normalizeCategoryKey(article.category || 'general') !== normalizedCategory
+    ) return false;
     if (maxAgeHours) {
       const publishedAt = article.publishedAt ? new Date(article.publishedAt).getTime() : 0;
       if (!publishedAt || (now - publishedAt) > (Number(maxAgeHours) * 60 * 60 * 1000)) return false;

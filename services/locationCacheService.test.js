@@ -43,7 +43,7 @@ describe('locationCacheService', () => {
     LocationNewsCache.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
     LocationNewsCache.findOneAndUpdate.mockResolvedValue({});
     mockParseURL
-      .mockResolvedValueOnce({ items: [{ title: 'Fire in San Marcos - KXAN', link: 'https://example.com/local', pubDate: '2026-03-17T10:00:00.000Z' }] })
+      .mockResolvedValueOnce({ items: [{ title: 'Fire in San Marcos - KXAN', link: 'https://example.com/local', pubDate: '2026-03-17T10:00:00.000Z', categories: ['Health'] }] })
       .mockResolvedValueOnce({ items: [{ title: 'Fire in San Marcos - KVUE', link: 'https://example.com/state', pubDate: '2026-03-17T09:00:00.000Z' }] })
       .mockResolvedValueOnce({ items: [{ title: 'National update', link: 'https://example.com/national', pubDate: '2026-03-17T08:00:00.000Z' }] });
 
@@ -56,6 +56,7 @@ describe('locationCacheService', () => {
       'Fire in San Marcos - KXAN',
       'National update'
     ]);
+    expect(result.articles.find((article) => article.title === 'Fire in San Marcos - KXAN')?.category).toBe('health');
   });
 
   it('searches across hydrated cached articles', async () => {

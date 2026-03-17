@@ -12,6 +12,34 @@ const { extractRssImageUrl } = require('./newsRssImage');
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const parser = new Parser({ timeout: 5000, headers: { 'User-Agent': 'SocialSecure-NewsCache/1.0' } });
+const CATEGORY_ALIASES = new Map([
+  ['health', 'health'],
+  ['sports', 'sports'],
+  ['sport', 'sports'],
+  ['business', 'business'],
+  ['technology', 'technology'],
+  ['tech', 'technology'],
+  ['science', 'science'],
+  ['entertainment', 'entertainment'],
+  ['politics', 'politics'],
+  ['politic', 'politics'],
+  ['finance', 'finance'],
+  ['financial', 'finance'],
+  ['gaming', 'gaming'],
+  ['ai', 'ai'],
+  ['artificial intelligence', 'ai'],
+  ['world', 'world'],
+  ['war', 'war'],
+  ['space', 'space'],
+  ['nature', 'nature'],
+  ['ocean', 'ocean'],
+  ['programming', 'programming'],
+  ['marijuana', 'marijuana'],
+  ['cannabis', 'marijuana'],
+  ['conspiracy', 'conspiracy'],
+  ['breaking', 'breaking'],
+  ['general', 'general']
+]);
 
 // In-memory LRU cache for hot locations — avoids MongoDB round-trip on every hit
 const memoryCache = new LRU({ max: 200, maxAge: 5 * 60 * 1000 });
@@ -40,6 +68,28 @@ function mapTierToLocality(tier) {
   return 'global';
 }
 
+function normalizeCategory(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (CATEGORY_ALIASES.has(normalized)) return CATEGORY_ALIASES.get(normalized);
+  for (const [alias, category] of CATEGORY_ALIASES.entries()) {
+    if (normalized.includes(alias)) return category;
+  }
+  return null;
+}
+
+function inferArticleCategory(article = {}) {
+  const directCategory = normalizeCategory(article.category);
+  if (directCategory) return directCategory;
+
+  const categoryList = Array.isArray(article.categories) ? article.categories : [];
+  for (const categoryLabel of categoryList) {
+    const inferred = normalizeCategory(categoryLabel);
+    if (inferred) return inferred;
+  }
+  return 'general';
+}
+
 function hydrateArticles(articles = [], locationKey) {
   const parsedLocation = parseLocationKey(locationKey) || {};
   return articles.map((article) => ({
@@ -48,7 +98,7 @@ function hydrateArticles(articles = [], locationKey) {
     url: article.link,
     locationKey,
     localityLevel: mapTierToLocality(article.tier),
-    category: article.category || 'general',
+    category: inferArticleCategory(article),
     locationTags: {
       city: parsedLocation.city ? parsedLocation.city.replace(/_/g, ' ') : null,
       state: parsedLocation.state ? parsedLocation.state.toUpperCase() : null,
@@ -91,7 +141,8 @@ function normalizeCachedArticle(item = {}, tier, feed) {
     publishedAt: publishedAt && !Number.isNaN(publishedAt.getTime()) ? publishedAt : null,
     tier,
     imageUrl: extractRssImageUrl(item),
-    description: String(item.contentSnippet || item.summary || '').trim().slice(0, 280)
+    description: String(item.contentSnippet || item.summary || '').trim().slice(0, 280),
+    categories: Array.isArray(item.categories) ? item.categories : []
   };
 }
 
