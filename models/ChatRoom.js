@@ -495,7 +495,9 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
 };
 
 chatRoomSchema.statics.reconcileDefaultDiscoveryRoomDuplicates = async function() {
-  const candidateRooms = await this.find(buildDuplicateDiscoveryRoomQuery());
+  const candidateRooms = await this.find(buildDuplicateDiscoveryRoomQuery())
+    .select('_id type city state country stableKey members messageCount lastActivity')
+    .lean();
   if (!Array.isArray(candidateRooms) || candidateRooms.length === 0) {
     return;
   }

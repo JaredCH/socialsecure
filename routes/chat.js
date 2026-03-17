@@ -2500,7 +2500,10 @@ router.post('/rooms/sync-location', unifiedChatLimiter, authenticateToken, async
   try {
     const userId = req.user.userId;
     
-    const user = await User.findById(userId);
+    const user = await resolveLeanDoc(
+      User.findById(userId)
+        .select('_id city state country county zipCode location')
+    );
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }

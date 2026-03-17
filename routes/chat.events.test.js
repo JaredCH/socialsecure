@@ -514,11 +514,18 @@ describe('Chat event room discovery routes', () => {
 
   it('returns a no-op success for sync-location when coordinates are unavailable', async () => {
     const onboardingSelect = jest.fn().mockResolvedValue({ _id: 'user-1', onboardingStatus: 'completed' });
+    const syncUserSelect = jest.fn(function select() {
+      return this;
+    });
+    const syncUserLean = jest.fn().mockResolvedValue({
+      _id: 'user-1',
+      location: { rejected: true, message: 'UNSUPPORTED_OS' }
+    });
     User.findById
       .mockReturnValueOnce({ select: onboardingSelect })
-      .mockResolvedValueOnce({
-        _id: 'user-1',
-        location: { rejected: true, message: 'UNSUPPORTED_OS' }
+      .mockReturnValueOnce({
+        select: syncUserSelect,
+        lean: syncUserLean
       });
     ChatRoom.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
@@ -540,5 +547,48 @@ describe('Chat event room discovery routes', () => {
     });
     expect(ChatRoom.ensureDefaultStateRooms).not.toHaveBeenCalled();
     expect(ChatRoom.syncUserLocationRooms).not.toHaveBeenCalled();
+  });
+
+  it('uses lean user loading for sync-location to avoid cast-style failures on legacy location payloads', async () => {
+    const onboardingSelect = jest.fn().mockResolvedValue({ _id: 'user-1', onboardingStatus: 'completed' });
+    const syncUserQuery = {
+      select: jest.fn(function select() {
+        return this;
+      }),
+      lean: jest.fn().mockResolvedValue({
+        _id: 'user-1',
+        city: 'Boston',
+        state: 'MA',
+        country: 'US',
+        county: 'Suffolk County',
+        zipCode: '02115',
+        location: { rejected: true, message: 'UNSUPPORTED_OS' }
+      }),
+      // If route code accidentally awaits the raw query instead of using lean(), this should fail.
+      then: (resolve, reject) => reject(new Error('Cast to embedded failed for value "{ rejected: true }" at path "location"'))
+    };
+    User.findById
+      .mockReturnValueOnce({ select: onboardingSelect })
+      .mockReturnValueOnce(syncUserQuery);
+    ChatRoom.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([])
+      })
+    });
+
+    const app = buildApp();
+    const response = await request(app)
+      .post('/api/chat/rooms/sync-location')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(syncUserQuery.select).toHaveBeenCalledWith('_id city state country county zipCode location');
+    expect(syncUserQuery.lean).toHaveBeenCalledTimes(1);
+    expect(response.body).toMatchObject({
+      success: true,
+      message: 'Location unavailable. Skipped location room sync.',
+      createdRooms: [],
+      allRooms: []
+    });
   });
 });
