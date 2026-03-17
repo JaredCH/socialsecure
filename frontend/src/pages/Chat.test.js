@@ -1238,7 +1238,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const userRow = Array.from(container.querySelectorAll('li')).find((node) => node.textContent.includes('@buddy'));
+    const userRow = Array.from(container.querySelectorAll('li')).find((node) => node.textContent.includes('buddy'));
     expect(userRow).not.toBeUndefined();
 
     await act(async () => {
