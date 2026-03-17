@@ -5096,7 +5096,7 @@ const Social = () => {
                     onClick={() => handleHeroTabChange(tab.id)}
                     className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${isDisabled ? 'opacity-40 hover:opacity-60' : ''} ${activeHeroTab === tab.id && !isDisabled ? 'text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
                     style={activeHeroTab === tab.id && !isDisabled ? { background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` } : undefined}
-                    title={isDisabled ? 'Click to enable and setup!' : tab.label}
+                    title={isDisabled ? 'Click to enable and setup!' : undefined}
                   >
                     {tab.label}
                   </button>
