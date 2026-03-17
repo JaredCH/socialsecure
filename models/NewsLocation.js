@@ -7,127 +7,21 @@ const newsLocationSchema = new mongoose.Schema({
     unique: true,
     index: true
   },
-  canonicalName: {
+  city: { type: String, default: null },
+  state: { type: String, default: null },
+  stateFull: { type: String, default: null },
+  country: { type: String, default: 'us' },
+  lastAccessedAt: { type: Date, default: null, index: true },
+  accessCount: { type: Number, default: 0 },
+  cacheStatus: {
     type: String,
-    required: true,
-    trim: true
-  },
-  canonicalCity: {
-    type: String,
-    default: null
-  },
-  canonicalState: {
-    type: String,
-    default: null
-  },
-  canonicalStateCode: {
-    type: String,
-    default: null
-  },
-  canonicalCountry: {
-    type: String,
-    default: 'United States'
-  },
-  canonicalCountryCode: {
-    type: String,
-    default: 'US'
-  },
-  canonicalCounty: {
-    type: String,
-    default: null
-  },
-  canonicalZipCode: {
-    type: String,
-    default: null
-  },
-  coordinates: {
-    lat: { type: Number, default: null },
-    lon: { type: Number, default: null }
-  },
-  geoIdentifier: {
-    type: String,
-    default: null
-  },
-  aliases: [{
-    type: String,
-    trim: true
-  }],
-  userIds: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  userCount: {
-    type: Number,
-    default: 0,
-    index: true
-  },
-  lastPolledAt: {
-    type: Date,
-    default: null,
-    index: true
-  },
-  nextPollAt: {
-    type: Date,
-    default: null,
-    index: true
-  },
-  lastPollDurationMs: {
-    type: Number,
-    default: null
-  },
-  lastPollStatus: {
-    type: String,
-    enum: ['idle', 'success', 'error'],
-    default: 'idle'
-  },
-  lastPollError: {
-    type: String,
-    default: null
-  },
-  lastResultArticleCount: {
-    type: Number,
-    default: 0
-  },
-  lastResultDuplicateCount: {
-    type: Number,
-    default: 0
-  },
-  totalPollCount: {
-    type: Number,
-    default: 0
-  },
-  totalFailureCount: {
-    type: Number,
-    default: 0
-  },
-  consecutiveFailureCount: {
-    type: Number,
-    default: 0
-  },
-  onDemandRequestedAt: {
-    type: Date,
-    default: null,
-    index: true
-  },
-  onDemandLastTriggeredAt: {
-    type: Date,
-    default: null
-  },
-  onDemandStatus: {
-    type: String,
-    enum: ['none', 'queued', 'running', 'success', 'error'],
-    default: 'none'
-  },
-  isActive: {
-    type: Boolean,
-    default: true,
-    index: true
+    enum: ['warm', 'stale', 'empty'],
+    default: 'empty'
   }
 }, {
   timestamps: true
 });
 
-newsLocationSchema.index({ nextPollAt: 1, isActive: 1 });
-newsLocationSchema.index({ onDemandRequestedAt: 1, onDemandStatus: 1, isActive: 1 });
+newsLocationSchema.index({ lastAccessedAt: -1, cacheStatus: 1 });
 
-module.exports = mongoose.model('NewsLocation', newsLocationSchema);
+module.exports = mongoose.models.NewsLocation || mongoose.model('NewsLocation', newsLocationSchema);

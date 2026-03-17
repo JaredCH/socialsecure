@@ -35,7 +35,7 @@ export default function ArticleRow({ article, onArticle, onScrollPast, onClick }
       ([entry]) => {
         if (entry.intersectionRatio >= 0.7 && !firedRef.current) {
           firedRef.current = true;
-          onScrollPast(article._id);
+          onScrollPast(article);
         }
       },
       { threshold: 0.7 }
@@ -45,7 +45,7 @@ export default function ArticleRow({ article, onArticle, onScrollPast, onClick }
   }, [article._id]);
 
   const handleClick = () => {
-    onClick?.(article._id);
+    onClick?.(article);
     onArticle?.(article);
   };
 

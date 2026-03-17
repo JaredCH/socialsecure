@@ -26,6 +26,7 @@ const User = require('../models/User');
 const Article = require('../models/Article');
 const ArticleImpression = require('../models/ArticleImpression');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
+const LocationNewsCache = require('../models/LocationNewsCache');
 
 // ---------------------------------------------------------------------------
 // Auth middleware (mirrors the pattern used across all route files)
@@ -42,8 +43,7 @@ const authenticateToken = (req, res, next) => {
 };
 const PROMOTED_THRESHOLD = parseInt(process.env.NEWS_VIRAL_PROMOTED_THRESHOLD || '65', 10);
 
-const { buildFeed } = require('../services/newsFeedBuilder');
-const { triggerLocationIngest, ingestLocalNews, ingestAllKnownLocations } = require('../services/newsIngestion.local');
+const { triggerLocationIngest } = require('../services/newsIngestion.local');
 const { ingestAllCategories } = require('../services/newsIngestion.categories');
 const { ingestAllFollowedTeams } = require('../services/newsIngestion.sports');
 const { getTeamSchedules, getLeagueStatusMap, getAllLeagueStatuses } = require('../services/sportsScheduleIngestion');
@@ -52,6 +52,11 @@ const { ingestAllMonitoredSubreddits } = require('../services/newsIngestion.soci
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
 const { canonicalizeStateCode, getLocationTaxonomyPayload } = require('../utils/newsLocationTaxonomy');
 const { resolveZipLocation, resolveZipLocationByCityState } = require('../services/zipLocationIndex');
+const { buildFeed } = require('../services/newsFeedBuilder');
+const { getArticlesForLocation, getCacheMetrics, searchCachedArticles } = require('../services/locationCacheService');
+const { normalizeLocationInput, resolvePrimaryLocation } = require('../services/locationNormalizer');
+const { REFRESH_INTERVAL_MS, getCacheSchedulerState, refreshAllCachedLocations, startCacheRefreshScheduler } = require('../services/cacheRefreshWorker');
+const { preloadCommonLocations } = require('../services/locationPreloader');
 
 // ---------------------------------------------------------------------------
 // Weather constants
@@ -103,6 +108,90 @@ const getOpenMeteoWeatherDescriptor = (code) =>
 
 function normalizeUSState(value) {
   return canonicalizeStateCode(value);
+}
+
+function filterCachedArticles(articles = [], { tier = null, category = null, maxAgeHours = null } = {}) {
+  const now = Date.now();
+  return articles.filter((article) => {
+    if (tier && article.tier !== tier) return false;
+    if (category && category !== 'all' && article.category && article.category !== category) return false;
+    if (maxAgeHours) {
+      const publishedAt = article.publishedAt ? new Date(article.publishedAt).getTime() : 0;
+      if (!publishedAt || (now - publishedAt) > (Number(maxAgeHours) * 60 * 60 * 1000)) return false;
+    }
+    return true;
+  });
+}
+
+async function resolveFeedLocationForUser(userId, overrideLocation = null) {
+  if (overrideLocation && (overrideLocation.city || overrideLocation.state || overrideLocation.zipCode)) {
+    return normalizeLocationInput(overrideLocation);
+  }
+
+  const prefs = await NewsPreferences.findOne({ user: userId }).lean();
+  const primaryLocation = (prefs?.locations || []).find((location) => location.isPrimary) || (prefs?.locations || [])[0] || null;
+  if (primaryLocation) {
+    return resolvePrimaryLocation(primaryLocation, null);
+  }
+
+  const user = await User.findById(userId).select('city state zipCode country').lean();
+  return resolvePrimaryLocation(null, user);
+}
+
+function buildCacheSourceDescriptors(metrics = {}) {
+  const health = metrics.freshCount > 0 ? 'green' : (metrics.cachedLocations > 0 ? 'yellow' : 'unknown');
+  const healthReason = metrics.freshCount > 0
+    ? 'Cache warm'
+    : metrics.cachedLocations > 0
+      ? 'Refreshing cached locations'
+      : 'No cached locations yet';
+
+  return [
+    {
+      id: 'google-news',
+      name: 'Google News Cache',
+      type: 'googleNews',
+      url: 'https://news.google.com/rss',
+      health,
+      healthReason,
+      wired: true,
+      enabled: true,
+      categories: ['local', 'state', 'national']
+    },
+    {
+      id: 'google-news-local',
+      name: 'Google News Local',
+      type: 'googleNews',
+      url: 'https://news.google.com/rss/search',
+      health,
+      healthReason: 'Location-based RSS search',
+      wired: false,
+      enabled: true,
+      categories: ['local']
+    },
+    {
+      id: 'google-news-state',
+      name: 'Google News State',
+      type: 'googleNews',
+      url: 'https://news.google.com/rss/search',
+      health,
+      healthReason: 'Statewide RSS search',
+      wired: false,
+      enabled: true,
+      categories: ['state']
+    },
+    {
+      id: 'google-news-national',
+      name: 'Google News National',
+      type: 'googleNews',
+      url: 'https://news.google.com/rss',
+      health,
+      healthReason: 'National RSS headlines',
+      wired: false,
+      enabled: true,
+      categories: ['national']
+    }
+  ];
 }
 
 function classifySourceHealth(source = {}, now = new Date()) {
@@ -622,53 +711,50 @@ async function requireAdminUser(req, res, next) {
  */
 router.get('/feed', authenticateToken, async (req, res) => {
   try {
-    const { category, page, limit, teamIds, country, state, city } = req.query;
-    const teamIdList = teamIds ? String(teamIds).split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const { category, page = 1, limit = 20, tier, maxAgeHours, country, state, city, zipCode } = req.query;
+    const safePage = Math.max(parseInt(page, 10) || 1, 1);
+    const safeLimit = Math.min(parseInt(limit, 10) || 20, 50);
 
-    // Region filter (from drill-down selector)
-    const regionFilter = (country || state || city)
-      ? { country: country || undefined, state: state || undefined, city: city || undefined }
-      : null;
-
-    // Keyword promotion: load user's followedKeywords from preferences
-    let followedKeywords = [];
-    let triggeredIngest = false;
-    try {
-      const prefs = await NewsPreferences.findOne({ user: req.user.userId }).lean();
-      followedKeywords = (prefs?.followedKeywords || []).map((k) => k.keyword).filter(Boolean);
-
-      // Region-triggered ingest: if a specific city was requested and we have no
-      // recent articles for it, fire a background ingest.
-      if (city && state) {
-        const { buildCityKey } = require('../services/newsIngestion.local');
-        const cityKey = buildCityKey(city, state);
-        const recentCount = await Article.countDocuments({
-          pipeline: 'local',
-          cityKey,
-          ingestTimestamp: { $gte: new Date(Date.now() - 2 * 60 * 60 * 1000) }
-        });
-        if (recentCount === 0) {
-          ingestLocalNews(city, state).catch((err) =>
-            console.error('[feed] region-triggered ingest error:', err.message)
-          );
-          triggeredIngest = true;
-        }
-      }
-    } catch (prefErr) {
-      console.error('[feed] prefs lookup error:', prefErr.message);
+    const normalizedLocation = await resolveFeedLocationForUser(req.user.userId, { country, state, city, zipCode });
+    if (!normalizedLocation?.locationKey) {
+      return res.json({
+        articles: [],
+        pagination: { page: 1, pages: 0, total: 0 },
+        location: null,
+        message: 'No location set',
+        sections: { keyword: [], local: [], state: [], national: [], trending: [] },
+        feed: []
+      });
     }
 
-    const result = await buildFeed(req.user.userId, {
-      category: category || null,
-      page: parseInt(page, 10) || 1,
-      limit: parseInt(limit, 10) || 20,
-      teamIds: teamIdList,
-      followedKeywords,
-      regionFilter,
-    });
+    const cacheResult = await getArticlesForLocation(normalizedLocation.locationKey, { normalizedLocation });
+    const filteredArticles = filterCachedArticles(cacheResult.articles, { tier, category, maxAgeHours });
+    const start = (safePage - 1) * safeLimit;
+    const pageArticles = filteredArticles.slice(start, start + safeLimit);
 
-    if (triggeredIngest) result.triggeredIngest = true;
-    res.json(result);
+    res.json({
+      articles: pageArticles,
+      pagination: {
+        page: safePage,
+        pages: Math.ceil(filteredArticles.length / safeLimit),
+        total: filteredArticles.length
+      },
+      location: {
+        locationKey: cacheResult.locationKey,
+        cacheHit: cacheResult.cacheHit,
+        ...normalizedLocation
+      },
+      message: filteredArticles.length === 0 ? 'No articles available for this location' : undefined,
+      sections: safePage === 1 ? {
+        keyword: [],
+        local: filteredArticles.filter((article) => article.tier === 'local').slice(0, 6),
+        state: filteredArticles.filter((article) => article.tier === 'state').slice(0, 4),
+        national: filteredArticles.filter((article) => article.tier === 'national').slice(0, 4),
+        trending: []
+      } : { keyword: [], local: [], state: [], national: [], trending: [] },
+      feed: pageArticles,
+      triggeredIngest: false
+    });
   } catch (error) {
     console.error('Error building news feed:', error);
     res.status(500).json({ error: 'Failed to build news feed' });
@@ -820,9 +906,8 @@ router.get('/location-taxonomy', authenticateToken, async (req, res) => {
  */
 router.get('/sources', authenticateToken, async (req, res) => {
   try {
-    const RssSource = require('../models/RssSource');
-    const dbSources = await RssSource.find({}).lean();
-    res.json({ sources: dbSources, catalogVersion: 'v1' });
+    const metrics = await getCacheMetrics();
+    res.json({ sources: buildCacheSourceDescriptors(metrics), catalogVersion: 'cache-v1', metrics });
   } catch (error) {
     console.error('Error fetching news sources:', error);
     res.status(500).json({ error: 'Failed to fetch sources' });
@@ -836,12 +921,13 @@ router.get('/sources', authenticateToken, async (req, res) => {
 router.get('/promoted', authenticateToken, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
-    const query = { viralScore: { $gte: PROMOTED_THRESHOLD }, isActive: { $ne: false } };
-    if (req.query.topic) query.category = req.query.topic;
-    const articles = await Article.find(query)
-      .sort({ viralScore: -1, publishedAt: -1 })
-      .limit(limit)
-      .lean();
+    const normalizedLocation = await resolveFeedLocationForUser(req.user.userId, null);
+    const cacheResult = normalizedLocation?.locationKey
+      ? await getArticlesForLocation(normalizedLocation.locationKey, { normalizedLocation })
+      : { articles: [] };
+    const articles = filterCachedArticles(cacheResult.articles, {
+      category: req.query.topic || null
+    }).slice(0, limit);
     res.json({ articles });
   } catch (error) {
     console.error('Error fetching promoted articles:', error);
@@ -1463,9 +1549,10 @@ router.post('/impressions', authenticateToken, async (req, res) => {
   if (!Array.isArray(impressions) || impressions.length === 0) return;
   const userId = req.user.userId;
   for (const imp of impressions.slice(0, 50)) {
-    const { articleId, type } = imp || {};
-    if (!articleId || !['scroll', 'click'].includes(type)) continue;
-    ArticleImpression.upsertImpression(userId, articleId, type).catch((err) =>
+    const { articleId, articleLink, locationKey, type } = imp || {};
+    const articleRef = articleLink || articleId;
+    if (!articleRef || !['scroll', 'click'].includes(type)) continue;
+    ArticleImpression.upsertImpression(userId, articleRef, type, { articleLink, locationKey }).catch((err) =>
       console.error('[impressions] upsert error:', err.message)
     );
   }
@@ -1557,7 +1644,7 @@ router.put('/preferences/keywords/:keyword', authenticateToken, async (req, res)
  */
 router.get('/search', authenticateToken, async (req, res) => {
   try {
-    const { q, category, dateFrom, dateTo, country, state, city, page = 1, limit = 20 } = req.query;
+    const { q, category, dateFrom, dateTo, country, state, city, zipCode, tier, page = 1, limit = 20 } = req.query;
     if (!q || String(q).trim().length === 0) {
       return res.status(400).json({ error: 'q (search query) is required' });
     }
@@ -1565,58 +1652,48 @@ router.get('/search', authenticateToken, async (req, res) => {
     const safePage = Math.max(parseInt(page, 10) || 1, 1);
     const skip = (safePage - 1) * safeLimit;
 
-    const filter = {
-      $text: { $search: String(q).trim() },
-      isActive: { $ne: false }
-    };
-    if (category && category !== 'all') filter.category = category;
-    if (dateFrom || dateTo) {
-      filter.publishedAt = {};
-      if (dateFrom) filter.publishedAt.$gte = new Date(dateFrom);
-      if (dateTo) filter.publishedAt.$lte = new Date(dateTo);
-    }
-    if (city) {
-      filter['locationTags.cities'] = { $regex: city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-    } else if (state) {
-      filter['locationTags.states'] = state.toLowerCase();
-    } else if (country) {
-      filter['locationTags.countries'] = country.toLowerCase();
-    }
+    const overrideLocation = (city || state || country || zipCode) ? { city, state, country, zipCode } : null;
+    const normalizedLocation = overrideLocation
+      ? await normalizeLocationInput(overrideLocation)
+      : await resolveFeedLocationForUser(req.user.userId, null);
+    const searchResults = await searchCachedArticles(q, { locationKey: normalizedLocation?.locationKey || null });
 
-    const [articles, total] = await Promise.all([
-      Article.find(filter, { score: { $meta: 'textScore' } })
-        .sort({ score: { $meta: 'textScore' }, publishedAt: -1 })
-        .skip(skip)
-        .limit(safeLimit)
-        .lean(),
-      Article.countDocuments(filter)
-    ]);
+    const filtered = searchResults.filter((article) => {
+      if (tier && article.tier !== tier) return false;
+      if (category && category !== 'all' && article.category && article.category !== category) return false;
+      if (dateFrom && (!article.publishedAt || new Date(article.publishedAt) < new Date(dateFrom))) return false;
+      if (dateTo && (!article.publishedAt || new Date(article.publishedAt) > new Date(dateTo))) return false;
+      return true;
+    });
 
-    res.json({ articles, total, page: safePage, limit: safeLimit, query: q });
+    const pageArticles = filtered.slice(skip, skip + safeLimit);
+    res.json({
+      articles: pageArticles,
+      total: filtered.length,
+      page: safePage,
+      limit: safeLimit,
+      pagination: {
+        page: safePage,
+        pages: Math.ceil(filtered.length / safeLimit),
+        total: filtered.length
+      },
+      location: normalizedLocation ? { ...normalizedLocation } : null,
+      query: q
+    });
   } catch (error) {
     console.error('Error searching articles:', error);
     res.status(500).json({ error: 'Search failed' });
   }
 });
 
-const INGESTION_PIPELINES = ['local', 'categories', 'sports', 'social'];
-const INGESTION_FAST_INTERVAL_MS = 30 * 60 * 1000;
+const INGESTION_PIPELINES = ['cache', 'preload'];
+const INGESTION_FAST_INTERVAL_MS = REFRESH_INTERVAL_MS;
 const SOURCE_ADAPTER_KEY_MAP = {
-  'Google News': 'categories',
-  Reuters: 'categories',
-  'BBC News': 'categories',
-  NPR: 'categories',
-  'Associated Press': 'categories',
-  'PBS NewsHour': 'categories',
-  CNN: 'categories',
-  'The Guardian': 'categories',
-  'New York Times': 'categories',
-  'Wall Street Journal': 'categories',
-  TechCrunch: 'categories',
-  'Yahoo News': 'categories',
-  ESPN: 'sports',
-  GDELT: 'categories',
-  Reddit: 'social'
+  'Google News Cache': 'cache',
+  'Google News Local': 'cache',
+  'Google News State': 'cache',
+  'Google News National': 'cache',
+  preload: 'preload'
 };
 
 let _schedulerStarted = false;
@@ -1625,17 +1702,11 @@ let lastIngestionRunAt = null;
 
 function enqueuePipeline(pipeline) {
   let task = Promise.resolve();
-  if (pipeline === 'local') {
-    task = ingestAllKnownLocations().catch((err) => console.error('[news] local ingest error:', err));
+  if (pipeline === 'cache') {
+    task = refreshAllCachedLocations({ force: true }).catch((err) => console.error('[news-cache] refresh error:', err));
   }
-  if (pipeline === 'categories') {
-    task = ingestAllCategories().catch((err) => console.error('[news] category ingest error:', err));
-  }
-  if (pipeline === 'sports') {
-    task = ingestAllFollowedTeams().catch((err) => console.error('[news] sports ingest error:', err));
-  }
-  if (pipeline === 'social') {
-    task = ingestAllMonitoredSubreddits().catch((err) => console.error('[news] reddit ingest error:', err));
+  if (pipeline === 'preload') {
+    task = preloadCommonLocations().catch((err) => console.error('[news-cache] preload error:', err));
   }
 
   return task.finally(() => {
@@ -1682,97 +1753,41 @@ router.post('/ingest/:sourceKey', authenticateToken, requireAdminUser, async (re
 });
 
 router.get('/schedule-info', authenticateToken, requireAdminUser, async (req, res) => {
-  const now = new Date();
-  let nextRunAt = null;
-  if (lastIngestionRunAt) {
-    nextRunAt = new Date(lastIngestionRunAt.getTime() + INGESTION_FAST_INTERVAL_MS);
-  } else if (schedulerStartedAt && _schedulerStarted) {
-    nextRunAt = new Date(schedulerStartedAt.getTime() + INGESTION_FAST_INTERVAL_MS);
-  }
-
-  return res.json({
-    schedulerRunning: _schedulerStarted,
-    schedulerStartedAt,
-    lastIngestionRunAt,
-    nextRunAt,
-    msUntilNextRun: nextRunAt ? Math.max(0, nextRunAt.getTime() - now.getTime()) : null,
-    intervalMs: INGESTION_FAST_INTERVAL_MS
-  });
+  return res.json(getCacheSchedulerState());
 });
 
 router.get('/ingestion-stats', authenticateToken, requireAdminUser, async (req, res) => {
   try {
     const now = new Date();
-    const last24h = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-
-    const [today, week, activeArticles, byScopeRows, byStatusRows, bySourceRows] = await Promise.all([
-      NewsIngestionRecord.countDocuments({ ingestedAt: { $gte: startOfDay } }),
-      NewsIngestionRecord.countDocuments({ ingestedAt: { $gte: weekAgo } }),
-      Article.countDocuments({ isActive: { $ne: false } }),
-      NewsIngestionRecord.aggregate([
-        { $match: { ingestedAt: { $gte: last24h } } },
-        { $group: { _id: '$resolvedScope', count: { $sum: 1 } } }
-      ]),
-      NewsIngestionRecord.aggregate([
-        { $match: { ingestedAt: { $gte: last24h } } },
-        { $group: { _id: '$dedupe.outcome', count: { $sum: 1 } } }
-      ]),
-      NewsIngestionRecord.aggregate([
-        { $match: { ingestedAt: { $gte: last24h } } },
-        {
-          $group: {
-            _id: '$source.name',
-            total: { $sum: 1 },
-            processed: {
-              $sum: {
-                $cond: [{ $eq: ['$processingStatus', 'processed'] }, 1, 0]
-              }
-            },
-            failed: {
-              $sum: {
-                $cond: [{ $eq: ['$processingStatus', 'failed'] }, 1, 0]
-              }
-            }
-          }
-        },
-        { $sort: { total: -1, _id: 1 } },
-        { $limit: 100 }
-      ])
-    ]);
-
-    const toMap = (rows = []) => rows.reduce((acc, row) => {
-      const key = row?._id || 'unknown';
-      acc[key] = row?.count || 0;
-      return acc;
-    }, {});
-
-    const bySource = bySourceRows.map((row) => ({
-      source: row?._id || 'unknown',
-      total: row?.total || 0,
-      processed: row?.processed || 0,
-      failed: row?.failed || 0
+    const metrics = await getCacheMetrics();
+    const sourceRows = buildCacheSourceDescriptors(metrics).map((source) => ({
+      source: source.name,
+      total: metrics.totalArticles,
+      processed: metrics.freshCount,
+      failed: metrics.errorCount
     }));
-
-    // Only include adapter keys for sources present in the latest 24h stats.
-    const nameToAdapterKey = bySource.reduce((acc, row) => {
-      if (SOURCE_ADAPTER_KEY_MAP[row.source]) {
-        acc[row.source] = SOURCE_ADAPTER_KEY_MAP[row.source];
-      }
-      return acc;
-    }, {});
-
     return res.json({
       totals: {
-        today,
-        week,
-        activeArticles
+        today: metrics.freshCount,
+        week: metrics.cachedLocations,
+        activeArticles: metrics.totalArticles,
+        cachedLocations: metrics.cachedLocations
       },
-      byScope: toMap(byScopeRows),
-      byStatus: toMap(byStatusRows),
-      bySource,
-      nameToAdapterKey,
+      byScope: {
+        local: 0,
+        state: 0,
+        national: 0
+      },
+      byStatus: {
+        fresh: metrics.freshCount,
+        stale: metrics.staleCount,
+        errors: metrics.errorCount
+      },
+      bySource: sourceRows,
+      nameToAdapterKey: sourceRows.reduce((acc, row) => {
+        acc[row.source] = SOURCE_ADAPTER_KEY_MAP[row.source] || 'cache';
+        return acc;
+      }, {}),
       generatedAt: now.toISOString()
     });
   } catch (error) {
@@ -1789,34 +1804,7 @@ function startIngestionScheduler() {
   if (_schedulerStarted) return;
   _schedulerStarted = true;
   schedulerStartedAt = new Date();
-
-  console.log('[news] Starting ingestion schedulers...');
-
-  // Pipeline 1 · Local — every 30 minutes
-  setInterval(() => {
-    enqueuePipeline('local');
-  }, INGESTION_FAST_INTERVAL_MS);
-
-  // Pipeline 2 · Categories — every 2 hours
-  setInterval(() => {
-    enqueuePipeline('categories');
-  }, 2 * 60 * 60 * 1000);
-
-  // Pipeline 3 · Sports teams — every 4 hours
-  setInterval(() => {
-    enqueuePipeline('sports');
-  }, 4 * 60 * 60 * 1000);
-
-  // Pipeline 4 · Reddit — every 30 minutes
-  setInterval(() => {
-    enqueuePipeline('social');
-  }, INGESTION_FAST_INTERVAL_MS);
-
-  // Kick off an initial run (staggered to spread load)
-  setTimeout(() => enqueuePipeline('categories'), 10 * 1000);
-  setTimeout(() => enqueuePipeline('local'), 30 * 1000);
-  setTimeout(() => enqueuePipeline('sports'), 60 * 1000);
-  setTimeout(() => enqueuePipeline('social'), 90 * 1000);
+  startCacheRefreshScheduler();
 }
 
 module.exports = {
