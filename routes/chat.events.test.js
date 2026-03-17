@@ -413,10 +413,7 @@ describe('Chat event room discovery routes', () => {
       name: 'Suffolk County, Massachusetts',
       isMember: true
     });
-    expect(response.body.rooms.zip).toMatchObject({
-      _id: 'zip-02115',
-      title: 'Zip 02115'
-    });
+    expect(response.body.rooms.zip).toBeNull();
     expect(response.body.rooms.cities).toEqual([
       expect.objectContaining({
         _id: 'city-1',
@@ -465,7 +462,7 @@ describe('Chat event room discovery routes', () => {
     expect(response.body.rooms).toMatchObject({
       state: { _id: 'state-ma' },
       county: { _id: 'county-suffolk' },
-      zip: { _id: 'zip-02115' }
+      zip: null
     });
     consoleErrorSpy.mockRestore();
   });
