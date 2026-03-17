@@ -652,7 +652,7 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).toContain('SocialSecure');
   });
 
-  it('auto-joins the state room and default room on initial chat load', async () => {
+  it('auto-joins state/county rooms and keeps SocialSecure selected on initial chat load', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -669,7 +669,8 @@ describe('Chat zip room indicator', () => {
       data: {
         rooms: [
           { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', defaultLanding: true, members: [] },
-          { _id: 'state-tx', type: 'state', name: 'Texas', discoveryGroup: 'states', members: [] }
+          { _id: 'state-tx', type: 'state', name: 'Texas', discoveryGroup: 'states', members: [] },
+          { _id: 'county-travis', type: 'county', name: 'Travis County, Texas', discoveryGroup: 'counties', members: [] }
         ]
       }
     });
@@ -677,7 +678,7 @@ describe('Chat zip room indicator', () => {
       data: {
         rooms: {
           state: { _id: 'state-tx', type: 'state', name: 'Texas' },
-          county: null,
+          county: { _id: 'county-travis', type: 'county', name: 'Travis County, Texas' },
           zip: null,
           cities: []
         }
@@ -688,8 +689,15 @@ describe('Chat zip room indicator', () => {
     await renderChat();
 
     expect(chatAPI.joinRoom).toHaveBeenCalledWith('state-tx');
+    expect(chatAPI.joinRoom).toHaveBeenCalledWith('county-travis');
     expect(chatAPI.joinRoom).toHaveBeenCalledWith('topic-socialsecure');
     expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-socialsecure', 1, 40);
+    const openChatTabs = Array.from(container.querySelectorAll('[data-open-chat-tab]'));
+    expect(openChatTabs.map((button) => button.getAttribute('data-open-chat-tab'))).toEqual(
+      expect.arrayContaining(['SocialSecure', 'Texas', 'Travis County, Texas'])
+    );
+    const selectedTab = openChatTabs.find((button) => button.getAttribute('aria-selected') === 'true');
+    expect(selectedTab?.getAttribute('data-open-chat-tab')).toBe('SocialSecure');
   });
 
   it('shows a collapsed admin control panel by default and expands it for room management', async () => {
