@@ -814,9 +814,13 @@ function Chat() {
       .sort(sortRoomsByDiscoveryOrder),
     [allChatRooms]
   );
-  const defaultLandingRoom = useMemo(
-    () => allChatRooms.find((room) => room?.defaultLanding) || allChatRooms.find((room) => room?.stableKey === 'topic:socialsecure') || null,
+  const defaultLandingRooms = useMemo(
+    () => allChatRooms.filter((room) => room?.defaultLanding),
     [allChatRooms]
+  );
+  const defaultLandingRoom = useMemo(
+    () => defaultLandingRooms[0] || allChatRooms.find((room) => room?.stableKey === 'topic:socialsecure') || null,
+    [allChatRooms, defaultLandingRooms]
   );
   const roomParentOptions = useMemo(
     () => allChatRooms
@@ -970,12 +974,14 @@ function Chat() {
     if (!defaultLandingRoom?._id) return;
     if (allChatRoomsLoading) return;
     if (activeChannel !== 'zip') return;
+    const defaultLandingRoomId = normalizeId(defaultLandingRoom._id);
+    if (!joinedRoomIds[defaultLandingRoomId]) return;
     const currentType = String(activeConversation?.type || '');
     if (activeConversationId && currentType && currentType !== 'zip-room') {
       initialDefaultRoomAppliedRef.current = true;
       return;
     }
-    openConversationById(defaultLandingRoom._id, { openWorkspace: false });
+    openConversationById(defaultLandingRoomId, { openWorkspace: false });
     initialDefaultRoomAppliedRef.current = true;
   }, [
     activeChannel,
@@ -983,7 +989,53 @@ function Chat() {
     activeConversationId,
     allChatRoomsLoading,
     defaultLandingRoom,
+    joinedRoomIds,
     openConversationById
+  ]);
+
+  useEffect(() => {
+    if (!profile?._id || allChatRoomsLoading || typeof chatAPI.joinRoom !== 'function') return;
+    const roomIdsToAutoJoin = Array.from(new Set([
+      normalizeId(quickAccessRooms.state?._id),
+      ...defaultLandingRooms.map((room) => normalizeId(room?._id))
+    ].filter(Boolean)));
+    if (roomIdsToAutoJoin.length === 0) return;
+
+    const missingRoomIds = roomIdsToAutoJoin.filter((roomId) => !joinedRoomIds[roomId]);
+    if (missingRoomIds.length === 0) return;
+
+    let cancelled = false;
+    const autoJoinRooms = async () => {
+      for (const roomId of missingRoomIds) {
+        try {
+          await chatAPI.joinRoom(roomId);
+          if (cancelled) return;
+          setJoinedRoomIds((prev) => (
+            prev[roomId]
+              ? prev
+              : { ...prev, [roomId]: true }
+          ));
+          setAllChatRooms((prev) => prev.map((entry) => (
+            String(entry?._id) === roomId
+              ? addCurrentUserToRoomEntry(entry, profile?._id)
+              : entry
+          )));
+        } catch {
+          // ignore auto-join failures and allow manual joins
+        }
+      }
+    };
+
+    autoJoinRooms();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    allChatRoomsLoading,
+    defaultLandingRooms,
+    joinedRoomIds,
+    profile?._id,
+    quickAccessRooms.state?._id
   ]);
 
   const loadLatestConversationMessages = useCallback(async (conversationId) => {
@@ -2603,32 +2655,6 @@ function Chat() {
                   </section>
                 ) : null}
 
-                {/* ── Zip Rooms ───────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
-                  <h3 className="text-sm font-semibold">Zip Rooms</h3>
-                  {conversationList.length === 0 ? (
-                    <p className="mt-2 text-xs opacity-80">No conversations available here yet.</p>
-                  ) : (
-                    <ul className="mt-2 space-y-1">
-                      {conversationList.map((conversation) => {
-                        const selected = String(conversation._id) === String(activeConversationId);
-                        return (
-                          <li key={String(conversation._id)}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                openConversationById(String(conversation._id));
-                              }}
-                              className={`w-full rounded-xl border px-2.5 py-2 text-left text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}
-                            >
-                              <span className="font-medium">{getConversationLabel(conversation)}</span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </section>
               </>
             )}
           </div>

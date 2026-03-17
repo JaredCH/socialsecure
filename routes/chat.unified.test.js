@@ -239,6 +239,36 @@ describe('Unified chat hub routes', () => {
     expect(mockChatRoom.updateMany).toHaveBeenCalled();
   });
 
+  it('returns a not-found error instead of 500 when creating a room with an invalid parentRoomId', async () => {
+    const app = buildApp();
+    mockUser.findById
+      .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
+      .mockImplementationOnce(() => createSelectLean({ _id: '507f1f77bcf86cd799439011', isAdmin: true }));
+    mockChatRoom.findById = jest.fn().mockImplementation(() => {
+      const error = new Error('Cast to ObjectId failed');
+      error.name = 'CastError';
+      throw error;
+    });
+    mockChatRoom.create = jest.fn();
+
+    const response = await request(app)
+      .post('/api/chat/rooms/admin')
+      .set('Authorization', 'Bearer token')
+      .send({
+        name: 'Austin',
+        type: 'city',
+        discoveryGroup: 'states',
+        parentRoomId: 'not-an-object-id',
+        state: 'TX',
+        country: 'US',
+        defaultLanding: false
+      });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('Parent chat room not found');
+    expect(mockChatRoom.create).not.toHaveBeenCalled();
+  });
+
   it('applies a 20 second global cooldown to non-DM conversation messages', async () => {
     const app = buildApp();
     const saveConversation = jest.fn().mockResolvedValue(undefined);

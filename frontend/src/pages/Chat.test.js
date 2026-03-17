@@ -361,6 +361,26 @@ describe('Chat zip room indicator', () => {
     expect(menuBar.textContent).not.toContain('📍');
   });
 
+  it('removes the Zip Rooms panel from the chat sidebar', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const sectionTitles = Array.from(container.querySelectorAll('h3')).map((node) => node.textContent);
+    expect(sectionTitles).not.toContain('Zip Rooms');
+  });
+
   it('renders compact theme menu with six readable options', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
@@ -630,6 +650,46 @@ describe('Chat zip room indicator', () => {
 
     expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-socialsecure', 1, 40);
     expect(container.textContent).toContain('SocialSecure');
+  });
+
+  it('auto-joins the state room and default room on initial chat load', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', defaultLanding: true, members: [] },
+          { _id: 'state-tx', type: 'state', name: 'Texas', discoveryGroup: 'states', members: [] }
+        ]
+      }
+    });
+    chatAPI.getQuickAccessRooms.mockResolvedValue({
+      data: {
+        rooms: {
+          state: { _id: 'state-tx', type: 'state', name: 'Texas' },
+          county: null,
+          zip: null,
+          cities: []
+        }
+      }
+    });
+    chatAPI.getMessages.mockResolvedValue({ data: { messages: [], pagination: { hasMore: false } } });
+
+    await renderChat();
+
+    expect(chatAPI.joinRoom).toHaveBeenCalledWith('state-tx');
+    expect(chatAPI.joinRoom).toHaveBeenCalledWith('topic-socialsecure');
+    expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-socialsecure', 1, 40);
   });
 
   it('shows a collapsed admin control panel by default and expands it for room management', async () => {
