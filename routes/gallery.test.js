@@ -222,7 +222,7 @@ describe('Gallery routes', () => {
     );
   });
 
-  it('stores uploaded gallery image URLs using the request origin', async () => {
+  it('stores uploaded gallery image URLs as server-relative upload paths', async () => {
     const app = buildApp();
     jwt.verify.mockImplementation((token, secret, callback) => callback(null, { userId: 'owner-1' }));
     mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
@@ -254,10 +254,41 @@ describe('Gallery routes', () => {
     expect(response.status).toBe(201);
     expect(mockGalleryImage.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        mediaUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/uploads\/gallery\/owner-1\//),
+        mediaUrl: expect.stringMatching(/^\/uploads\/gallery\/owner-1\//),
         mediaType: 'upload'
       })
     );
+  });
+
+  it('rewrites persisted absolute upload URLs to the current request origin in responses', async () => {
+    const app = buildApp();
+    mockOwnerLookup({ _id: 'owner-1', username: 'owner' });
+
+    const imageDoc = {
+      _id: 'img-upload-absolute',
+      ownerId: 'owner-1',
+      mediaUrl: 'https://stale.example.com/uploads/gallery/owner-1/file.png',
+      mediaType: 'upload',
+      caption: '',
+      comments: [],
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      getReactionCounts: jest.fn().mockReturnValue({ likesCount: 0, dislikesCount: 0 }),
+      getViewerReaction: jest.fn().mockReturnValue(null)
+    };
+
+    mockGalleryImage.find.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue([imageDoc])
+    });
+    mockGalleryImage.countDocuments.mockResolvedValue(1);
+
+    const response = await request(app).get('/api/gallery/owner');
+
+    expect(response.status).toBe(200);
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0].mediaUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/uploads\/gallery\/owner-1\/file\.png$/);
   });
 
   it('rejects create for blocked host URL', async () => {

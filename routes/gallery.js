@@ -216,9 +216,22 @@ const resolveRequestOrigin = (req) => {
 const resolveStoredMediaUrl = (url, req) => {
   const normalized = typeof url === 'string' ? url.trim() : '';
   if (!normalized) return '';
-  if (!SERVER_UPLOAD_PATH_REGEX.test(normalized)) return normalized;
+  let uploadPath = '';
+  if (SERVER_UPLOAD_PATH_REGEX.test(normalized)) {
+    uploadPath = normalized;
+  } else {
+    try {
+      const parsed = new URL(normalized);
+      if (SERVER_UPLOAD_PATH_REGEX.test(parsed.pathname || '')) {
+        uploadPath = parsed.pathname;
+      }
+    } catch {
+      return normalized;
+    }
+  }
+  if (!uploadPath) return normalized;
   const origin = resolveRequestOrigin(req);
-  return origin ? `${origin}${normalized}` : normalized;
+  return origin ? `${origin}${uploadPath}` : uploadPath;
 };
 
 const getGalleryViewerContext = async (ownerId, viewerId) => {
@@ -440,7 +453,7 @@ router.post(
 
         await fs.writeFile(absolutePath, req.file.buffer);
 
-        mediaUrl = resolveStoredMediaUrl(`/uploads/gallery/${String(owner._id)}/${fileName}`, req);
+        mediaUrl = `/uploads/gallery/${String(owner._id)}/${fileName}`;
         mediaType = 'upload';
         storageFileName = fileName;
       } else {
