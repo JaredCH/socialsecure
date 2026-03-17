@@ -289,6 +289,11 @@ const hasValidCoordinates = (location) => (
   && Number.isFinite(Number(location.coordinates[0]))
   && Number.isFinite(Number(location.coordinates[1]))
 );
+const getNormalizedCoordinates = (location) => (
+  hasValidCoordinates(location)
+    ? location.coordinates.map((value) => Number(value))
+    : null
+);
 const discoveryLimiter = buildRouteLimiter(90, 'Too many room discovery requests. Please slow down.');
 const allRoomsLimiter = buildRouteLimiter(20, 'Too many full room list requests. Please try again soon.');
 const roomReadLimiter = buildRouteLimiter(120, 'Too many room requests. Please slow down.');
@@ -1046,7 +1051,17 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
       return res.status(404).json({ error: 'User not found' });
     }
 
-    await ChatRoom.syncUserLocationRooms(user);
+    const coordinates = getNormalizedCoordinates(user.location);
+
+    if (coordinates) {
+      await ChatRoom.syncUserLocationRooms({
+        ...user,
+        location: {
+          ...user.location,
+          coordinates
+        }
+      });
+    }
 
     const normalizedZipCode = normalizeZipCode(user.zipCode);
     const country = user.country || 'US';
@@ -1056,7 +1071,7 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
           type: 'state',
           state: user.state,
           country,
-          coordinates: user.location?.coordinates
+          coordinates: coordinates || undefined
         })
         : Promise.resolve(null),
       user.state && user.county
@@ -1065,7 +1080,7 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
           state: user.state,
           country,
           county: user.county,
-          coordinates: user.location?.coordinates
+          coordinates: coordinates || undefined
         })
         : Promise.resolve(null),
       normalizedZipCode
@@ -1074,8 +1089,8 @@ router.get('/rooms/quick-access', unifiedChatLimiter, authenticateToken, async (
     ]);
 
     let nearbyCities = [];
-    if (hasValidCoordinates(user.location)) {
-      const [longitude, latitude] = user.location.coordinates.map((value) => Number(value));
+    if (coordinates) {
+      const [longitude, latitude] = coordinates;
       nearbyCities = await ChatRoom.aggregate([
         {
           $geoNear: {
@@ -2474,14 +2489,42 @@ router.post('/rooms/sync-location', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    if (!user.location || !user.location.coordinates) {
-      return res.status(400).json({ error: 'User location not set. Please update your location first.' });
+    const coordinates = getNormalizedCoordinates(user.location);
+    if (!coordinates) {
+      const userRooms = await ChatRoom.find({ members: userId })
+        .select('_id name type city state country zipCode location radius memberCount lastActivity')
+        .lean();
+
+      return res.json({
+        success: true,
+        message: 'Location unavailable. Skipped location room sync.',
+        createdRooms: [],
+        allRooms: userRooms.map(room => ({
+          _id: room._id,
+          name: room.name,
+          type: room.type,
+          zipCode: room.zipCode,
+          city: room.city,
+          state: room.state,
+          country: room.country,
+          location: room.location,
+          radius: room.radius,
+          memberCount: room.memberCount || (room.members ? room.members.length : 0),
+          lastActivity: room.lastActivity
+        }))
+      });
     }
     
     await ChatRoom.ensureDefaultStateRooms();
 
     // Sync location rooms
-    const result = await ChatRoom.syncUserLocationRooms(user);
+    const result = await ChatRoom.syncUserLocationRooms({
+      ...toPlainDoc(user),
+      location: {
+        ...(toPlainDoc(user.location) || {}),
+        coordinates
+      }
+    });
     
     // Get all rooms the user is now a member of (including existing ones)
     const userRooms = await ChatRoom.find({ members: userId })

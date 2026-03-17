@@ -391,4 +391,94 @@ describe('Chat event room discovery routes', () => {
       })
     ]);
   });
+
+  it('handles quick-access users with unsupported location coordinates without 500 errors', async () => {
+    const onboardingSelect = jest.fn().mockResolvedValue({ _id: 'user-1', onboardingStatus: 'completed' });
+    const locationSelect = jest.fn().mockResolvedValue({
+      _id: 'user-1',
+      city: 'Boston',
+      state: 'MA',
+      country: 'US',
+      county: 'Suffolk County',
+      zipCode: '02115',
+      location: { rejected: true, message: 'UNSUPPORTED_OS' }
+    });
+    User.findById
+      .mockReturnValueOnce({ select: onboardingSelect })
+      .mockReturnValueOnce({ select: locationSelect });
+    ChatRoom.findOrCreateByLocation
+      .mockResolvedValueOnce({
+        room: {
+          _id: 'state-ma',
+          name: 'Massachusetts',
+          type: 'state',
+          state: 'MA',
+          country: 'US',
+          members: ['user-1']
+        }
+      })
+      .mockResolvedValueOnce({
+        room: {
+          _id: 'county-suffolk',
+          name: 'Suffolk County, Massachusetts',
+          type: 'county',
+          state: 'MA',
+          country: 'US',
+          county: 'Suffolk County',
+          members: ['user-1']
+        }
+      });
+    ChatConversation.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        _id: 'zip-02115',
+        type: 'zip-room',
+        zipCode: '02115',
+        title: 'Zip 02115',
+        participants: []
+      })
+    });
+
+    const app = buildApp();
+    const response = await request(app)
+      .get('/api/chat/rooms/quick-access')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(ChatRoom.syncUserLocationRooms).not.toHaveBeenCalled();
+    expect(ChatRoom.aggregate).not.toHaveBeenCalled();
+    expect(ChatRoom.findOrCreateByLocation).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'state',
+      coordinates: undefined
+    }));
+  });
+
+  it('returns a no-op success for sync-location when coordinates are unavailable', async () => {
+    const onboardingSelect = jest.fn().mockResolvedValue({ _id: 'user-1', onboardingStatus: 'completed' });
+    User.findById
+      .mockReturnValueOnce({ select: onboardingSelect })
+      .mockResolvedValueOnce({
+        _id: 'user-1',
+        location: { rejected: true, message: 'UNSUPPORTED_OS' }
+      });
+    ChatRoom.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([])
+      })
+    });
+
+    const app = buildApp();
+    const response = await request(app)
+      .post('/api/chat/rooms/sync-location')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      message: 'Location unavailable. Skipped location room sync.',
+      createdRooms: [],
+      allRooms: []
+    });
+    expect(ChatRoom.ensureDefaultStateRooms).not.toHaveBeenCalled();
+    expect(ChatRoom.syncUserLocationRooms).not.toHaveBeenCalled();
+  });
 });
