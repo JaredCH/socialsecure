@@ -455,6 +455,8 @@ const normalizeHeroConfig = (heroInput, fallback) => {
     if (typeof value !== 'string') return valueFallback;
     const trimmed = value.trim();
     if (!trimmed || trimmed.length > MEDIA_URL_MAX_LENGTH) return valueFallback;
+    if (/^\/uploads\/\S+/i.test(trimmed)) return trimmed;
+    if (/^data:image\/(?:jpeg|jpg|png|gif|webp);base64,[a-z0-9+/=]+$/i.test(trimmed)) return trimmed;
     try {
       const parsed = new URL(trimmed);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return valueFallback;

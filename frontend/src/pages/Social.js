@@ -38,7 +38,7 @@ const MEDIA_URL_MAX_LENGTH = 2048;
 const COMPOSER_CONTENT_TYPES = ['standard', 'poll', 'quiz', 'countdown'];
 const COMPOSER_EDITOR_MODES = ['design', 'code'];
 const INTERACTION_MAX_OPTIONS = 6;
-const GALLERY_MAX_ITEMS = 24;
+const GALLERY_MAX_ITEMS = 50;
 const GALLERY_MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 const HERO_IMAGE_HISTORY_LIMIT = 3;
 const HERO_RANDOM_BACKGROUND_ROTATION_INTERVAL_MS = 12000;
@@ -570,6 +570,22 @@ const normalizeGalleryItem = (item) => ({
   title: item?.title || '',
   caption: item?.caption || '',
   mediaType: item?.mediaType || 'url',
+  comments: Array.isArray(item?.comments)
+    ? item.comments.map((comment) => ({
+      ...comment,
+      userId: typeof comment?.userId === 'string'
+        ? comment.userId
+        : String(comment?.userId?._id || comment?.userId || ''),
+      username: typeof comment?.userId === 'object' && comment?.userId?.username
+        ? comment.userId.username
+        : (comment?.username || null),
+      content: comment?.content || '',
+      createdAt: comment?.createdAt || null
+    }))
+    : [],
+  commentsCount: typeof item?.commentsCount === 'number'
+    ? item.commentsCount
+    : (Array.isArray(item?.comments) ? item.comments.length : 0),
   relationshipAudience: item?.relationshipAudience === 'secure'
     ? 'secure'
     : (item?.relationshipAudience === 'public' ? 'public' : 'social'),
@@ -672,7 +688,10 @@ const Social = () => {
   const [galleryError, setGalleryError] = useState('');
   const [galleryLoading, setGalleryLoading] = useState(false);
   const [galleryActionLoadingByImage, setGalleryActionLoadingByImage] = useState({});
+  const [galleryCommentSubmittingByImage, setGalleryCommentSubmittingByImage] = useState({});
+  const [galleryCommentInputs, setGalleryCommentInputs] = useState({});
   const [galleryEditById, setGalleryEditById] = useState({});
+  const [activeGalleryImageId, setActiveGalleryImageId] = useState(null);
   const [showGalleryUploadModal, setShowGalleryUploadModal] = useState(false);
   const [galleryUploadPreviews, setGalleryUploadPreviews] = useState([]);
   const [galleryUploadDescriptions, setGalleryUploadDescriptions] = useState({});
@@ -1419,6 +1438,10 @@ const Social = () => {
       normalizedGalleryOwnerIdentifier === normalizedCurrentUserId
       || normalizedGalleryOwnerIdentifier === normalizedCurrentUsername
     );
+  const activeGalleryImage = useMemo(
+    () => galleryItems.find((item) => item._id === activeGalleryImageId) || null,
+    [galleryItems, activeGalleryImageId]
+  );
   const topFriendIdSet = useMemo(
     () => new Set(topFriends.map((friend) => String(friend._id))),
     [topFriends]
@@ -3314,6 +3337,9 @@ const Social = () => {
     try {
       await galleryAPI.deleteGalleryItem(galleryOwnerIdentifier, imageId);
       setGalleryItems((prev) => prev.filter((item) => item._id !== imageId));
+      if (activeGalleryImageId === imageId) {
+        setActiveGalleryImageId(null);
+      }
       handleCancelEditGalleryItem(imageId);
     } catch (error) {
       setGalleryError(error.response?.data?.error || 'Failed to remove gallery image.');
@@ -3349,6 +3375,46 @@ const Social = () => {
       setGalleryError(error.response?.data?.error || 'Failed to update gallery reaction.');
     } finally {
       setGalleryActionLoading(imageId, false);
+    }
+  };
+  const handleOpenGalleryImage = (imageId) => {
+    setActiveGalleryImageId(imageId);
+  };
+  const handleCloseGalleryImage = () => {
+    setActiveGalleryImageId(null);
+  };
+  const handleGalleryCommentInputChange = (imageId, value) => {
+    setGalleryCommentInputs((prev) => ({
+      ...prev,
+      [imageId]: value
+    }));
+  };
+  const handleGalleryCommentSubmit = async (imageId) => {
+    if (!viewerCanReact || !galleryOwnerIdentifier) return;
+    const content = (galleryCommentInputs[imageId] || '').trim();
+    if (!content) return;
+
+    setGalleryCommentSubmittingByImage((prev) => ({ ...prev, [imageId]: true }));
+    setGalleryError('');
+    try {
+      const response = await galleryAPI.addGalleryComment(galleryOwnerIdentifier, imageId, content);
+      const comment = response.data?.comment || null;
+      const commentsCount = typeof response.data?.commentsCount === 'number' ? response.data.commentsCount : null;
+
+      setGalleryItems((prev) => prev.map((item) => {
+        if (item._id !== imageId) return item;
+        const nextComments = comment ? [...(item.comments || []), comment] : (item.comments || []);
+        return {
+          ...item,
+          comments: nextComments,
+          commentsCount: commentsCount !== null ? commentsCount : nextComments.length
+        };
+      }));
+      setGalleryCommentInputs((prev) => ({ ...prev, [imageId]: '' }));
+    } catch (error) {
+      setGalleryError(error.response?.data?.error || 'Failed to add gallery comment.');
+    } finally {
+      setGalleryCommentSubmittingByImage((prev) => ({ ...prev, [imageId]: false }));
     }
   };
 
@@ -4166,7 +4232,9 @@ const Social = () => {
                   const editState = galleryEditById[image._id] || null;
                   return (
                     <article key={image._id} className="overflow-hidden rounded-[1.5rem] border shadow-sm" style={{ background: 'var(--bg-panel)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)' }}>
-                      <img src={image.mediaUrl} alt="Gallery item" className="h-40 w-full object-cover" />
+                      <button type="button" onClick={() => handleOpenGalleryImage(image._id)} className="block w-full">
+                        <img src={image.mediaUrl} alt="Gallery item" className="h-40 w-full cursor-zoom-in object-cover" />
+                      </button>
                       <div className="space-y-2.5 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -4180,6 +4248,7 @@ const Social = () => {
                         <div className="flex items-center gap-2 text-sm">
                           <button type="button" onClick={() => handleGalleryReaction(image._id, 'like')} disabled={!viewerCanReact || imageBusy} className="rounded-lg border px-2 py-1 transition-colors" style={viewerReaction === 'like' ? { borderColor: '#16a34a', background: '#16a34a', color: '#fff' } : { borderColor: 'color-mix(in srgb, var(--social-text-muted) 30%, transparent)', color: 'var(--social-text-secondary)' }}>👍 {image.likesCount || 0}</button>
                           <button type="button" onClick={() => handleGalleryReaction(image._id, 'dislike')} disabled={!viewerCanReact || imageBusy} className="rounded-lg border px-2 py-1 transition-colors" style={viewerReaction === 'dislike' ? { borderColor: '#ef4444', background: '#ef4444', color: '#fff' } : { borderColor: 'color-mix(in srgb, var(--social-text-muted) 30%, transparent)', color: 'var(--social-text-secondary)' }}>👎 {image.dislikesCount || 0}</button>
+                          <span className="rounded-lg border px-2 py-1 text-xs" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)', color: 'var(--social-text-secondary)' }}>💬 {image.commentsCount || 0}</span>
                         </div>
                         {canManageGallery ? (
                           <div className="space-y-2 border-t pt-2" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 15%, transparent)' }}>
@@ -6146,6 +6215,67 @@ const Social = () => {
         onToggleTopFriend={toggleDraftTopFriend}
         onMoveTopFriend={moveDraftTopFriend}
       />
+
+      {activeGalleryImage ? (
+        <div className="fixed inset-0 z-[130] bg-black/85 p-3 sm:p-6">
+          <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-4 lg:flex-row">
+            <div className="relative flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-white/20 bg-black/40 p-2 sm:p-4">
+              <button
+                type="button"
+                onClick={handleCloseGalleryImage}
+                className="absolute right-3 top-3 z-10 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black/80"
+              >
+                Close ✕
+              </button>
+              <img src={activeGalleryImage.mediaUrl} alt={activeGalleryImage.title || 'Gallery item'} className="max-h-full max-w-full rounded-xl object-contain" />
+            </div>
+            <aside className="flex w-full flex-col rounded-2xl border border-white/20 bg-white/95 p-4 text-slate-900 lg:w-[360px]">
+              <div className="mb-3">
+                <p className="text-base font-semibold">{activeGalleryImage.title || 'Untitled visual'}</p>
+                {activeGalleryImage.caption ? <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{activeGalleryImage.caption}</p> : null}
+              </div>
+              <div className="mb-3 flex items-center gap-2 text-sm">
+                <button type="button" onClick={() => handleGalleryReaction(activeGalleryImage._id, 'like')} disabled={!viewerCanReact || Boolean(galleryActionLoadingByImage[activeGalleryImage._id])} className="rounded-lg border px-2 py-1 transition-colors" style={(activeGalleryImage.viewerReaction || null) === 'like' ? { borderColor: '#16a34a', background: '#16a34a', color: '#fff' } : { borderColor: '#d1d5db', color: '#334155' }}>👍 {activeGalleryImage.likesCount || 0}</button>
+                <button type="button" onClick={() => handleGalleryReaction(activeGalleryImage._id, 'dislike')} disabled={!viewerCanReact || Boolean(galleryActionLoadingByImage[activeGalleryImage._id])} className="rounded-lg border px-2 py-1 transition-colors" style={(activeGalleryImage.viewerReaction || null) === 'dislike' ? { borderColor: '#ef4444', background: '#ef4444', color: '#fff' } : { borderColor: '#d1d5db', color: '#334155' }}>👎 {activeGalleryImage.dislikesCount || 0}</button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
+                {(activeGalleryImage.comments || []).length === 0 ? (
+                  <p className="p-2 text-sm text-slate-500">No comments yet.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {(activeGalleryImage.comments || []).map((comment, index) => (
+                      <li key={comment._id || `${activeGalleryImage._id}-comment-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm">
+                        <p className="font-medium text-slate-700">@{comment.username || 'Unknown User'}</p>
+                        <p className="whitespace-pre-wrap text-slate-800">{comment.content}</p>
+                        <p className="text-[11px] text-slate-500">{formatDate(comment.createdAt)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <input
+                  type="text"
+                  value={galleryCommentInputs[activeGalleryImage._id] || ''}
+                  onChange={(event) => handleGalleryCommentInputChange(activeGalleryImage._id, event.target.value)}
+                  placeholder={viewerCanReact ? 'Add a comment...' : 'Sign in to comment'}
+                  disabled={!viewerCanReact || Boolean(galleryCommentSubmittingByImage[activeGalleryImage._id])}
+                  maxLength={1000}
+                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleGalleryCommentSubmit(activeGalleryImage._id)}
+                  disabled={!viewerCanReact || !(galleryCommentInputs[activeGalleryImage._id] || '').trim() || Boolean(galleryCommentSubmittingByImage[activeGalleryImage._id])}
+                  className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  Send
+                </button>
+              </div>
+            </aside>
+          </div>
+        </div>
+      ) : null}
 
       {/* Gallery Upload Modal */}
       {showGalleryUploadModal ? (

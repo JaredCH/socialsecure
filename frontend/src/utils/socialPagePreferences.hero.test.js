@@ -25,4 +25,16 @@ describe('socialPagePreferences hero media normalization', () => {
       'https://example.com/old-3.jpg'
     ]);
   });
+
+  it('preserves uploaded /uploads hero image paths', () => {
+    const normalized = normalizeSocialPreferences({
+      hero: {
+        backgroundImage: '/uploads/gallery/user-1/photo-1.jpg',
+        profileImage: '/uploads/gallery/user-1/photo-2.jpg'
+      }
+    });
+
+    expect(normalized.hero.backgroundImage).toBe('/uploads/gallery/user-1/photo-1.jpg');
+    expect(normalized.hero.profileImage).toBe('/uploads/gallery/user-1/photo-2.jpg');
+  });
 });
