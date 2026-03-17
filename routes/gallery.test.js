@@ -61,13 +61,22 @@ describe('Gallery routes', () => {
       mediaUrl: 'https://example.com/photo.jpg',
       mediaType: 'url',
       caption: 'Caption',
+      comments: [
+        {
+          _id: 'comment-1',
+          userId: { _id: 'viewer-1', username: 'viewer' },
+          content: 'Nice shot'
+        }
+      ],
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
       updatedAt: new Date('2024-01-01T00:00:00.000Z'),
       getReactionCounts: jest.fn().mockReturnValue({ likesCount: 3, dislikesCount: 1 }),
       getViewerReaction: jest.fn().mockReturnValue(null)
     };
 
+    const populateMock = jest.fn().mockReturnThis();
     mockGalleryImage.find.mockReturnValue({
+      populate: populateMock,
       sort: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([imageDoc])
@@ -84,6 +93,12 @@ describe('Gallery routes', () => {
       dislikesCount: 1,
       mediaUrl: 'https://example.com/photo.jpg'
     });
+    expect(response.body.items[0].comments?.[0]).toMatchObject({
+      userId: 'viewer-1',
+      username: 'viewer',
+      content: 'Nice shot'
+    });
+    expect(populateMock).toHaveBeenCalledWith('comments.userId', 'username');
   });
 
   it('rejects create when requester is not owner', async () => {
@@ -278,6 +293,7 @@ describe('Gallery routes', () => {
     };
 
     mockGalleryImage.find.mockReturnValue({
+      populate: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([imageDoc])

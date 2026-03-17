@@ -42,6 +42,7 @@ jest.mock('../utils/api', () => {
     },
     galleryAPI: {
       getGallery: jest.fn(),
+      addGalleryComment: jest.fn(),
       deleteGalleryItem: jest.fn(),
       updateGalleryItem: jest.fn(),
       createGalleryItem: jest.fn(),
@@ -190,6 +191,7 @@ describe('Social page hero background rendering', () => {
     feedAPI.getPublicUserFeed.mockResolvedValue({ data: { posts: [], user: null } });
     feedAPI.deletePost.mockResolvedValue({ data: { success: true } });
     galleryAPI.getGallery.mockResolvedValue({ data: { items: [] } });
+    galleryAPI.addGalleryComment.mockResolvedValue({ data: { comment: null, commentsCount: 0 } });
     galleryAPI.deleteGalleryItem.mockResolvedValue({ data: { success: true } });
     galleryAPI.updateGalleryItem.mockResolvedValue({ data: { item: null } });
     galleryAPI.createGalleryItem.mockResolvedValue({ data: { item: null } });
@@ -600,13 +602,53 @@ describe('Social page hero background rendering', () => {
       galleryThumbnail?.closest('button')?.click();
     });
 
-    const closeButton = Array.from(container.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'Close gallery viewer');
+    const closeButton = Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'Close gallery viewer');
     expect(closeButton).toBeTruthy();
+    expect(container.contains(closeButton)).toBe(false);
+    expect(document.body.contains(closeButton)).toBe(true);
     expect(closeButton?.className).toContain('absolute');
     expect(closeButton?.className).toContain('right-4');
     expect(closeButton?.className).toContain('top-4');
     expect(closeButton?.className).toContain('sm:right-6');
     expect(closeButton?.className).toContain('sm:top-6');
+  });
+
+  it('falls back to the signed-in username when a gallery comment username is missing', async () => {
+    galleryAPI.getGallery.mockResolvedValue({
+      data: {
+        items: [
+          {
+            _id: 'img-1',
+            mediaUrl: 'https://example.com/gallery-image.jpg',
+            title: 'Gallery image',
+            caption: '',
+            likesCount: 0,
+            dislikesCount: 0,
+            comments: [
+              {
+                _id: 'comment-1',
+                userId: 'u-1',
+                username: null,
+                content: 'Looks great',
+                createdAt: '2025-01-01T00:00:00.000Z'
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+    await switchToTab('Gallery');
+
+    const galleryThumbnail = container.querySelector('img.cursor-zoom-in');
+    expect(galleryThumbnail).toBeTruthy();
+    await act(async () => {
+      galleryThumbnail?.closest('button')?.click();
+    });
+
+    expect(document.body.textContent).toContain('@alpha');
+    expect(document.body.textContent).not.toContain('@Unknown User');
   });
 
   it('loads profile chat thread/messages for guest viewers when read access allows guests', async () => {
