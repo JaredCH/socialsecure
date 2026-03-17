@@ -161,4 +161,39 @@ describe('AlgorithmicFeed', () => {
     expect(container.textContent).not.toContain('Austin technology update');
     expect(container.textContent).toContain('1 result for "budget"');
   });
+
+  it('accepts the cache-first feed contract using data.articles', async () => {
+    newsAPI.getFeed.mockResolvedValue({
+      data: {
+        articles: [
+          {
+            _id: 'article-cache-1',
+            title: 'Cache-backed local headline',
+            link: 'https://example.com/cache-local',
+            url: 'https://example.com/cache-local',
+            category: 'general',
+            tier: 'local',
+            publishedAt: '2026-03-14T23:30:00.000Z',
+            source: 'Google News'
+          }
+        ],
+        pagination: { page: 1, pages: 1, total: 1 },
+        location: { locationKey: 'san_marcos_tx_us', cacheHit: true }
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <AlgorithmicFeed
+          categories={[]}
+          activeCategory={null}
+          activeRegion={null}
+          activeDate="all"
+          searchQuery=""
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Cache-backed local headline');
+  });
 });
