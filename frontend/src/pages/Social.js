@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { authAPI, blogAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, getAuthToken, moderationAPI, notificationAPI, resumeAPI, socialPageAPI } from '../utils/api';
+import { authAPI, blogAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, getAuthToken, moderationAPI, notificationAPI, resolveUploadMediaUrl, resumeAPI, socialPageAPI } from '../utils/api';
 import CircleManager from '../components/CircleManager';
 import ReportModal from '../components/ReportModal';
 import BlockButton from '../components/BlockButton';
@@ -569,6 +569,7 @@ const normalizeGalleryItem = (item) => ({
   viewerReaction: item?.viewerReaction || null,
   title: item?.title || '',
   caption: item?.caption || '',
+  mediaUrl: resolveUploadMediaUrl(item?.mediaUrl || ''),
   mediaType: item?.mediaType || 'url',
   comments: Array.isArray(item?.comments)
     ? item.comments.map((comment) => ({
@@ -965,7 +966,7 @@ const Social = () => {
     if (isHeroRandomGalleryEnabled && galleryImageUrls.length > 0) {
       return heroRandomBackgroundImage || galleryImageUrls[0];
     }
-    return socialPreferences.hero?.backgroundImage || '';
+    return resolveUploadMediaUrl(socialPreferences.hero?.backgroundImage || '');
   }, [isHeroRandomGalleryEnabled, galleryImageUrls, heroRandomBackgroundImage, socialPreferences.hero?.backgroundImage]);
   const heroConfig = useMemo(
     () => ({ ...(socialPreferences.hero || {}), backgroundImage: resolvedHeroBackgroundImage || null }),
@@ -5722,7 +5723,7 @@ const Social = () => {
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
-  const bodyBgImage = socialPreferences.globalStyles?.bodyBackgroundImage || '';
+  const bodyBgImage = resolveUploadMediaUrl(socialPreferences.globalStyles?.bodyBackgroundImage || '');
   const bodyBgOverlay = socialPreferences.globalStyles?.bodyBackgroundOverlay || 0;
   const bodyBgGrain = socialPreferences.globalStyles?.bodyBackgroundGrain || 0;
   const bodyBgBlur = socialPreferences.globalStyles?.bodyBackgroundBlur || 0;

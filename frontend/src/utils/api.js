@@ -89,6 +89,33 @@ export const normalizeApiBaseUrl = (apiUrl) => {
 
 const API_URL = normalizeApiBaseUrl(process.env.REACT_APP_API_URL);
 
+const resolveUrlOrigin = (baseUrl, fallbackOrigin = '') => {
+  const normalizedBaseUrl = String(baseUrl || '').trim();
+  if (!normalizedBaseUrl) return fallbackOrigin;
+
+  try {
+    const parsed = fallbackOrigin
+      ? new URL(normalizedBaseUrl, fallbackOrigin)
+      : new URL(normalizedBaseUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return fallbackOrigin;
+    }
+    return parsed.origin;
+  } catch {
+    return fallbackOrigin;
+  }
+};
+
+export const resolveUploadMediaUrl = (mediaUrl, apiBaseUrl = API_URL) => {
+  const normalizedMediaUrl = typeof mediaUrl === 'string' ? mediaUrl.trim() : '';
+  if (!normalizedMediaUrl) return '';
+  if (!/^\/uploads\/\S+/i.test(normalizedMediaUrl)) return normalizedMediaUrl;
+
+  const browserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const uploadOrigin = resolveUrlOrigin(apiBaseUrl, browserOrigin);
+  return uploadOrigin ? `${uploadOrigin}${normalizedMediaUrl}` : normalizedMediaUrl;
+};
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {
