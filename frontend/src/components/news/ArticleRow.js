@@ -44,9 +44,19 @@ export default function ArticleRow({ article, onArticle, onScrollPast, onClick }
     return () => observer.disconnect();
   }, [article._id]);
 
-  const handleClick = () => {
+  const buildAnchor = (event) => {
+    const rowRect = rowRef.current?.getBoundingClientRect?.();
+    const fallbackX = rowRect ? rowRect.left + (rowRect.width / 2) : 0;
+    const fallbackY = rowRect ? rowRect.top + (rowRect.height / 2) : 0;
+    return {
+      x: typeof event?.clientX === 'number' ? event.clientX : fallbackX,
+      y: typeof event?.clientY === 'number' ? event.clientY : fallbackY,
+    };
+  };
+
+  const handleClick = (event) => {
     onClick?.(article);
-    onArticle?.(article);
+    onArticle?.(article, buildAnchor(event));
   };
 
   const { symbol, bg, text } = getCategoryIcon(article.category);
