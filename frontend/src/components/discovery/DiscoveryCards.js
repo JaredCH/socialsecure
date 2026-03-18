@@ -124,7 +124,7 @@ export const UserCard = ({ user, onSendRequest, canInteract }) => {
               disabled={requestState === 'loading'}
               className="flex-shrink-0 px-2 py-1 text-[10px] font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              {requestState === 'loading' ? '…' : 'Add'}
+              {requestState === 'loading' ? '…' : 'Add Friend'}
             </button>
           )}
         </div>

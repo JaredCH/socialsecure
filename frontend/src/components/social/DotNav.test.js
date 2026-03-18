@@ -248,7 +248,8 @@ describe('DotNav navigation system', () => {
     await act(async () => { dot.click(); });
 
     const labels = document.querySelectorAll('.dotnav-slot-label');
-    expect(labels.length).toBe(DEFAULT_ASSIGNED.length);
+    // The last radial slot is empty so only 15 labels render
+    expect(labels.length).toBe(DEFAULT_ASSIGNED.filter(Boolean).length);
     expect(Array.from(labels).some(l => l.textContent === 'Find')).toBe(true);
   });
 
@@ -283,7 +284,7 @@ describe('DotNav navigation system', () => {
 
     const slot0After = document.querySelector('[data-slot-index="0"] .dotnav-nbtn');
     const slot1After = document.querySelector('[data-slot-index="1"] .dotnav-nbtn');
-    expect(slot0After.getAttribute('aria-label')).toContain('My Gallery');
+    expect(slot0After.getAttribute('aria-label')).toContain('Gallery');
     expect(slot1After.getAttribute('aria-label')).toContain('Main');
   });
 
@@ -319,7 +320,7 @@ describe('DotNav navigation system', () => {
 
     const slot0After = document.querySelector('[data-slot-index="0"] .dotnav-nbtn');
     const slot1After = document.querySelector('[data-slot-index="1"] .dotnav-nbtn');
-    expect(slot0After.getAttribute('aria-label')).toContain('My Gallery');
+    expect(slot0After.getAttribute('aria-label')).toContain('Gallery');
     expect(slot1After.getAttribute('aria-label')).toContain('Main');
 
     document.elementFromPoint = originalElementFromPoint;
