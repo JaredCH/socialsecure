@@ -15,7 +15,15 @@ const mockUser = {
 const mockChatRoom = {
   ensureDefaultDiscoveryRooms: jest.fn(),
   findOrCreateByLocation: jest.fn(),
-  findOne: jest.fn()
+  findOne: jest.fn(),
+  find: jest.fn(),
+  countDocuments: jest.fn(),
+  findById: jest.fn()
+};
+
+const mockChatMessage = {
+  getRoomMessages: jest.fn(),
+  countDocuments: jest.fn()
 };
 
 const mockLocationCacheService = {
@@ -31,6 +39,7 @@ const mockFetchWeatherForLocation = jest.fn();
 jest.mock('../models/Post', () => mockPost);
 jest.mock('../models/User', () => mockUser);
 jest.mock('../models/ChatRoom', () => mockChatRoom);
+jest.mock('../models/ChatMessage', () => mockChatMessage);
 jest.mock('../services/locationCacheService', () => mockLocationCacheService);
 jest.mock('../services/locationNormalizer', () => mockLocationNormalizer);
 jest.mock('./news', () => ({
@@ -63,6 +72,19 @@ describe('Guest routes', () => {
     mockChatRoom.ensureDefaultDiscoveryRooms.mockResolvedValue();
     mockChatRoom.findOrCreateByLocation.mockResolvedValue({ room: null, created: false });
     mockChatRoom.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
+    mockChatRoom.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        skip: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue([])
+          })
+        })
+      })
+    });
+    mockChatRoom.countDocuments.mockResolvedValue(0);
+    mockChatRoom.findById.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
+    mockChatMessage.getRoomMessages.mockResolvedValue([]);
+    mockChatMessage.countDocuments.mockResolvedValue(0);
     mockUser.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         sort: jest.fn().mockReturnValue({
@@ -177,6 +199,87 @@ describe('Guest routes', () => {
       city: 'Austin',
       state: 'TX',
       zipCode: '78701'
+    }));
+  });
+
+  it('lists discovery rooms for guests with pagination metadata', async () => {
+    const app = buildApp();
+    const roomDoc = {
+      _id: 'room-state-tx',
+      name: 'Texas',
+      type: 'state',
+      discoveryGroup: 'states',
+      sortOrder: 0,
+      defaultLanding: false,
+      members: ['u1'],
+      messageCount: 4,
+      lastActivity: new Date('2024-01-01T00:00:00.000Z')
+    };
+    mockChatRoom.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        skip: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue([roomDoc])
+          })
+        })
+      })
+    });
+    mockChatRoom.countDocuments.mockResolvedValue(1);
+
+    const response = await request(app).get('/api/guest/chat/rooms/all?page=1&limit=50');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.rooms).toHaveLength(1);
+    expect(response.body.rooms[0]).toEqual(expect.objectContaining({
+      _id: 'room-state-tx',
+      name: 'Texas',
+      type: 'state',
+      discoveryGroup: 'states',
+      sortOrder: 0,
+      memberCount: 1
+    }));
+    expect(response.body.hasMore).toBe(false);
+  });
+
+  it('returns guest-readable room messages for a selected room', async () => {
+    const app = buildApp();
+    mockChatRoom.findById.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        _id: 'room-topic-ai',
+        name: 'AI',
+        type: 'topic',
+        discoverable: true,
+        archivedAt: null,
+        members: []
+      })
+    });
+    mockChatMessage.getRoomMessages.mockResolvedValue([
+      {
+        _id: 'm-1',
+        roomId: 'room-topic-ai',
+        content: 'hello guests',
+        userId: { _id: 'u-2', username: 'buddy' },
+        createdAt: '2024-01-01T00:00:00.000Z'
+      }
+    ]);
+    mockChatMessage.countDocuments.mockResolvedValue(1);
+
+    const response = await request(app).get('/api/guest/chat/rooms/room-topic-ai/messages?page=1&limit=25');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        _id: 'm-1',
+        content: 'hello guests'
+      })
+    ]));
+    expect(response.body.pagination).toEqual(expect.objectContaining({
+      page: 1,
+      limit: 25,
+      total: 1,
+      hasMore: false
     }));
   });
 });
