@@ -514,13 +514,14 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
   }, [isEditing]);
 
   const handleTouchDragEnd = useCallback((e) => {
+    if (!isEditing || draggedSlotRef.current === null) return;
     if (e) e.preventDefault();
     swapSlots(draggedSlotRef.current, dragOverSlotRef.current);
     draggedSlotRef.current = null;
     dragOverSlotRef.current = null;
     setDraggedSlotIndex(null);
     setDragOverSlotIndex(null);
-  }, [swapSlots]);
+  }, [isEditing, swapSlots]);
 
   // Determine context for viewingUser
   const effectiveViewingUser = useMemo(() => {
