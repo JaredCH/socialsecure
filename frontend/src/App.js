@@ -808,7 +808,7 @@ function App() {
                 >
                   <Social />
                 </ProtectedRoute>
-              ) : <Discovery />}
+              ) : <Social />}
             />
             <Route
               path="/friends"
