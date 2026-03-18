@@ -10,6 +10,7 @@ describe('DotNav navigation system', () => {
   let root;
   let originalWidth;
   let originalHeight;
+  let originalUserAgent;
 
   const setViewport = (width, height = 844) => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width });
@@ -35,6 +36,7 @@ describe('DotNav navigation system', () => {
     localStorage.clear();
     originalWidth = window.innerWidth;
     originalHeight = window.innerHeight;
+    originalUserAgent = navigator.userAgent;
     setViewport(390, 844);
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -49,6 +51,10 @@ describe('DotNav navigation system', () => {
     container = null;
     root = null;
     setViewport(originalWidth, originalHeight);
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: originalUserAgent
+    });
   });
 
   it('renders the main dot button', async () => {
@@ -72,6 +78,18 @@ describe('DotNav navigation system', () => {
     await renderNav();
     const dot = document.getElementById('dotnav-dot');
     expect(dot).toBeNull();
+  });
+
+  it('renders for touch mobile user agents on tablet-sized widths', async () => {
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'
+    });
+    setViewport(820, 900);
+    await renderNav();
+
+    const dot = document.getElementById('dotnav-dot');
+    expect(dot).not.toBeNull();
   });
 
   it('opens and closes the navigation menu', async () => {
