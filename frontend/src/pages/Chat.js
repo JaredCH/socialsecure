@@ -2467,7 +2467,7 @@ function Chat({ isGuestMode = false }) {
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="truncate font-medium">{getConversationLabel(conversation)}</span>
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-jetbrains uppercase">
                                     {conversation.__hasUnread ? <span className="h-2 w-2 rounded-full bg-sky-500" /> : null}
                                     <span className={`h-2 w-2 rounded-full ${status.tone}`} />
                                     <span>{status.label}</span>
@@ -2947,7 +2947,7 @@ function Chat({ isGuestMode = false }) {
 
           <div className="mt-1 space-y-1">
             {localTyping ? (
-              <div className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-mono opacity-80">
+              <div className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-jetbrains opacity-80 ${activeTheme.subtle}`}>
                 <span className="animate-pulse">●</span>
                 <span className="animate-pulse [animation-delay:120ms]">●</span>
                 <span className="animate-pulse [animation-delay:240ms]">●</span>
@@ -3073,8 +3073,11 @@ function Chat({ isGuestMode = false }) {
               <div className={`sticky top-0 z-10 rounded border p-2 ${activeTheme.panelGlass}`}>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.1em]">Users in Room</h3>
                 {activeConversation ? (
-                  <p className="mt-1 text-[11px] opacity-80">
-                    {getConversationLabel(activeConversation)} &middot; {roomUsers.length} {roomUsers.length === 1 ? 'user' : 'users'}
+                  <p className="mt-1 text-[11px] font-jetbrains opacity-80">
+                    {getConversationLabel(activeConversation)} &middot;
+                    <span className="ml-1">🟢</span>
+                    <span className="ml-0.5">{roomUsers.length} {roomUsers.length === 1 ? 'user' : 'users'}</span>
+                    <span className="ml-1">👥</span>
                   </p>
                 ) : (
                   <p className="mt-1 text-[11px] opacity-80">Select a room to see who's here.</p>

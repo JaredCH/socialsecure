@@ -174,7 +174,11 @@ function ChatMessageList({
             ))}
           </div>
         ) : messages.length === 0 ? (
-          <p className="text-sm opacity-80">No messages yet.</p>
+          <div className="flex flex-col items-center justify-center py-8 opacity-60">
+            <span className="text-3xl">💬</span>
+            <p className="mt-2 text-sm">No messages yet.</p>
+            <p className="mt-1 text-[11px] opacity-70">Start the conversation by typing below.</p>
+          </div>
         ) : (
           visibleMessagesWithGrouping.map(({ message, groupedWithPrevious, groupedWithNext }) => (
             <ChatMessageItem

@@ -480,7 +480,7 @@ function ChatMessageItem({
               {reactionsMarkup}
             </div>
             {timestamp ? (
-              <span className="mt-0.5 px-2 text-[10px] font-mono opacity-65">{timestamp}</span>
+              <span className="mt-0.5 px-2 text-[10px] font-jetbrains opacity-65">{timestamp}</span>
             ) : null}
           </div>
         </div>
@@ -553,7 +553,7 @@ function ChatMessageItem({
                   </>
                 ) : null}
                 {renderMessageContent(displayContent)}
-                {timestamp ? <span className="ml-2 whitespace-nowrap font-mono text-[10px] opacity-40">{timestamp}</span> : null}
+                {timestamp ? <span className="ml-2 whitespace-nowrap font-jetbrains text-[10px] opacity-40">{timestamp}</span> : null}
               </p>
               {reactionsMarkup}
             </div>
