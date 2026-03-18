@@ -8,6 +8,14 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 describe('DotNav navigation system', () => {
   let container;
   let root;
+  let originalWidth;
+  let originalHeight;
+
+  const setViewport = (width, height = 844) => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: height });
+    window.dispatchEvent(new Event('resize'));
+  };
 
   const renderNav = async (props = {}, initialPath = '/') => {
     await act(async () => {
@@ -25,6 +33,9 @@ describe('DotNav navigation system', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    originalWidth = window.innerWidth;
+    originalHeight = window.innerHeight;
+    setViewport(390, 844);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -37,6 +48,7 @@ describe('DotNav navigation system', () => {
     container.remove();
     container = null;
     root = null;
+    setViewport(originalWidth, originalHeight);
   });
 
   it('renders the main dot button', async () => {
@@ -51,6 +63,13 @@ describe('DotNav navigation system', () => {
   it('does not render when disabled', async () => {
     await renderNav({ enabled: false });
 
+    const dot = document.getElementById('dotnav-dot');
+    expect(dot).toBeNull();
+  });
+
+  it('does not render on desktop viewport', async () => {
+    setViewport(1200, 900);
+    await renderNav();
     const dot = document.getElementById('dotnav-dot');
     expect(dot).toBeNull();
   });
@@ -153,6 +172,52 @@ describe('DotNav navigation system', () => {
     const btns = document.querySelectorAll('.dotnav-nbtn');
     const labels = Array.from(btns).map(b => b.getAttribute('aria-label')).filter(Boolean);
     expect(labels.length).toBeGreaterThanOrEqual(DEFAULT_ASSIGNED.length);
+  });
+
+  it('renders compact labels below each button', async () => {
+    await renderNav();
+
+    const dot = document.getElementById('dotnav-dot');
+    await act(async () => { dot.click(); });
+
+    const labels = document.querySelectorAll('.dotnav-slot-label');
+    expect(labels.length).toBe(DEFAULT_ASSIGNED.length);
+    expect(Array.from(labels).some(l => l.textContent === 'Find')).toBe(true);
+  });
+
+  it('rearranges button slots during edit mode drag and drop', async () => {
+    await renderNav();
+
+    const dot = document.getElementById('dotnav-dot');
+    await act(async () => { dot.click(); });
+
+    const cog = document.getElementById('dotnav-cog');
+    await act(async () => { cog.click(); });
+
+    const editBtn = Array.from(document.querySelectorAll('#dotnav-settings-panel button'))
+      .find(btn => btn.textContent.includes('Edit Buttons'));
+    expect(editBtn).not.toBeUndefined();
+
+    await act(async () => { editBtn.click(); });
+
+    const sourceSlotBtn = document.querySelector('[data-slot-index="0"] .dotnav-nbtn');
+    const targetSlot = document.querySelector('[data-slot-index="1"]');
+    expect(sourceSlotBtn).not.toBeNull();
+    expect(targetSlot).not.toBeNull();
+    expect(sourceSlotBtn.getAttribute('aria-label')).toContain('Main');
+
+    await act(async () => {
+      sourceSlotBtn.dispatchEvent(new Event('dragstart', { bubbles: true }));
+      targetSlot.dispatchEvent(new Event('dragenter', { bubbles: true }));
+      targetSlot.dispatchEvent(new Event('dragover', { bubbles: true, cancelable: true }));
+      targetSlot.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
+      sourceSlotBtn.dispatchEvent(new Event('dragend', { bubbles: true }));
+    });
+
+    const slot0After = document.querySelector('[data-slot-index="0"] .dotnav-nbtn');
+    const slot1After = document.querySelector('[data-slot-index="1"] .dotnav-nbtn');
+    expect(slot0After.getAttribute('aria-label')).toContain('My Gallery');
+    expect(slot1After.getAttribute('aria-label')).toContain('Main');
   });
 
   it('dispatches VoidNavTrigger event on nav button click', async () => {
