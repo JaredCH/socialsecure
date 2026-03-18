@@ -1000,19 +1000,28 @@ function Chat({ isGuestMode = false }) {
 
   const refreshHub = async (channelToKeep = activeChannel) => {
     if (isGuestMode) {
-      const [roomsResponse, quickAccessResponse] = await Promise.all([
-        chatAPI.getAllRooms(1, MAX_CHAT_ROOM_FETCH),
-        Promise.resolve(chatAPI.getQuickAccessRooms?.()).catch(() => ({ data: { rooms: {} } }))
-      ]);
-      const rooms = Array.isArray(roomsResponse?.data?.rooms) ? roomsResponse.data.rooms : [];
-      const quickRooms = quickAccessResponse?.data?.rooms || {};
-      const currentRoom = quickRooms.zip || quickRooms.state || quickRooms.county || rooms[0] || null;
-      setProfile(null);
-      setHubData({
-        zip: { current: currentRoom, nearby: [] },
-        dm: [],
-        profile: []
-      });
+      try {
+        const [roomsResponse, quickAccessResponse] = await Promise.all([
+          chatAPI.getAllRooms(1, MAX_CHAT_ROOM_FETCH),
+          Promise.resolve(chatAPI.getQuickAccessRooms?.()).catch(() => ({ data: { rooms: {} } }))
+        ]);
+        const rooms = Array.isArray(roomsResponse?.data?.rooms) ? roomsResponse.data.rooms : [];
+        const quickRooms = quickAccessResponse?.data?.rooms || {};
+        const currentRoom = quickRooms.zip || quickRooms.state || quickRooms.county || rooms[0] || null;
+        setProfile(null);
+        setHubData({
+          zip: { current: currentRoom, nearby: [] },
+          dm: [],
+          profile: []
+        });
+      } catch {
+        setProfile(null);
+        setHubData({
+          zip: { current: null, nearby: [] },
+          dm: [],
+          profile: []
+        });
+      }
       return;
     }
 

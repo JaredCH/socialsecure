@@ -78,7 +78,7 @@ describe('GuestChat', () => {
     chatAPI.getAllRooms.mockResolvedValue({
       data: {
         rooms: [
-          { _id: 'state-tx', type: 'state', name: 'Texas', discoveryGroup: 'states', state: 'TX', defaultLanding: true },
+          { _id: 'state-tx', type: 'state', name: 'Texas', discoveryGroup: 'states', state: 'TX' },
           { _id: 'topic-ai', type: 'topic', name: 'AI', discoveryGroup: 'topics' }
         ]
       }

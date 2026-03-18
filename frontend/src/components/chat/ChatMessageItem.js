@@ -272,7 +272,6 @@ function ChatMessageItem({
             type="button"
             disabled={reactionsDisabled}
             onClick={(event) => {
-              if (reactionsDisabled) return;
               event.stopPropagation();
               onToggleReaction?.(message._id, reaction.key);
             }}
@@ -304,7 +303,6 @@ function ChatMessageItem({
               type="button"
               disabled={reactionsDisabled}
               onClick={(event) => {
-                if (reactionsDisabled) return;
                 event.stopPropagation();
                 onToggleReaction?.(message._id, reaction.key);
                 setReactionPickerOpen(false);
