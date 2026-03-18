@@ -939,6 +939,7 @@ function App() {
           loggedInUser={user?.username || ''}
           enabled={canUseProtectedFeatures}
           unreadNotificationCount={unreadNotificationCount}
+          incomingNotification={incomingNotification}
         />
 
         <Toaster position="bottom-right" />

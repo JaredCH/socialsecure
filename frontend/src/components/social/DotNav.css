@@ -642,6 +642,92 @@
   }
 }
 
+/* ── Mobile DotNav Notification Overlay ── */
+.dotnav-mobile-notification {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  margin: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--dotnav-bg);
+  border: 1px solid var(--dotnav-border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: var(--dotnav-shadow);
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+  pointer-events: none;
+  transition: opacity 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+              transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dotnav-mobile-notification.dotnav-mobile-notification-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.dotnav-mobile-notification-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dotnav-mobile-notification-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dotnav-ink);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dotnav-mobile-notification-body {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--dotnav-mid);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dotnav-mobile-notification-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dotnav-mobile-notification-ack,
+.dotnav-mobile-notification-dismiss {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--dotnav-border);
+  background: transparent;
+  color: var(--dotnav-mid);
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dotnav-mobile-notification-ack:active,
+.dotnav-mobile-notification-dismiss:active {
+  background: var(--dotnav-ink);
+  color: var(--dotnav-btn-fg);
+}
+
 /* ── Reduced motion preference ── */
 @media (prefers-reduced-motion: reduce) {
   #dotnav-dot,
@@ -656,7 +742,8 @@
   #dotnav-notification-panel,
   #dotnav-hint,
   #dotnav-nav-label,
-  #dotnav-backdrop {
+  #dotnav-backdrop,
+  .dotnav-mobile-notification {
     transition: none !important;
   }
 

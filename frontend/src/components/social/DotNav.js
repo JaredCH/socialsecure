@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
+import MobileDotNavNotification from './MobileDotNavNotification';
 import './DotNav.css';
 
 // ═══════════════════════════════════════════
@@ -248,7 +249,7 @@ function resolveRoute(catalogEntry, loggedInUser, viewingUser) {
 // ═══════════════════════════════════════════
 // DOTNAV COMPONENT
 // ═══════════════════════════════════════════
-const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0 }) => {
+const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0, incomingNotification = null, onNotificationInteraction }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -851,6 +852,14 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
           </button>
         </div>
       </div>
+
+      {/* Mobile notification overlay – positioned above DotNav, never overlapping */}
+      <MobileDotNavNotification
+        notification={incomingNotification}
+        dotnavHeight={DSIZ + PAD}
+        onAcknowledge={onNotificationInteraction}
+        onDismiss={onNotificationInteraction}
+      />
     </>
   );
 
