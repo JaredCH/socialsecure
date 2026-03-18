@@ -1,106 +1,245 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { notificationAPI } from '../../utils/api';
 
 // ═══════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════
-const AUTO_DISMISS_MS = 6000;
 const ANIMATION_DURATION_MS = 350;
-const BOTTOM_GAP_PX = 16;
+const TOP_GAP_PX = 0;
 
 /**
- * MobileDotNavNotification – overlay notification toast for the mobile DotNav.
+ * MobileDotNavNotification – notification panel for the mobile DotNav overlay.
  *
- * Renders a fixed-position, animated notification above the DotNav so it never
- * overlaps navigation buttons.  Supports acknowledge (✓) and dismiss (✗)
- * actions, and auto-dismisses after a timeout.
+ * When the DotNav is open, renders a fixed-position notification panel at the
+ * top of the screen with a "Notifications" header bar and red "Logout" button.
+ * Below the header, displays grouped active notifications as slim pills, or
+ * "No new notifications" if empty.  Notifications never overlap DotNav buttons;
+ * the list height is restricted via max-height derived from dotnavHeight.
  *
  * Props:
- *   notification  – { _id, title, body, type }  (from realtime push)
- *   dotnavHeight  – pixel height of the dotnav anchor region (for bottom offset)
+ *   isOpen        – whether the DotNav overlay is open
+ *   dotnavHeight  – pixel height of the dotnav anchor region (for max-height calc)
+ *   onLogout      – () => void
+ *   onNavigate    – (path) => void
  *   onAcknowledge – (notification) => void
  *   onDismiss     – (notification) => void
  */
-const MobileDotNavNotification = ({ notification, dotnavHeight = 72, onAcknowledge, onDismiss }) => {
+
+const formatRelativeTime = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+};
+
+/** Group notifications by type+title, keeping newest first. */
+const groupNotifications = (list) => {
+  const map = new Map();
+  for (const n of list) {
+    const key = `${n.type || ''}::${n.title || ''}`;
+    if (!map.has(key)) {
+      map.set(key, { ...n, _ids: [n._id], count: 1 });
+    } else {
+      const group = map.get(key);
+      group._ids.push(n._id);
+      group.count += 1;
+      // keep newest createdAt
+      if (n.createdAt > group.createdAt) {
+        group.createdAt = n.createdAt;
+        group.body = n.body;
+      }
+    }
+  }
+  return Array.from(map.values());
+};
+
+const MobileDotNavNotification = ({
+  isOpen = false,
+  dotnavHeight = 72,
+  onLogout,
+  onNavigate,
+  onAcknowledge,
+  onDismiss,
+}) => {
   const [visible, setVisible] = useState(false);
-  const [current, setCurrent] = useState(null);
-  const timerRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(false);
   const animTimerRef = useRef(null);
 
-  const clearTimers = useCallback(() => {
-    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
-    if (animTimerRef.current) { clearTimeout(animTimerRef.current); animTimerRef.current = null; }
-  }, []);
-
-  // Animate out then clear
-  const animateOut = useCallback(() => {
-    setVisible(false);
-    animTimerRef.current = setTimeout(() => setCurrent(null), ANIMATION_DURATION_MS);
-  }, []);
-
-  // When a new notification arrives, show it
+  // Fetch active notifications when panel opens
   useEffect(() => {
-    if (!notification || !notification._id) return;
-    clearTimers();
-    setCurrent(notification);
+    if (!isOpen) {
+      // animate out
+      setVisible(false);
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+      animTimerRef.current = setTimeout(() => {
+        setMounted(false);
+        setNotifications([]);
+      }, ANIMATION_DURATION_MS);
+      return;
+    }
+    setMounted(true);
+    let cancelled = false;
+    setLoading(true);
+    notificationAPI.getNotifications(1, 50)
+      .then((res) => {
+        if (cancelled) return;
+        const list = Array.isArray(res.data?.notifications) ? res.data.notifications : [];
+        setNotifications(list);
+      })
+      .catch(() => {
+        if (!cancelled) setNotifications([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     // Trigger enter animation on next frame
-    requestAnimationFrame(() => setVisible(true));
-    timerRef.current = setTimeout(animateOut, AUTO_DISMISS_MS);
-    return clearTimers;
-  }, [notification, clearTimers, animateOut]);
+    requestAnimationFrame(() => { if (!cancelled) setVisible(true); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
-  const handleAcknowledge = useCallback(() => {
-    clearTimers();
-    if (onAcknowledge && current) onAcknowledge(current);
-    animateOut();
-  }, [current, onAcknowledge, clearTimers, animateOut]);
+  const handleAcknowledge = useCallback((e, notification) => {
+    e.stopPropagation();
+    if (onAcknowledge) onAcknowledge(notification);
+    setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !(notification._ids || []).includes(n._id)));
+  }, [onAcknowledge]);
 
-  const handleDismiss = useCallback(() => {
-    clearTimers();
-    if (onDismiss && current) onDismiss(current);
-    animateOut();
-  }, [current, onDismiss, clearTimers, animateOut]);
+  const handleDismiss = useCallback((e, notification) => {
+    e.stopPropagation();
+    if (onDismiss) onDismiss(notification);
+    setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !(notification._ids || []).includes(n._id)));
+  }, [onDismiss]);
 
-  if (!current) return null;
+  const handlePillClick = useCallback((notification) => {
+    if (onNavigate) onNavigate('/notifications');
+  }, [onNavigate]);
+
+  const handleLogout = useCallback(() => {
+    if (onLogout) onLogout();
+  }, [onLogout]);
+
+  if (!isOpen && !mounted) return null;
+
+  const grouped = groupNotifications(notifications);
+
+  // max list height: viewport height minus top bar (48px) minus dotnav (dotnavHeight) minus gaps
+  const maxListHeight = `calc(100vh - ${dotnavHeight + TOP_GAP_PX + 48 + 32}px)`;
 
   return (
     <div
-      className={`dotnav-mobile-notification${visible ? ' dotnav-mobile-notification-visible' : ''}`}
-      style={{ bottom: dotnavHeight + BOTTOM_GAP_PX }}
-      role="alert"
-      aria-live="assertive"
+      className={`dotnav-mobile-notif-panel${visible ? ' dotnav-mobile-notif-panel-visible' : ''}`}
+      role="region"
+      aria-label="Notifications panel"
       data-testid="mobile-dotnav-notification"
     >
-      <div className="dotnav-mobile-notification-content">
-        {current.title && (
-          <span className="dotnav-mobile-notification-title" data-testid="mobile-dotnav-notification-title">
-            {current.title}
-          </span>
-        )}
-        {current.body && (
-          <span className="dotnav-mobile-notification-body" data-testid="mobile-dotnav-notification-body">
-            {current.body}
-          </span>
-        )}
+      {/* Header bar */}
+      <div className="dotnav-mobile-notif-header" data-testid="mobile-dotnav-notification-header">
+        <span className="dotnav-mobile-notif-header-title">Notifications</span>
+        <button
+          type="button"
+          className="dotnav-mobile-notif-logout"
+          onClick={handleLogout}
+          aria-label="Logout"
+          data-testid="mobile-dotnav-notification-logout"
+        >
+          Logout
+        </button>
       </div>
-      <div className="dotnav-mobile-notification-actions">
-        <button
-          type="button"
-          className="dotnav-mobile-notification-ack"
-          onClick={handleAcknowledge}
-          aria-label="Acknowledge notification"
-          data-testid="mobile-dotnav-notification-ack"
-        >
-          ✓
-        </button>
-        <button
-          type="button"
-          className="dotnav-mobile-notification-dismiss"
-          onClick={handleDismiss}
-          aria-label="Dismiss notification"
-          data-testid="mobile-dotnav-notification-dismiss"
-        >
-          ✗
-        </button>
+
+      {/* Notification list */}
+      <div
+        className="dotnav-mobile-notif-list"
+        style={{ maxHeight: maxListHeight }}
+        data-testid="mobile-dotnav-notification-list"
+      >
+        {loading && notifications.length === 0 && (
+          <p className="dotnav-mobile-notif-empty">Loading…</p>
+        )}
+        {!loading && grouped.length === 0 && (
+          <p className="dotnav-mobile-notif-empty" data-testid="mobile-dotnav-notification-empty">
+            No new notifications
+          </p>
+        )}
+        {grouped.map((n) => (
+          <button
+            key={n._id}
+            type="button"
+            className="dotnav-mobile-notif-pill"
+            onClick={() => handlePillClick(n)}
+            data-testid="mobile-dotnav-notification-pill"
+          >
+            <div className="dotnav-mobile-notif-pill-content">
+              <div className="dotnav-mobile-notif-pill-row">
+                <span className="dotnav-mobile-notif-pill-title" data-testid="mobile-dotnav-notification-title">
+                  {n.title || 'Notification'}
+                  {n.count > 1 && (
+                    <span className="dotnav-mobile-notif-pill-badge">{n.count}</span>
+                  )}
+                </span>
+                <span className="dotnav-mobile-notif-pill-time">{formatRelativeTime(n.createdAt)}</span>
+              </div>
+              {n.body ? (
+                <span className="dotnav-mobile-notif-pill-body" data-testid="mobile-dotnav-notification-body">
+                  {n.body}
+                </span>
+              ) : null}
+            </div>
+            <div className="dotnav-mobile-notif-pill-actions">
+              <span
+                role="button"
+                tabIndex={0}
+                className="dotnav-mobile-notif-action dotnav-mobile-notif-action-ack"
+                onClick={(e) => handleAcknowledge(e, n)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAcknowledge(e, n); }}
+                aria-label="Acknowledge"
+                data-testid="mobile-dotnav-notification-ack"
+              >
+                Ack
+              </span>
+              <span
+                role="button"
+                tabIndex={0}
+                className="dotnav-mobile-notif-action dotnav-mobile-notif-action-agree"
+                onClick={(e) => { e.stopPropagation(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.stopPropagation(); }}
+                aria-label="Agree"
+                data-testid="mobile-dotnav-notification-agree"
+              >
+                Agree
+              </span>
+              <span
+                role="button"
+                tabIndex={0}
+                className="dotnav-mobile-notif-action dotnav-mobile-notif-action-dismiss"
+                onClick={(e) => handleDismiss(e, n)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleDismiss(e, n); }}
+                aria-label="Dismiss"
+                data-testid="mobile-dotnav-notification-dismiss"
+              >
+                Dismiss
+              </span>
+              <span
+                role="button"
+                tabIndex={0}
+                className="dotnav-mobile-notif-action dotnav-mobile-notif-action-decline"
+                onClick={(e) => { e.stopPropagation(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.stopPropagation(); }}
+                aria-label="Decline"
+                data-testid="mobile-dotnav-notification-decline"
+              >
+                Decline
+              </span>
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );

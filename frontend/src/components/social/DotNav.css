@@ -642,43 +642,119 @@
   }
 }
 
-/* ── Mobile DotNav Notification Overlay ── */
-.dotnav-mobile-notification {
+/* ── Mobile DotNav Notification Panel ── */
+.dotnav-mobile-notif-panel {
   position: fixed;
+  top: 0;
   left: 0;
   right: 0;
-  z-index: 9999;
-  margin: 0 12px;
+  z-index: 10000;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
   background: var(--dotnav-bg);
-  border: 1px solid var(--dotnav-border);
-  border-radius: 16px;
-  padding: 12px 14px;
-  box-shadow: var(--dotnav-shadow);
+  border-bottom: 1px solid var(--dotnav-border);
+  box-shadow: var(--dotnav-shadow-sm);
   opacity: 0;
-  transform: translateY(20px) scale(0.95);
+  transform: translateY(-20px);
   pointer-events: none;
   transition: opacity 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
               transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.dotnav-mobile-notification.dotnav-mobile-notification-visible {
+.dotnav-mobile-notif-panel.dotnav-mobile-notif-panel-visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateY(0);
   pointer-events: auto;
 }
 
-.dotnav-mobile-notification-content {
-  flex: 1;
-  min-width: 0;
+/* Header bar */
+.dotnav-mobile-notif-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--dotnav-border);
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+.dotnav-mobile-notif-header-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dotnav-ink);
+  letter-spacing: 0.01em;
+}
+
+.dotnav-mobile-notif-logout {
+  padding: 5px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #dc2626;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease;
+}
+
+.dotnav-mobile-notif-logout:active {
+  background: #b91c1c;
+}
+
+/* Notification list */
+.dotnav-mobile-notif-list {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dotnav-mobile-notif-empty {
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--dotnav-mid);
+  margin: 0;
+}
+
+/* Notification pill */
+.dotnav-mobile-notif-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--dotnav-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease;
+}
+
+.dotnav-mobile-notif-pill:active {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.dotnav-mobile-notif-pill-content {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
-.dotnav-mobile-notification-title {
+.dotnav-mobile-notif-pill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dotnav-mobile-notif-pill-title {
   font-size: 13px;
   font-weight: 700;
   color: var(--dotnav-ink);
@@ -686,11 +762,36 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
-.dotnav-mobile-notification-body {
+.dotnav-mobile-notif-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 4px;
+  border-radius: 9px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.dotnav-mobile-notif-pill-time {
+  font-size: 11px;
+  color: var(--dotnav-mid);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dotnav-mobile-notif-pill-body {
   font-size: 12px;
-  font-weight: 400;
   color: var(--dotnav-mid);
   line-height: 1.35;
   overflow: hidden;
@@ -698,34 +799,58 @@
   white-space: nowrap;
 }
 
-.dotnav-mobile-notification-actions {
+/* Quick action buttons */
+.dotnav-mobile-notif-pill-actions {
   display: flex;
   gap: 6px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  margin-top: 2px;
 }
 
-.dotnav-mobile-notification-ack,
-.dotnav-mobile-notification-dismiss {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--dotnav-border);
-  background: transparent;
-  color: var(--dotnav-mid);
-  font-size: 16px;
-  line-height: 1;
-  display: flex;
+.dotnav-mobile-notif-action {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
   -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: background 0.15s ease;
 }
 
-.dotnav-mobile-notification-ack:active,
-.dotnav-mobile-notification-dismiss:active {
-  background: var(--dotnav-ink);
-  color: var(--dotnav-btn-fg);
+.dotnav-mobile-notif-action-ack {
+  background: #dcfce7;
+  color: #166534;
+}
+.dotnav-mobile-notif-action-ack:active {
+  background: #bbf7d0;
+}
+
+.dotnav-mobile-notif-action-agree {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.dotnav-mobile-notif-action-agree:active {
+  background: #bfdbfe;
+}
+
+.dotnav-mobile-notif-action-dismiss {
+  background: #fef3c7;
+  color: #92400e;
+}
+.dotnav-mobile-notif-action-dismiss:active {
+  background: #fde68a;
+}
+
+.dotnav-mobile-notif-action-decline {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.dotnav-mobile-notif-action-decline:active {
+  background: #fecaca;
 }
 
 /* ── Reduced motion preference ── */
@@ -743,7 +868,7 @@
   #dotnav-hint,
   #dotnav-nav-label,
   #dotnav-backdrop,
-  .dotnav-mobile-notification {
+  .dotnav-mobile-notif-panel {
     transition: none !important;
   }
 

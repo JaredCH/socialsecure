@@ -24,6 +24,7 @@ import NotificationCenter from './components/NotificationCenter';
 import DotNav from './components/social/DotNav';
 import NotificationSettings from './pages/NotificationSettings';
 import NotificationsHistory from './pages/NotificationsHistory';
+import Notifications from './pages/Notifications';
 import ResumePublic from './pages/ResumePublic';
 import MobileProfile from './pages/MobileProfile';
 import Friends from './pages/Friends';
@@ -878,6 +879,19 @@ function App() {
                 </ProtectedRoute>
               )}
             />
+            <Route
+              path="/notifications"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
+                >
+                  <Notifications />
+                </ProtectedRoute>
+              )}
+            />
             <Route path="/feed" element={<Navigate to={socialProfilePath} replace />} />
             <Route
               path="/chat"
@@ -954,6 +968,7 @@ function App() {
           enabled={canUseProtectedFeatures}
           unreadNotificationCount={unreadNotificationCount}
           incomingNotification={incomingNotification}
+          onLogout={handleLogout}
         />
 
         <Toaster position="bottom-right" />

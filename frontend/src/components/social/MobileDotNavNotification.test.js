@@ -2,13 +2,22 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import MobileDotNavNotification from './MobileDotNavNotification';
 
+// Mock the notification API
+jest.mock('../../utils/api', () => ({
+  notificationAPI: {
+    getNotifications: jest.fn(),
+  },
+}));
+
+const { notificationAPI } = require('../../utils/api');
+
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('MobileDotNavNotification', () => {
   let container;
   let root;
 
-  const renderNotification = async (props = {}) => {
+  const renderPanel = async (props = {}) => {
     await act(async () => {
       root.render(<MobileDotNavNotification {...props} />);
     });
@@ -19,6 +28,7 @@ describe('MobileDotNavNotification', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [] } });
   });
 
   afterEach(() => {
@@ -29,139 +39,165 @@ describe('MobileDotNavNotification', () => {
     jest.useRealTimers();
   });
 
-  it('does not render when notification is null', async () => {
-    await renderNotification({ notification: null });
+  it('does not render when isOpen is false', async () => {
+    await renderPanel({ isOpen: false });
     const el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
     expect(el).toBeNull();
   });
 
-  it('does not render when notification has no _id', async () => {
-    await renderNotification({ notification: { title: 'Hello' } });
-    const el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
-    expect(el).toBeNull();
-  });
-
-  it('renders notification with title and body', async () => {
-    await renderNotification({
-      notification: { _id: 'n1', title: 'New follower', body: 'Alice followed you' },
-    });
-    // Advance one animation frame so visible class is applied
+  it('renders panel with header when isOpen is true', async () => {
+    await renderPanel({ isOpen: true });
     await act(async () => { jest.advanceTimersByTime(50); });
     const el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
     expect(el).not.toBeNull();
-    expect(el.getAttribute('role')).toBe('alert');
-    expect(el.querySelector('[data-testid="mobile-dotnav-notification-title"]').textContent).toBe('New follower');
-    expect(el.querySelector('[data-testid="mobile-dotnav-notification-body"]').textContent).toBe('Alice followed you');
+    const header = document.querySelector('[data-testid="mobile-dotnav-notification-header"]');
+    expect(header).not.toBeNull();
+    expect(header.textContent).toContain('Notifications');
   });
 
-  it('applies visible class after render', async () => {
-    await renderNotification({
-      notification: { _id: 'n2', title: 'Test', body: 'Body' },
-    });
+  it('renders red Logout button in the header', async () => {
+    await renderPanel({ isOpen: true });
     await act(async () => { jest.advanceTimersByTime(50); });
-    const el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
-    expect(el.classList.contains('dotnav-mobile-notification-visible')).toBe(true);
+    const logoutBtn = document.querySelector('[data-testid="mobile-dotnav-notification-logout"]');
+    expect(logoutBtn).not.toBeNull();
+    expect(logoutBtn.textContent).toBe('Logout');
+    expect(logoutBtn.getAttribute('aria-label')).toBe('Logout');
   });
 
-  it('sets bottom offset from dotnavHeight prop', async () => {
-    await renderNotification({
-      notification: { _id: 'n3', title: 'T', body: 'B' },
-      dotnavHeight: 80,
-    });
+  it('calls onLogout when Logout button is clicked', async () => {
+    const onLogout = jest.fn();
+    await renderPanel({ isOpen: true, onLogout });
     await act(async () => { jest.advanceTimersByTime(50); });
-    const el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
-    expect(el.style.bottom).toBe('96px'); // 80 + 16
+    const logoutBtn = document.querySelector('[data-testid="mobile-dotnav-notification-logout"]');
+    await act(async () => { logoutBtn.click(); });
+    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 
-  it('auto-dismisses after timeout', async () => {
-    await renderNotification({
-      notification: { _id: 'n4', title: 'Timed', body: 'Auto' },
-    });
+  it('shows "No new notifications" when no notifications exist', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [] } });
+    await renderPanel({ isOpen: true });
     await act(async () => { jest.advanceTimersByTime(50); });
-    let el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
-    expect(el).not.toBeNull();
-
-    // Advance past auto-dismiss (6000ms) + animation (350ms)
-    await act(async () => { jest.advanceTimersByTime(6000); });
-    el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
-    expect(el.classList.contains('dotnav-mobile-notification-visible')).toBe(false);
-
-    await act(async () => { jest.advanceTimersByTime(350); });
-    el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
-    expect(el).toBeNull();
+    // Wait for API promise to resolve
+    await act(async () => { await Promise.resolve(); });
+    const emptyMsg = document.querySelector('[data-testid="mobile-dotnav-notification-empty"]');
+    expect(emptyMsg).not.toBeNull();
+    expect(emptyMsg.textContent).toBe('No new notifications');
   });
 
-  it('calls onAcknowledge when ack button is clicked', async () => {
+  it('renders notification pills when notifications exist', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n1', title: 'New follower', body: 'Alice followed you', type: 'follow', createdAt: new Date().toISOString() },
+          { _id: 'n2', title: 'New like', body: 'Bob liked your post', type: 'like', createdAt: new Date().toISOString() },
+        ],
+      },
+    });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const pills = document.querySelectorAll('[data-testid="mobile-dotnav-notification-pill"]');
+    expect(pills.length).toBe(2);
+  });
+
+  it('groups matching notifications with badge count', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n1', title: 'New like', body: 'Alice liked', type: 'like', createdAt: new Date().toISOString() },
+          { _id: 'n2', title: 'New like', body: 'Bob liked', type: 'like', createdAt: new Date().toISOString() },
+          { _id: 'n3', title: 'New like', body: 'Charlie liked', type: 'like', createdAt: new Date().toISOString() },
+        ],
+      },
+    });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const pills = document.querySelectorAll('[data-testid="mobile-dotnav-notification-pill"]');
+    expect(pills.length).toBe(1); // All three grouped into one
+    const badge = pills[0].querySelector('.dotnav-mobile-notif-pill-badge');
+    expect(badge).not.toBeNull();
+    expect(badge.textContent).toBe('3');
+  });
+
+  it('renders quick action buttons on each pill', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n1', title: 'Test', body: 'Body', type: 'system', createdAt: new Date().toISOString() },
+        ],
+      },
+    });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const ack = document.querySelector('[data-testid="mobile-dotnav-notification-ack"]');
+    const agree = document.querySelector('[data-testid="mobile-dotnav-notification-agree"]');
+    const dismiss = document.querySelector('[data-testid="mobile-dotnav-notification-dismiss"]');
+    const decline = document.querySelector('[data-testid="mobile-dotnav-notification-decline"]');
+    expect(ack).not.toBeNull();
+    expect(agree).not.toBeNull();
+    expect(dismiss).not.toBeNull();
+    expect(decline).not.toBeNull();
+  });
+
+  it('calls onAcknowledge when Ack action is clicked', async () => {
     const onAck = jest.fn();
-    const notif = { _id: 'n5', title: 'Ack', body: 'me' };
-    await renderNotification({ notification: notif, onAcknowledge: onAck });
+    const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
+    await renderPanel({ isOpen: true, onAcknowledge: onAck });
     await act(async () => { jest.advanceTimersByTime(50); });
-
+    await act(async () => { await Promise.resolve(); });
     const ackBtn = document.querySelector('[data-testid="mobile-dotnav-notification-ack"]');
-    expect(ackBtn).not.toBeNull();
     await act(async () => { ackBtn.click(); });
-
     expect(onAck).toHaveBeenCalledTimes(1);
-    expect(onAck).toHaveBeenCalledWith(notif);
   });
 
-  it('calls onDismiss when dismiss button is clicked', async () => {
+  it('calls onDismiss when Dismiss action is clicked', async () => {
     const onDismiss = jest.fn();
-    const notif = { _id: 'n6', title: 'Dismiss', body: 'me' };
-    await renderNotification({ notification: notif, onDismiss });
+    const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
+    await renderPanel({ isOpen: true, onDismiss });
     await act(async () => { jest.advanceTimersByTime(50); });
-
+    await act(async () => { await Promise.resolve(); });
     const dismissBtn = document.querySelector('[data-testid="mobile-dotnav-notification-dismiss"]');
-    expect(dismissBtn).not.toBeNull();
     await act(async () => { dismissBtn.click(); });
-
     expect(onDismiss).toHaveBeenCalledTimes(1);
-    expect(onDismiss).toHaveBeenCalledWith(notif);
   });
 
-  it('removes notification from DOM after dismiss animation', async () => {
-    const notif = { _id: 'n7', title: 'Go away', body: '...' };
-    await renderNotification({ notification: notif });
+  it('applies visible class when open', async () => {
+    await renderPanel({ isOpen: true });
     await act(async () => { jest.advanceTimersByTime(50); });
+    const el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
+    expect(el.classList.contains('dotnav-mobile-notif-panel-visible')).toBe(true);
+  });
 
-    const dismissBtn = document.querySelector('[data-testid="mobile-dotnav-notification-dismiss"]');
-    await act(async () => { dismissBtn.click(); });
+  it('navigates to /notifications when pill is clicked', async () => {
+    const onNavigate = jest.fn();
+    const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
+    await renderPanel({ isOpen: true, onNavigate });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const pill = document.querySelector('[data-testid="mobile-dotnav-notification-pill"]');
+    await act(async () => { pill.click(); });
+    expect(onNavigate).toHaveBeenCalledWith('/notifications');
+  });
 
-    // Still in DOM but animating out
+  it('hides panel when isOpen changes to false', async () => {
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
     let el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
     expect(el).not.toBeNull();
-    expect(el.classList.contains('dotnav-mobile-notification-visible')).toBe(false);
+
+    await renderPanel({ isOpen: false });
+    el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
+    // Still in DOM but animating out
+    expect(el.classList.contains('dotnav-mobile-notif-panel-visible')).toBe(false);
 
     // After animation completes
     await act(async () => { jest.advanceTimersByTime(350); });
     el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
     expect(el).toBeNull();
-  });
-
-  it('renders ack and dismiss buttons with proper aria labels', async () => {
-    await renderNotification({
-      notification: { _id: 'n8', title: 'T', body: 'B' },
-    });
-    await act(async () => { jest.advanceTimersByTime(50); });
-
-    const ackBtn = document.querySelector('[data-testid="mobile-dotnav-notification-ack"]');
-    const dismissBtn = document.querySelector('[data-testid="mobile-dotnav-notification-dismiss"]');
-    expect(ackBtn.getAttribute('aria-label')).toBe('Acknowledge notification');
-    expect(dismissBtn.getAttribute('aria-label')).toBe('Dismiss notification');
-  });
-
-  it('replaces current notification when a new one arrives', async () => {
-    const notif1 = { _id: 'n9', title: 'First', body: 'one' };
-    const notif2 = { _id: 'n10', title: 'Second', body: 'two' };
-
-    await renderNotification({ notification: notif1 });
-    await act(async () => { jest.advanceTimersByTime(50); });
-    let el = document.querySelector('[data-testid="mobile-dotnav-notification-title"]');
-    expect(el.textContent).toBe('First');
-
-    await renderNotification({ notification: notif2 });
-    await act(async () => { jest.advanceTimersByTime(50); });
-    el = document.querySelector('[data-testid="mobile-dotnav-notification-title"]');
-    expect(el.textContent).toBe('Second');
   });
 });
