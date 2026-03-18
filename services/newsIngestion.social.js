@@ -14,10 +14,13 @@
 
 const https = require('https');
 const crypto = require('crypto');
+
 const mongoose = require('mongoose');
+
+const { calculateViralScore } = require('./newsViralScore');
+
 const Article = require('../models/Article');
 const NewsPreferences = require('../models/NewsPreferences');
-const { calculateViralScore } = require('./newsViralScore');
 
 const REDDIT_USER_AGENT = 'SocialSecure-NewsBot/1.0 (aggregator; no auth)';
 const REQUEST_TIMEOUT_MS = 10000;
@@ -153,14 +156,9 @@ async function ingestSubreddit(subreddit, minUpvotes = 100) {
       if (result === 'inserted') inserted++;
       else duplicates++;
     } catch (err) {
-      console.error(`[social-ingest] r/${subreddit} post persist error:`, err.message);
+      // Continue ingesting remaining posts.
     }
   }
-
-  console.log(
-    `[social-ingest] r/${subreddit}: ${inserted} inserted, ${duplicates} dups ` +
-    `(${filtered.length} passed threshold of ${minUpvotes} upvotes from ${posts.length} fetched)`
-  );
 
   return { subreddit, inserted, duplicates, fetched: posts.length, passed: filtered.length };
 }
@@ -196,11 +194,9 @@ async function ingestAllMonitoredSubreddits() {
   }
 
   if (!monitorMap.size) {
-    console.log('[social-ingest] No monitored subreddits — skipping');
     return [];
   }
 
-  console.log(`[social-ingest] Ingesting ${monitorMap.size} subreddit(s)`);
   const results = [];
 
   for (const [subreddit, minUpvotes] of monitorMap.entries()) {
@@ -210,13 +206,9 @@ async function ingestAllMonitoredSubreddits() {
       // Respectful delay between requests (Reddit is rate-limit sensitive)
       await new Promise(r => setTimeout(r, 2000 + Math.random() * 1000));
     } catch (err) {
-      console.error(`[social-ingest] Error for r/${subreddit}:`, err.message);
       results.push({ subreddit, error: err.message });
     }
   }
-
-  const totalInserted = results.reduce((s, r) => s + (r.inserted || 0), 0);
-  console.log(`[social-ingest] Complete: ${totalInserted} inserted across ${monitorMap.size} subreddits`);
 
   return results;
 }

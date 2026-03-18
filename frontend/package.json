@@ -10,9 +10,7 @@
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-hook-form": "^7.48.2",
     "react-hot-toast": "^2.4.1",
-    "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.20.0",
     "react-scripts": "5.0.1",
     "serve": "^14.2.4",
@@ -25,10 +23,6 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0"
   },
   "browserslist": {
     "production": [

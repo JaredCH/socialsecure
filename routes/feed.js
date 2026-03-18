@@ -1,16 +1,20 @@
 const express = require('express');
-const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
+
+const { createNotification } = require('../services/notifications');
+const { emitFeedInteraction, emitFeedPost } = require('../services/realtime');
+
 const Post = require('../models/Post');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const BlockList = require('../models/BlockList');
 const MuteList = require('../models/MuteList');
 const SiteContentFilter = require('../models/SiteContentFilter');
-const { createNotification } = require('../services/notifications');
-const { emitFeedInteraction, emitFeedPost } = require('../services/realtime');
+
+const router = express.Router();
+
 const {
   RELATIONSHIP_AUDIENCE_VALUES,
   normalizeRelationshipAudience,

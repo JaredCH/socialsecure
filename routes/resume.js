@@ -1,6 +1,7 @@
+const crypto = require('crypto');
+
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 

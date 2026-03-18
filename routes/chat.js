@@ -1,11 +1,25 @@
-const express = require('express');
-const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const rateLimit = require('express-rate-limit');
-const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs/promises');
+
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const multer = require('multer');
+
+const {
+  requireAuth: parseRequiredAuth,
+  optionalAuth: parseOptionalAuth,
+  authErrorHandler
+} = require('../middleware/parseAuthToken');
+const { createNotification } = require('../services/notifications');
+const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload } = require('../services/realtime');
+const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
+const {
+  findExactFilterWord,
+  censorMaturityText,
+  normalizeFilterWords
+} = require('../utils/contentFilter');
+
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
 const EventSchedule = require('../models/EventSchedule');
@@ -19,14 +33,8 @@ const ConversationKeyPackage = require('../models/ConversationKeyPackage');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const SiteContentFilter = require('../models/SiteContentFilter');
-const { createNotification } = require('../services/notifications');
-const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload } = require('../services/realtime');
-const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
-const {
-  findExactFilterWord,
-  censorMaturityText,
-  normalizeFilterWords
-} = require('../utils/contentFilter');
+
+const router = express.Router();
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -83,74 +91,50 @@ const getViewerContentFilterPreference = async (viewerId) => {
   return viewer?.enableMaturityWordCensor !== false;
 };
 
-// Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required' });
+const enforceCompletedOnboarding = async (req, res, next) => {
+  try {
+    if (!req.user?.userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const user = await User.findById(req.user.userId).select('onboardingStatus');
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    if (user.onboardingStatus !== 'completed') {
+      return res.status(403).json({
+        error: 'Complete onboarding before using chat features',
+        code: 'ONBOARDING_REQUIRED'
+      });
+    }
+
+    return next();
+  } catch {
+    return res.status(500).json({ error: 'Authentication failed' });
   }
-  
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', async (err, decoded) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
-    }
-
-    try {
-      const user = await User.findById(decoded.userId).select('onboardingStatus');
-      if (!user) {
-        return res.status(401).json({ error: 'User not found' });
-      }
-
-      if (user.onboardingStatus !== 'completed') {
-        return res.status(403).json({
-          error: 'Complete onboarding before using chat features',
-          code: 'ONBOARDING_REQUIRED'
-        });
-      }
-
-      req.user = decoded;
-      next();
-    } catch (lookupError) {
-      return res.status(500).json({ error: 'Authentication failed' });
-    }
-  });
 };
 
-const optionalAuthenticateToken = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) {
+const softValidateOnboarding = async (req, _res, next) => {
+  if (!req.user?.userId) {
     req.user = null;
     return next();
   }
 
-  return jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', async (err, decoded) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+  try {
+    const user = await User.findById(req.user.userId).select('onboardingStatus');
+    if (!user || user.onboardingStatus !== 'completed') {
+      req.user = null;
     }
+  } catch {
+    req.user = null;
+  }
 
-    try {
-      const user = await User.findById(decoded.userId).select('onboardingStatus');
-      if (!user) {
-        return res.status(401).json({ error: 'User not found' });
-      }
-
-      if (user.onboardingStatus !== 'completed') {
-        return res.status(403).json({
-          error: 'Complete onboarding before using chat features',
-          code: 'ONBOARDING_REQUIRED'
-        });
-      }
-
-      req.user = decoded;
-      return next();
-    } catch (lookupError) {
-      return res.status(500).json({ error: 'Authentication failed' });
-    }
-  });
+  return next();
 };
+
+const authenticateToken = [parseRequiredAuth, enforceCompletedOnboarding];
+const optionalAuthenticateToken = [parseOptionalAuth, softValidateOnboarding];
 
 const E2EE_LIMITS = {
   deviceId: 128,
@@ -180,6 +164,14 @@ const unifiedChatLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many chat requests, please slow down.' }
 });
+const defaultChatRouteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 240,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many chat requests, please slow down.' }
+});
+router.use(defaultChatRouteLimiter);
 
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 500;
@@ -3925,5 +3917,7 @@ router.put(
     }
   }
 );
+
+router.use(authErrorHandler);
 
 module.exports = router;

@@ -1,10 +1,12 @@
 const jwt = require('jsonwebtoken');
+
+const { normalizeRealtimePreferences } = require('../utils/realtimePreferences');
+
 const Friendship = require('../models/Friendship');
 const ChatConversation = require('../models/ChatConversation');
 const ChatRoom = require('../models/ChatRoom');
 const Presence = require('../models/Presence');
 const User = require('../models/User');
-const { normalizeRealtimePreferences } = require('../utils/realtimePreferences');
 
 const MAX_REPLAY_EVENTS = 50;
 const TYPING_RATE_LIMIT_MS = 800;
@@ -393,10 +395,6 @@ const emitFeedInteraction = ({ userIds, interaction }) => {
 
 const emitChatMessage = ({ userIds, message }) => {
   emitToUsers(userIds, 'chat:message', { message });
-};
-
-const emitCommentTypingRoomUpdate = ({ postId, payload }) => {
-  emitToSocketRoom(`post:${String(postId)}`, 'typing', payload);
 };
 
 const getPresenceMapForUsers = async (userIds) => {

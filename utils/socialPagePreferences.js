@@ -358,20 +358,6 @@ const normalizeGridPlacement = (gridPlacement, fallback) => {
   return { row: Math.floor(row), col: Math.floor(col) };
 };
 
-const buildDefaultPanels = () => SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
-  const defaults = DEFAULT_PANEL_LAYOUTS[panelId];
-  acc[panelId] = {
-    area: defaults.area,
-    size: defaults.size,
-    height: defaults.height,
-    order: defaults.order,
-    visible: defaults.visible,
-    gridPlacement: defaults.gridPlacement ? { ...defaults.gridPlacement } : undefined,
-    useCustomStyles: false,
-    styles: {}
-  };
-  return acc;
-}, {});
 const buildDefaultPanelsForMode = (mode = 'desktop') => SOCIAL_PANEL_IDS.reduce((acc, panelId) => {
   const defaults = (mode === 'mobile' ? DEFAULT_MOBILE_PANEL_LAYOUTS : DEFAULT_PANEL_LAYOUTS)[panelId]
     || DEFAULT_PANEL_LAYOUTS[panelId];

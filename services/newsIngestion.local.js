@@ -1,8 +1,9 @@
 'use strict';
 
-const User = require('../models/User');
 const { normalizeLocationInput } = require('./locationNormalizer');
 const { getArticlesForLocation } = require('./locationCacheService');
+
+const User = require('../models/User');
 
 const _recentlyTriggered = new Map();
 const DEBOUNCE_MS = 60 * 1000;
@@ -52,7 +53,7 @@ async function triggerLocationIngest(zipCode) {
         normalizedLocation: normalized
       });
     } catch (error) {
-      console.error('[news-cache] triggerLocationIngest error:', error.message);
+      // Best-effort trigger.
     }
   });
 

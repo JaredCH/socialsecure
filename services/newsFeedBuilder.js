@@ -1,9 +1,10 @@
 'use strict';
 
-const NewsPreferences = require('../models/NewsPreferences');
-const User = require('../models/User');
 const { getArticlesForLocation } = require('./locationCacheService');
 const { resolvePrimaryLocation } = require('./locationNormalizer');
+
+const NewsPreferences = require('../models/NewsPreferences');
+const User = require('../models/User');
 
 function normalizeCategoryKey(value) {
   return String(value || '').trim().toLowerCase();

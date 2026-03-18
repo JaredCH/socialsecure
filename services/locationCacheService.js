@@ -1,14 +1,17 @@
 'use strict';
 
 const crypto = require('crypto');
+
 const LRU = require('lru-cache');
 const Parser = require('rss-parser');
-const LocationNewsCache = require('../models/LocationNewsCache');
-const NewsIngestionRecord = require('../models/NewsIngestionRecord');
+
 const { buildFeedUrls } = require('./locationFeedBuilder');
 const { parseLocationKey } = require('./locationNormalizer');
 const { deduplicateArticles } = require('./articleDeduplicator');
 const { extractRssImageUrl } = require('./newsRssImage');
+
+const LocationNewsCache = require('../models/LocationNewsCache');
+const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const parser = new Parser({ timeout: 5000, headers: { 'User-Agent': 'SocialSecure-NewsCache/1.0' } });

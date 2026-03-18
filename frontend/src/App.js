@@ -509,9 +509,9 @@ function App() {
     return <div className="min-h-screen grid place-items-center">Loading...</div>;
   }
 
-  const navLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300';
-  const navEmphasisLinkClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50';
-  const navDangerButtonClass = 'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50';
+  const navLinkClass = 'shrink-0 inline-flex min-h-[44px] items-center rounded-full px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300';
+  const navEmphasisLinkClass = 'shrink-0 inline-flex min-h-[44px] items-center rounded-full px-3 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50';
+  const navDangerButtonClass = 'shrink-0 inline-flex min-h-[44px] items-center rounded-full px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50';
   const closeNavMenus = () => {
     setIsMobileMenuOpen(false);
   };
@@ -571,7 +571,7 @@ function App() {
                 )}
                 <button
                   type="button"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50 md:hidden"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50 md:hidden"
                   onClick={() => setIsMobileMenuOpen((prev) => !prev)}
                   aria-expanded={isMobileMenuOpen}
                   aria-controls="main-nav-menu"

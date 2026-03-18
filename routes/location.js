@@ -1,13 +1,14 @@
 const express = require('express');
-const router = express.Router();
 const { body, query, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const NodeGeocoder = require('node-geocoder');
+
 const User = require('../models/User');
 const ChatRoom = require('../models/ChatRoom');
 
-// Initialize geocoder
+const router = express.Router();
+
 const geocoder = NodeGeocoder({
   provider: 'openstreetmap',
   httpAdapter: 'https',

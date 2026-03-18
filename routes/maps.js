@@ -1,15 +1,21 @@
 const express = require('express');
-const router = express.Router();
 const mongoose = require('mongoose');
 const NodeGeocoder = require('node-geocoder');
 const rateLimit = require('express-rate-limit');
 
-// Import models
 const LocationPresence = require('../models/LocationPresence');
 const Spotlight = require('../models/Spotlight');
 const HeatmapAggregation = require('../models/HeatmapAggregation');
 const FavoriteLocation = require('../models/FavoriteLocation');
 const User = require('../models/User');
+
+const router = express.Router();
+
+const {
+  requireAuth: authenticateToken,
+  optionalAuth,
+  authErrorHandler
+} = require('../middleware/parseAuthToken');
 
 const parseCoordinate = (value) => {
   const parsed = Number(value);
@@ -85,43 +91,6 @@ const serializeFavoriteLocation = (favorite) => {
     createdAt: favorite.createdAt,
     updatedAt: favorite.updatedAt
   };
-};
-
-// ============================================
-// AUTHENTICATION MIDDLEWARE
-// ============================================
-
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  
-  const jwt = require('jsonwebtoken');
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' });
-    req.user = user;
-    next();
-  });
-};
-
-// Optional authentication (for public endpoints)
-const optionalAuth = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) {
-    req.user = null;
-    return next();
-  }
-  
-  const jwt = require('jsonwebtoken');
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
-    req.user = err ? null : user;
-    next();
-  });
 };
 
 // ============================================
@@ -430,7 +399,6 @@ router.post('/spotlight', authenticateToken, async (req, res) => {
     const presence = await LocationPresence.findOne({ user: req.user.userId });
     if (presence && presence.deviceType !== 'mobile') {
       // Allow but warn - in production might require mobile
-      console.log('Warning: Spotlight created from non-mobile device');
     }
     
     const spotlight = await Spotlight.createSpotlight(req.user.userId, {
@@ -756,8 +724,7 @@ router.get('/community', optionalAuth, async (req, res) => {
 // Cleanup expired spotlights
 async function cleanupJob() {
   try {
-    const result = await Spotlight.cleanupExpired();
-    console.log(`Cleaned up ${result.nModified || 0} expired spotlights`);
+    await Spotlight.cleanupExpired();
   } catch (error) {
     console.error('Error cleaning up spotlights:', error);
   }
@@ -776,8 +743,6 @@ async function heatmapJob() {
     for (const bounds of regions) {
       await HeatmapAggregation.recomputeRegion(bounds, 5);
     }
-    
-    console.log('Heatmap recomputation complete');
   } catch (error) {
     console.error('Error recomputing heatmap:', error);
   }
@@ -793,15 +758,14 @@ function startScheduledJobs() {
   
   // Recompute heatmap every 10 minutes
   heatmapInterval = setInterval(heatmapJob, 10 * 60 * 1000);
-  
-  console.log('Maps scheduled jobs started');
 }
 
 function stopScheduledJobs() {
   if (cleanupInterval) clearInterval(cleanupInterval);
   if (heatmapInterval) clearInterval(heatmapInterval);
-  console.log('Maps scheduled jobs stopped');
 }
+
+router.use(authErrorHandler);
 
 // Export for server.js
 module.exports = {

@@ -1,4 +1,5 @@
 const Parser = require('rss-parser');
+
 const EventSchedule = require('../models/EventSchedule');
 const EventSourceHealth = require('../models/EventSourceHealth');
 

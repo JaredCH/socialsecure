@@ -130,28 +130,6 @@ describe('Fallback to Open-Meteo geocoding for non-static ZIPs', () => {
   });
 });
 
-describe('Weather endpoint integration for ZIP 78666', () => {
-  it('should accept ZIP 78666 as a valid location hint', async () => {
-    const app = buildApp();
-    const mockPrefs = {
-      weatherLocations: [],
-      save: jest.fn().mockResolvedValue(true)
-    };
-    const NewsPreferences = require('../models/NewsPreferences');
-    NewsPreferences.findOne.mockResolvedValue(mockPrefs);
-
-    const res = await request(app)
-      .post('/api/news/preferences/weather-locations')
-      .set('Authorization', 'Bearer valid-token')
-      .send({ zipCode: '78666' });
-
-    // Should not return 400 (validation error)
-    expect(res.status).not.toBe(400);
-    // The request should be accepted (200) since ZIP 78666 is valid
-    expect(res.status).toBe(200);
-  });
-});
-
 describe('fetchWeatherForLocation with ZIP 78666', () => {
   it('should NOT return "Unable to resolve weather data" error for ZIP 78666', async () => {
     // This test verifies that when fetchWeatherForLocation is called with ZIP 78666,

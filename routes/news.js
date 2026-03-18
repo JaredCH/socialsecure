@@ -15,48 +15,31 @@
  * UV Index, AQI, and pollen data from the Open-Meteo Air Quality API.
  */
 
-const express = require('express');
-const router = express.Router();
 const https = require('https');
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
+
+const express = require('express');
+
+const {
+  requireAuth: authenticateToken,
+  authErrorHandler
+} = require('../middleware/parseAuthToken');
+const { getTeamSchedules, getLeagueStatusMap, getAllLeagueStatuses } = require('../services/sportsScheduleIngestion');
+const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocationIndex');
+const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
+const { canonicalizeStateCode, getLocationTaxonomyPayload } = require('../utils/newsLocationTaxonomy');
+const { resolveZipLocation, resolveZipLocationByCityState } = require('../services/zipLocationIndex');
+const { getArticlesForLocation, getCacheMetrics, searchCachedArticles } = require('../services/locationCacheService');
+const { normalizeLocationInput, resolvePrimaryLocation } = require('../services/locationNormalizer');
+const { REFRESH_INTERVAL_MS, getCacheSchedulerState, refreshAllCachedLocations, startCacheRefreshScheduler } = require('../services/cacheRefreshWorker');
+const { preloadCommonLocations } = require('../services/locationPreloader');
 
 const NewsPreferences = require('../models/NewsPreferences');
 const User = require('../models/User');
 const Article = require('../models/Article');
 const ArticleImpression = require('../models/ArticleImpression');
-const NewsIngestionRecord = require('../models/NewsIngestionRecord');
-const LocationNewsCache = require('../models/LocationNewsCache');
 
-// ---------------------------------------------------------------------------
-// Auth middleware (mirrors the pattern used across all route files)
-// ---------------------------------------------------------------------------
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Authentication required' });
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', (err, decoded) => {
-    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
-    req.user = decoded;
-    next();
-  });
-};
-const PROMOTED_THRESHOLD = parseInt(process.env.NEWS_VIRAL_PROMOTED_THRESHOLD || '65', 10);
-
-const { triggerLocationIngest } = require('../services/newsIngestion.local');
-const { ingestAllCategories } = require('../services/newsIngestion.categories');
-const { ingestAllFollowedTeams } = require('../services/newsIngestion.sports');
-const { getTeamSchedules, getLeagueStatusMap, getAllLeagueStatuses } = require('../services/sportsScheduleIngestion');
-const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocationIndex');
-const { ingestAllMonitoredSubreddits } = require('../services/newsIngestion.social');
-const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
-const { canonicalizeStateCode, getLocationTaxonomyPayload } = require('../utils/newsLocationTaxonomy');
-const { resolveZipLocation, resolveZipLocationByCityState } = require('../services/zipLocationIndex');
-const { buildFeed } = require('../services/newsFeedBuilder');
-const { getArticlesForLocation, getCacheMetrics, searchCachedArticles } = require('../services/locationCacheService');
-const { normalizeLocationInput, resolvePrimaryLocation } = require('../services/locationNormalizer');
-const { REFRESH_INTERVAL_MS, getCacheSchedulerState, refreshAllCachedLocations, startCacheRefreshScheduler } = require('../services/cacheRefreshWorker');
-const { preloadCommonLocations } = require('../services/locationPreloader');
+const router = express.Router();
 
 // ---------------------------------------------------------------------------
 // Weather constants
@@ -1732,7 +1715,6 @@ router.get('/search', authenticateToken, async (req, res) => {
 });
 
 const INGESTION_PIPELINES = ['cache', 'preload'];
-const INGESTION_FAST_INTERVAL_MS = REFRESH_INTERVAL_MS;
 const SOURCE_ADAPTER_KEY_MAP = {
   'Google News Cache': 'cache',
   'Google News Local': 'cache',
@@ -1851,6 +1833,8 @@ function startIngestionScheduler() {
   schedulerStartedAt = new Date();
   startCacheRefreshScheduler();
 }
+
+router.use(authErrorHandler);
 
 module.exports = {
   router,

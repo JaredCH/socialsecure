@@ -497,7 +497,7 @@ describe('Chat zip room indicator', () => {
 
     const quickAccessRooms = Array.from(container.querySelectorAll('[data-quick-access-room]'))
       .map((node) => node.getAttribute('data-quick-access-room'));
-    expect(quickAccessRooms).toEqual(['Massachusetts', 'Suffolk County, Massachusetts']);
+    expect(quickAccessRooms).toEqual(['Zip 02115', 'Massachusetts', 'Suffolk County, Massachusetts']);
     expect(Array.from(container.querySelectorAll('[data-quick-access-city]'))
       .map((node) => node.getAttribute('data-quick-access-city'))).toEqual([
       'Boston (ZIP 02116)',

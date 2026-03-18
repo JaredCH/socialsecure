@@ -1,9 +1,9 @@
-const User = require('../models/User');
-const NewsLocation = require('../models/NewsLocation');
 const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
 const { resolveZipLocation, resolveZipLocationByCityState } = require('./zipLocationIndex');
+const normalizeToken = require('../utils/normalizeToken');
 
-const normalizeToken = (value) => String(value || '').trim();
+const User = require('../models/User');
+const NewsLocation = require('../models/NewsLocation');
 
 const buildCanonicalName = (canonical = {}) => {
   const parts = [
@@ -231,27 +231,26 @@ const syncMasterLocationsFromUsers = async ({ limit = 2000 } = {}) => {
     .limit(limit)
     .lean();
 
-  let touched = 0;
-  for (const user of users) {
-    const coordinates = Array.isArray(user.location?.coordinates)
-      ? { lon: user.location.coordinates[0], lat: user.location.coordinates[1] }
-      : null;
-    const upserted = await upsertMasterLocationFromUser({
-      userId: user._id,
-      location: {
-        city: user.city,
-        state: user.state,
-        country: user.country,
-        county: user.county,
-        zipCode: user.zipCode
-      },
-      coordinates,
-      queueOnDemand: false
-    });
-    if (upserted) {
-      touched += 1;
-    }
-  }
+  const upsertResults = await Promise.all(
+    users.map((user) => {
+      const coordinates = Array.isArray(user.location?.coordinates)
+        ? { lon: user.location.coordinates[0], lat: user.location.coordinates[1] }
+        : null;
+      return upsertMasterLocationFromUser({
+        userId: user._id,
+        location: {
+          city: user.city,
+          state: user.state,
+          country: user.country,
+          county: user.county,
+          zipCode: user.zipCode
+        },
+        coordinates,
+        queueOnDemand: false
+      });
+    })
+  );
+  const touched = upsertResults.filter(Boolean).length;
 
   return {
     usersScanned: users.length,

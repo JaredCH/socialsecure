@@ -1,12 +1,17 @@
+const path = require('path');
+
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const path = require('path');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const { v4: uuidv4 } = require('uuid');
+
+const { logEvent } = require('../utils/logEvent');
+
 const User = require('../models/User');
 const SocialPageConfig = require('../models/SocialPageConfig');
+
 const {
   SOCIAL_DESIGN_TEMPLATES,
   buildDefaultSocialPagePreferences,
@@ -70,16 +75,7 @@ const normalizeConfigName = (name, fallback = 'Untitled design') => {
 
 const cloneValue = (value) => JSON.parse(JSON.stringify(value));
 
-const logSocialPageEvent = ({ eventType, userId, req, metadata = {} }) => {
-  console.log('[social-page-event]', JSON.stringify({
-    eventType,
-    userId: userId ? String(userId) : null,
-    metadata,
-    ipAddress: req.ip,
-    userAgent: req.get('user-agent') || null,
-    createdAt: new Date().toISOString()
-  }));
-};
+const logSocialPageEvent = (payload) => logEvent(payload);
 
 const serializeConfig = (configDoc, viewerId = null) => ({
   _id: String(configDoc._id),

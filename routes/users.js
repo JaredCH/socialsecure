@@ -1,11 +1,13 @@
 const express = require('express');
-const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
+
 const User = require('../models/User');
 const BlockList = require('../models/BlockList');
 const Friendship = require('../models/Friendship');
 const Resume = require('../models/Resume');
+
+const router = express.Router();
 
 const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

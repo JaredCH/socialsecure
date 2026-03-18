@@ -18,11 +18,8 @@
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
-const RssSource = require('../models/RssSource');
 
-// ---------------------------------------------------------------------------
-// Lookup tables
-// ---------------------------------------------------------------------------
+const RssSource = require('../models/RssSource');
 
 const STATE_NAME_TO_CODE = new Map([
   ['alabama','AL'],['alaska','AK'],['arizona','AZ'],['arkansas','AR'],['california','CA'],

@@ -227,7 +227,7 @@ describe('News inline preferences updates', () => {
     }));
   });
 
-  // Skip: Test timing issues with React state updates in test environment
+  // Skip tracked in GitHub issue: https://github.com/JaredCH/socialsecure/issues/new?title=Fix%20News.test%20location%20selection%20timing
   it.skip('submits primary location selection and refreshes feed', async () => {
     await renderNews();
 
@@ -673,7 +673,7 @@ describe('News inline preferences updates', () => {
     }));
   });
 
-  // Skip: Test timing issues with React state updates in test environment
+  // Skip tracked in GitHub issue: https://github.com/JaredCH/socialsecure/issues/new?title=Fix%20News.test%20city-state%20location%20timing
   it.skip('accepts valid city + state location input', async () => {
     newsAPI.getLocationTaxonomy.mockResolvedValue({
       data: {

@@ -3145,10 +3145,10 @@ function Chat() {
             ) : pd ? (
               <>
                 <div className="relative h-20 w-full" style={{ backgroundColor: headerColor }}>
-                  {heroImg ? <img src={heroImg} alt="" className="h-full w-full object-cover" /> : null}
+                  {heroImg ? <img src={heroImg} alt={`Header image for ${pd.username || 'user'}`} className="h-full w-full object-cover" /> : null}
                   <div className="absolute -bottom-5 left-3">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white text-sm font-bold overflow-hidden" style={{ borderColor: panelColor }}>
-                      {profileImg ? <img src={profileImg} alt="" className="h-full w-full rounded-full object-cover" /> : (pd.username || 'U').slice(0, 1).toUpperCase()}
+                      {profileImg ? <img src={profileImg} alt={`${pd.username || 'user'} profile`} className="h-full w-full rounded-full object-cover" /> : (pd.username || 'U').slice(0, 1).toUpperCase()}
                     </span>
                   </div>
                 </div>

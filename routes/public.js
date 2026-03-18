@@ -1,14 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-const router = express.Router();
-const User = require('../models/User');
-const Post = require('../models/Post');
-const BlockList = require('../models/BlockList');
-const Resume = require('../models/Resume');
-const Friendship = require('../models/Friendship');
-const SiteContentFilter = require('../models/SiteContentFilter');
+
 const { toPublicSocialPagePreferences } = require('../utils/socialPagePreferences');
 const {
   normalizeRelationshipAudience,
@@ -16,6 +9,17 @@ const {
   ownerCategorizedViewerAsSecure
 } = require('../utils/relationshipAudience');
 const { censorMaturityText, normalizeFilterWords } = require('../utils/contentFilter');
+const { decodeAuthToken } = require('../middleware/parseAuthToken');
+const { logEvent } = require('../utils/logEvent');
+
+const User = require('../models/User');
+const Post = require('../models/Post');
+const BlockList = require('../models/BlockList');
+const Resume = require('../models/Resume');
+const Friendship = require('../models/Friendship');
+const SiteContentFilter = require('../models/SiteContentFilter');
+
+const router = express.Router();
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -171,28 +175,11 @@ const toPublicResumePayload = (resumeDoc) => ({
   createdAt: resumeDoc.createdAt || null
 });
 
-const logResumeEvent = ({ eventType, userId, req, metadata = {} }) => {
-  const payload = {
-    eventType,
-    userId,
-    metadata,
-    ipAddress: req.ip,
-    userAgent: req.get('user-agent') || null,
-    createdAt: new Date().toISOString()
-  };
-  console.log('[resume-event]', JSON.stringify(payload));
-};
+const logResumeEvent = (payload) => logEvent(payload);
 
 const getViewerIdFromAuthHeader = (req) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return null;
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
-    return decoded.userId ? String(decoded.userId) : null;
-  } catch {
-    return null;
-  }
+  const decoded = decodeAuthToken(req);
+  return decoded?.userId ? String(decoded.userId) : null;
 };
 
 const getContentFilterConfig = async () => {

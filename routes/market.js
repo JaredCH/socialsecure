@@ -1,17 +1,20 @@
-const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs/promises');
+
+const express = require('express');
 const multer = require('multer');
-const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+
+const { createNotification } = require('../services/notifications');
+
 const MarketListing = require('../models/MarketListing');
 const MarketTransaction = require('../models/MarketTransaction');
 const User = require('../models/User');
-const { createNotification } = require('../services/notifications');
 
-// Hierarchical category definitions
+const router = express.Router();
+
 const MARKET_CATEGORIES = [
   {
     id: 'for-sale',
