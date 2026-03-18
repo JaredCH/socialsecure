@@ -161,6 +161,7 @@ function ChatMessageItem({
   reactionsByType = {},
   reactionOptions = [],
   onToggleReaction,
+  reactionsDisabled = false,
   longPressDelayMs = DEFAULT_LONG_PRESS_DELAY_MS,
   showAdminActions = false,
   adminMutedUserIds,
@@ -212,6 +213,7 @@ function ChatMessageItem({
   }, []);
 
   const openReactionPicker = () => {
+    if (reactionsDisabled) return;
     if (reactionCloseTimerRef.current) {
       clearTimeout(reactionCloseTimerRef.current);
       reactionCloseTimerRef.current = null;
@@ -268,7 +270,9 @@ function ChatMessageItem({
           <button
             key={reaction.key}
             type="button"
+            disabled={reactionsDisabled}
             onClick={(event) => {
+              if (reactionsDisabled) return;
               event.stopPropagation();
               onToggleReaction?.(message._id, reaction.key);
             }}
@@ -298,7 +302,9 @@ function ChatMessageItem({
             <button
               key={`pick-${reaction.key}`}
               type="button"
+              disabled={reactionsDisabled}
               onClick={(event) => {
+                if (reactionsDisabled) return;
                 event.stopPropagation();
                 onToggleReaction?.(message._id, reaction.key);
                 setReactionPickerOpen(false);
@@ -441,16 +447,17 @@ function ChatMessageItem({
                 isOwnMessage ? theme.messageOwn : theme.messageOther
               ].join(' ')}
               onMouseOver={() => {
-                if (canHoverForReactions) {
+                if (canHoverForReactions && !reactionsDisabled) {
                   openReactionPicker();
                 }
               }}
               onMouseLeave={(event) => {
-                if (canHoverForReactions) {
+                if (canHoverForReactions && !reactionsDisabled) {
                   scheduleCloseReactionPicker(event);
                 }
               }}
               onClick={(event) => {
+                if (reactionsDisabled) return;
                 if (canHoverForReactions) return;
                 if (event.target?.closest?.('a, button, [data-chat-no-user-menu="true"]')) return;
                 event.stopPropagation();
@@ -515,16 +522,17 @@ function ChatMessageItem({
                   tabIndex={0}
                   className="relative rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
                   onMouseOver={() => {
-                    if (canHoverForReactions) {
+                    if (canHoverForReactions && !reactionsDisabled) {
                       openReactionPicker();
                     }
                   }}
                   onMouseLeave={(event) => {
-                    if (canHoverForReactions) {
+                    if (canHoverForReactions && !reactionsDisabled) {
                       scheduleCloseReactionPicker(event);
                     }
                   }}
                   onClick={(event) => {
+                    if (reactionsDisabled) return;
                     if (canHoverForReactions) return;
                     if (event.target?.closest?.('a, button, [data-chat-no-user-menu="true"]')) return;
                     event.stopPropagation();

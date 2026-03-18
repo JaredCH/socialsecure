@@ -17,6 +17,7 @@ function ChatMessageList({
   reactionsByMessageId,
   reactionOptions,
   onToggleReaction,
+  reactionsDisabled = false,
   longPressDelayMs,
   onVisibleMessageIdsChange,
   hasMoreMessages,
@@ -179,8 +180,9 @@ function ChatMessageList({
               onOpenUserMenu={onOpenUserMenu}
                reactionsByType={reactionsByMessageId?.[String(message._id)] || {}}
                reactionOptions={reactionOptions}
-               onToggleReaction={onToggleReaction}
-               longPressDelayMs={longPressDelayMs}
+                onToggleReaction={onToggleReaction}
+                reactionsDisabled={reactionsDisabled}
+                longPressDelayMs={longPressDelayMs}
                showAdminActions={showAdminActions}
                adminMutedUserIds={adminMutedUserIds}
                adminProcessingMessageIds={adminProcessingMessageIds}
