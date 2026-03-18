@@ -4111,7 +4111,7 @@ const Social = () => {
         return (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm" style={{ color: 'var(--social-text-muted)' }}>Timeline</p>
+              <p className="text-sm" style={{ color: 'var(--social-text-secondary)' }}>Timeline</p>
               <button type="button" onClick={loadFeed} className="rounded-xl border px-3 py-2 text-sm transition-colors" style={{ borderColor: 'color-mix(in srgb, var(--social-text-muted) 25%, transparent)', color: 'var(--social-text-secondary)', background: 'transparent' }} disabled={loadingFeed}>{loadingFeed ? 'Refreshing…' : 'Refresh'}</button>
             </div>
             {feedError ? <div className="rounded-xl border px-3 py-2.5 text-sm" style={{ borderColor: 'color-mix(in srgb, #ef4444 40%, transparent)', background: 'color-mix(in srgb, #ef4444 10%, var(--bg-panel))', color: '#ef4444' }}>{feedError}</div> : null}
@@ -5048,11 +5048,17 @@ const Social = () => {
       className={`overflow-hidden rounded-[1.75rem] border shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur-xl ${options.className || ''}`}
       style={{ ...hubSurfaceStyle, ...(options.style || {}) }}
     >
-      <div className="border-b border-white/30 px-4 py-3.5 sm:px-5 sm:py-4">
+      <div
+        className="border-b border-white/30 px-4 py-3.5 sm:px-5 sm:py-4"
+        style={{
+          borderBottomColor: 'color-mix(in srgb, var(--social-text-muted) 24%, transparent)',
+          background: 'color-mix(in srgb, var(--social-surface-muted) 85%, var(--bg-base) 15%)'
+        }}
+      >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--social-text-muted)' }}>{title}</h2>
-            {options.subtitle ? <p className="mt-1 text-sm" style={{ color: 'var(--social-text-muted)' }}>{options.subtitle}</p> : null}
+            <h2 className="text-sm font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--social-text-primary)' }}>{title}</h2>
+            {options.subtitle ? <p className="mt-1 text-sm" style={{ color: 'var(--social-text-secondary)' }}>{options.subtitle}</p> : null}
           </div>
           {options.action}
         </div>
@@ -5889,9 +5895,6 @@ const Social = () => {
         <div className="grid grid-cols-1 gap-6" style={{ gridTemplateColumns: isMobile ? '1fr' : '300px minmax(0, 1fr)' }}>
           {/* Main Content Area */}
           <main className="min-w-0 space-y-6">
-            {!isAuthenticated ? renderGlassPanel('Guest Access', renderPanelBody('guest_lookup'), {
-              subtitle: 'Load a public profile by username or user ID'
-            }) : null}
             {renderCenterStage()}
           </main>
 
