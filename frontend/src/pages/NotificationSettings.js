@@ -14,6 +14,9 @@ const TYPE_LABELS = {
   mentions: 'Mentions',
   follows: 'Follows',
   messages: 'Messages',
+  friendPosts: 'Friend posts',
+  top5: 'Top 5 changes',
+  partnerRequests: 'Partner/spouse requests',
   system: 'System announcements',
   securityAlerts: 'Security alerts'
 };
@@ -24,6 +27,9 @@ const defaultPreferences = {
   mentions: { inApp: true, email: true, push: false },
   follows: { inApp: true, email: false, push: false },
   messages: { inApp: true, email: false, push: false },
+  friendPosts: { inApp: true, email: false, push: false },
+  top5: { inApp: true, email: false, push: false },
+  partnerRequests: { inApp: true, email: true, push: false },
   system: { inApp: true, email: true, push: false },
   securityAlerts: { inApp: true, email: true, push: false },
   realtime: { enabled: true, typingIndicators: true, presence: true }
