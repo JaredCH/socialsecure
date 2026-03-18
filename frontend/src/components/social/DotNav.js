@@ -147,12 +147,17 @@ const CATALOG = [
 const CATALOG_BY_KEY = Object.fromEntries(CATALOG.map(c => [c.key, c]));
 
 // Default layout: 4 power buttons + 12 context-aware buttons
+// Closer radial slots (lower indices) are populated first with contextual
+// buttons that require routing logic (own page vs viewed user), then
+// absolute shortcuts; furthest slots are left empty when there are not
+// enough buttons. Site-wide power buttons remain the same.
 const DEFAULT_ASSIGNED = [
-  // Radial slots 0-11
-  'main', 'my-gallery', 'my-friends',
-  'gallery', 'friends', 'chat', 'calendar', 'blog',
-  'my-chat', 'my-calendar', 'my-blog', 'my-resume',
-  // Power slots 12-15
+  // Radial slots 0-11 (closest → furthest)
+  'main', 'gallery', 'friends',
+  'chat', 'calendar', 'blog',
+  'my-gallery', 'my-friends', 'my-chat',
+  'map', 'my-calendar', '',
+  // Power slots 12-15 (site-wide, unchanged)
   'chat-power', 'news-power', 'market-power', 'discover-power',
 ];
 

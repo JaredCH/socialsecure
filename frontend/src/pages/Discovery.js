@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { discoveryAPI, friendsAPI, hasAuthToken } from '../utils/api';
 import { PostCard, UserCard } from '../components/discovery/DiscoveryCards';
 
@@ -14,6 +14,8 @@ const extractApiErrorMessage = (error, fallbackMessage) => (
 const Discovery = () => {
   const canInteract = hasAuthToken();
   const [activeTab, setActiveTab] = useState('people');
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchDebounceRef = useRef(null);
 
   const [users, setUsers] = useState([]);
   const [usersPage, setUsersPage] = useState(1);
@@ -40,11 +42,11 @@ const Discovery = () => {
     );
   }, []);
 
-  const loadUsers = useCallback(async (page) => {
+  const loadUsers = useCallback(async (page, query = '') => {
     setUsersLoading(true);
     setUsersError('');
     try {
-      const { data } = await discoveryAPI.getUsers('', page, 20);
+      const { data } = await discoveryAPI.getUsers(query, page, 20);
       if (page === 1) {
         setUsers(data.users || []);
       } else {
@@ -85,8 +87,9 @@ const Discovery = () => {
   // Load initial data when tab changes
   useEffect(() => {
     if (activeTab === 'people' && !usersLoaded && !usersLoading) {
-      loadUsers(1);
+      loadUsers(1, searchQuery);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, loadUsers, usersLoaded, usersLoading]);
 
   useEffect(() => {
@@ -95,18 +98,36 @@ const Discovery = () => {
     }
   }, [activeTab, loadPosts, postsLoaded, postsLoading]);
 
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
+  // Debounced search
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setUsers([]);
+      setUsersLoaded(false);
+      loadUsers(1, value);
+    }, 350);
+  };
+
   const handleSendFriendRequest = async (userId) => {
     await friendsAPI.sendRequest(userId);
     // Emit follow analytics in the background (non-blocking)
     discoveryAPI.trackEvent('follow_click', { targetUserId: userId, surface: 'find_friends' }).catch(() => {});
   };
 
-  const handleLoadMoreUsers = () => loadUsers(usersPage + 1);
+  const handleLoadMoreUsers = () => loadUsers(usersPage + 1, searchQuery);
   const handleLoadMorePosts = () => loadPosts(postsPage + 1);
 
   const handleRefreshUsers = () => {
     setUsers([]);
-    loadUsers(1);
+    loadUsers(1, searchQuery);
   };
 
   const handleRefreshPosts = () => {
@@ -115,13 +136,31 @@ const Discovery = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
+    <div className="max-w-6xl mx-auto px-4 py-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Find Friends</h1>
         <p className="text-gray-500 text-sm mt-1">
           Find people and posts you might find interesting
         </p>
       </div>
+
+      {/* Search Bar */}
+      {activeTab === 'people' && (
+        <div className="mb-5">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search by username or name…"
+              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Tab Bar */}
       <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
@@ -159,7 +198,7 @@ const Discovery = () => {
             </div>
           )}
 
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {users.map((user) => (
               <UserCard
                 key={String(user._id)}

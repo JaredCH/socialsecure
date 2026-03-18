@@ -33,6 +33,14 @@ const SocialStageSettingsSidebar = ({
   heroRandomGalleryEnabled,
   heroProfileImage,
   heroProfileImageHistory,
+  heroBackgroundDisplayMode,
+  heroBackgroundOverlay,
+  heroBackgroundGrain,
+  heroBackgroundBlur,
+  onHeroBackgroundDisplayModeChange,
+  onHeroBackgroundOverlayChange,
+  onHeroBackgroundGrainChange,
+  onHeroBackgroundBlurChange,
   bodyBackgroundImage,
   bodyBackgroundOverlay,
   bodyBackgroundGrain,
@@ -194,6 +202,81 @@ const SocialStageSettingsSidebar = ({
                       Use recent {index + 1}
                     </button>
                   ))}
+                </div>
+              </div>
+            ) : null}
+            {heroBackgroundImage ? (
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex h-20 items-center justify-center overflow-hidden rounded-xl bg-slate-200">
+                  <img src={heroBackgroundImage} alt="Hero background preview" className="h-full w-full object-cover" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">Display Mode</label>
+                  <div className="flex gap-1.5" data-testid="hero-display-mode-selector">
+                    {DISPLAY_MODE_OPTIONS.map((mode) => (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        onClick={() => onHeroBackgroundDisplayModeChange(mode.value)}
+                        className={`flex-1 rounded-xl px-2 py-1.5 text-xs font-semibold transition ${
+                          (heroBackgroundDisplayMode || 'cover') === mode.value
+                            ? 'border border-blue-300 bg-blue-50 text-blue-700'
+                            : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        }`}
+                        title={mode.description}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    Dark overlay
+                    <span className="text-slate-400">{Math.round((heroBackgroundOverlay || 0) * 100)}%</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={heroBackgroundOverlay || 0}
+                    onChange={(event) => onHeroBackgroundOverlayChange(parseFloat(event.target.value))}
+                    className="mt-1 w-full accent-blue-600"
+                    data-testid="hero-overlay-slider"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    Grain / Noise
+                    <span className="text-slate-400">{Math.round((heroBackgroundGrain || 0) * 100)}%</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={heroBackgroundGrain || 0}
+                    onChange={(event) => onHeroBackgroundGrainChange(parseFloat(event.target.value))}
+                    className="mt-1 w-full accent-blue-600"
+                    data-testid="hero-grain-slider"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    Blur
+                    <span className="text-slate-400">{heroBackgroundBlur || 0}px</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    step="1"
+                    value={heroBackgroundBlur || 0}
+                    onChange={(event) => onHeroBackgroundBlurChange(parseInt(event.target.value, 10))}
+                    className="mt-1 w-full accent-blue-600"
+                    data-testid="hero-blur-slider"
+                  />
                 </div>
               </div>
             ) : null}
