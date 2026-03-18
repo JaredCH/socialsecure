@@ -21,7 +21,7 @@ const GuestChat = () => {
         const discoveredRooms = Array.isArray(data?.rooms) ? data.rooms : [];
         setRooms(discoveredRooms);
         setSelectedRoomId((current) => {
-          if (String(current || '').trim() || discoveredRooms.length === 0) return current;
+          if (String(current || '').trim().length > 0 || discoveredRooms.length === 0) return current;
           return String(discoveredRooms[0]._id || '');
         });
       } catch {

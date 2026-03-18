@@ -33,24 +33,27 @@ const parsePagination = (query, defaultLimit = 20, maxLimit = 50) => {
   return { page, limit, skip: (page - 1) * limit };
 };
 
-const toRoomSummary = (room) => ({
-  _id: room?._id,
-  name: room?.name || '',
-  type: room?.type || '',
-  stableKey: room?.stableKey || null,
-  discoveryGroup: room?.discoveryGroup || null,
-  parentRoomId: room?.parentRoomId || null,
-  sortOrder: Number.isFinite(Number(room?.sortOrder)) ? Number(room.sortOrder) : null,
-  defaultLanding: Boolean(room?.defaultLanding),
-  city: room?.city || null,
-  county: room?.county || null,
-  state: room?.state || null,
-  country: room?.country || null,
-  zipCode: room?.zipCode || null,
-  messageCount: Number(room?.messageCount || 0),
-  memberCount: Array.isArray(room?.members) ? room.members.length : 0,
-  lastActivity: room?.lastActivity || null
-});
+const toRoomSummary = (room) => {
+  const sortOrder = Number(room?.sortOrder);
+  return {
+    _id: room?._id,
+    name: room?.name || '',
+    type: room?.type || '',
+    stableKey: room?.stableKey || null,
+    discoveryGroup: room?.discoveryGroup || null,
+    parentRoomId: room?.parentRoomId || null,
+    sortOrder: Number.isFinite(sortOrder) ? sortOrder : null,
+    defaultLanding: Boolean(room?.defaultLanding),
+    city: room?.city || null,
+    county: room?.county || null,
+    state: room?.state || null,
+    country: room?.country || null,
+    zipCode: room?.zipCode || null,
+    messageCount: Number(room?.messageCount || 0),
+    memberCount: Array.isArray(room?.members) ? room.members.length : 0,
+    lastActivity: room?.lastActivity || null
+  };
+};
 
 const filterNewsFeedArticles = (articles = [], { category = null, maxAgeHours = null } = {}) => {
   const now = Date.now();
