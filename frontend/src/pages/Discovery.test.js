@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import Discovery from './Discovery';
-import { discoveryAPI, friendsAPI } from '../utils/api';
+import { discoveryAPI, friendsAPI, hasAuthToken } from '../utils/api';
 
 jest.mock('../utils/api', () => ({
   discoveryAPI: {
@@ -12,7 +12,8 @@ jest.mock('../utils/api', () => ({
   },
   friendsAPI: {
     sendRequest: jest.fn()
-  }
+  },
+  hasAuthToken: jest.fn()
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -46,6 +47,7 @@ describe('Discovery friend requests', () => {
     });
     discoveryAPI.trackEvent.mockResolvedValue({ data: { success: true } });
     friendsAPI.sendRequest.mockResolvedValue({ data: { success: true } });
+    hasAuthToken.mockReturnValue(true);
 
     container = document.createElement('div');
     document.body.appendChild(container);

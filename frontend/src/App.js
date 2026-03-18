@@ -8,8 +8,10 @@ import UserSettings from './pages/UserSettings';
 import ReferFriend from './pages/ReferFriend';
 import Social from './pages/Social';
 import Chat from './pages/Chat';
+import GuestChat from './pages/GuestChat';
 import Market from './pages/Market';
 import News from './pages/News';
+import GuestNews from './pages/GuestNews';
 import Maps from './pages/Maps';
 import Discovery from './pages/Discovery';
 import Calendar from './pages/Calendar';
@@ -513,6 +515,7 @@ function App() {
   const closeNavMenus = () => {
     setIsMobileMenuOpen(false);
   };
+  const isGuest = !isAuthenticated;
 
   return (
     <Router>
@@ -531,6 +534,10 @@ function App() {
                 {canUseProtectedFeatures && <Link to="/news" onClick={closeNavMenus} className={navLinkClass}>News</Link>}
                 {canUseProtectedFeatures && <Link to="/market" onClick={closeNavMenus} className={navLinkClass}>Market</Link>}
                 {canUseProtectedFeatures && <Link to="/maps" onClick={closeNavMenus} className={navLinkClass}>Maps</Link>}
+                {isGuest && <Link to="/social" onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
+                {isGuest && <Link to="/discover" onClick={closeNavMenus} className={navLinkClass}>Discover</Link>}
+                {isGuest && <Link to="/chat" onClick={closeNavMenus} className={navLinkClass}>Chat</Link>}
+                {isGuest && <Link to="/news" onClick={closeNavMenus} className={navLinkClass}>News</Link>}
                 {isAuthenticated && onboardingRequired && <Link to="/onboarding" onClick={closeNavMenus} className={navEmphasisLinkClass}>Onboarding</Link>}
                 {isAuthenticated ? (
                   !canUseProtectedFeatures && <button onClick={handleLogout} className={navDangerButtonClass}>Logout</button>
@@ -589,6 +596,13 @@ function App() {
           <div className="container mx-auto mt-4">
             <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">
               Encryption password setup is required before using Social, Chat, Market, and referral features.
+            </div>
+          </div>
+        ) : null}
+        {isGuest ? (
+          <div className="container mx-auto mt-4">
+            <div className="rounded border border-blue-200 bg-blue-50 p-3 text-blue-900">
+              You're browsing as a guest from Austin, TX. Register to unlock all features.
             </div>
           </div>
         ) : null}
@@ -772,7 +786,7 @@ function App() {
             />
             <Route
               path="/discover"
-              element={(
+              element={isAuthenticated ? (
                 <ProtectedRoute
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
@@ -781,11 +795,11 @@ function App() {
                 >
                   <Discovery />
                 </ProtectedRoute>
-              )}
+              ) : <Discovery />}
             />
             <Route
               path="/social"
-              element={(
+              element={isAuthenticated ? (
                 <ProtectedRoute
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
@@ -794,7 +808,7 @@ function App() {
                 >
                   <Social />
                 </ProtectedRoute>
-              )}
+              ) : <Discovery />}
             />
             <Route
               path="/friends"
@@ -825,7 +839,7 @@ function App() {
             <Route path="/feed" element={<Navigate to={socialProfilePath} replace />} />
             <Route
               path="/chat"
-              element={(
+              element={isAuthenticated ? (
                 <ProtectedRoute
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
@@ -834,7 +848,7 @@ function App() {
                 >
                   <Chat />
                 </ProtectedRoute>
-              )}
+              ) : <GuestChat />}
             />
             <Route
               path="/market"
@@ -851,7 +865,7 @@ function App() {
             />
             <Route
               path="/news"
-              element={(
+              element={isAuthenticated ? (
                 <ProtectedRoute
                   isAuthenticated={isAuthenticated}
                   onboardingRequired={onboardingRequired}
@@ -860,7 +874,7 @@ function App() {
                 >
                   <News />
                 </ProtectedRoute>
-              )}
+              ) : <GuestNews />}
             />
             <Route
               path="/maps"

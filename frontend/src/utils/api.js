@@ -74,6 +74,7 @@ export const setAuthToken = (token) => {
 };
 
 export const clearAuthToken = () => setAuthToken(null);
+export const hasAuthToken = () => Boolean(getAuthToken());
 
 export const normalizeApiBaseUrl = (apiUrl) => {
   const trimmedApiUrl = (apiUrl || '').trim();
@@ -367,7 +368,7 @@ export const chatAPI = {
   moveRoom: (roomId, direction) => api.post(`/chat/rooms/${roomId}/move`, { direction }),
   getAllRooms: (page = 1, limit = 100) =>
     api.get(`/chat/rooms/all?page=${page}&limit=${limit}`),
-  getQuickAccessRooms: () => api.get('/chat/rooms/quick-access'),
+  getQuickAccessRooms: () => api.get(hasAuthToken() ? '/chat/rooms/quick-access' : '/guest/chat/rooms/quick-access'),
   getRoomUsers: (roomId) => api.get(`/chat/rooms/${roomId}/users`),
   syncLocationRooms: () => api.post('/chat/rooms/sync-location'),
   getNearbyZipRooms: (zipCode) => api.get(`/chat/zip/nearby?zipCode=${encodeURIComponent(zipCode)}`),
@@ -560,7 +561,8 @@ export const discoveryAPI = {
   getUsers: (q = '', page = 1, limit = 10) => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (q) params.append('q', q);
-    return api.get(`/discovery/users?${params.toString()}`);
+    const basePath = hasAuthToken() ? '/discovery/users' : '/guest/discovery/users';
+    return api.get(`${basePath}?${params.toString()}`);
   },
   getPosts: (q = '', page = 1, limit = 10, latitude = null, longitude = null) => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
@@ -569,7 +571,8 @@ export const discoveryAPI = {
       params.append('latitude', String(latitude));
       params.append('longitude', String(longitude));
     }
-    return api.get(`/discovery/posts?${params.toString()}`);
+    const basePath = hasAuthToken() ? '/discovery/posts' : '/guest/discovery/posts';
+    return api.get(`${basePath}?${params.toString()}`);
   },
   trackEvent: (eventType, metadata = {}) => api.post('/discovery/events', { eventType, metadata }),
   trackUserImpression: (userId) =>
@@ -625,11 +628,11 @@ export const calendarAPI = {
 // News API
 export const newsAPI = {
   // Get personalized news feed
-  getFeed: (params = {}) => api.get('/news/feed', { params }),
+  getFeed: (params = {}) => api.get(hasAuthToken() ? '/news/feed' : '/guest/news/feed', { params }),
   // Get promoted news ranked by viral potential
   getPromoted: (params = {}) => api.get('/news/promoted', { params }),
   // Get available RSS sources (merged with catalog)
-  getSources: () => api.get('/news/sources'),
+  getSources: () => api.get(hasAuthToken() ? '/news/sources' : '/guest/news/sources'),
   // Add new RSS source
   addSource: (data) => api.post('/news/sources', data),
   // Remove RSS source
@@ -637,7 +640,7 @@ export const newsAPI = {
   // Refresh source health status
   refreshSourceHealth: () => api.post('/news/sources/health-check'),
   // Get user's news preferences
-  getPreferences: () => api.get('/news/preferences'),
+  getPreferences: () => api.get(hasAuthToken() ? '/news/preferences' : '/guest/news/preferences'),
   // Update user's news preferences
   updatePreferences: (data) => api.put('/news/preferences', data),
   // Add followed keyword
@@ -657,9 +660,9 @@ export const newsAPI = {
   // Get available topics
   getTopics: () => api.get('/news/topics'),
   // Get canonical location taxonomy for state/city selectors
-  getLocationTaxonomy: () => api.get('/news/location-taxonomy'),
+  getLocationTaxonomy: () => api.get(hasAuthToken() ? '/news/location-taxonomy' : '/guest/news/location-taxonomy'),
   // Get sports team league catalog for team-follow UI
-  getSportsTeams: () => api.get('/news/sports-teams'),
+  getSportsTeams: () => api.get(hasAuthToken() ? '/news/sports-teams' : '/guest/news/sports-teams'),
   // Get sports schedules for followed teams
   getSportsSchedules: (teamIds) => api.get('/news/sports-schedules', { params: { teams: teamIds?.join(',') } }),
   // Get season status for all leagues

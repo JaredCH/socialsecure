@@ -10,8 +10,10 @@ jest.mock('./pages/UserSettings', () => () => <div>User Settings Page</div>);
 jest.mock('./pages/ReferFriend', () => () => <div>Refer Friend Page</div>);
 jest.mock('./pages/Social', () => () => <div>Social Page</div>);
 jest.mock('./pages/Chat', () => () => <div>Chat Page</div>);
+jest.mock('./pages/GuestChat', () => () => <div>Guest Chat Page</div>);
 jest.mock('./pages/Market', () => () => <div>Market Page</div>);
 jest.mock('./pages/News', () => () => <div>News Page</div>);
+jest.mock('./pages/GuestNews', () => () => <div>Guest News Page</div>);
 jest.mock('./pages/Maps', () => () => <div>Maps Page</div>);
 jest.mock('./pages/Discovery', () => () => <div>Discovery Page</div>);
 jest.mock('./pages/Calendar', () => () => <div>Calendar Page</div>);
@@ -158,7 +160,7 @@ describe('App navbar features dropdown', () => {
     const mainNav = container.querySelector('#main-nav-menu');
     expect(mainNav).not.toBeNull();
     expect(mainNav.textContent).not.toContain('Calendar');
-    expect(mainNav.textContent).not.toContain('Discover');
+    expect(mainNav.textContent).toContain('Discover');
     expect(mainNav.textContent).not.toContain('Resume');
   });
 
@@ -245,6 +247,36 @@ describe('App navbar features dropdown', () => {
     expect(main.className).toContain('overflow-hidden');
     expect(main.className).not.toContain('overflow-y-auto');
     expect(container.textContent).toContain('News Page');
+  });
+
+  it('renders guest-safe route views for social/news/chat', async () => {
+    window.history.pushState({}, '', '/social');
+    await renderApp();
+    expect(container.textContent).toContain('Discovery Page');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    window.history.pushState({}, '', '/news');
+    await renderApp();
+    expect(container.textContent).toContain('Guest News Page');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    window.history.pushState({}, '', '/chat');
+    await renderApp();
+    expect(container.textContent).toContain('Guest Chat Page');
   });
 
 });

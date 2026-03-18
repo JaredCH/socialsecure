@@ -223,6 +223,7 @@ registerRoute('/api/resume', () => require('./routes/resume'));
 registerRoute('/api/social-page', () => require('./routes/social-page'));
 registerRoute('/api/blog', () => require('./routes/blog'));
 registerRoute('/api/admin', () => require('./routes/admin'));
+registerRoute('/api/guest', () => require('./routes/guest'));
 
 let newsRoutes = null;
 let mapsRoutes = null;
