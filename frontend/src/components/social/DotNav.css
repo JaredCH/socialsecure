@@ -159,6 +159,10 @@
   transform: scale(1.15);
 }
 
+.dotnav-slot.dotnav-dragging {
+  opacity: 0.75;
+}
+
 .dotnav-slot.dotnav-editing {
   animation: dotnav-wiggle 0.4s ease-in-out infinite alternate;
 }
@@ -195,6 +199,23 @@
 .dotnav-nbtn svg {
   width: 20px;
   height: 20px;
+  pointer-events: none;
+}
+
+.dotnav-slot-label {
+  position: absolute;
+  top: calc(100% - 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: var(--dotnav-btn-fg);
+  letter-spacing: 0.02em;
   pointer-events: none;
 }
 
@@ -596,6 +617,11 @@
   .dotnav-picker-item {
     width: 36px;
     height: 36px;
+  }
+
+  .dotnav-slot-label {
+    font-size: 8px;
+    padding: 1px 4px;
   }
 
   #dotnav-settings-panel {

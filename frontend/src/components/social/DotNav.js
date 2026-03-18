@@ -14,6 +14,7 @@ const TOTAL_SLOTS = 16;
 const STORAGE_KEY = 'dotnav-state';
 const NOTIF_PANEL_W = 260;
 const EDGE_INSET = 10;
+const MOBILE_MAX_WIDTH = 768;
 
 // ═══════════════════════════════════════════
 // DOCK POSITION CONFIGS
@@ -46,11 +47,30 @@ function buildArc(side) {
 
 // 4 vertical power button offsets
 function buildPowerSlots(side) {
-  const sign = side === 'right' ? -1 : 1;
+  const edgeDirectionSign = side === 'right' ? 1 : -1;
   return [0, 1, 2, 3].map(i => ({
-    dl: CA + sign * 60,
+    dl: CA + edgeDirectionSign * 18,
     db: CA + 70 + i * 52,
   }));
+}
+
+const COMPACT_LABELS = {
+  'My Gallery': 'Gallery',
+  'My Friends': 'Friends',
+  'My Chat': 'Chat',
+  'My Calendar': 'Cal',
+  'My Blog': 'Blog',
+  'My Resume': 'Resume',
+  'My About Me': 'About',
+  Discover: 'Find',
+};
+
+function getCompactLabel(label) {
+  return COMPACT_LABELS[label] || label;
+}
+
+function isValidSlotIndex(index) {
+  return Number.isInteger(index) && index >= 0 && index < TOTAL_SLOTS;
 }
 
 // ═══════════════════════════════════════════
@@ -252,8 +272,12 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
   const [hoveredSlot, setHoveredSlot] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+  const [draggedSlotIndex, setDraggedSlotIndex] = useState(null);
+  const [dragOverSlotIndex, setDragOverSlotIndex] = useState(null);
 
   const dotRef = useRef(null);
+  const draggedSlotRef = useRef(null);
+  const dragOverSlotRef = useRef(null);
 
   // Persist state changes
   useEffect(() => {
@@ -404,13 +428,99 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     setPickerSlotIndex(null);
   }, []);
 
+  const swapSlots = useCallback((fromIndex, toIndex) => {
+    if (
+      !isEditing
+      || !isValidSlotIndex(fromIndex)
+      || !isValidSlotIndex(toIndex)
+      || fromIndex === toIndex
+    ) {
+      return;
+    }
+    setAssigned(prev => {
+      const next = [...prev];
+      const tmp = next[fromIndex];
+      next[fromIndex] = next[toIndex];
+      next[toIndex] = tmp;
+      return next;
+    });
+  }, [isEditing]);
+
+  const handleDragStart = useCallback((slotIndex) => {
+    if (!isEditing) return;
+    draggedSlotRef.current = slotIndex;
+    dragOverSlotRef.current = null;
+    setDraggedSlotIndex(slotIndex);
+    setDragOverSlotIndex(null);
+  }, [isEditing]);
+
+  const handleDragEnter = useCallback((slotIndex) => {
+    if (!isEditing || draggedSlotRef.current === null || draggedSlotRef.current === slotIndex) return;
+    dragOverSlotRef.current = slotIndex;
+    setDragOverSlotIndex(slotIndex);
+  }, [isEditing]);
+
+  const handleDragDrop = useCallback((slotIndex) => {
+    swapSlots(draggedSlotRef.current, slotIndex);
+    draggedSlotRef.current = null;
+    dragOverSlotRef.current = null;
+    setDraggedSlotIndex(null);
+    setDragOverSlotIndex(null);
+  }, [swapSlots]);
+
+  const handleDragEnd = useCallback(() => {
+    draggedSlotRef.current = null;
+    dragOverSlotRef.current = null;
+    setDraggedSlotIndex(null);
+    setDragOverSlotIndex(null);
+  }, []);
+
+  const handleDragOver = useCallback((e) => {
+    if (!isEditing) return;
+    e.preventDefault();
+  }, [isEditing]);
+
+  const handleTouchDragStart = useCallback((e, slotIndex) => {
+    if (!isEditing) return;
+    e.preventDefault();
+    draggedSlotRef.current = slotIndex;
+    dragOverSlotRef.current = null;
+    setDraggedSlotIndex(slotIndex);
+    setDragOverSlotIndex(null);
+  }, [isEditing]);
+
+  const handleTouchDragMove = useCallback((e) => {
+    if (!isEditing || draggedSlotRef.current === null) return;
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    e.preventDefault();
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    const slotEl = target?.closest?.('[data-slot-index]');
+    const slotIndex = Number(slotEl?.getAttribute?.('data-slot-index'));
+    if (!Number.isNaN(slotIndex) && slotIndex !== draggedSlotRef.current) {
+      dragOverSlotRef.current = slotIndex;
+      setDragOverSlotIndex(slotIndex);
+    }
+  }, [isEditing]);
+
+  const handleTouchDragEnd = useCallback((e) => {
+    if (e) e.preventDefault();
+    swapSlots(draggedSlotRef.current, dragOverSlotRef.current);
+    draggedSlotRef.current = null;
+    dragOverSlotRef.current = null;
+    setDraggedSlotIndex(null);
+    setDragOverSlotIndex(null);
+  }, [swapSlots]);
+
   // Determine context for viewingUser
   const effectiveViewingUser = useMemo(() => {
     if (!viewingUser || viewingUser === loggedInUser) return null;
     return viewingUser;
   }, [viewingUser, loggedInUser]);
 
-  if (!enabled) return null;
+  const isMobile = windowSize.w <= MOBILE_MAX_WIDTH;
+
+  if (!enabled || !isMobile) return null;
 
   // Picker position near the target empty slot
   const pickerPos = pickerSlotIndex !== null && slotPositions[pickerSlotIndex]
@@ -562,6 +672,8 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
               isOpen ? 'dotnav-visible' : '',
               !isFilled ? 'dotnav-empty' : '',
               isEditing ? 'dotnav-editing' : '',
+              dragOverSlotIndex === index ? 'dotnav-drag-over' : '',
+              draggedSlotIndex === index ? 'dotnav-dragging' : '',
             ].filter(Boolean).join(' ')}
             style={{
               left: pos.left,
@@ -569,6 +681,10 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
               transitionDelay: isOpen ? `${index * 25}ms` : '0ms',
             }}
             data-slot-index={index}
+            onDragEnter={() => handleDragEnter(index)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => { e.preventDefault(); handleDragDrop(index); }}
+            onDragEnd={handleDragEnd}
             onMouseEnter={() => setHoveredSlot(index)}
             onMouseLeave={() => setHoveredSlot(null)}
           >
@@ -576,14 +692,27 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
               <>
                 <button
                   className="dotnav-nbtn"
+                  draggable={isEditing}
+                  onDragStart={() => handleDragStart(index)}
+                  onTouchStart={(e) => handleTouchDragStart(e, index)}
+                  onTouchMove={handleTouchDragMove}
+                  onTouchEnd={handleTouchDragEnd}
                   onClick={() => isEditing ? undefined : handleNavClick(index)}
                   aria-label={`${entry.label}${isPower ? ' (Power Button)' : ''}${entry.type === 'contextual' && effectiveViewingUser ? ` for ${effectiveViewingUser}` : ''}`}
                   title={entry.label}
                   type="button"
-                  style={isPower ? { background: '#2563eb' } : undefined}
+                  style={{
+                    ...(isPower ? { background: '#2563eb' } : {}),
+                    touchAction: isEditing ? 'none' : undefined,
+                  }}
                 >
                   {SVG_ICONS[entry.icon] || <span>{entry.label.charAt(0)}</span>}
                 </button>
+                {isOpen && (
+                  <span className="dotnav-slot-label" aria-hidden="true">
+                    {getCompactLabel(entry.label)}
+                  </span>
+                )}
                 {isEditing && (
                   <button
                     className="dotnav-slot-remove"
