@@ -332,7 +332,7 @@ const writeDmUnlockCache = (conversationIds, unlockDurationMinutes = DEFAULT_UNL
   );
 };
 
-function Chat() {
+function Chat({ isGuestMode = false }) {
   const [profile, setProfile] = useState(null);
   const [loadingHub, setLoadingHub] = useState(true);
   const [activeChannel, setActiveChannel] = useState('zip');
@@ -427,7 +427,7 @@ function Chat() {
   useEffect(() => {
     const requestedChannel = new URLSearchParams(search).get('tab');
 
-    if (requestedChannel === 'dm') {
+    if (!isGuestMode && requestedChannel === 'dm') {
       setActiveChannel('dm');
       return;
     }
@@ -436,7 +436,10 @@ function Chat() {
     if (requestedChannel === 'zip' || requestedChannel === 'rooms') {
       setActiveChannel('zip');
     }
-  }, [search]);
+    if (isGuestMode) {
+      setActiveChannel('zip');
+    }
+  }, [isGuestMode, search]);
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setPresenceReferenceTime(Date.now());
@@ -717,7 +720,7 @@ function Chat() {
   }, [activeConversationId, activeConversation?.type]);
 
   useEffect(() => {
-    if (!profile?._id) return;
+    if (isGuestMode || !profile?._id) return;
     let cancelled = false;
     setDmFriendsLoading(true);
     friendsAPI.getFriends()
@@ -734,20 +737,26 @@ function Chat() {
     return () => {
       cancelled = true;
     };
-  }, [profile?._id]);
+  }, [isGuestMode, profile?._id]);
 
   const loadAllChatRooms = useCallback(async () => {
-    if (!profile?._id || typeof chatAPI.getAllRooms !== 'function') return;
+    if (typeof chatAPI.getAllRooms !== 'function') return;
 
     setAllChatRoomsLoading(true);
     try {
-      await Promise.resolve(chatAPI.syncLocationRooms?.()).catch(() => null);
+      if (!isGuestMode) {
+        await Promise.resolve(chatAPI.syncLocationRooms?.()).catch(() => null);
+      }
       const { data } = await chatAPI.getAllRooms(1, MAX_CHAT_ROOM_FETCH);
       const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
       setAllChatRooms(rooms);
       const nextJoinedIds = rooms.reduce((acc, room) => {
         const roomId = normalizeId(room?._id);
         if (!roomId) return acc;
+        if (isGuestMode) {
+          acc[roomId] = true;
+          return acc;
+        }
         const members = Array.isArray(room?.members) ? room.members.map((memberId) => String(memberId)) : [];
         if (members.includes(String(profile?._id))) {
           acc[roomId] = true;
@@ -761,10 +770,10 @@ function Chat() {
     } finally {
       setAllChatRoomsLoading(false);
     }
-  }, [profile?._id]);
+  }, [isGuestMode, profile?._id]);
 
   const loadQuickAccessRooms = useCallback(async () => {
-    if (!profile?._id || typeof chatAPI.getQuickAccessRooms !== 'function') return;
+    if (typeof chatAPI.getQuickAccessRooms !== 'function') return;
 
     try {
       const { data } = await chatAPI.getQuickAccessRooms();
@@ -782,10 +791,10 @@ function Chat() {
         cities: []
       });
     }
-  }, [profile?._id]);
+  }, []);
 
   useEffect(() => {
-    if (!profile?._id || typeof chatAPI.getAllRooms !== 'function') return;
+    if (typeof chatAPI.getAllRooms !== 'function') return;
     let cancelled = false;
     loadAllChatRooms()
       .catch(() => null)
@@ -795,12 +804,12 @@ function Chat() {
     return () => {
       cancelled = true;
     };
-  }, [loadAllChatRooms, profile?._id]);
+  }, [loadAllChatRooms]);
 
   useEffect(() => {
-    if (!profile?._id || typeof chatAPI.getQuickAccessRooms !== 'function') return;
+    if (typeof chatAPI.getQuickAccessRooms !== 'function') return;
     loadQuickAccessRooms().catch(() => null);
-  }, [loadQuickAccessRooms, profile?._id]);
+  }, [loadQuickAccessRooms]);
 
   useEffect(() => {
     try {
@@ -990,6 +999,32 @@ function Chat() {
   }, [openConversationById]);
 
   const refreshHub = async (channelToKeep = activeChannel) => {
+    if (isGuestMode) {
+      try {
+        const [roomsResponse, quickAccessResponse] = await Promise.all([
+          chatAPI.getAllRooms(1, MAX_CHAT_ROOM_FETCH),
+          Promise.resolve(chatAPI.getQuickAccessRooms?.()).catch(() => ({ data: { rooms: {} } }))
+        ]);
+        const rooms = Array.isArray(roomsResponse?.data?.rooms) ? roomsResponse.data.rooms : [];
+        const quickRooms = quickAccessResponse?.data?.rooms || {};
+        const currentRoom = quickRooms.zip || quickRooms.state || quickRooms.county || rooms[0] || null;
+        setProfile(null);
+        setHubData({
+          zip: { current: currentRoom, nearby: [] },
+          dm: [],
+          profile: []
+        });
+      } catch {
+        setProfile(null);
+        setHubData({
+          zip: { current: null, nearby: [] },
+          dm: [],
+          profile: []
+        });
+      }
+      return;
+    }
+
     const [{ data: me }, { data: conversationsData }] = await Promise.all([
       authAPI.getProfile(),
       chatAPI.getConversations()
@@ -1063,7 +1098,7 @@ function Chat() {
   ]);
 
   useEffect(() => {
-    if (!profile?._id || allChatRoomsLoading || typeof chatAPI.joinRoom !== 'function') return;
+    if (isGuestMode || !profile?._id || allChatRoomsLoading || typeof chatAPI.joinRoom !== 'function') return;
     const roomIdsToAutoJoin = Array.from(new Set([
       normalizeId(quickAccessRooms.state?._id),
       normalizeId(quickAccessRooms.county?._id),
@@ -1104,6 +1139,7 @@ function Chat() {
     allChatRoomsLoading,
     defaultLandingRooms,
     joinedRoomIds,
+    isGuestMode,
     profile?._id,
     quickAccessRooms.county?._id,
     quickAccessRooms.state?._id
@@ -1424,6 +1460,7 @@ function Chat() {
 
   const handleSend = async (event) => {
     event.preventDefault();
+    if (isGuestMode) return;
     const trimmed = composerValue.trim();
     if (!trimmed || !activeConversationId) return;
 
@@ -1536,6 +1573,7 @@ function Chat() {
   };
 
   const handleStartDM = useCallback(async (targetUserId) => {
+    if (isGuestMode) return;
     try {
       const { data } = await chatAPI.startDM(targetUserId);
       await refreshHub('dm');
@@ -1547,9 +1585,10 @@ function Chat() {
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to start DM');
     }
-  }, [openConversationById, refreshHub]);
+  }, [isGuestMode, openConversationById, refreshHub]);
 
   const handleDeleteConversation = useCallback(async (conversationId) => {
+    if (isGuestMode) return;
     if (!conversationId) return;
     if (!window.confirm('Are you sure you want to delete this conversation? This will permanently remove it for both you and the other participant.')) return;
     try {
@@ -1566,13 +1605,13 @@ function Chat() {
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to delete conversation');
     }
-  }, [activeConversationId, refreshHub]);
+  }, [activeConversationId, isGuestMode, refreshHub]);
 
   const handleOpenRoom = useCallback(async (room) => {
     const normalizedRoomId = normalizeId(room?._id || room);
     if (!normalizedRoomId) return;
     try {
-      if (!joinedRoomIds[normalizedRoomId] && typeof chatAPI.joinRoom === 'function') {
+      if (!isGuestMode && !joinedRoomIds[normalizedRoomId] && typeof chatAPI.joinRoom === 'function') {
         await chatAPI.joinRoom(normalizedRoomId);
         setJoinedRoomIds((prev) => ({
           ...prev,
@@ -1589,7 +1628,7 @@ function Chat() {
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to join room');
     }
-  }, [joinedRoomIds, openConversationById, profile?._id]);
+  }, [isGuestMode, joinedRoomIds, openConversationById, profile?._id]);
 
   const handleCloseOpenTab = useCallback((conversationId) => {
     const normalizedConversationId = normalizeId(conversationId);
@@ -1868,6 +1907,7 @@ function Chat() {
   };
 
   const handleToggleMessageReaction = useCallback((messageId, reactionKey) => {
+    if (isGuestMode) return;
     const normalizedMessageId = String(messageId || '').trim();
     const normalizedReactionKey = String(reactionKey || '').trim();
     if (!normalizedMessageId || !normalizedReactionKey) return;
@@ -1889,7 +1929,7 @@ function Chat() {
         }
       };
     });
-  }, [profile?._id]);
+  }, [isGuestMode, profile?._id]);
 
   const handleToggleAdminMessageRemoval = useCallback(async (message) => {
     const messageId = String(message?._id || '').trim();
@@ -2159,24 +2199,31 @@ function Chat() {
             role="tablist"
             aria-label="Chat channels"
           >
-            {CHANNELS.map((channel) => (
-              <button
-                key={channel.key}
-                type="button"
-                onClick={() => {
-                  setActiveChannel(channel.key);
-                  setMobileWorkspaceOpen(false);
-                }}
-                className={[
-                  'rounded-lg px-2 py-1 text-[11px] font-semibold tracking-wide transition-all duration-150 lg:px-3 lg:py-1.5 lg:text-xs',
-                  activeChannel === channel.key ? `${activeTheme.subtle} shadow-sm` : 'opacity-70 hover:opacity-100'
-                ].join(' ')}
-                role="tab"
-                aria-selected={activeChannel === channel.key}
-              >
-                {channel.label}
-              </button>
-            ))}
+            {CHANNELS.map((channel) => {
+              const channelDisabled = isGuestMode && channel.key === 'dm';
+              return (
+                <button
+                  key={channel.key}
+                  type="button"
+                  disabled={channelDisabled}
+                  onClick={() => {
+                    if (channelDisabled) return;
+                    setActiveChannel(channel.key);
+                    setMobileWorkspaceOpen(false);
+                  }}
+                  className={[
+                    'rounded-lg px-2 py-1 text-[11px] font-semibold tracking-wide transition-all duration-150 lg:px-3 lg:py-1.5 lg:text-xs',
+                    activeChannel === channel.key ? `${activeTheme.subtle} shadow-sm` : 'opacity-70 hover:opacity-100',
+                    channelDisabled ? 'cursor-not-allowed opacity-50' : ''
+                  ].join(' ')}
+                  role="tab"
+                  aria-selected={activeChannel === channel.key}
+                  aria-disabled={channelDisabled}
+                >
+                  {channel.label}
+                </button>
+              );
+            })}
           </div>
 
 
@@ -2800,6 +2847,7 @@ function Chat() {
               reactionsByMessageId={reactionByMessageId}
               reactionOptions={MESSAGE_REACTIONS}
               onToggleReaction={handleToggleMessageReaction}
+              reactionsDisabled={isGuestMode}
               longPressDelayMs={LONG_PRESS_DELAY_MS}
               hasMoreMessages={messagesHasMore}
               onLoadOlderMessages={handleLoadOlderMessages}
@@ -2887,7 +2935,8 @@ function Chat() {
                 setComposerValue={setComposerValue}
                 onSubmit={handleSend}
                 disabled={
-                  !activeConversationId
+                  isGuestMode
+                  || !activeConversationId
                   || (activeConversation?.type === 'dm' && (
                     !dmUnlockedByConversation[String(activeConversationId)]
                   ))

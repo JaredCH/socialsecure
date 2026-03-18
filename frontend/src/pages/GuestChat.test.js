@@ -5,10 +5,54 @@ import { chatAPI } from '../utils/api';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+jest.mock('react-hot-toast', () => ({
+  error: jest.fn(),
+  success: jest.fn(),
+  default: {
+    error: jest.fn(),
+    success: jest.fn()
+  }
+}));
+
+jest.mock('../utils/realtime', () => ({
+  joinRealtimeRoom: jest.fn(),
+  leaveRealtimeRoom: jest.fn(),
+  onChatMessage: jest.fn(() => () => {}),
+  onFriendPresence: jest.fn(() => () => {}),
+  onPresenceUpdate: jest.fn(() => () => {})
+}));
+
+jest.mock('../utils/e2ee', () => ({
+  unlockOrCreateVault: jest.fn(),
+  createWrappedRoomKeyPackage: jest.fn(),
+  decryptEnvelope: jest.fn(),
+  encryptEnvelope: jest.fn(),
+  ingestWrappedRoomKeyPackage: jest.fn()
+}));
+
 jest.mock('../utils/api', () => ({
+  authAPI: {
+    getProfile: jest.fn(),
+    verifyEncryptionPassword: jest.fn()
+  },
   chatAPI: {
+    getConversations: jest.fn(),
     getAllRooms: jest.fn(),
-    getMessages: jest.fn()
+    getQuickAccessRooms: jest.fn(),
+    getMessages: jest.fn(),
+    getConversationMessages: jest.fn(),
+    getConversationUsers: jest.fn(),
+    getRoomUsers: jest.fn()
+  },
+  friendsAPI: {
+    getFriends: jest.fn(),
+    sendRequest: jest.fn()
+  },
+  moderationAPI: {
+    blockUser: jest.fn()
+  },
+  userAPI: {
+    getByUsername: jest.fn()
   }
 }));
 
@@ -39,6 +83,16 @@ describe('GuestChat', () => {
         ]
       }
     });
+    chatAPI.getQuickAccessRooms.mockResolvedValue({
+      data: {
+        rooms: {
+          zip: { _id: 'state-tx', type: 'state', name: 'Texas' },
+          state: null,
+          county: null,
+          cities: []
+        }
+      }
+    });
 
     chatAPI.getMessages.mockImplementation(async (roomId) => ({
       data: {
@@ -47,6 +101,8 @@ describe('GuestChat', () => {
           : [{ _id: 'm-topic', content: 'hello ai', userId: { username: 'beta' } }]
       }
     }));
+    chatAPI.getConversationUsers.mockResolvedValue({ data: { users: [] } });
+    chatAPI.getRoomUsers.mockResolvedValue({ data: { users: [] } });
   });
 
   afterEach(async () => {
@@ -57,23 +113,38 @@ describe('GuestChat', () => {
     container.remove();
   });
 
-  it('loads discoverable rooms and allows read-only room selection', async () => {
+  it('matches chat layout while disabling DM, reactions, and composer for guests', async () => {
     await renderGuestChat();
 
-    expect(container.textContent).toContain('Guest mode: full chat browsing (read-only)');
+    expect(container.querySelector('[data-testid="chat-layout-grid"]')).not.toBeNull();
     expect(chatAPI.getAllRooms).toHaveBeenCalledWith(1, 500);
-    expect(chatAPI.getMessages).toHaveBeenCalledWith('state-tx', 1, 100);
-    expect(container.textContent).toContain('hello texas');
-    expect(container.textContent).toContain('Read-only mode: sign in to send messages or react.');
+    expect(chatAPI.getQuickAccessRooms).toHaveBeenCalledTimes(2);
 
-    const aiButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent.includes('AI'));
-    expect(aiButton).toBeDefined();
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    expect(dmTab).toBeDefined();
+    expect(dmTab.disabled).toBe(true);
+
+    const quickAccessTexasButton = Array.from(container.querySelectorAll('button')).find((button) => button.getAttribute('data-quick-access-room') === 'Texas');
+    expect(quickAccessTexasButton).toBeDefined();
     await act(async () => {
-      aiButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      quickAccessTexasButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 
-    expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-ai', 1, 100);
-    expect(container.textContent).toContain('hello ai');
+    expect(chatAPI.getAllRooms).toHaveBeenCalledWith(1, 500);
+    expect(chatAPI.getMessages).toHaveBeenCalledWith('state-tx', 1, 40);
+    expect(container.textContent).toContain('hello texas');
+
+    const composer = container.querySelector('textarea');
+    expect(composer).not.toBeNull();
+    expect(composer.disabled).toBe(true);
+
+    const firstMessage = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'hello texas');
+    expect(firstMessage).toBeDefined();
+    await act(async () => {
+      firstMessage.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    expect(container.querySelector('[data-testid="reaction-picker-popup"]')).toBeNull();
   });
 });
