@@ -252,7 +252,19 @@ describe('App navbar features dropdown', () => {
   it('renders guest-safe route views for social/news/chat', async () => {
     window.history.pushState({}, '', '/social');
     await renderApp();
-    expect(container.textContent).toContain('Discovery Page');
+    expect(container.textContent).toContain('Social Page');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    window.history.pushState({}, '', '/social?user=guest-profile');
+    await renderApp();
+    expect(container.textContent).toContain('Social Page');
 
     await act(async () => {
       root.unmount();
