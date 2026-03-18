@@ -12,6 +12,8 @@ const BSIZ = 44;
 const CA = (DSIZ - BSIZ) / 2;
 const TOTAL_SLOTS = 16;
 const STORAGE_KEY = 'dotnav-state';
+const NOTIF_PANEL_W = 260;
+const EDGE_INSET = 10;
 
 // ═══════════════════════════════════════════
 // DOCK POSITION CONFIGS
@@ -489,8 +491,8 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
           id="dotnav-notification-panel"
           className="dotnav-visible"
           style={{
-            left: Math.min(Math.max(anchorPos.left + (side === 'right' ? -260 : DSIZ + 6), 10), windowSize.w - 290),
-            top: Math.max(anchorPos.top - 220, 10),
+            left: Math.min(Math.max(anchorPos.left + (side === 'right' ? -NOTIF_PANEL_W : DSIZ + 6), EDGE_INSET), windowSize.w - NOTIF_PANEL_W - PAD),
+            top: Math.max(anchorPos.top - 220, EDGE_INSET),
           }}
           role="dialog"
           aria-label="Notifications"

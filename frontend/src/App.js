@@ -131,10 +131,11 @@ const GuestBanner = () => {
       type="button"
       onClick={handleDismiss}
       className="fixed bottom-20 left-3 z-[60] flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-900 shadow-lg transition-transform active:scale-95 md:static md:mx-auto md:mt-4 md:flex md:rounded md:border md:px-3 md:py-3 md:shadow-none"
-      aria-label="Dismiss guest banner"
+      aria-label="Dismiss guest browsing notice"
       data-testid="guest-banner"
+      role="status"
     >
-      <span>You&apos;re browsing as a guest. Register to unlock all features.</span>
+      <span>You&apos;re browsing as a guest. Tap to dismiss.</span>
       <span aria-hidden="true" className="ml-1 text-blue-400">✕</span>
     </button>
   );
