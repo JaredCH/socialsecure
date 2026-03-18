@@ -162,7 +162,7 @@ function ChatMessageList({
         ) : null}
 
         {loading ? (
-          <div className="space-y-3">
+          <div className="space-y-3" aria-busy="true" aria-label="Loading messages">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={`skeleton-${i}`} className="flex items-start gap-2 animate-pulse">
                 <span className={`inline-block h-8 w-8 shrink-0 rounded-full ${theme.subtle}`} />

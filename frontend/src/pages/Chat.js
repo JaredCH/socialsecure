@@ -3006,7 +3006,7 @@ function Chat({ isGuestMode = false }) {
                   </p>
                   <div className="mt-2 rounded border overflow-auto h-full min-h-[20rem]">
                     {roomUsersLoading ? (
-                      <div className="space-y-3 p-2">
+                      <div className="space-y-3 p-2" aria-busy="true" aria-label="Loading users">
                         {[1, 2, 3].map((i) => (
                           <div key={`dm-user-skeleton-${i}`} className="flex items-center gap-3 animate-pulse">
                             <span className={`inline-block h-9 w-9 shrink-0 rounded-full ${activeTheme.subtle}`} />
@@ -3099,7 +3099,7 @@ function Chat({ isGuestMode = false }) {
 
               <div className="mt-2 min-h-0 flex-1 overflow-y-auto" data-testid="room-user-list">
                 {roomUsersLoading ? (
-                  <div className="space-y-2 px-2 py-3">
+                  <div className="space-y-2 px-2 py-3" aria-busy="true" aria-label="Loading room users">
                     {[1, 2, 3, 4].map((i) => (
                       <div key={`user-skeleton-${i}`} className="flex items-center gap-2 animate-pulse">
                         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${activeTheme.subtle}`} />
