@@ -220,6 +220,44 @@ describe('DotNav navigation system', () => {
     expect(slot1After.getAttribute('aria-label')).toContain('Main');
   });
 
+  it('rearranges button slots during edit mode touch drag', async () => {
+    await renderNav();
+
+    const dot = document.getElementById('dotnav-dot');
+    await act(async () => { dot.click(); });
+
+    const cog = document.getElementById('dotnav-cog');
+    await act(async () => { cog.click(); });
+
+    const editBtn = Array.from(document.querySelectorAll('#dotnav-settings-panel button'))
+      .find(btn => btn.textContent.includes('Edit Buttons'));
+    await act(async () => { editBtn.click(); });
+
+    const sourceSlotBtn = document.querySelector('[data-slot-index="0"] .dotnav-nbtn');
+    const targetSlot = document.querySelector('[data-slot-index="1"]');
+    const originalElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = jest.fn(() => targetSlot);
+
+    const touchStartEvent = new Event('touchstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(touchStartEvent, 'touches', { value: [{ clientX: 10, clientY: 10 }] });
+    const touchMoveEvent = new Event('touchmove', { bubbles: true, cancelable: true });
+    Object.defineProperty(touchMoveEvent, 'touches', { value: [{ clientX: 20, clientY: 20 }] });
+    const touchEndEvent = new Event('touchend', { bubbles: true, cancelable: true });
+
+    await act(async () => {
+      sourceSlotBtn.dispatchEvent(touchStartEvent);
+      sourceSlotBtn.dispatchEvent(touchMoveEvent);
+      sourceSlotBtn.dispatchEvent(touchEndEvent);
+    });
+
+    const slot0After = document.querySelector('[data-slot-index="0"] .dotnav-nbtn');
+    const slot1After = document.querySelector('[data-slot-index="1"] .dotnav-nbtn');
+    expect(slot0After.getAttribute('aria-label')).toContain('My Gallery');
+    expect(slot1After.getAttribute('aria-label')).toContain('Main');
+
+    document.elementFromPoint = originalElementFromPoint;
+  });
+
   it('dispatches VoidNavTrigger event on nav button click', async () => {
     const events = [];
     const handler = (e) => events.push(e.detail);

@@ -47,9 +47,9 @@ function buildArc(side) {
 
 // 4 vertical power button offsets
 function buildPowerSlots(side) {
-  const edgeSign = side === 'right' ? 1 : -1;
+  const towardEdgeSign = side === 'right' ? 1 : -1;
   return [0, 1, 2, 3].map(i => ({
-    dl: CA + edgeSign * 18,
+    dl: CA + towardEdgeSign * 18,
     db: CA + 70 + i * 52,
   }));
 }
@@ -67,6 +67,10 @@ const COMPACT_LABELS = {
 
 function getCompactLabel(label) {
   return COMPACT_LABELS[label] || label;
+}
+
+function isValidSlotIndex(index) {
+  return Number.isInteger(index) && index >= 0 && index < TOTAL_SLOTS;
 }
 
 // ═══════════════════════════════════════════
@@ -427,13 +431,9 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
   const swapSlots = useCallback((fromIndex, toIndex) => {
     if (
       !isEditing
-      || fromIndex === null
-      || toIndex === null
+      || !isValidSlotIndex(fromIndex)
+      || !isValidSlotIndex(toIndex)
       || fromIndex === toIndex
-      || fromIndex < 0
-      || toIndex < 0
-      || fromIndex >= TOTAL_SLOTS
-      || toIndex >= TOTAL_SLOTS
     ) {
       return;
     }
@@ -690,12 +690,15 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
                   onDragStart={() => handleDragStart(index)}
                   onTouchStart={(e) => handleTouchDragStart(e, index)}
                   onTouchMove={handleTouchDragMove}
-                  onTouchEnd={handleTouchDragEnd}
+                  onTouchEnd={(e) => { e.preventDefault(); handleTouchDragEnd(); }}
                   onClick={() => isEditing ? undefined : handleNavClick(index)}
                   aria-label={`${entry.label}${isPower ? ' (Power Button)' : ''}${entry.type === 'contextual' && effectiveViewingUser ? ` for ${effectiveViewingUser}` : ''}`}
                   title={entry.label}
                   type="button"
-                  style={isPower ? { background: '#2563eb' } : undefined}
+                  style={{
+                    ...(isPower ? { background: '#2563eb' } : {}),
+                    touchAction: isEditing ? 'none' : undefined,
+                  }}
                 >
                   {SVG_ICONS[entry.icon] || <span>{entry.label.charAt(0)}</span>}
                 </button>
