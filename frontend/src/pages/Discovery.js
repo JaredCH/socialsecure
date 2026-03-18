@@ -87,9 +87,8 @@ const Discovery = () => {
   // Load initial data when tab changes
   useEffect(() => {
     if (activeTab === 'people' && !usersLoaded && !usersLoading) {
-      loadUsers(1, searchQuery);
+      loadUsers(1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, loadUsers, usersLoaded, usersLoading]);
 
   useEffect(() => {
