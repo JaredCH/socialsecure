@@ -16,7 +16,7 @@ const SITE_NAV_LINKS = [
   { id: 'chat', label: 'Chat', path: '/chat', icon: 'chat' },
   { id: 'news', label: 'News', path: '/news', icon: 'news' },
   { id: 'market', label: 'Market', path: '/market', icon: 'market' },
-  { id: 'discover', label: 'Discover', path: '/discover', icon: 'discover' }
+  { id: 'discover', label: 'Find Friends', path: '/find-friends', icon: 'discover' }
 ];
 const MUTED_ACTIVITY_CLASS = 'opacity-55';
 

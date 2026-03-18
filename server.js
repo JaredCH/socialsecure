@@ -187,6 +187,13 @@ app.get('/', (req, res, next) => {
   return res.json({ message: 'Social Media API v1.0', status: 'active' });
 });
 
+app.get(/^\/discover(?:\/.*)?$/, (req, res) => {
+  const suffix = req.path.replace(/^\/discover/, '');
+  const queryIndex = req.originalUrl.indexOf('?');
+  const query = queryIndex >= 0 ? req.originalUrl.slice(queryIndex) : '';
+  return res.redirect(301, `/find-friends${suffix}${query}`);
+});
+
 // API routes
 registerRoute('/api/auth', () => require('./routes/auth'));
 registerRoute('/api/users', () => require('./routes/users'));

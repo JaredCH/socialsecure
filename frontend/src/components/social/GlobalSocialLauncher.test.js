@@ -170,7 +170,7 @@ describe('GlobalSocialLauncher', () => {
       }
     });
 
-    await renderLauncher({ initialEntries: ['/discover'] });
+    await renderLauncher({ initialEntries: ['/find-friends'] });
 
     const launcher = container.querySelector('button[aria-label="Expand social section menu"]');
 
@@ -197,7 +197,7 @@ describe('GlobalSocialLauncher', () => {
       }
     });
 
-    await renderLauncher({ initialEntries: ['/discover'] });
+    await renderLauncher({ initialEntries: ['/find-friends'] });
 
     const launcher = container.querySelector('button[aria-label="Expand social section menu"]');
 

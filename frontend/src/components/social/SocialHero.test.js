@@ -129,7 +129,7 @@ describe('SocialHero mobile navigation', () => {
     expect(container.textContent).toContain('Chat');
     expect(container.textContent).toContain('News');
     expect(container.textContent).toContain('Market');
-    expect(container.textContent).toContain('Discover');
+    expect(container.textContent).toContain('Find Friends');
   });
 
   it('shows activity cards when the social launcher is open', async () => {
