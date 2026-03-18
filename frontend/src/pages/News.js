@@ -27,7 +27,7 @@ const normalizeSportsTeamId = (v) => String(v || '').trim().toLowerCase();
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-function News() {
+function News({ isGuestMode = false }) {
   // ── Preference & source state ──────────────────────────────────────────────
   const [preferences, setPreferences] = useState(null);
   const [availableSources, setAvailableSources]     = useState([]);
@@ -316,15 +316,17 @@ function News() {
             />
           </div>
         </div>
-        <button
-          className="fixed bottom-20 right-2 z-40 h-14 w-14 rounded-full border border-white/20 bg-slate-950/75 text-white shadow-[0_18px_36px_rgba(2,6,23,0.35)] backdrop-blur-xl flex items-center justify-center active:scale-95 transition-transform"
-          onClick={() => setSettingsOpen(true)}
-          aria-label="Open news settings"
-        >
-          <span className="absolute inset-[7px] rounded-full border border-white/15" aria-hidden="true" />
-          <span className="absolute inset-[12px] rounded-full bg-white/[0.04]" aria-hidden="true" />
-          <span className="relative material-symbols-outlined text-[1.3rem] leading-none">settings</span>
-        </button>
+        {!isGuestMode && (
+          <button
+            className="fixed bottom-20 right-2 z-40 h-14 w-14 rounded-full border border-white/20 bg-slate-950/75 text-white shadow-[0_18px_36px_rgba(2,6,23,0.35)] backdrop-blur-xl flex items-center justify-center active:scale-95 transition-transform"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Open news settings"
+          >
+            <span className="absolute inset-[7px] rounded-full border border-white/15" aria-hidden="true" />
+            <span className="absolute inset-[12px] rounded-full bg-white/[0.04]" aria-hidden="true" />
+            <span className="relative material-symbols-outlined text-[1.3rem] leading-none">settings</span>
+          </button>
+        )}
       </div>
 
       {/* ─── Desktop layout (>= lg) ────────────────────────────────────────── */}
@@ -335,14 +337,14 @@ function News() {
           disabledCategories={hiddenCategories}
           multiSelect={multiSelect}
           onToggleCategory={handleToggleCategory}
-          onToggleCategoryEnabled={handleToggleCategoryEnabled}
+          onToggleCategoryEnabled={isGuestMode ? undefined : handleToggleCategoryEnabled}
           onMultiSelectToggle={() => setMultiSelect((v) => !v)}
           keywords={keywords}
-          onAddKeyword={handleAddKeyword}
-          onRemoveKeyword={handleRemoveKeyword}
+          onAddKeyword={isGuestMode ? undefined : handleAddKeyword}
+          onRemoveKeyword={isGuestMode ? undefined : handleRemoveKeyword}
           onSearch={setSearchQuery}
           searchValue={searchQuery}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={isGuestMode ? undefined : () => setSettingsOpen(true)}
         />
         <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-6 py-4">
@@ -402,45 +404,47 @@ function News() {
         onClose={() => setDesktopArticlePreview(null)}
       />
 
-      <SettingsDrawer
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        sources={availableSources}
-        preferences={preferences}
-        onToggleSource={handleToggleSource}
-        isSourceEnabled={isSourceEnabled}
-        onToggleGoogleNews={handleToggleGoogleNews}
-        onToggleSourceCategory={handleToggleSourceCategory}
-        onAddKeyword={handleAddKeyword}
-        onRemoveKeyword={handleRemoveKeyword}
-        onRenameKeyword={handleRenameKeyword}
-        newKeyword={newKeyword}
-        setNewKeyword={setNewKeyword}
-        onAddLocation={handleAddLocation}
-        onRemoveLocation={handleRemoveLocation}
-        onSetPrimaryLocation={handleSetPrimaryLocation}
-        newLocation={newLocation}
-        setNewLocation={setNewLocation}
-        locationTaxonomy={locationTaxonomy}
-        registrationAlignment={registrationAlignment}
-        sportsLeagues={sportsLeagues}
-        followedSportsTeams={followedTeams}
-        onSetAllSportsTeams={handleSetAllSportsTeams}
-        onSetLeagueSportsTeams={handleSetLeagueSportsTeams}
-        onToggleSportsTeam={handleToggleSportsTeam}
-        weatherLocations={preferences?.weatherLocations || []}
-        onSearchWeatherLocations={handleSearchWeatherLocations}
-        onAddWeatherLocation={handleAddWeatherLocation}
-        onRemoveWeatherLocation={handleRemoveWeatherLocation}
-        onSetPrimaryWeatherLocation={handleSetPrimaryWeatherLocation}
-        onReorderWeatherLocations={handleReorderWeatherLocations}
-        weatherStatusMessage={weatherStatusMessage}
-        setWeatherStatusMessage={setWeatherStatusMessage}
-        onUpdatePreferences={handleUpdatePreferences}
-        onRefreshHealth={handleRefreshHealth}
-        onRestore={bootstrap}
-        scopes={NEWS_SCOPES}
-      />
+      {!isGuestMode && (
+        <SettingsDrawer
+          isOpen={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          sources={availableSources}
+          preferences={preferences}
+          onToggleSource={handleToggleSource}
+          isSourceEnabled={isSourceEnabled}
+          onToggleGoogleNews={handleToggleGoogleNews}
+          onToggleSourceCategory={handleToggleSourceCategory}
+          onAddKeyword={handleAddKeyword}
+          onRemoveKeyword={handleRemoveKeyword}
+          onRenameKeyword={handleRenameKeyword}
+          newKeyword={newKeyword}
+          setNewKeyword={setNewKeyword}
+          onAddLocation={handleAddLocation}
+          onRemoveLocation={handleRemoveLocation}
+          onSetPrimaryLocation={handleSetPrimaryLocation}
+          newLocation={newLocation}
+          setNewLocation={setNewLocation}
+          locationTaxonomy={locationTaxonomy}
+          registrationAlignment={registrationAlignment}
+          sportsLeagues={sportsLeagues}
+          followedSportsTeams={followedTeams}
+          onSetAllSportsTeams={handleSetAllSportsTeams}
+          onSetLeagueSportsTeams={handleSetLeagueSportsTeams}
+          onToggleSportsTeam={handleToggleSportsTeam}
+          weatherLocations={preferences?.weatherLocations || []}
+          onSearchWeatherLocations={handleSearchWeatherLocations}
+          onAddWeatherLocation={handleAddWeatherLocation}
+          onRemoveWeatherLocation={handleRemoveWeatherLocation}
+          onSetPrimaryWeatherLocation={handleSetPrimaryWeatherLocation}
+          onReorderWeatherLocations={handleReorderWeatherLocations}
+          weatherStatusMessage={weatherStatusMessage}
+          setWeatherStatusMessage={setWeatherStatusMessage}
+          onUpdatePreferences={handleUpdatePreferences}
+          onRefreshHealth={handleRefreshHealth}
+          onRestore={bootstrap}
+          scopes={NEWS_SCOPES}
+        />
+      )}
     </>
   );
 }
