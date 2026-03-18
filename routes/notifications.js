@@ -16,6 +16,14 @@ const MAX_PAGE_SIZE = 50;
 
 const hashToken = (token = '') => require('crypto').createHash('sha256').update(token).digest('hex');
 
+const decrementUnreadCount = async (userId) => {
+  await User.updateOne({ _id: userId }, { $inc: { unreadNotificationCount: -1 } });
+  await User.updateOne(
+    { _id: userId, unreadNotificationCount: { $lt: 0 } },
+    { $set: { unreadNotificationCount: 0 } }
+  );
+};
+
 const getUserFromBearerToken = async (req, select = '') => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
@@ -108,15 +116,7 @@ router.put('/:id/read', authenticateToken, async (req, res) => {
       notification.readAt = new Date();
       await notification.save();
 
-      await User.updateOne(
-        { _id: req.user._id },
-        { $inc: { unreadNotificationCount: -1 } }
-      );
-
-      await User.updateOne(
-        { _id: req.user._id, unreadNotificationCount: { $lt: 0 } },
-        { $set: { unreadNotificationCount: 0 } }
-      );
+      await decrementUnreadCount(req.user._id);
     }
 
     return res.json({ success: true, notification: toPayload(notification) });
@@ -164,15 +164,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     await notification.deleteOne();
 
     if (wasUnread) {
-      await User.updateOne(
-        { _id: req.user._id },
-        { $inc: { unreadNotificationCount: -1 } }
-      );
-
-      await User.updateOne(
-        { _id: req.user._id, unreadNotificationCount: { $lt: 0 } },
-        { $set: { unreadNotificationCount: 0 } }
-      );
+      await decrementUnreadCount(req.user._id);
     }
 
     return res.json({ success: true });
@@ -203,14 +195,7 @@ router.put('/:id/acknowledge', authenticateToken, async (req, res) => {
     await notification.save();
 
     if (wasUnread) {
-      await User.updateOne(
-        { _id: req.user._id },
-        { $inc: { unreadNotificationCount: -1 } }
-      );
-      await User.updateOne(
-        { _id: req.user._id, unreadNotificationCount: { $lt: 0 } },
-        { $set: { unreadNotificationCount: 0 } }
-      );
+      await decrementUnreadCount(req.user._id);
     }
 
     return res.json({ success: true, notification: toPayload(notification) });
@@ -241,14 +226,7 @@ router.put('/:id/dismiss', authenticateToken, async (req, res) => {
     await notification.save();
 
     if (wasUnread) {
-      await User.updateOne(
-        { _id: req.user._id },
-        { $inc: { unreadNotificationCount: -1 } }
-      );
-      await User.updateOne(
-        { _id: req.user._id, unreadNotificationCount: { $lt: 0 } },
-        { $set: { unreadNotificationCount: 0 } }
-      );
+      await decrementUnreadCount(req.user._id);
     }
 
     return res.json({ success: true, notification: toPayload(notification) });

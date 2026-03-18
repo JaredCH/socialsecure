@@ -13,6 +13,7 @@ const rollUpNotifications = (notifications) => {
   const grouped = {};
   const order = [];
   notifications.forEach((n) => {
+    // Use backend-provided groupKey; fallback mirrors services/notifications.js format for older records
     const key = n.groupKey || `${n.type}:${n.senderId || 'system'}`;
     if (!grouped[key]) {
       grouped[key] = [];

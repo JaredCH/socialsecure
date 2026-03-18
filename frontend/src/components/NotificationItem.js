@@ -62,43 +62,25 @@ const NotificationItem = ({
       </button>
 
       <div className="mt-2 flex gap-2 flex-wrap">
-        {isFriendRequest && !isHistory ? (
+        {isRequest && !isHistory ? (
           <div className="flex w-full items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5">
-            <label htmlFor={`friend-circle-${id}`} className="text-xs font-medium text-slate-700">
-              Circle
-            </label>
-            <select
-              id={`friend-circle-${id}`}
-              value={friendCircle}
-              disabled={friendActionLoading}
-              onChange={(event) => onFriendCircleChange(id, event.target.value)}
-              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
-            >
-              <option value="social">Social</option>
-              <option value="secure">Secure</option>
-            </select>
-            <button
-              type="button"
-              disabled={friendActionLoading}
-              onClick={() => onFriendRequestAction(notification, 'accept')}
-              className="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label="Accept"
-            >
-              ✓ Accept
-            </button>
-            <button
-              type="button"
-              disabled={friendActionLoading}
-              onClick={() => onFriendRequestAction(notification, 'decline')}
-              className="rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label="Decline"
-            >
-              ✗ Decline
-            </button>
-          </div>
-        ) : null}
-        {isRequest && !isFriendRequest && !isHistory ? (
-          <div className="flex w-full items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5">
+            {isFriendRequest ? (
+              <>
+                <label htmlFor={`friend-circle-${id}`} className="text-xs font-medium text-slate-700">
+                  Circle
+                </label>
+                <select
+                  id={`friend-circle-${id}`}
+                  value={friendCircle}
+                  disabled={friendActionLoading}
+                  onChange={(event) => onFriendCircleChange(id, event.target.value)}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                >
+                  <option value="social">Social</option>
+                  <option value="secure">Secure</option>
+                </select>
+              </>
+            ) : null}
             <button
               type="button"
               disabled={friendActionLoading}
