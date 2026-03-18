@@ -548,7 +548,7 @@ function ChatMessageItem({
                     >
                       @{author}
                     </a>
-                    {message.userId?.realName ? <span className="ml-1 text-[11px] opacity-50">({message.userId.realName})</span> : null}
+                    {message.userId?.realName ? <span className="ml-1 max-w-[120px] truncate align-bottom text-[11px] opacity-50">({message.userId.realName})</span> : null}
                     <span className="mx-1 opacity-30">–</span>
                   </>
                 ) : null}

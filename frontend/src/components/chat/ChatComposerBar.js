@@ -91,7 +91,7 @@ function ChatComposerBar({
           value={composerValue}
           onChange={(event) => setComposerValue(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey) {
+            if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
               event.preventDefault();
               if (composerValue.trim() && !disabled && !sending) {
                 onSubmit(event);

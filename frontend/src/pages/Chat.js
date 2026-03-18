@@ -2288,7 +2288,7 @@ function Chat({ isGuestMode = false }) {
           ) : null}
         </nav>
 
-        <div className="relative shrink-0 border-l" style={{ borderColor: 'currentColor', borderOpacity: 0.1 }}>
+        <div className="relative shrink-0">
           <button
             type="button"
             onClick={(event) => {
@@ -2305,7 +2305,7 @@ function Chat({ isGuestMode = false }) {
           </button>
           {themeMenuOpen ? (
             <div
-              className={`absolute right-0 top-[calc(100%+0.25rem)] z-[9999] min-w-44 rounded-lg border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}
+              className={`absolute right-0 top-[calc(100%+0.25rem)] z-[100] min-w-44 rounded-lg border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}
               onClick={(event) => event.stopPropagation()}
             >
               {CHAT_THEMES.map((themeOption) => (
