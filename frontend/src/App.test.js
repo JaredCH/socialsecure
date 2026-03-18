@@ -22,7 +22,7 @@ jest.mock('./pages/OnboardingPage', () => () => <div>Onboarding Page</div>);
 jest.mock('./pages/PostRegistrationWelcome', () => () => <div>Welcome Page</div>);
 jest.mock('./pages/ModerationDashboard', () => () => <div>Moderation Dashboard</div>);
 jest.mock('./components/NotificationCenter', () => () => <div>🔔</div>);
-jest.mock('./components/social/GlobalSocialLauncher', () => () => <div data-testid="global-social-launcher" />);
+jest.mock('./components/social/DotNav', () => () => <div data-testid="dotnav" />);
 jest.mock('./pages/NotificationSettings', () => () => <div>Notification Settings</div>);
 jest.mock('./pages/ResumePublic', () => () => <div>Public Resume</div>);
 jest.mock('./pages/MobileProfile', () => () => <div>Mobile Profile Page</div>);
