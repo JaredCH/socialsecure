@@ -8,6 +8,7 @@ const getClientIp = (req) => {
   return req?.ip || req?.socket?.remoteAddress || 'unknown';
 };
 
+/** Create and emit a structured application event payload with request context metadata. */
 const logEvent = ({ eventType, userId = null, metadata = {}, req }) => {
   const payload = {
     eventType,

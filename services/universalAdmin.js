@@ -1,5 +1,7 @@
 const bcrypt = require('bcryptjs');
+
 const User = require('../models/User');
+
 const ONBOARDING_COMPLETE_STEP = 4;
 
 const resolveAdminProfile = () => {

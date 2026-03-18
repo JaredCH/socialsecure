@@ -1,12 +1,15 @@
 const express = require('express');
-const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
+
+const { getUserNotificationPreferences, toPayload } = require('../services/notifications');
+const { normalizeRealtimePreferences } = require('../utils/realtimePreferences');
+
 const User = require('../models/User');
 const Session = require('../models/Session');
 const Notification = require('../models/Notification');
-const { getUserNotificationPreferences, toPayload } = require('../services/notifications');
-const { normalizeRealtimePreferences } = require('../utils/realtimePreferences');
+
+const router = express.Router();
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;

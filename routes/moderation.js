@@ -1,10 +1,14 @@
-const express = require('express');
-const router = express.Router();
 const crypto = require('crypto');
+
+const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+
+const { emitChatMessage } = require('../services/realtime');
+const { normalizeFilterWords } = require('../utils/contentFilter');
+
 const Report = require('../models/Report');
 const BlockList = require('../models/BlockList');
 const MuteList = require('../models/MuteList');
@@ -19,8 +23,8 @@ const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
 const NewsPreferences = require('../models/NewsPreferences');
 const SiteContentFilter = require('../models/SiteContentFilter');
-const { emitChatMessage } = require('../services/realtime');
-const { normalizeFilterWords } = require('../utils/contentFilter');
+
+const router = express.Router();
 
 const REPORT_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const REPORT_LIMIT_MAX = 5;

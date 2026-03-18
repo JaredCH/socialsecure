@@ -1,15 +1,25 @@
-const express = require('express');
-const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs/promises');
+
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const multer = require('multer');
+
 const {
   requireAuth: parseRequiredAuth,
   optionalAuth: parseOptionalAuth,
   authErrorHandler
 } = require('../middleware/parseAuthToken');
+const { createNotification } = require('../services/notifications');
+const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload } = require('../services/realtime');
+const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
+const {
+  findExactFilterWord,
+  censorMaturityText,
+  normalizeFilterWords
+} = require('../utils/contentFilter');
+
 const ChatRoom = require('../models/ChatRoom');
 const ChatMessage = require('../models/ChatMessage');
 const EventSchedule = require('../models/EventSchedule');
@@ -23,14 +33,8 @@ const ConversationKeyPackage = require('../models/ConversationKeyPackage');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const SiteContentFilter = require('../models/SiteContentFilter');
-const { createNotification } = require('../services/notifications');
-const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload } = require('../services/realtime');
-const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
-const {
-  findExactFilterWord,
-  censorMaturityText,
-  normalizeFilterWords
-} = require('../utils/contentFilter');
+
+const router = express.Router();
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];

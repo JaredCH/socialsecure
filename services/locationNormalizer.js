@@ -1,6 +1,7 @@
 'use strict';
 
 const { resolveZipLocation } = require('./zipLocationIndex');
+
 const {
   canonicalizeCountryCode,
   canonicalizeStateCode,

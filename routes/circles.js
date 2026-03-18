@@ -1,10 +1,13 @@
 const express = require('express');
-const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+
+const { normalizeRelationshipAudience, RELATIONSHIP_AUDIENCE_VALUES } = require('../utils/relationshipAudience');
+
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
-const { normalizeRelationshipAudience, RELATIONSHIP_AUDIENCE_VALUES } = require('../utils/relationshipAudience');
+
+const router = express.Router();
 
 const COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 const MAX_CIRCLES_PER_USER = 10;

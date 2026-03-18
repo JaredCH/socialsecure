@@ -16,9 +16,13 @@
 
 'use strict';
 
-const express = require('express');
 const crypto = require('crypto');
+
+const express = require('express');
 const mongoose = require('mongoose');
+
+const { runBulkImport, parseCsv } = require('../services/newsBulkSourceImporter');
+const { upsertZipLocationIndexEntries } = require('../services/zipLocationIndex');
 
 const User = require('../models/User');
 const Article = require('../models/Article');
@@ -26,18 +30,9 @@ const NewsPreferences = require('../models/NewsPreferences');
 const NewsLocation = require('../models/NewsLocation');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
 const RssSource = require('../models/RssSource');
-const { runBulkImport, parseCsv } = require('../services/newsBulkSourceImporter');
-const { upsertZipLocationIndexEntries } = require('../services/zipLocationIndex');
 
 const router = express.Router();
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Fields that are safe to include in user responses (no credential material).
- */
 const USER_SAFE_FIELDS = [
   '_id', 'universalId', 'realName', 'username', 'email', 'phone', 'bio',
   'avatarUrl', 'bannerUrl', 'links', 'profileTheme', 'socialPagePreferences',

@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 
 const DEFAULT_JWT_SECRET = 'your-secret-key-change-in-production';
 
+/** Parse and validate bearer auth tokens for required or optional route authentication. */
 const createAuthError = (status, message, code) => {
   const error = new Error(message);
   error.status = status;

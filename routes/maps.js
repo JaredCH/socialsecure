@@ -1,15 +1,16 @@
 const express = require('express');
-const router = express.Router();
 const mongoose = require('mongoose');
 const NodeGeocoder = require('node-geocoder');
 const rateLimit = require('express-rate-limit');
 
-// Import models
 const LocationPresence = require('../models/LocationPresence');
 const Spotlight = require('../models/Spotlight');
 const HeatmapAggregation = require('../models/HeatmapAggregation');
 const FavoriteLocation = require('../models/FavoriteLocation');
 const User = require('../models/User');
+
+const router = express.Router();
+
 const {
   requireAuth: authenticateToken,
   optionalAuth,

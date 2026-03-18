@@ -1,4 +1,5 @@
 const path = require('path');
+
 const { importZipLocationIndexFromFile } = require('./zipLocationIndex');
 
 const DEFAULT_ZIP_INDEX_FILE = process.env.ZIP_LOCATION_INDEX_FILE

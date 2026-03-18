@@ -12,14 +12,17 @@
  * Schedule: every 1 hour via server.js
  */
 
-const Parser = require('rss-parser');
 const crypto = require('crypto');
+
+const Parser = require('rss-parser');
 const mongoose = require('mongoose');
-const Article = require('../models/Article');
+
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
 const { calculateViralScore, createMomentumMap } = require('./newsViralScore');
 const { extractRssImageUrl } = require('./newsRssImage');
 const { extractLocationContext } = require('../utils/newsLocationExtractor');
+
+const Article = require('../models/Article');
 
 const parser = new Parser({ timeout: 14000, headers: { 'User-Agent': 'SocialSecure-NewsBot/1.0' } });
 

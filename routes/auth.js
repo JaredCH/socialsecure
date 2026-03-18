@@ -1,18 +1,15 @@
+const crypto = require('crypto');
+
 const express = require('express');
-const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
-const User = require('../models/User');
-const Session = require('../models/Session');
-const SecurityEvent = require('../models/SecurityEvent');
-const DeviceKey = require('../models/DeviceKey');
-const NewsPreferences = require('../models/NewsPreferences');
-const ChatRoom = require('../models/ChatRoom');
+
 const { createNotification } = require('../services/notifications');
+const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
+const { resolveCanonicalLocationInput } = require('../services/newsLocationMaster');
 const {
   SOCIAL_THEME_PRESETS,
   SOCIAL_ACCENT_TOKENS,
@@ -21,8 +18,15 @@ const {
   THEME_TO_ALLOWED_ACCENTS,
   normalizeSocialPagePreferences
 } = require('../utils/socialPagePreferences');
-const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
-const { resolveCanonicalLocationInput } = require('../services/newsLocationMaster');
+
+const User = require('../models/User');
+const Session = require('../models/Session');
+const SecurityEvent = require('../models/SecurityEvent');
+const DeviceKey = require('../models/DeviceKey');
+const NewsPreferences = require('../models/NewsPreferences');
+const ChatRoom = require('../models/ChatRoom');
+
+const router = express.Router();
 
 const PROFILE_THEMES = [...SOCIAL_THEME_PRESETS];
 const ENCRYPTION_PASSWORD_MIN_LENGTH = 8;

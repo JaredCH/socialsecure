@@ -14,10 +14,13 @@
 
 const https = require('https');
 const crypto = require('crypto');
+
 const mongoose = require('mongoose');
+
+const { calculateViralScore } = require('./newsViralScore');
+
 const Article = require('../models/Article');
 const NewsPreferences = require('../models/NewsPreferences');
-const { calculateViralScore } = require('./newsViralScore');
 
 const REDDIT_USER_AGENT = 'SocialSecure-NewsBot/1.0 (aggregator; no auth)';
 const REQUEST_TIMEOUT_MS = 10000;

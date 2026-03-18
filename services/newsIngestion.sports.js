@@ -12,14 +12,17 @@
  * Schedule: daily at 6 AM + triggered when a user adds a new team.
  */
 
-const Parser = require('rss-parser');
 const crypto = require('crypto');
+
+const Parser = require('rss-parser');
 const mongoose = require('mongoose');
-const Article = require('../models/Article');
-const NewsPreferences = require('../models/NewsPreferences');
+
 const { buildSportsTeamFeedUrl } = require('../config/newsCategoryFeeds');
 const { calculateViralScore } = require('./newsViralScore');
 const { extractRssImageUrl } = require('./newsRssImage');
+
+const Article = require('../models/Article');
+const NewsPreferences = require('../models/NewsPreferences');
 
 const parser = new Parser({ timeout: 14000, headers: { 'User-Agent': 'SocialSecure-NewsBot/1.0' } });
 

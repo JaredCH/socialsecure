@@ -1,16 +1,19 @@
 const express = require('express');
-const router = express.Router();
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
-const User = require('../models/User');
-const Friendship = require('../models/Friendship');
-const TopFriend = require('../models/TopFriend');
-const Presence = require('../models/Presence');
+
 const { logEvent } = require('../utils/logEvent');
 const { createNotification } = require('../services/notifications');
 const { buildPresencePayload, getPresenceMapForUsers } = require('../services/realtime');
 const { RELATIONSHIP_AUDIENCE_VALUES, normalizeRelationshipAudience } = require('../utils/relationshipAudience');
+
+const User = require('../models/User');
+const Friendship = require('../models/Friendship');
+const TopFriend = require('../models/TopFriend');
+const Presence = require('../models/Presence');
+
+const router = express.Router();
 
 const VALID_FRIEND_CATEGORIES = [...RELATIONSHIP_AUDIENCE_VALUES];
 const VALID_PARTNER_ACTIONS = ['request', 'accept', 'deny', 'clear'];

@@ -1,8 +1,6 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const Post = require('../models/Post');
-const User = require('../models/User');
-const ChatRoom = require('../models/ChatRoom');
+
 const { getArticlesForLocation } = require('../services/locationCacheService');
 const { normalizeLocationInput } = require('../services/locationNormalizer');
 const { getLocationTaxonomyPayload } = require('../utils/newsLocationTaxonomy');
@@ -10,7 +8,12 @@ const { normalizeRelationshipAudience } = require('../utils/relationshipAudience
 const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocationIndex');
 const { guestSessionContext } = require('../utils/guestSessionContext');
 
+const Post = require('../models/Post');
+const User = require('../models/User');
+const ChatRoom = require('../models/ChatRoom');
+
 const router = express.Router();
+
 const MAX_DISCOVERY_POSTS_FETCH_LIMIT = 200;
 const MIN_DISCOVERY_POSTS_FETCH_LIMIT = 100;
 const DISCOVERY_POSTS_FETCH_MULTIPLIER = 10;

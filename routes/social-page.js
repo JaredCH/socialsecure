@@ -1,13 +1,17 @@
+const path = require('path');
+
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const path = require('path');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const { v4: uuidv4 } = require('uuid');
+
+const { logEvent } = require('../utils/logEvent');
+
 const User = require('../models/User');
 const SocialPageConfig = require('../models/SocialPageConfig');
-const { logEvent } = require('../utils/logEvent');
+
 const {
   SOCIAL_DESIGN_TEMPLATES,
   buildDefaultSocialPagePreferences,

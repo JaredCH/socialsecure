@@ -1,17 +1,19 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-const User = require('../models/User');
-const Post = require('../models/Post');
-const Friendship = require('../models/Friendship');
-const BlockList = require('../models/BlockList');
-const SiteContentFilter = require('../models/SiteContentFilter');
+
 const {
   normalizeRelationshipAudience,
   getViewerRelationshipContext,
   logRelationshipAudienceEvent
 } = require('../utils/relationshipAudience');
 const { censorMaturityText, normalizeFilterWords } = require('../utils/contentFilter');
+
+const User = require('../models/User');
+const Post = require('../models/Post');
+const Friendship = require('../models/Friendship');
+const BlockList = require('../models/BlockList');
+const SiteContentFilter = require('../models/SiteContentFilter');
 
 const router = express.Router();
 

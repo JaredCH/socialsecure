@@ -1,11 +1,15 @@
+const crypto = require('crypto');
+
 const express = require('express');
-const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
+
 const User = require('../models/User');
 const ReferralInvitation = require('../models/ReferralInvitation');
+
+const router = express.Router();
+
 const REFERRAL_REWARD_AMOUNT = Number(process.env.REFERRAL_REWARD_AMOUNT || 100);
 
 const authenticateToken = (req, res, next) => {

@@ -5,9 +5,11 @@
  */
 
 const https = require('https');
+
+const { LEAGUE_CATALOG, SPORTS_TEAMS, inferSportsTeamsFromText } = require('../data/news/sportsTeamLocationIndex');
+
 const SportsSchedule = require('../models/SportsSchedule');
 const EventSourceHealth = require('../models/EventSourceHealth');
-const { LEAGUE_CATALOG, SPORTS_TEAMS, inferSportsTeamsFromText } = require('../data/news/sportsTeamLocationIndex');
 
 const ESPN_SCOREBOARD_BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
 const SCHEDULE_FETCH_TIMEOUT_MS = 15000;

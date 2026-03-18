@@ -1,9 +1,12 @@
 const fs = require('fs/promises');
 const path = require('path');
+
 const mongoose = require('mongoose');
 const NodeGeocoder = require('node-geocoder');
-const ZipLocationIndex = require('../models/ZipLocationIndex');
+
 const normalizeToken = require('../utils/normalizeToken');
+
+const ZipLocationIndex = require('../models/ZipLocationIndex');
 
 const STATIC_ZIP_LOCATION_INDEX = Object.freeze({
   '78666': {

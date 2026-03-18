@@ -15,20 +15,15 @@
  * UV Index, AQI, and pollen data from the Open-Meteo Air Quality API.
  */
 
-const express = require('express');
-const router = express.Router();
 const https = require('https');
 const crypto = require('crypto');
+
+const express = require('express');
+
 const {
   requireAuth: authenticateToken,
   authErrorHandler
 } = require('../middleware/parseAuthToken');
-
-const NewsPreferences = require('../models/NewsPreferences');
-const User = require('../models/User');
-const Article = require('../models/Article');
-const ArticleImpression = require('../models/ArticleImpression');
-
 const { getTeamSchedules, getLeagueStatusMap, getAllLeagueStatuses } = require('../services/sportsScheduleIngestion');
 const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocationIndex');
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
@@ -38,6 +33,13 @@ const { getArticlesForLocation, getCacheMetrics, searchCachedArticles } = requir
 const { normalizeLocationInput, resolvePrimaryLocation } = require('../services/locationNormalizer');
 const { REFRESH_INTERVAL_MS, getCacheSchedulerState, refreshAllCachedLocations, startCacheRefreshScheduler } = require('../services/cacheRefreshWorker');
 const { preloadCommonLocations } = require('../services/locationPreloader');
+
+const NewsPreferences = require('../models/NewsPreferences');
+const User = require('../models/User');
+const Article = require('../models/Article');
+const ArticleImpression = require('../models/ArticleImpression');
+
+const router = express.Router();
 
 // ---------------------------------------------------------------------------
 // Weather constants

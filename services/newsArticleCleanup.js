@@ -12,6 +12,7 @@
  */
 
 const mongoose = require('mongoose');
+
 const Article = require('../models/Article');
 const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 

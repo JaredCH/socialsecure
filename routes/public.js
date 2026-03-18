@@ -1,13 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
-const router = express.Router();
-const User = require('../models/User');
-const Post = require('../models/Post');
-const BlockList = require('../models/BlockList');
-const Resume = require('../models/Resume');
-const Friendship = require('../models/Friendship');
-const SiteContentFilter = require('../models/SiteContentFilter');
+
 const { toPublicSocialPagePreferences } = require('../utils/socialPagePreferences');
 const {
   normalizeRelationshipAudience,
@@ -17,6 +11,15 @@ const {
 const { censorMaturityText, normalizeFilterWords } = require('../utils/contentFilter');
 const { decodeAuthToken } = require('../middleware/parseAuthToken');
 const { logEvent } = require('../utils/logEvent');
+
+const User = require('../models/User');
+const Post = require('../models/Post');
+const BlockList = require('../models/BlockList');
+const Resume = require('../models/Resume');
+const Friendship = require('../models/Friendship');
+const SiteContentFilter = require('../models/SiteContentFilter');
+
+const router = express.Router();
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;

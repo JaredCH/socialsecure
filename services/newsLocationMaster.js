@@ -1,8 +1,9 @@
-const User = require('../models/User');
-const NewsLocation = require('../models/NewsLocation');
 const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
 const { resolveZipLocation, resolveZipLocationByCityState } = require('./zipLocationIndex');
 const normalizeToken = require('../utils/normalizeToken');
+
+const User = require('../models/User');
+const NewsLocation = require('../models/NewsLocation');
 
 const buildCanonicalName = (canonical = {}) => {
   const parts = [
