@@ -231,8 +231,26 @@ router.get('/users', authenticateToken, discoveryLimiter, async (req, res) => {
       searchFilter.$or = [{ username: searchRegex }, { realName: searchRegex }];
     }
 
+    // Return a lightweight snapshot of social page preferences for mini-preview
+    const projectSocialPrefs = (prefs) => {
+      if (!prefs) return null;
+      return {
+        themePreset: prefs.themePreset || 'default',
+        accentColorToken: prefs.accentColorToken || 'blue',
+        hero: {
+          backgroundColor: prefs.hero?.backgroundColor || '#1e293b',
+          backgroundImage: prefs.hero?.backgroundImage || null
+        },
+        globalStyles: {
+          pageBackgroundColor: prefs.globalStyles?.pageBackgroundColor || '#f8fafc',
+          bodyBackgroundImage: prefs.globalStyles?.bodyBackgroundImage || '',
+          fontFamily: prefs.globalStyles?.fontFamily || 'Inter'
+        }
+      };
+    };
+
     const candidates = await User.find(searchFilter)
-      .select('_id username realName city state country friendCount createdAt')
+      .select('_id username realName city state country friendCount createdAt avatarUrl bannerUrl profileTheme socialPagePreferences')
       .sort({ createdAt: -1 })
       .limit(Math.min(300, Math.max(120, limit * 12)))
       .lean();
@@ -285,6 +303,9 @@ router.get('/users', authenticateToken, discoveryLimiter, async (req, res) => {
 
         return {
           ...candidate,
+          avatarUrl: candidate.avatarUrl || '',
+          bannerUrl: candidate.bannerUrl || '',
+          socialPreview: projectSocialPrefs(candidate.socialPagePreferences),
           ranking: {
             score: Number(score.toFixed(4)),
             signals: {

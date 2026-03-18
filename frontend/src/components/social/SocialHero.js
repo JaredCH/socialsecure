@@ -176,6 +176,10 @@ const SocialHero = ({
   const {
     backgroundColor = '#1e293b',
     backgroundImage = null,
+    backgroundImageDisplayMode = 'cover',
+    backgroundImageOverlay = 0,
+    backgroundImageGrain = 0,
+    backgroundImageBlur = 0,
     nameColor = '#ffffff',
     locationColor = '#94a3b8',
     fontFamily = 'Inter',
@@ -215,20 +219,42 @@ const SocialHero = ({
     return 'Offline';
   };
 
+  const bgDisplayStyles = backgroundImage
+    ? backgroundImageDisplayMode === 'fixed'
+      ? { backgroundImage: `url(${backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }
+      : backgroundImageDisplayMode === 'repeat'
+        ? { backgroundImage: `url(${backgroundImage})`, backgroundRepeat: 'repeat', backgroundSize: 'auto' }
+        : { backgroundImage: `url(${backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : {};
+
   const containerStyle = {
     backgroundColor,
     fontFamily: `"${fontFamily}", sans-serif`,
-    ...(backgroundImage && { backgroundImage: `url(${backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center' })
+    ...bgDisplayStyles
   };
 
   const nameStyle = { color: nameColor };
   const locationStyle = { color: locationColor };
+
+  const hasOverlayEffects = backgroundImage && (backgroundImageOverlay > 0 || backgroundImageGrain > 0 || backgroundImageBlur > 0);
 
   return (
     <div 
       className="relative w-full overflow-visible"
       style={containerStyle}
     >
+      {/* Blur layer */}
+      {backgroundImage && backgroundImageBlur > 0 && (
+        <div className="absolute inset-0" style={{ backdropFilter: `blur(${backgroundImageBlur}px)`, WebkitBackdropFilter: `blur(${backgroundImageBlur}px)` }} />
+      )}
+      {/* Dark overlay */}
+      {backgroundImage && backgroundImageOverlay > 0 && (
+        <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${backgroundImageOverlay})` }} />
+      )}
+      {/* Grain / noise */}
+      {backgroundImage && backgroundImageGrain > 0 && (
+        <div className="absolute inset-0 pointer-events-none" style={{ opacity: backgroundImageGrain, backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.85\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\' opacity=\'0.5\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat', backgroundSize: '128px 128px' }} />
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/65 to-slate-950/10" />
       <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/90 to-transparent" />
 

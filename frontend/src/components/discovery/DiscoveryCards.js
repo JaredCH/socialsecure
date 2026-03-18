@@ -53,67 +53,93 @@ export const UserCard = ({ user, onSendRequest, canInteract }) => {
     }
   };
 
+  const preview = user.socialPreview || {};
+  const heroConfig = preview.hero || {};
+  const globalStyles = preview.globalStyles || {};
+  const heroBg = heroConfig.backgroundImage || null;
+  const heroBgColor = heroConfig.backgroundColor || '#1e293b';
+  const pageBgColor = globalStyles.pageBackgroundColor || '#f8fafc';
+  const pageBgImage = globalStyles.bodyBackgroundImage || '';
+  const fontFamily = globalStyles.fontFamily || 'Inter';
+
+  const heroStyle = {
+    backgroundColor: heroBgColor,
+    ...(heroBg ? { backgroundImage: `url(${heroBg})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {})
+  };
+
+  const cardStyle = {
+    backgroundColor: pageBgColor,
+    fontFamily: `"${fontFamily}", sans-serif`,
+    ...(pageBgImage ? { backgroundImage: `url(${pageBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {})
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow p-4 flex flex-col sm:flex-row items-start gap-3">
-      <div className="flex-shrink-0">
-        {user.avatarUrl ? (
-          <img
-            src={user.avatarUrl}
-            alt={`${user.username || 'user'} avatar`}
-            className="w-12 h-12 rounded-full object-cover border border-gray-200"
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          />
-        ) : (
-          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg">
-            {(user.realName || user.username || '?')[0].toUpperCase()}
-          </div>
-        )}
+    <div
+      className="rounded-xl shadow-md overflow-hidden border border-gray-200 flex flex-col transition-shadow hover:shadow-lg"
+      style={cardStyle}
+    >
+      {/* Mini hero banner */}
+      <div className="relative h-20 w-full" style={heroStyle}>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+        {/* Avatar overlay on banner */}
+        <div className="absolute -bottom-5 left-3">
+          {user.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt={`${user.username || 'user'} avatar`}
+              className="w-10 h-10 rounded-lg object-cover border-2 border-white shadow"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          ) : (
+            <div
+              className="w-10 h-10 rounded-lg border-2 border-white shadow flex items-center justify-center text-white font-semibold text-sm"
+              style={{ backgroundColor: heroBgColor }}
+            >
+              {(user.realName || user.username || '?')[0].toUpperCase()}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 min-w-0 w-full">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <div className="min-w-0">
+      {/* Card body */}
+      <div className="pt-7 px-3 pb-3 flex flex-col flex-1 bg-white/80 backdrop-blur-sm">
+        <div className="flex items-start justify-between gap-1 mb-1">
+          <div className="min-w-0 flex-1">
             <Link
               to={`/social?user=${encodeURIComponent(user.username)}`}
-              className="font-semibold text-gray-900 hover:text-blue-600 truncate block"
+              className="font-semibold text-gray-900 hover:text-blue-600 text-sm truncate block leading-tight"
             >
               {user.realName || user.username}
             </Link>
-            <p className="text-sm text-gray-500">@{user.username}</p>
+            <p className="text-xs text-gray-400 truncate">@{user.username}</p>
           </div>
-
           {!canInteract ? (
-            <span className="text-sm text-slate-500 font-medium flex-shrink-0">Register to connect</span>
+            <span className="text-[10px] text-slate-400 font-medium flex-shrink-0">Register</span>
           ) : requestState === 'sent' ? (
-            <span className="text-sm text-amber-600 font-medium flex-shrink-0">Pending</span>
+            <span className="text-[10px] text-amber-600 font-medium flex-shrink-0 bg-amber-50 rounded-full px-2 py-0.5">Pending</span>
           ) : (
             <button
               type="button"
               onClick={handleSendRequest}
               disabled={requestState === 'loading'}
-              className="flex-shrink-0 min-h-[44px] px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="flex-shrink-0 px-2 py-1 text-[10px] font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              {requestState === 'loading' ? 'Sending…' : 'Add Friend'}
+              {requestState === 'loading' ? '…' : 'Add'}
             </button>
           )}
         </div>
 
-        {user.bio && (
-          <p className="text-sm text-gray-600 mt-1 line-clamp-2">{user.bio}</p>
-        )}
-
-        <div className="flex items-center gap-2 mt-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-auto text-[10px] text-gray-400">
           {[user.city, user.state, user.country].filter(Boolean).length > 0 && (
-            <span className="text-xs text-gray-400">
-              📍 {[user.city, user.state, user.country].filter(Boolean).join(', ')}
-            </span>
+            <span className="truncate">📍 {[user.city, user.state].filter(Boolean).join(', ')}</span>
+          )}
+          {user.createdAt && (
+            <span>Joined {formatDate(user.createdAt)}</span>
           )}
         </div>
 
-        <p className="text-xs text-blue-500 mt-1">{user.whySuggested}</p>
-
         {requestState === 'error' && (
-          <p className="text-xs text-red-500 mt-1">{requestError || 'Failed to send request. Please try again.'}</p>
+          <p className="text-[10px] text-red-500 mt-1">{requestError || 'Failed to send request.'}</p>
         )}
       </div>
     </div>

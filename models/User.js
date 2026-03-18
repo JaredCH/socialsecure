@@ -215,6 +215,16 @@ const userSchema = new mongoose.Schema({
     default: ''
   },
   profileFieldVisibility: {
+    firstName: {
+      type: String,
+      enum: ['public'],
+      default: 'public'
+    },
+    lastName: {
+      type: String,
+      enum: ['public'],
+      default: 'public'
+    },
     streetAddress: {
       type: String,
       enum: ['public', 'social', 'secure'],

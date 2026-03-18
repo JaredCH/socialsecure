@@ -16,7 +16,8 @@ const {
   SOCIAL_MODULE_IDS,
   SOCIAL_PRIMARY_SECTION_IDS,
   THEME_TO_ALLOWED_ACCENTS,
-  normalizeSocialPagePreferences
+  normalizeSocialPagePreferences,
+  buildRandomRegistrationPreferences
 } = require('../utils/socialPagePreferences');
 
 const User = require('../models/User');
@@ -112,10 +113,12 @@ const normalizeHobbies = (value) => {
 };
 const normalizeProfileFieldVisibility = (value = {}) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
+    return { firstName: 'public', lastName: 'public' };
   }
 
   return {
+    firstName: 'public',
+    lastName: 'public',
     streetAddress: PROFILE_VISIBILITY_OPTIONS.includes(value.streetAddress) ? value.streetAddress : undefined,
     phone: PROFILE_VISIBILITY_OPTIONS.includes(value.phone) ? value.phone : undefined,
     email: PROFILE_VISIBILITY_OPTIONS.includes(value.email) ? value.email : undefined,
@@ -497,6 +500,7 @@ router.post('/register', [
     const universalId = User.generateUniversalId(email);
 
     // Create new user
+    const registrationPreferences = buildRandomRegistrationPreferences();
     const user = new User({
       universalId,
       realName: derivedRealName,
@@ -514,7 +518,13 @@ router.post('/register', [
       ageGroup: normalizeProfileOptionalValue(ageGroup),
       sex: normalizeProfileOptionalValue(sex),
       race: normalizeProfileOptionalValue(race),
-      profileFieldVisibility: normalizedProfileFieldVisibility,
+      profileFieldVisibility: {
+        ...normalizedProfileFieldVisibility,
+        firstName: 'public',
+        lastName: 'public'
+      },
+      profileTheme: registrationPreferences.themePreset,
+      socialPagePreferences: registrationPreferences,
       locationLastUpdatedAt: new Date(),
       registrationStatus: 'active',
       mustResetPassword: false,

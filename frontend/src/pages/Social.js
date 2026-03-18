@@ -6211,6 +6211,14 @@ const Social = () => {
         heroRandomGalleryEnabled={Boolean(socialPreferences.hero?.backgroundImageUseRandomGallery)}
         heroProfileImage={socialPreferences.hero?.profileImage || ''}
         heroProfileImageHistory={socialPreferences.hero?.profileImageHistory || []}
+        heroBackgroundDisplayMode={socialPreferences.hero?.backgroundImageDisplayMode || 'cover'}
+        heroBackgroundOverlay={socialPreferences.hero?.backgroundImageOverlay || 0}
+        heroBackgroundGrain={socialPreferences.hero?.backgroundImageGrain || 0}
+        heroBackgroundBlur={socialPreferences.hero?.backgroundImageBlur || 0}
+        onHeroBackgroundDisplayModeChange={(value) => updateHeroConfig({ backgroundImageDisplayMode: value })}
+        onHeroBackgroundOverlayChange={(value) => updateHeroConfig({ backgroundImageOverlay: value })}
+        onHeroBackgroundGrainChange={(value) => updateHeroConfig({ backgroundImageGrain: value })}
+        onHeroBackgroundBlurChange={(value) => updateHeroConfig({ backgroundImageBlur: value })}
         bodyBackgroundImage={socialPreferences.globalStyles?.bodyBackgroundImage || ''}
         bodyBackgroundOverlay={socialPreferences.globalStyles?.bodyBackgroundOverlay || 0}
         bodyBackgroundGrain={socialPreferences.globalStyles?.bodyBackgroundGrain || 0}

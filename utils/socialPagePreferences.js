@@ -91,6 +91,10 @@ const DEFAULT_GLOBAL_STYLES = Object.freeze({
 const DEFAULT_HERO_CONFIG = Object.freeze({
   backgroundColor: '#1e293b',
   backgroundImage: null,
+  backgroundImageDisplayMode: 'cover',
+  backgroundImageOverlay: 0,
+  backgroundImageGrain: 0,
+  backgroundImageBlur: 0,
   textColor: '#ffffff',
   nameColor: '#ffffff',
   locationColor: '#94a3b8',
@@ -826,6 +830,82 @@ const toPublicSocialPagePreferences = (input, options = {}) => {
   return normalized.value;
 };
 
+// ═══════════════════════════════════════════
+// CURATED IMAGES FOR NEW USER RANDOMIZATION
+// ═══════════════════════════════════════════
+// Hero banner images (1200×400-ish landscape banners)
+const REGISTRATION_HERO_IMAGES = [
+  'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1434394354979-a235cd36269d?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1491002052546-bf38f186af56?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1504198453319-5ce911bafcde?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1483728642387-6c3bdd6c93e5?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1490682143684-14369e18dce8?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1431440869543-efaf3388c585?w=1200&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=1200&h=400&fit=crop'
+];
+
+// Body / page background images (larger, tileable or full-cover)
+const REGISTRATION_BODY_BACKGROUND_IMAGES = [
+  'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1528460033278-a6ba57a8e118?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1604079628040-94301bb21b91?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1519751138087-5bf79df62d5b?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1550684376-efcbd6e3f031?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1614851099511-773084f6911d?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1557683316-973673baf926?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1553356084-58ef4a67b2a7?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1614854262318-831574f15f1f?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1567095761054-7a02e69e5571?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1614741118887-7a4ee193a5fa?w=1920&h=1080&fit=crop',
+  'https://images.unsplash.com/photo-1614850715649-1d0106571571?w=1920&h=1080&fit=crop'
+];
+
+/**
+ * Build randomized social page preferences for a newly registered user.
+ * Picks a random theme, accent color, hero image, and body background image
+ * so that every new user starts with a unique-looking social page.
+ */
+const buildRandomRegistrationPreferences = () => {
+  const theme = SOCIAL_THEME_PRESETS[Math.floor(Math.random() * SOCIAL_THEME_PRESETS.length)];
+  const allowedAccents = THEME_TO_ALLOWED_ACCENTS[theme] || SOCIAL_ACCENT_TOKENS;
+  const accent = allowedAccents[Math.floor(Math.random() * allowedAccents.length)];
+  const font = SOCIAL_FONT_FAMILIES[Math.floor(Math.random() * SOCIAL_FONT_FAMILIES.length)];
+  const heroImage = REGISTRATION_HERO_IMAGES[Math.floor(Math.random() * REGISTRATION_HERO_IMAGES.length)];
+  const bodyImage = REGISTRATION_BODY_BACKGROUND_IMAGES[Math.floor(Math.random() * REGISTRATION_BODY_BACKGROUND_IMAGES.length)];
+
+  const prefs = buildDefaultSocialPagePreferences(theme);
+  prefs.accentColorToken = accent;
+  prefs.globalStyles.fontFamily = font;
+  prefs.globalStyles.bodyBackgroundImage = bodyImage;
+  prefs.globalStyles.bodyBackgroundOverlay = 0.3;
+  prefs.globalStyles.bodyBackgroundDisplayMode = 'cover';
+  prefs.hero.backgroundImage = heroImage;
+  prefs.hero.fontFamily = font;
+  prefs.hero.backgroundImageHistory = [heroImage];
+  return prefs;
+};
+
 module.exports = {
   SOCIAL_THEME_PRESETS,
   SOCIAL_LAYOUT_MODES,
@@ -850,6 +930,9 @@ module.exports = {
   BODY_BG_DISPLAY_MODES,
   BODY_BG_OVERLAY_ANIMATIONS,
   buildDefaultSocialPagePreferences,
+  buildRandomRegistrationPreferences,
+  REGISTRATION_HERO_IMAGES,
+  REGISTRATION_BODY_BACKGROUND_IMAGES,
   mergeDesignPatch,
   normalizeSocialPagePreferences,
   toPublicSocialPagePreferences
