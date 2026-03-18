@@ -314,6 +314,21 @@ describe('DotNav navigation system', () => {
     document.elementFromPoint = originalElementFromPoint;
   });
 
+  it('does not cancel touchend on nav buttons when not editing', async () => {
+    await renderNav();
+
+    const dot = document.getElementById('dotnav-dot');
+    await act(async () => { dot.click(); });
+
+    const mainBtn = document.querySelector('.dotnav-nbtn[aria-label="Main"]');
+    expect(mainBtn).not.toBeNull();
+
+    const touchEndEvent = new Event('touchend', { bubbles: true, cancelable: true });
+    const notCancelled = mainBtn.dispatchEvent(touchEndEvent);
+    expect(notCancelled).toBe(true);
+    expect(touchEndEvent.defaultPrevented).toBe(false);
+  });
+
   it('dispatches VoidNavTrigger event on nav button click', async () => {
     const events = [];
     const handler = (e) => events.push(e.detail);
