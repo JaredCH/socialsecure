@@ -1,128 +1,99 @@
-jest.mock('../models/Article', () => ({
-  find: jest.fn(),
-  countDocuments: jest.fn()
-}));
-
 jest.mock('../models/NewsPreferences', () => ({
   findOne: jest.fn()
-}));
-
-jest.mock('../models/ArticleImpression', () => ({
-  getDeprioritisedArticleIds: jest.fn()
 }));
 
 jest.mock('../models/User', () => ({
   findById: jest.fn()
 }));
 
-const Article = require('../models/Article');
-const NewsPreferences = require('../models/NewsPreferences');
-const ArticleImpression = require('../models/ArticleImpression');
-const User = require('../models/User');
-const { buildFeed } = require('./newsFeedBuilder');
+jest.mock('./locationCacheService', () => ({
+  getArticlesForLocation: jest.fn()
+}));
 
-function createFindChain(result) {
-  const chain = {
-    sort: jest.fn(() => chain),
-    limit: jest.fn(() => chain),
-    skip: jest.fn(() => chain),
-    lean: jest.fn().mockResolvedValue(result)
-  };
-  return chain;
-}
+jest.mock('./locationNormalizer', () => ({
+  resolvePrimaryLocation: jest.fn()
+}));
+
+const NewsPreferences = require('../models/NewsPreferences');
+const User = require('../models/User');
+const { getArticlesForLocation } = require('./locationCacheService');
+const { resolvePrimaryLocation } = require('./locationNormalizer');
+const { buildFeed } = require('./newsFeedBuilder');
 
 describe('newsFeedBuilder marijuana category filter', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     NewsPreferences.findOne.mockReturnValue({
-      lean: jest.fn().mockResolvedValue(null)
-    });
-    User.findById.mockReturnValue({
-      select: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue(null)
+      lean: jest.fn().mockResolvedValue({
+        locations: [{ city: 'Austin', state: 'TX', country: 'US', isPrimary: true }]
       })
     });
-    ArticleImpression.getDeprioritisedArticleIds.mockResolvedValue([]);
-    Article.countDocuments.mockResolvedValue(0);
+    resolvePrimaryLocation.mockResolvedValue({
+      city: 'Austin',
+      stateCode: 'TX',
+      countryCode: 'US',
+      locationKey: 'austin-tx-us'
+    });
   });
 
-  it('includes marijuana topic-tagged articles when filtering the marijuana feed', async () => {
-    const queries = [];
-    Article.find.mockImplementation((query) => {
-      queries.push(query);
-      return createFindChain([]);
+  it('includes marijuana-category articles when filtering the marijuana feed', async () => {
+    getArticlesForLocation.mockResolvedValue({
+      cacheHit: true,
+      locationKey: 'austin-tx-us',
+      articles: [
+        { _id: 'm-1', category: 'marijuana', tier: 'local' },
+        { _id: 'g-1', category: 'general', tier: 'local' }
+      ]
     });
 
-    await buildFeed('user-1', { category: 'marijuana', limit: 5 });
+    const result = await buildFeed('user-1', { category: 'marijuana', limit: 5 });
 
-    expect(queries.length).toBeGreaterThan(0);
-    for (const query of queries) {
-      expect(query.$and?.[1]).toEqual({
-        $or: [
-          { category: 'marijuana' },
-          { topics: 'marijuana' }
-        ]
-      });
-    }
-    expect(Article.countDocuments).toHaveBeenCalledWith(expect.objectContaining({
-      $and: expect.arrayContaining([
-        expect.any(Object),
-        {
-          $or: [
-            { category: 'marijuana' },
-            { topics: 'marijuana' }
-          ]
-        }
-      ])
-    }));
+    expect(result.articles).toEqual([
+      expect.objectContaining({ _id: 'm-1', category: 'marijuana' })
+    ]);
+    expect(getArticlesForLocation).toHaveBeenCalledWith('austin-tx-us', expect.any(Object));
   });
 });
 
-describe('newsFeedBuilder trending tier location scoping', () => {
+describe('newsFeedBuilder location resolution', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    ArticleImpression.getDeprioritisedArticleIds.mockResolvedValue([]);
-    Article.countDocuments.mockResolvedValue(0);
   });
 
-  it('excludes out-of-state local articles from the trending tier for a TX user', async () => {
-    // User in Texas (78666 = San Marcos, TX)
+  it('resolves a TX user profile location and requests location-scoped articles', async () => {
     NewsPreferences.findOne.mockReturnValue({
       lean: jest.fn().mockResolvedValue(null)
     });
+    const profile = {
+      city: 'San Marcos',
+      state: 'TX',
+      country: 'US',
+      zipCode: '78666'
+    };
     User.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue({
-          city: 'San Marcos',
-          state: 'TX',
-          country: 'US',
-          zipCode: '78666'
-        })
+        lean: jest.fn().mockResolvedValue(profile)
       })
     });
-
-    const queries = [];
-    Article.find.mockImplementation((query) => {
-      queries.push(JSON.parse(JSON.stringify(query)));
-      return createFindChain([]);
+    resolvePrimaryLocation.mockResolvedValue({
+      city: 'San Marcos',
+      stateCode: 'TX',
+      countryCode: 'US',
+      locationKey: 'san-marcos-tx-us'
+    });
+    getArticlesForLocation.mockResolvedValue({
+      cacheHit: false,
+      locationKey: 'san-marcos-tx-us',
+      articles: []
     });
 
     await buildFeed('user-tx', { category: 'all', limit: 5 });
 
-    // The trending tier query (tier 4) should contain a location scope filter.
-    // We look for a query with the viralScore threshold and the $or clause that
-    // excludes out-of-state local articles.
-    const trendingQuery = queries.find(
-      (q) => q.viralScore && q.$or && q.$or.some((clause) => clause.pipeline && clause.pipeline.$ne === 'local')
-    );
-
-    expect(trendingQuery).toBeDefined();
-    // Must include a clause allowing the user's state through
-    const stateClause = trendingQuery.$or.find((c) => c['locationTags.states'] === 'tx');
-    expect(stateClause).toBeDefined();
+    expect(resolvePrimaryLocation).toHaveBeenCalledWith(null, profile);
+    expect(getArticlesForLocation).toHaveBeenCalledWith('san-marcos-tx-us', expect.any(Object));
   });
 
-  it('does not add location filter to trending tier when user has no state', async () => {
+  it('returns an empty feed when location cannot be resolved', async () => {
     NewsPreferences.findOne.mockReturnValue({
       lean: jest.fn().mockResolvedValue(null)
     });
@@ -131,19 +102,15 @@ describe('newsFeedBuilder trending tier location scoping', () => {
         lean: jest.fn().mockResolvedValue(null)
       })
     });
+    resolvePrimaryLocation.mockResolvedValue(null);
 
-    const queries = [];
-    Article.find.mockImplementation((query) => {
-      queries.push(JSON.parse(JSON.stringify(query)));
-      return createFindChain([]);
-    });
+    const result = await buildFeed('user-unknown', { category: 'all', limit: 5 });
 
-    await buildFeed('user-unknown', { category: 'all', limit: 5 });
-
-    // No trending query should have the pipeline-exclusion $or clause
-    const trendingQueries = queries.filter(
-      (q) => q.viralScore && q.$or && q.$or.some((clause) => clause.pipeline && clause.pipeline.$ne === 'local')
-    );
-    expect(trendingQueries).toHaveLength(0);
+    expect(getArticlesForLocation).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({
+      articles: [],
+      location: null,
+      feed: []
+    }));
   });
 });
