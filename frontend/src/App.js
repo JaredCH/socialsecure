@@ -141,6 +141,11 @@ const GuestBanner = () => {
   );
 };
 
+const LegacyDiscoverRedirect = () => {
+  const { search, hash } = useLocation();
+  return <Navigate to={`/find-friends${search}${hash}`} replace />;
+};
+
 function App() {
   const WELCOME_PENDING_KEY = 'postRegistrationWelcomePending';
   const WELCOME_PROFILE_KEY = 'postRegistrationWelcomeProfile';
