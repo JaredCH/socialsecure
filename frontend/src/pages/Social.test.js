@@ -283,6 +283,37 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).not.toContain('SocialSecure');
   });
 
+  it('keeps feed, timeline, and gallery panel labels visible in the main layout', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const feedHeading = Array.from(container.querySelectorAll('section h2')).find((heading) => heading.textContent === 'Feed');
+    const galleryHeading = Array.from(container.querySelectorAll('section h2')).find((heading) => heading.textContent === 'Gallery');
+    const timelineLabel = Array.from(container.querySelectorAll('p')).find((label) => label.textContent === 'Timeline');
+
+    expect(feedHeading).toBeTruthy();
+    expect(galleryHeading).toBeTruthy();
+    expect(timelineLabel).toBeTruthy();
+  });
+
+  it('does not render the guest access lookup panel for public profile pages', async () => {
+    localStorage.clear();
+    require('../utils/api').getAuthToken.mockReturnValue(null);
+    window.history.replaceState({}, '', '/social?user=buddy');
+    feedAPI.getPublicUserFeed.mockResolvedValue({
+      data: {
+        posts: [],
+        user: { _id: 'u-2', username: 'buddy' }
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    expect(container.textContent).not.toContain('Guest Access');
+    expect(container.textContent).not.toContain('Load a public profile by username or user ID');
+    expect(container.textContent).not.toContain('Load profile');
+    expect(container.textContent).not.toContain('Viewing public posts for @');
+  });
+
   it('shows social chat and calendar tabs for friend profile context', async () => {
     window.history.replaceState({}, '', '/social?user=buddy');
     feedAPI.getPublicUserFeed.mockResolvedValue({
