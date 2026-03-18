@@ -291,4 +291,23 @@ describe('App navbar features dropdown', () => {
     expect(container.textContent).toContain('Guest Chat Page');
   });
 
+  it('hides the guest banner on the social route to avoid a gap above the hero', async () => {
+    window.history.pushState({}, '', '/social');
+    await renderApp();
+    expect(container.textContent).toContain('Social Page');
+    expect(container.textContent).not.toContain('browsing as a guest');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    window.history.pushState({}, '', '/news');
+    await renderApp();
+    expect(container.textContent).toContain('browsing as a guest');
+  });
+
 });

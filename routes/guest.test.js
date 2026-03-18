@@ -26,11 +26,16 @@ const mockLocationNormalizer = {
   normalizeLocationInput: jest.fn()
 };
 
+const mockFetchWeatherForLocation = jest.fn();
+
 jest.mock('../models/Post', () => mockPost);
 jest.mock('../models/User', () => mockUser);
 jest.mock('../models/ChatRoom', () => mockChatRoom);
 jest.mock('../services/locationCacheService', () => mockLocationCacheService);
 jest.mock('../services/locationNormalizer', () => mockLocationNormalizer);
+jest.mock('./news', () => ({
+  internals: { fetchWeatherForLocation: mockFetchWeatherForLocation }
+}));
 
 const guestRouter = require('./guest');
 
@@ -144,6 +149,34 @@ describe('Guest routes', () => {
       targetFeedId: 'owner-1',
       visibility: 'public',
       relationshipAudience: 'public'
+    }));
+  });
+
+  it('returns guest weather for Austin TX defaults', async () => {
+    const app = buildApp();
+    mockFetchWeatherForLocation.mockResolvedValue({
+      weather: { provider: 'open-meteo', current: { temperature: 75 } },
+      error: null,
+      cacheHit: false,
+      resolved: { lat: 30.2672, lon: -97.7431, city: 'Austin', state: 'TX' }
+    });
+
+    const response = await request(app).get('/api/guest/news/weather');
+
+    expect(response.status).toBe(200);
+    expect(response.body.locations).toHaveLength(1);
+    expect(response.body.locations[0]).toMatchObject({
+      lat: 30.2672,
+      lon: -97.7431,
+      weather: { provider: 'open-meteo', current: { temperature: 75 } }
+    });
+    expect(response.body.fallbackSource).toBe('guestDefault');
+    expect(mockFetchWeatherForLocation).toHaveBeenCalledWith(expect.objectContaining({
+      lat: 30.2672,
+      lon: -97.7431,
+      city: 'Austin',
+      state: 'TX',
+      zipCode: '78701'
     }));
   });
 });

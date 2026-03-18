@@ -113,6 +113,18 @@ const RouteMain = ({ children }) => {
   );
 };
 
+const GuestBanner = () => {
+  const location = useLocation();
+  if (location.pathname === '/social' || location.pathname === '/friends') return null;
+  return (
+    <div className="container mx-auto mt-4">
+      <div className="rounded border border-blue-200 bg-blue-50 p-3 text-blue-900">
+        You&apos;re browsing as a guest from Austin, TX. Register to unlock all features.
+      </div>
+    </div>
+  );
+};
+
 function App() {
   const WELCOME_PENDING_KEY = 'postRegistrationWelcomePending';
   const WELCOME_PROFILE_KEY = 'postRegistrationWelcomeProfile';
@@ -599,13 +611,7 @@ function App() {
             </div>
           </div>
         ) : null}
-        {isGuest ? (
-          <div className="container mx-auto mt-4">
-            <div className="rounded border border-blue-200 bg-blue-50 p-3 text-blue-900">
-              You're browsing as a guest from Austin, TX. Register to unlock all features.
-            </div>
-          </div>
-        ) : null}
+        {isGuest ? <GuestBanner /> : null}
 
         <RouteMain>
           <Routes>
