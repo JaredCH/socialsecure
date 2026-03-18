@@ -15,6 +15,9 @@ const STORAGE_KEY = 'dotnav-state';
 const NOTIF_PANEL_W = 260;
 const EDGE_INSET = 10;
 const MOBILE_MAX_WIDTH = 768;
+const TOUCH_DEVICE_MAX_WIDTH = 1024;
+const MOBILE_USER_AGENT_RE = /Mobi|Android|iPhone|iPad|iPod/i;
+const MACINTOSH_USER_AGENT_RE = /Macintosh/i;
 
 // ═══════════════════════════════════════════
 // DOCK POSITION CONFIGS
@@ -175,6 +178,13 @@ function saveState(dock, assigned) {
   } catch {
     // Gracefully handle quota exceeded or restricted storage access
   }
+}
+
+function isLikelyTouchMobileDevice() {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+  const touchPoints = typeof navigator !== 'undefined' ? Number(navigator.maxTouchPoints || 0) : 0;
+  const isIPadDesktopUA = MACINTOSH_USER_AGENT_RE.test(ua) && touchPoints > 1;
+  return MOBILE_USER_AGENT_RE.test(ua) || isIPadDesktopUA;
 }
 
 // ═══════════════════════════════════════════
@@ -518,7 +528,8 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     return viewingUser;
   }, [viewingUser, loggedInUser]);
 
-  const isMobile = windowSize.w <= MOBILE_MAX_WIDTH;
+  const isMobile = windowSize.w <= MOBILE_MAX_WIDTH
+    || (isLikelyTouchMobileDevice() && windowSize.w <= TOUCH_DEVICE_MAX_WIDTH);
 
   if (!enabled || !isMobile) return null;
 

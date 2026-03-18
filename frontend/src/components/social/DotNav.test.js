@@ -10,6 +10,8 @@ describe('DotNav navigation system', () => {
   let root;
   let originalWidth;
   let originalHeight;
+  let originalUserAgent;
+  let originalMaxTouchPoints;
 
   const setViewport = (width, height = 844) => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width });
@@ -35,6 +37,8 @@ describe('DotNav navigation system', () => {
     localStorage.clear();
     originalWidth = window.innerWidth;
     originalHeight = window.innerHeight;
+    originalUserAgent = navigator.userAgent;
+    originalMaxTouchPoints = navigator.maxTouchPoints;
     setViewport(390, 844);
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -49,6 +53,14 @@ describe('DotNav navigation system', () => {
     container = null;
     root = null;
     setViewport(originalWidth, originalHeight);
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: originalUserAgent
+    });
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: originalMaxTouchPoints
+    });
   });
 
   it('renders the main dot button', async () => {
@@ -70,6 +82,50 @@ describe('DotNav navigation system', () => {
   it('does not render on desktop viewport', async () => {
     setViewport(1200, 900);
     await renderNav();
+    const dot = document.getElementById('dotnav-dot');
+    expect(dot).toBeNull();
+  });
+
+  it('renders for touch mobile user agents on tablet-sized widths', async () => {
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'
+    });
+    setViewport(820, 900);
+    await renderNav();
+
+    const dot = document.getElementById('dotnav-dot');
+    expect(dot).not.toBeNull();
+  });
+
+  it('renders for iPad desktop user agent with touch points on tablet-sized widths', async () => {
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15'
+    });
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 5
+    });
+    setViewport(900, 1200);
+    await renderNav();
+
+    const dot = document.getElementById('dotnav-dot');
+    expect(dot).not.toBeNull();
+  });
+
+  it('does not render for touch-enabled desktop user agents on tablet-sized widths', async () => {
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36'
+    });
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 10
+    });
+    setViewport(900, 1200);
+    await renderNav();
+
     const dot = document.getElementById('dotnav-dot');
     expect(dot).toBeNull();
   });
