@@ -9,6 +9,28 @@ const isResolvedFriendRequestNotification = (notification) => (
   notification?.type === 'follow' && notification?.isRead
 );
 
+const rollUpNotifications = (notifications) => {
+  const grouped = {};
+  const order = [];
+  notifications.forEach((n) => {
+    // Use backend-provided groupKey; fallback mirrors services/notifications.js format for older records
+    const key = n.groupKey || `${n.type}:${n.senderId || 'system'}`;
+    if (!grouped[key]) {
+      grouped[key] = [];
+      order.push(key);
+    }
+    grouped[key].push(n);
+  });
+  return order.map((key) => {
+    const group = grouped[key];
+    return {
+      ...group[0],
+      count: group.length,
+      _groupedIds: group.map((item) => String(item._id))
+    };
+  });
+};
+
 const NotificationCenter = ({
   unreadCount = 0,
   onUnreadCountChange,
@@ -118,6 +140,32 @@ const NotificationCenter = ({
     }
   };
 
+  const acknowledgeNotification = async (id) => {
+    const target = notifications.find((item) => String(item._id) === String(id));
+    try {
+      await notificationAPI.acknowledgeNotification(id);
+      setNotifications((prev) => prev.filter((item) => String(item._id) !== String(id)));
+      if (target && !target.isRead) {
+        onUnreadCountChange((prev) => Math.max(0, prev - 1));
+      }
+    } catch {
+      // no-op
+    }
+  };
+
+  const dismissNotification = async (id) => {
+    const target = notifications.find((item) => String(item._id) === String(id));
+    try {
+      await notificationAPI.dismissNotification(id);
+      setNotifications((prev) => prev.filter((item) => String(item._id) !== String(id)));
+      if (target && !target.isRead) {
+        onUnreadCountChange((prev) => Math.max(0, prev - 1));
+      }
+    } catch {
+      // no-op
+    }
+  };
+
   const setFriendActionLoading = (id, loadingValue) => {
     setFriendActionLoadingById((prev) => ({ ...prev, [String(id)]: loadingValue }));
   };
@@ -166,15 +214,8 @@ const NotificationCenter = ({
         await friendsAPI.declineRequest(friendshipId);
       }
 
-      if (!notification?.isRead) {
-        await notificationAPI.markAsRead(notificationId);
-      }
-
-      setNotifications((prev) => prev.map((item) => (
-        String(item._id) === notificationId
-          ? { ...item, isRead: true, readAt: item.readAt || new Date().toISOString() }
-          : item
-      )));
+      await notificationAPI.acknowledgeNotification(notificationId);
+      setNotifications((prev) => prev.filter((item) => String(item._id) !== notificationId));
       onUnreadCountChange((prev) => Math.max(0, prev - (notification?.isRead ? 0 : 1)));
       setFriendActionMessage(action === 'accept' ? 'Friend request accepted.' : 'Friend request declined.');
     } catch {
@@ -232,7 +273,8 @@ const NotificationCenter = ({
     }
   };
 
-  const visibleNotifications = notifications.filter((notification) => !isResolvedFriendRequestNotification(notification));
+  const activeNotifications = notifications.filter((notification) => !isResolvedFriendRequestNotification(notification));
+  const rolledUpNotifications = rollUpNotifications(activeNotifications);
 
   const openPanel = () => {
     if (closeTimerRef.current) {
@@ -305,6 +347,7 @@ const NotificationCenter = ({
             <p className="font-semibold text-gray-900">Notifications</p>
             <div className="flex items-center gap-3">
               <button type="button" className="text-xs text-blue-600 hover:text-blue-700" onClick={markAllRead}>Mark all read</button>
+              <Link to="/notifications/history" className="text-xs text-gray-600 hover:text-gray-800" onClick={() => setOpen(false)}>History</Link>
               <Link to="/notification-settings" className="text-xs text-gray-600 hover:text-gray-800" onClick={() => setOpen(false)}>Settings</Link>
             </div>
           </div>
@@ -313,15 +356,18 @@ const NotificationCenter = ({
             {friendActionMessage ? (
               <div className="px-3 pt-2 text-xs text-slate-600">{friendActionMessage}</div>
             ) : null}
-            {visibleNotifications.length === 0 && !loading ? (
+            {rolledUpNotifications.length === 0 && !loading ? (
               <div className="p-4 text-sm text-gray-500">No notifications yet.</div>
-            ) : visibleNotifications.map((notification) => (
+            ) : rolledUpNotifications.map((notification) => (
               <NotificationItem
                 key={String(notification._id)}
                 notification={notification}
+                count={notification.count || 1}
                 onOpen={openNotification}
                 onMarkRead={markRead}
                 onDelete={deleteNotification}
+                onAcknowledge={acknowledgeNotification}
+                onDismiss={dismissNotification}
                 onFriendRequestAction={handleFriendRequestAction}
                 onFriendCircleChange={handleFriendCircleChange}
                 friendActionLoading={Boolean(friendActionLoadingById[String(notification._id)])}

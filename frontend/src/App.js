@@ -23,6 +23,7 @@ import AdminNewsReview from './pages/AdminNewsReview';
 import NotificationCenter from './components/NotificationCenter';
 import DotNav from './components/social/DotNav';
 import NotificationSettings from './pages/NotificationSettings';
+import NotificationsHistory from './pages/NotificationsHistory';
 import ResumePublic from './pages/ResumePublic';
 import MobileProfile from './pages/MobileProfile';
 import Friends from './pages/Friends';
@@ -861,6 +862,19 @@ function App() {
                   passwordResetRequired={passwordResetRequired}
                 >
                   <NotificationSettings />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/notifications/history"
+              element={(
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  onboardingRequired={onboardingRequired}
+                  encryptionPasswordRequired={encryptionPasswordRequired}
+                  passwordResetRequired={passwordResetRequired}
+                >
+                  <NotificationsHistory />
                 </ProtectedRoute>
               )}
             />

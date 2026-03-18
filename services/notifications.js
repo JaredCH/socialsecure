@@ -11,7 +11,12 @@ const preferenceMap = {
   message: 'messages',
   system: 'system',
   security_alert: 'securityAlerts',
-  market_transaction: 'system'
+  market_transaction: 'system',
+  friend_post: 'friendPosts',
+  top5_added: 'top5',
+  top5_removed: 'top5',
+  partner_request: 'partnerRequests',
+  partner_response: 'partnerRequests'
 };
 
 const clampText = (value, max) => String(value || '').trim().slice(0, max);
@@ -31,6 +36,10 @@ const toPayload = (notification) => ({
   channels: notification.channels,
   isRead: notification.isRead,
   readAt: notification.readAt,
+  status: notification.status || 'active',
+  acknowledgedAt: notification.acknowledgedAt || null,
+  dismissedAt: notification.dismissedAt || null,
+  groupKey: notification.groupKey || null,
   createdAt: notification.createdAt
 });
 
@@ -43,6 +52,9 @@ const getUserNotificationPreferences = (user) => {
     messages: { inApp: true, email: false, push: false },
     system: { inApp: true, email: true, push: false },
     securityAlerts: { inApp: true, email: true, push: false },
+    friendPosts: { inApp: true, email: false, push: false },
+    top5: { inApp: true, email: false, push: false },
+    partnerRequests: { inApp: true, email: true, push: false },
     realtime: { enabled: true, typingIndicators: true, presence: true }
   };
 
@@ -121,6 +133,8 @@ const createNotification = async ({
     push: !!prefChannels.push
   };
 
+  const groupKey = `${type}:${String(senderId || 'system')}`;
+
   const notification = await Notification.create({
     recipientId,
     senderId,
@@ -138,7 +152,9 @@ const createNotification = async ({
     },
     channels,
     isRead: channels.inApp ? false : true,
-    readAt: channels.inApp ? null : new Date()
+    readAt: channels.inApp ? null : new Date(),
+    status: 'active',
+    groupKey
   });
 
   if (channels.inApp) {

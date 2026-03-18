@@ -14,7 +14,12 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['like', 'comment', 'mention', 'follow', 'message', 'system', 'security_alert', 'market_transaction'],
+    enum: [
+      'like', 'comment', 'mention', 'follow', 'message', 'system',
+      'security_alert', 'market_transaction',
+      'friend_post', 'top5_added', 'top5_removed',
+      'partner_request', 'partner_response'
+    ],
     required: true
   },
   title: {
@@ -73,6 +78,25 @@ const notificationSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  status: {
+    type: String,
+    enum: ['active', 'acknowledged', 'dismissed'],
+    default: 'active',
+    index: true
+  },
+  acknowledgedAt: {
+    type: Date,
+    default: null
+  },
+  dismissedAt: {
+    type: Date,
+    default: null
+  },
+  groupKey: {
+    type: String,
+    default: null,
+    index: true
+  },
   channels: {
     inApp: {
       type: Boolean,
@@ -97,6 +121,7 @@ const notificationSchema = new mongoose.Schema({
 
 notificationSchema.index({ recipientId: 1, isRead: 1, createdAt: -1 });
 notificationSchema.index({ recipientId: 1, createdAt: -1 });
+notificationSchema.index({ recipientId: 1, status: 1, createdAt: -1 });
 notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 });
 
 module.exports = mongoose.model('Notification', notificationSchema);

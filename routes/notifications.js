@@ -16,6 +16,14 @@ const MAX_PAGE_SIZE = 50;
 
 const hashToken = (token = '') => require('crypto').createHash('sha256').update(token).digest('hex');
 
+const decrementUnreadCount = async (userId) => {
+  await User.updateOne({ _id: userId }, { $inc: { unreadNotificationCount: -1 } });
+  await User.updateOne(
+    { _id: userId, unreadNotificationCount: { $lt: 0 } },
+    { $set: { unreadNotificationCount: 0 } }
+  );
+};
+
 const getUserFromBearerToken = async (req, select = '') => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
@@ -61,13 +69,14 @@ router.get('/', authenticateToken, async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
     const skip = (page - 1) * limit;
 
+    const filter = { recipientId: req.user._id, status: 'active' };
     const [notifications, total] = await Promise.all([
-      Notification.find({ recipientId: req.user._id })
+      Notification.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Notification.countDocuments({ recipientId: req.user._id })
+      Notification.countDocuments(filter)
     ]);
 
     const hasMore = skip + notifications.length < total;
@@ -107,15 +116,7 @@ router.put('/:id/read', authenticateToken, async (req, res) => {
       notification.readAt = new Date();
       await notification.save();
 
-      await User.updateOne(
-        { _id: req.user._id },
-        { $inc: { unreadNotificationCount: -1 } }
-      );
-
-      await User.updateOne(
-        { _id: req.user._id, unreadNotificationCount: { $lt: 0 } },
-        { $set: { unreadNotificationCount: 0 } }
-      );
+      await decrementUnreadCount(req.user._id);
     }
 
     return res.json({ success: true, notification: toPayload(notification) });
@@ -163,21 +164,112 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     await notification.deleteOne();
 
     if (wasUnread) {
-      await User.updateOne(
-        { _id: req.user._id },
-        { $inc: { unreadNotificationCount: -1 } }
-      );
-
-      await User.updateOne(
-        { _id: req.user._id, unreadNotificationCount: { $lt: 0 } },
-        { $set: { unreadNotificationCount: 0 } }
-      );
+      await decrementUnreadCount(req.user._id);
     }
 
     return res.json({ success: true });
   } catch (error) {
     console.error('Delete notification error:', error);
     return res.status(500).json({ error: 'Failed to delete notification' });
+  }
+});
+
+router.put('/:id/acknowledge', authenticateToken, async (req, res) => {
+  try {
+    const notification = await Notification.findOne({
+      _id: req.params.id,
+      recipientId: req.user._id
+    });
+
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    const wasUnread = !notification.isRead;
+    notification.status = 'acknowledged';
+    notification.acknowledgedAt = new Date();
+    if (!notification.isRead) {
+      notification.isRead = true;
+      notification.readAt = new Date();
+    }
+    await notification.save();
+
+    if (wasUnread) {
+      await decrementUnreadCount(req.user._id);
+    }
+
+    return res.json({ success: true, notification: toPayload(notification) });
+  } catch (error) {
+    console.error('Acknowledge notification error:', error);
+    return res.status(500).json({ error: 'Failed to acknowledge notification' });
+  }
+});
+
+router.put('/:id/dismiss', authenticateToken, async (req, res) => {
+  try {
+    const notification = await Notification.findOne({
+      _id: req.params.id,
+      recipientId: req.user._id
+    });
+
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    const wasUnread = !notification.isRead;
+    notification.status = 'dismissed';
+    notification.dismissedAt = new Date();
+    if (!notification.isRead) {
+      notification.isRead = true;
+      notification.readAt = new Date();
+    }
+    await notification.save();
+
+    if (wasUnread) {
+      await decrementUnreadCount(req.user._id);
+    }
+
+    return res.json({ success: true, notification: toPayload(notification) });
+  } catch (error) {
+    console.error('Dismiss notification error:', error);
+    return res.status(500).json({ error: 'Failed to dismiss notification' });
+  }
+});
+
+router.get('/history', authenticateToken, async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
+    const skip = (page - 1) * limit;
+
+    const filter = {
+      recipientId: req.user._id,
+      status: { $in: ['acknowledged', 'dismissed'] }
+    };
+
+    const [notifications, total] = await Promise.all([
+      Notification.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Notification.countDocuments(filter)
+    ]);
+
+    const hasMore = skip + notifications.length < total;
+
+    return res.json({
+      notifications,
+      pagination: {
+        page,
+        limit,
+        hasMore,
+        total
+      }
+    });
+  } catch (error) {
+    console.error('Notification history error:', error);
+    return res.status(500).json({ error: 'Failed to load notification history' });
   }
 });
 
@@ -197,6 +289,9 @@ router.put('/preferences', [
   body('messages').optional().isObject(),
   body('system').optional().isObject(),
   body('securityAlerts').optional().isObject(),
+  body('friendPosts').optional().isObject(),
+  body('top5').optional().isObject(),
+  body('partnerRequests').optional().isObject(),
   body('realtime').optional().isObject()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -229,6 +324,9 @@ router.put('/preferences', [
       messages: mergePreference('messages'),
       system: mergePreference('system'),
       securityAlerts: mergePreference('securityAlerts'),
+      friendPosts: mergePreference('friendPosts'),
+      top5: mergePreference('top5'),
+      partnerRequests: mergePreference('partnerRequests'),
       realtime: {
         enabled: typeof input?.realtime?.enabled === 'boolean'
           ? input.realtime.enabled

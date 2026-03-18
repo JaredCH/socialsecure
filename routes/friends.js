@@ -597,6 +597,38 @@ router.patch('/:id/partner', friendMutationLimiter, authenticateToken, async (re
 
     await friendship.save();
 
+    const otherId = isRequester ? friendship.recipient : friendship.requester;
+    const senderName = req.user.username || req.user.realName || 'Someone';
+
+    if (action === 'request') {
+      await createNotification({
+        recipientId: otherId,
+        senderId: req.user._id,
+        type: 'partner_request',
+        title: 'Partner/Spouse Request',
+        body: `@${senderName} sent you a partner/spouse request`,
+        data: { url: '/friends' }
+      });
+    } else if (action === 'accept') {
+      await createNotification({
+        recipientId: otherId,
+        senderId: req.user._id,
+        type: 'partner_response',
+        title: 'Partner Request Accepted',
+        body: `@${senderName} accepted your partner/spouse request`,
+        data: { url: '/friends' }
+      });
+    } else if (action === 'deny') {
+      await createNotification({
+        recipientId: otherId,
+        senderId: req.user._id,
+        type: 'partner_response',
+        title: 'Partner Request Declined',
+        body: `@${senderName} declined your partner/spouse request`,
+        data: { url: '/friends' }
+      });
+    }
+
     return res.json({
       success: true,
       partner: {
