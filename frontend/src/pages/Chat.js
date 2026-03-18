@@ -42,113 +42,19 @@ const MESSAGE_REACTIONS = [
 
 const PARTICIPANT_REFRESH_DEBOUNCE_MS = 1000;
 
-const CHAT_THEMES = [
-  {
-    key: 'classic',
-    label: 'Classic Light',
-    shell: 'bg-gradient-to-br from-slate-100 via-white to-slate-200 text-slate-900',
-    panel: 'border-slate-300/90 bg-white/75 backdrop-blur-xl shadow-[0_12px_30px_rgba(15,23,42,0.08)]',
-    panelGlass: 'border-slate-300/90 bg-white/85 backdrop-blur-2xl shadow-[0_12px_30px_rgba(15,23,42,0.10)]',
-    accent: 'border border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
-    subtle: 'border-slate-300 bg-slate-100/95 text-slate-700 hover:bg-slate-200',
-    input: 'border-slate-300 bg-white/95 text-slate-900',
-    messagesShell: 'bg-slate-50/90',
-    messageOwn: 'bg-blue-600 text-white',
-    messageOther: 'bg-white text-slate-900',
-    senderAccent: 'text-blue-700',
-    roomHover: 'hover:bg-slate-200/65'
-  },
-  {
-    key: 'midnight',
-    label: 'Midnight',
-    shell: 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100',
-    panel: 'border-cyan-700/70 bg-slate-900/70 backdrop-blur-xl shadow-[0_16px_35px_rgba(8,145,178,0.22)]',
-    panelGlass: 'border-cyan-700/70 bg-slate-900/80 backdrop-blur-2xl shadow-[0_16px_35px_rgba(8,145,178,0.26)]',
-    accent: 'border border-cyan-400 bg-cyan-400 text-slate-950 hover:bg-cyan-300',
-    subtle: 'border-cyan-800 bg-slate-800/90 text-cyan-100 hover:bg-slate-700',
-    input: 'border-cyan-700 bg-slate-950/95 text-cyan-100',
-    messagesShell: 'bg-slate-950/35',
-    messageOwn: 'bg-cyan-400/25 text-cyan-50',
-    messageOther: 'bg-slate-800/95 text-slate-100',
-    senderAccent: 'text-cyan-300',
-    roomHover: 'hover:bg-slate-800/65'
-  },
-  {
-    key: 'ocean',
-    label: 'Ocean',
-    shell: 'bg-gradient-to-br from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50',
-    panel: 'border-cyan-700 bg-cyan-900/70 backdrop-blur-xl shadow-[0_16px_35px_rgba(14,116,144,0.28)]',
-    panelGlass: 'border-cyan-600 bg-cyan-900/80 backdrop-blur-2xl shadow-[0_16px_35px_rgba(14,116,144,0.32)]',
-    accent: 'border border-cyan-300 bg-cyan-300 text-cyan-950 hover:bg-cyan-200',
-    subtle: 'border-cyan-700 bg-cyan-800/95 text-cyan-50 hover:bg-cyan-700',
-    input: 'border-cyan-600 bg-cyan-950/95 text-cyan-50',
-    messagesShell: 'bg-cyan-950/35',
-    messageOwn: 'bg-cyan-300/25 text-cyan-50',
-    messageOther: 'bg-cyan-900/95 text-cyan-50',
-    senderAccent: 'text-cyan-200',
-    roomHover: 'hover:bg-cyan-900/60'
-  },
-  {
-    key: 'terminal',
-    label: 'Terminal',
-    shell: 'bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-lime-200',
-    panel: 'border-lime-700 bg-zinc-900/75 backdrop-blur-xl shadow-[0_16px_35px_rgba(77,124,15,0.25)]',
-    panelGlass: 'border-lime-700 bg-zinc-900/85 backdrop-blur-2xl shadow-[0_16px_35px_rgba(77,124,15,0.3)]',
-    accent: 'border border-lime-500 bg-lime-500 text-zinc-950 hover:bg-lime-400',
-    subtle: 'border-lime-800 bg-zinc-800/95 text-lime-200 hover:bg-zinc-700',
-    input: 'border-lime-700 bg-zinc-950/95 text-lime-200',
-    messagesShell: 'bg-zinc-950/45',
-    messageOwn: 'bg-lime-500/25 text-lime-100',
-    messageOther: 'bg-zinc-900/95 text-lime-100',
-    senderAccent: 'text-lime-300',
-    roomHover: 'hover:bg-zinc-800/70'
-  },
-  {
-    key: 'sunset',
-    label: 'Sunset',
-    shell: 'bg-gradient-to-br from-orange-50 via-amber-50 to-rose-100 text-orange-950',
-    panel: 'border-orange-300/90 bg-white/80 backdrop-blur-xl shadow-[0_14px_32px_rgba(194,65,12,0.14)]',
-    panelGlass: 'border-orange-300/90 bg-white/88 backdrop-blur-2xl shadow-[0_14px_32px_rgba(194,65,12,0.18)]',
-    accent: 'border border-orange-600 bg-orange-600 text-white hover:bg-orange-700',
-    subtle: 'border-orange-300 bg-orange-100/95 text-orange-900 hover:bg-orange-200',
-    input: 'border-orange-300 bg-white/95 text-orange-950',
-    messagesShell: 'bg-orange-50/85',
-    messageOwn: 'bg-orange-500 text-white',
-    messageOther: 'bg-white text-orange-950',
-    senderAccent: 'text-orange-700',
-    roomHover: 'hover:bg-orange-100/80'
-  },
-  {
-    key: 'lavender',
-    label: 'Lavender',
-    shell: 'bg-gradient-to-br from-violet-50 via-fuchsia-50 to-violet-100 text-violet-950',
-    panel: 'border-violet-300/90 bg-white/80 backdrop-blur-xl shadow-[0_14px_32px_rgba(109,40,217,0.12)]',
-    panelGlass: 'border-violet-300/90 bg-white/90 backdrop-blur-2xl shadow-[0_14px_32px_rgba(109,40,217,0.16)]',
-    accent: 'border border-violet-600 bg-violet-600 text-white hover:bg-violet-700',
-    subtle: 'border-violet-300 bg-violet-100/95 text-violet-900 hover:bg-violet-200',
-    input: 'border-violet-300 bg-white/95 text-violet-950',
-    messagesShell: 'bg-violet-50/85',
-    messageOwn: 'bg-violet-500 text-white',
-    messageOther: 'bg-white text-violet-950',
-    senderAccent: 'text-violet-700',
-    roomHover: 'hover:bg-violet-100/80'
-  },
-  {
-    key: 'nightwatch',
-    label: 'Nightwatch',
-    shell: 'font-outfit bg-[#0b0e14] text-[#c5cad3]',
-    panel: 'border-[#1a1f2b] bg-[#11151d]/90 backdrop-blur-xl shadow-[0_16px_40px_rgba(0,0,0,0.5)]',
-    panelGlass: 'border-[#1a1f2b] bg-[#11151d]/95 backdrop-blur-2xl shadow-[0_16px_40px_rgba(0,0,0,0.55)]',
-    accent: 'border border-emerald-500 bg-emerald-500 text-[#0b0e14] hover:bg-emerald-400 font-semibold',
-    subtle: 'border-[#1e2430] bg-[#161b25] text-[#c5cad3] hover:bg-[#1e2430]',
-    input: 'border-[#1e2430] bg-[#0d1017] text-[#c5cad3] placeholder:text-[#4a5568]',
-    messagesShell: 'bg-[#0d1017]/60',
-    messageOwn: 'bg-emerald-500/15 text-emerald-100',
-    messageOther: 'bg-[#161b25] text-[#c5cad3]',
-    senderAccent: 'text-emerald-400',
-    roomHover: 'hover:bg-[#1a1f2b]/80'
-  }
-];
+const CHAT_STYLE = {
+  shell: 'font-outfit bg-[#0b0e14] text-[#c5cad3]',
+  panel: 'border-[#1a1f2b] bg-[#11151d]/90 backdrop-blur-xl',
+  panelGlass: 'border-[#1a1f2b] bg-[#11151d]/95 backdrop-blur-2xl',
+  accent: 'border border-emerald-500 bg-emerald-500 text-[#0b0e14] hover:bg-emerald-400 font-semibold',
+  subtle: 'border-[#1e2430] bg-[#161b25] text-[#c5cad3] hover:bg-[#1e2430]',
+  input: 'border-[#1e2430] bg-[#0d1017] text-[#c5cad3] placeholder:text-[#4a5568]',
+  messagesShell: 'bg-[#0d1017]/60',
+  messageOwn: 'bg-emerald-500/15 text-emerald-100',
+  messageOther: 'bg-[#161b25] text-[#c5cad3]',
+  senderAccent: 'text-emerald-400',
+  roomHover: 'hover:bg-[#1a1f2b]/80'
+};
 
 const getConversationLabel = (conversation) => {
   if (!conversation) return '';
@@ -190,7 +96,6 @@ const getPresenceState = (presence, referenceTime = Date.now()) => {
   };
 };
 
-const DEFAULT_CHAT_THEME = 'nightwatch';
 const LONG_PRESS_DELAY_MS = 550;
 const USER_MENU_WIDTH_PX = 240;
 const USER_MENU_HEIGHT_PX = 220;
@@ -412,21 +317,13 @@ function Chat({ isGuestMode = false }) {
       return {};
     }
   });
-  const [theme, setTheme] = useState(() => {
-    try {
-      const saved = localStorage.getItem('chatTheme');
-      if (saved && CHAT_THEMES.some((t) => t.key === saved)) return saved;
-    } catch {
-      // ignore localStorage errors
-    }
-    return DEFAULT_CHAT_THEME;
-  });
   const [roomUsers, setRoomUsers] = useState([]);
   const [roomUsersLoading, setRoomUsersLoading] = useState(false);
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+
   const [stateChatsOpen, setStateChatsOpen] = useState(false);
   const [topicsOpen, setTopicsOpen] = useState(false);
+  const [countyChatsOpen, setCountyChatsOpen] = useState(false);
   const [expandedManagedRooms, setExpandedManagedRooms] = useState({});
   const [dmUnlockedByConversation, setDmUnlockedByConversation] = useState({});
   const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(DEFAULT_UNLOCK_DURATION_MINUTES);
@@ -588,16 +485,6 @@ function Chat({ isGuestMode = false }) {
   const handleHoverPopupMouseLeave = useCallback(() => {
     handleUsernameHoverEnd();
   }, [handleUsernameHoverEnd]);
-
-  const handleThemeChange = useCallback((nextTheme) => {
-    if (!CHAT_THEMES.some((t) => t.key === nextTheme)) return;
-    setTheme(nextTheme);
-    try {
-      localStorage.setItem('chatTheme', nextTheme);
-    } catch {
-      // ignore localStorage errors
-    }
-  }, []);
 
   const handleVisibleMessageIdsChange = useCallback((nextIds) => {
     const normalizedNext = Array.isArray(nextIds)
@@ -906,6 +793,12 @@ function Chat({ isGuestMode = false }) {
       .sort(sortRoomsByDiscoveryOrder),
     [allChatRooms]
   );
+  const managedCountyRooms = useMemo(
+    () => allChatRooms
+      .filter((room) => room?.type === 'county')
+      .sort(sortRoomsByDiscoveryOrder),
+    [allChatRooms]
+  );
   const defaultLandingRooms = useMemo(
     () => allChatRooms.filter((room) => room?.defaultLanding),
     [allChatRooms]
@@ -932,12 +825,6 @@ function Chat({ isGuestMode = false }) {
     () => (Array.isArray(quickAccessRooms.cities) ? quickAccessRooms.cities : []),
     [quickAccessRooms]
   );
-
-  const activeTheme = useMemo(
-    () => CHAT_THEMES.find((themeOption) => themeOption.key === theme) || CHAT_THEMES[0],
-    [theme]
-  );
-
   const handleToggleExpandedManagedRoom = useCallback((roomId) => {
     const normalizedRoomId = normalizeId(roomId);
     if (!normalizedRoomId) return;
@@ -2050,20 +1937,6 @@ function Chat({ isGuestMode = false }) {
     };
   }, [userContextMenu.open]);
 
-  useEffect(() => {
-    if (!themeMenuOpen) return undefined;
-    const handleWindowClick = () => setThemeMenuOpen(false);
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') setThemeMenuOpen(false);
-    };
-    window.addEventListener('click', handleWindowClick);
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('click', handleWindowClick);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [themeMenuOpen]);
-
   useEffect(() => () => {
     if (participantRefreshTimerRef.current) {
       window.clearTimeout(participantRefreshTimerRef.current);
@@ -2148,7 +2021,7 @@ function Chat({ isGuestMode = false }) {
               <button
                 type="button"
                 onClick={() => handleOpenRoom(room)}
-                className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
+                className={`rounded border px-2 py-0.5 ${CHAT_STYLE.subtle}`}
               >
                 Join
               </button>
@@ -2159,7 +2032,7 @@ function Chat({ isGuestMode = false }) {
               <button
                 type="button"
                 onClick={() => handleToggleExpandedManagedRoom(roomId)}
-                className={`rounded border px-2 py-0.5 ${activeTheme.subtle}`}
+                className={`rounded border px-2 py-0.5 ${CHAT_STYLE.subtle}`}
               >
                 {isExpanded ? '−' : '+'}
               </button>
@@ -2174,7 +2047,6 @@ function Chat({ isGuestMode = false }) {
       </li>
     );
   }, [
-    activeTheme.subtle,
     childRoomsByParentId,
     expandedManagedRooms,
     handleOpenRoom,
@@ -2184,40 +2056,102 @@ function Chat({ isGuestMode = false }) {
 
   if (loadingHub) {
     return (
-      <div className={`h-full w-full grid place-items-center ${activeTheme.shell}`}>
+      <div className={`h-full w-full grid place-items-center ${CHAT_STYLE.shell}`}>
         <div className="w-full max-w-md space-y-3 px-4">
-          <div className={`h-4 w-3/5 animate-pulse rounded ${activeTheme.subtle}`} />
-          <div className={`h-3 w-4/5 animate-pulse rounded ${activeTheme.subtle}`} />
-          <div className={`h-3 w-2/5 animate-pulse rounded ${activeTheme.subtle}`} />
+          <div className={`h-4 w-3/5 animate-pulse rounded ${CHAT_STYLE.subtle}`} />
+          <div className={`h-3 w-4/5 animate-pulse rounded ${CHAT_STYLE.subtle}`} />
+          <div className={`h-3 w-2/5 animate-pulse rounded ${CHAT_STYLE.subtle}`} />
           <p className="mt-2 text-center text-sm opacity-60 font-outfit">Loading unified chat hub…</p>
         </div>
       </div>
     );
   }
 
-  const chatMenuBar = (
+  const conversationHeader = (
     <header
-      className={`mb-1 rounded-xl border shadow-sm backdrop-blur-sm lg:mb-2 ${activeTheme.panelGlass}`}
-      data-chat-menu-bar
+      className={`flex items-center gap-3 border-b px-4 py-2 ${CHAT_STYLE.panel}`}
       data-testid="chat-page-header"
     >
-      <div className="flex items-center">
-        <nav className="min-w-0 flex flex-1 items-center overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => setMobileWorkspaceOpen(false)}
-            className={[
-              mobileWorkspaceOpen ? 'inline-flex' : 'hidden',
-              `shrink-0 items-center gap-1 px-3 py-2 text-[11px] font-semibold lg:hidden opacity-70 hover:opacity-100`
-            ].join(' ')}
-            aria-label="Back to conversations"
-          >
-            <span aria-hidden="true">←</span>
-            <span>Back</span>
-          </button>
+      <button
+        type="button"
+        onClick={() => setMobileWorkspaceOpen(false)}
+        className={[
+          mobileWorkspaceOpen ? 'inline-flex' : 'hidden',
+          'shrink-0 items-center gap-1 text-[11px] font-semibold lg:hidden opacity-70 hover:opacity-100'
+        ].join(' ')}
+        aria-label="Back to conversations"
+      >
+        <span aria-hidden="true">←</span>
+        <span>Back</span>
+      </button>
+
+      {activeConversation?.type === 'dm' && activeConversationUser ? (
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden border-[#1e2430] bg-[#161b25]">
+            {activeConversationUser.avatarUrl
+              ? <img src={activeConversationUser.avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+              : String(activeConversationUser.username || 'U').slice(0, 1).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">@{activeConversationUser.username || 'user'}</p>
+            <p className="truncate text-[10px] opacity-60">direct message</p>
+          </div>
+        </div>
+      ) : activeConversation ? (
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-base" aria-hidden="true">{activeMenuIcon}</span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">#{activeMenuLabel}</p>
+            <p className="truncate text-[10px] opacity-60">{activeConversation.type || 'room'}</p>
+          </div>
+        </div>
+      ) : (
+        <span className="text-sm opacity-60">Select a conversation</span>
+      )}
+
+      <div className="ml-auto flex items-center gap-2 text-[11px]">
+        {activeConversation?.type === 'dm' && conversationPresence ? (
+          <span className="inline-flex items-center gap-1">
+            <span className={`h-2 w-2 rounded-full ${conversationPresence.tone}`} />
+            <span>{conversationPresence.label}</span>
+          </span>
+        ) : activeConversation ? (
+          <span className="inline-flex items-center gap-1 font-jetbrains">
+            <span aria-hidden="true">🟢</span>
+            <span>{roomUsers.length}</span>
+            <span aria-hidden="true">👥</span>
+          </span>
+        ) : null}
+      </div>
+    </header>
+  );
+
+  return (
+    <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${CHAT_STYLE.shell}`}>
+      <div
+        className="grid flex-1 min-h-0 grid-cols-1 gap-0 lg:grid-cols-[16rem_1fr_14rem]"
+        data-testid="chat-layout-grid"
+      >
+        {/* ─── LEFT SIDEBAR ─────────────────────────────── */}
+        <aside
+          className={[
+            mobileWorkspaceOpen ? 'hidden' : 'flex',
+            'min-h-0 flex-col border-r border-[#1a1f2b] lg:flex'
+          ].join(' ')}
+        >
+          <div className="flex items-center gap-2 px-4 py-3">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500 text-sm font-bold text-[#0b0e14]">SS</span>
+            {profile?.state ? (
+              <span className="rounded bg-[#1e2430] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">{profile.state}</span>
+            ) : null}
+          </div>
+
+          <a href="/chat" className="flex items-center gap-1 px-4 pb-2 text-sm font-semibold hover:opacity-80">
+            SocialSecure <span className="text-[10px] opacity-60">▾</span>
+          </a>
 
           <div
-            className="inline-flex shrink-0 items-center"
+            className="flex items-center border-b border-[#1a1f2b] px-2"
             data-chat-channel-tabs
             role="tablist"
             aria-label="Chat channels"
@@ -2250,19 +2184,506 @@ function Chat({ isGuestMode = false }) {
             })}
           </div>
 
-          {activeConversation?.type === 'dm' && activeConversationUser?.username ? (
-            <a
-              href={`/social?user=${encodeURIComponent(activeConversationUser.username)}`}
-              className={`shrink-0 truncate px-2 py-1 text-[11px] font-semibold ${activeTheme.senderAccent} hover:opacity-80`}
-              aria-label={`Open @${activeConversationUser.username} social page`}
-            >
-              @{activeConversationUser.username}
-            </a>
-          ) : null}
+          <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-3">
+            {activeChannel === 'dm' ? (
+              <>
+                <section className={`rounded border p-2 ${CHAT_STYLE.panelGlass}`}>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={dmQuery}
+                      onChange={(event) => setDmQuery(event.target.value)}
+                      className={`w-full rounded-lg border px-3 py-2 text-sm ${CHAT_STYLE.input}`}
+                      placeholder="Search conversations..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewDmPickerOpen((open) => !open)}
+                      className={`h-9 w-9 rounded-lg border text-lg leading-none ${CHAT_STYLE.subtle}`}
+                      aria-label="Start a new direct message"
+                    >
+                      +
+                    </button>
+                  </div>
+                  {newDmPickerOpen ? (
+                    <div className={`mt-2 rounded-lg border p-2 ${CHAT_STYLE.panel}`}>
+                      <label className="text-xs font-semibold block">New conversation</label>
+                      <input
+                        value={newDmQuery}
+                        onChange={(event) => setNewDmQuery(event.target.value)}
+                        className={`mt-1 w-full rounded border p-2 text-sm ${CHAT_STYLE.input}`}
+                        placeholder="Filter friends..."
+                      />
+                      {dmFriendsLoading ? <p className="mt-2 text-xs opacity-80">Loading friends...</p> : null}
+                      {!dmFriendsLoading && filteredFriendCandidates.length === 0 ? <p className="mt-2 text-xs opacity-80">No matching friends.</p> : null}
+                      {filteredFriendCandidates.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-xs">
+                        {filteredFriendCandidates.slice(0, MAX_DM_FRIEND_PICKER_RESULTS).map((friend) => (
+                            <li key={String(friend._id)} className="flex items-center justify-between gap-2 rounded border p-1.5">
+                              <span>@{friend.username || friend.realName || 'friend'}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleStartDM(friend._id)}
+                                className={`rounded border px-2 py-1 ${CHAT_STYLE.subtle}`}
+                              >
+                                Start
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </section>
+                <section className={`rounded border p-2 ${CHAT_STYLE.panelGlass}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Direct Messages</p>
+                  {filteredDmConversations.length === 0 ? (
+                    <p className="mt-2 text-xs opacity-80">No conversations available here yet.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1">
+                      {filteredDmConversations.map((conversation) => {
+                        const selected = String(conversation._id) === String(activeConversationId);
+                        const status = getPresenceState(getConversationUserPresence(conversation), presenceReferenceTime);
+                        return (
+                          <li key={String(conversation._id)}>
+                            <div className={`flex items-stretch rounded-xl border text-sm transition ${selected ? CHAT_STYLE.subtle : 'hover:opacity-85'}`}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  openConversationById(String(conversation._id));
+                                }}
+                                className="min-w-0 flex-1 px-2.5 py-2 text-left"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="truncate font-medium">{getConversationLabel(conversation)}</span>
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-jetbrains uppercase">
+                                    {conversation.__hasUnread ? <span className="h-2 w-2 rounded-full bg-sky-500" /> : null}
+                                    <span className={`h-2 w-2 rounded-full ${status.tone}`} />
+                                    <span>{status.label}</span>
+                                  </span>
+                                </div>
+                                <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] opacity-50">🔒 encrypted</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleDeleteConversation(String(conversation._id));
+                                }}
+                                className="shrink-0 border-l px-2 text-[10px] opacity-60 hover:opacity-100"
+                                aria-label={`Delete conversation with ${getConversationLabel(conversation)}`}
+                                title="Delete conversation"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+              </>
+            ) : (
+              <>
+                {/* ── Quick Access ────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
+                  <h3 className="text-sm font-semibold">Quick Access</h3>
+                  <div className="mt-2 space-y-1">
+                    {hubData?.zip?.current ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          openConversationById(String(hubData.zip.current._id));
+                        }}
+                        className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${CHAT_STYLE.subtle}`}
+                        data-quick-access-room={getConversationLabel(hubData.zip.current)}
+                      >
+                        {getConversationLabel(hubData.zip.current)}
+                      </button>
+                    ) : null}
+                    {relationalQuickRooms.map((room) => (
+                      <button
+                        key={String(room._id)}
+                        type="button"
+                        onClick={() => handleOpenRoom(room)}
+                        className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${CHAT_STYLE.subtle}`}
+                        data-quick-access-room={room.name}
+                      >
+                        <span className="block font-medium">{room.name}</span>
+                        <span className="block text-[10px] uppercase tracking-[0.12em] opacity-70">{room.type}</span>
+                      </button>
+                    ))}
+                    {nearbyCityQuickRooms.length > 0 ? (
+                      <div className={`mt-1 rounded-lg border p-2 ${CHAT_STYLE.panel}`}>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Nearby cities</p>
+                        <div className="mt-2 space-y-1">
+                          {nearbyCityQuickRooms.map((room) => (
+                            <button
+                              key={String(room._id)}
+                              type="button"
+                              onClick={() => handleOpenRoom(room)}
+                              className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${CHAT_STYLE.subtle}`}
+                              data-quick-access-city={room.name}
+                            >
+                              <span className="block font-medium">{room.name}</span>
+                              <span className="block text-[10px] opacity-70">
+                                {room.distanceMiles ? `${room.distanceMiles} mi away` : 'Nearby city room'}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+
+                {/* ── Find Room ───────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
+                  <h3 className="text-sm font-semibold">Find Room</h3>
+                  <div className="relative mt-2">
+                    <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs opacity-50" aria-hidden="true">🔍</span>
+                    <input
+                      value={roomQuery}
+                      onChange={(event) => setRoomQuery(event.target.value)}
+                      className={`w-full rounded-lg border py-2 pl-8 pr-3 text-sm ${CHAT_STYLE.input}`}
+                      placeholder="Search by room or location..."
+                    />
+                  </div>
+                  {allChatRoomsLoading ? <p className="mt-2 text-xs opacity-80">Loading rooms...</p> : null}
+                  {favoriteRooms.length > 0 ? (
+                    <div className="mt-2">
+                      <p className="text-[10px] font-semibold uppercase opacity-80">Favorites</p>
+                      <ul className="mt-1 space-y-1 text-xs">
+                        {favoriteRooms.slice(0, MAX_FAVORITE_ROOMS).map((room) => (
+                          <li key={`favorite-${String(room._id)}`} className="flex items-center justify-between gap-2 rounded border p-1.5">
+                            <button type="button" onClick={() => handleOpenRoom(room)} className="truncate text-left hover:underline">{room.name}</button>
+                            <button type="button" onClick={() => handleToggleFavoriteRoom(room._id)} className={`rounded border px-1.5 py-0.5 ${CHAT_STYLE.subtle}`}>Remove</button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {!roomQuery.trim() ? (
+                    <p className="mt-2 text-xs opacity-80">Search to find a room when you need one.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1 text-xs">
+                      {chatRoomsByQuery.length === 0 ? <li className="rounded border p-1.5 opacity-80">No matching rooms found.</li> : null}
+                      {chatRoomsByQuery.map((room) => {
+                        const roomId = String(room._id);
+                        const joined = Boolean(joinedRoomIds[roomId]);
+                        const favorited = Boolean(favoriteRoomIds[roomId]);
+                        return (
+                          <li key={roomId} className="rounded border p-1.5" data-room-search-result={room.name}>
+                            <div className="flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRoom(room)}
+                                aria-label={`Open ${room.name} room`}
+                                className="min-w-0 flex-1 text-left"
+                              >
+                                <p className="truncate font-semibold">{room.name}</p>
+                                <p className="truncate opacity-75">{[room.city, room.state, room.country].filter(Boolean).join(', ') || room.type}</p>
+                              </button>
+                              <div className="flex items-center gap-1">
+                                {!joined ? (
+                                  <button type="button" onClick={() => handleOpenRoom(room)} className={`rounded border px-2 py-1 ${CHAT_STYLE.subtle}`}>Join</button>
+                                ) : (
+                                  <span className="text-[10px] font-semibold opacity-80">Joined</span>
+                                )}
+                                {joined ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleFavoriteRoom(roomId)}
+                                    className={`rounded border px-2 py-1 ${CHAT_STYLE.subtle}`}
+                                  >
+                                    {favorited ? '★' : '☆'}
+                                  </button>
+                                ) : null}
+                                {canDeleteRoom(room) ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRoom(room)}
+                                    className="rounded border px-2 py-1 text-rose-700"
+                                    aria-label={`Delete ${room.name} room`}
+                                  >
+                                    Delete
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+
+                {/* ── State Rooms ─────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
+                  <button
+                    type="button"
+                    onClick={() => setStateChatsOpen((open) => !open)}
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    aria-expanded={stateChatsOpen}
+                    aria-controls="chat-state-discovery-list"
+                  >
+                    <h3 className="text-sm font-semibold">📍 State Rooms</h3>
+                    <span className="text-xs opacity-70" aria-hidden="true">{stateChatsOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {stateChatsOpen ? (
+                    <ul id="chat-state-discovery-list" className="mt-2 space-y-1 text-xs">
+                      {managedStateRooms.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
+                      {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
+                    </ul>
+                  ) : null}
+                </section>
+
+                {/* ── County Rooms ────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
+                  <button
+                    type="button"
+                    onClick={() => setCountyChatsOpen((open) => !open)}
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    aria-expanded={countyChatsOpen}
+                    aria-controls="chat-county-discovery-list"
+                  >
+                    <h3 className="text-sm font-semibold">🏛 County Rooms</h3>
+                    <span className="text-xs opacity-70" aria-hidden="true">{countyChatsOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {countyChatsOpen ? (
+                    <ul id="chat-county-discovery-list" className="mt-2 space-y-1 text-xs">
+                      {managedCountyRooms.length === 0 ? <li className="opacity-75">No county chats available.</li> : null}
+                      {managedCountyRooms.map((room) => renderManagedRoomBranch(room))}
+                    </ul>
+                  ) : null}
+                </section>
+
+                {/* ── Topics ──────────────────────────────────── */}
+                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
+                  <button
+                    type="button"
+                    onClick={() => setTopicsOpen((open) => !open)}
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    aria-expanded={topicsOpen}
+                    aria-controls="chat-topic-discovery-list"
+                  >
+                    <h3 className="text-sm font-semibold">Topics</h3>
+                    <span className="text-xs opacity-70" aria-hidden="true">{topicsOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {topicsOpen ? (
+                    <ul id="chat-topic-discovery-list" className="mt-2 space-y-1 text-xs">
+                      {managedTopicRooms.length === 0 ? <li className="opacity-75">No topic chats available.</li> : null}
+                      {managedTopicRooms.map((room) => (
+                        <React.Fragment key={String(room._id)}>
+                          {renderManagedRoomBranch(room, 0, { 'data-topic-room': room.name })}
+                        </React.Fragment>
+                      ))}
+                    </ul>
+                  ) : null}
+                </section>
+
+                {/* ── Admin Panel ─────────────────────────────── */}
+                {profile?.isAdmin ? (
+                  <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`} data-testid="chat-admin-control-panel">
+                    <button
+                      type="button"
+                      onClick={() => setAdminPanelOpen((open) => !open)}
+                      className="flex w-full items-center justify-between gap-2 text-left"
+                      aria-expanded={adminPanelOpen}
+                      aria-controls="chat-admin-control-panel-body"
+                    >
+                      <h3 className="text-sm font-semibold">Admin Panel</h3>
+                      <span className="text-xs opacity-70" aria-hidden="true">{adminPanelOpen ? '▾' : '▸'}</span>
+                    </button>
+                    <p className="mt-1 text-xs opacity-75">Add, edit, remove, and reorder state/topic rooms and nested sub-rooms.</p>
+                    {editingRoomId ? (
+                      <button
+                        type="button"
+                        onClick={resetAdminRoomForm}
+                        className={`mt-1 rounded border px-2 py-1 text-xs ${CHAT_STYLE.subtle}`}
+                      >
+                        Cancel edit
+                      </button>
+                    ) : null}
+                    {adminPanelOpen ? (
+                    <div id="chat-admin-control-panel-body">
+                    <form className="mt-2 space-y-2" onSubmit={handleSaveAdminRoom}>
+                      <input
+                        value={adminRoomForm.name}
+                        onChange={(event) => handleAdminRoomFormChange('name', event.target.value)}
+                        className={`w-full rounded-lg border p-2 text-sm ${CHAT_STYLE.input}`}
+                        placeholder="Room name"
+                        aria-label="Admin room name"
+                      />
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <select
+                          value={adminRoomForm.discoveryGroup}
+                          onChange={(event) => handleAdminRoomFormChange('discoveryGroup', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${CHAT_STYLE.input}`}
+                          aria-label="Admin room list"
+                        >
+                          {ROOM_DISCOVERY_GROUP_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={adminRoomForm.type}
+                          onChange={(event) => handleAdminRoomFormChange('type', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${CHAT_STYLE.input}`}
+                          aria-label="Admin room type"
+                        >
+                          {ROOM_DISCOVERY_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={adminRoomForm.parentRoomId}
+                          onChange={(event) => handleAdminRoomFormChange('parentRoomId', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${CHAT_STYLE.input}`}
+                          aria-label="Admin room parent"
+                        >
+                          <option value="">Top-level room</option>
+                          {roomParentOptions.map((room) => (
+                            <option key={String(room._id)} value={String(room._id)}>
+                              {`${getRoomDiscoveryGroup(room) === 'states' ? 'State' : 'Topic'} · ${room.name}`}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={adminRoomForm.state}
+                          onChange={(event) => handleAdminRoomFormChange('state', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${CHAT_STYLE.input}`}
+                          placeholder="State code (optional)"
+                          aria-label="Admin room state"
+                        />
+                        <input
+                          value={adminRoomForm.city}
+                          onChange={(event) => handleAdminRoomFormChange('city', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${CHAT_STYLE.input}`}
+                          placeholder="City label (optional)"
+                          aria-label="Admin room city"
+                        />
+                        <input
+                          value={adminRoomForm.county}
+                          onChange={(event) => handleAdminRoomFormChange('county', event.target.value)}
+                          className={`rounded-lg border p-2 text-sm ${CHAT_STYLE.input}`}
+                          placeholder="County label (optional)"
+                          aria-label="Admin room county"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={adminRoomForm.defaultLanding}
+                          onChange={(event) => handleAdminRoomFormChange('defaultLanding', event.target.checked)}
+                        />
+                        <span>Use as default room when people open /chat</span>
+                      </label>
+                      <button
+                        type="submit"
+                        className={`w-full rounded border px-3 py-2 text-sm font-semibold ${CHAT_STYLE.subtle}`}
+                        disabled={adminRoomSaving}
+                      >
+                        {adminRoomSaving ? 'Saving…' : editingRoomId ? 'Save room changes' : 'Add room'}
+                      </button>
+                    </form>
+                    <div className="mt-3 space-y-3 text-xs">
+                      {[
+                        { title: 'State room order', rooms: managedStateRooms },
+                        { title: 'Topic room order', rooms: managedTopicRooms }
+                      ].map((section) => (
+                        <div key={section.title}>
+                          <p className="font-semibold opacity-80">{section.title}</p>
+                          {section.rooms.length === 0 ? (
+                            <p className="mt-1 opacity-75">No rooms in this list.</p>
+                          ) : (
+                            <ul className="mt-1 space-y-1">
+                              {section.rooms.map((room) => {
+                                const roomId = String(room._id);
+                                const processing = adminProcessingRoomIds.has(roomId);
+                                return (
+                                  <li key={`admin-${roomId}`} className="rounded border px-2 py-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="truncate font-medium">{room.name}</p>
+                                        <p className="truncate text-[10px] uppercase opacity-70">
+                                          {room.defaultLanding ? 'Default room' : room.type}
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <button type="button" onClick={() => handleMoveRoom(roomId, 'up')} className={`rounded border px-1.5 py-0.5 ${CHAT_STYLE.subtle}`} disabled={processing}>↑</button>
+                                        <button type="button" onClick={() => handleMoveRoom(roomId, 'down')} className={`rounded border px-1.5 py-0.5 ${CHAT_STYLE.subtle}`} disabled={processing}>↓</button>
+                                        <button type="button" onClick={() => handleEditRoom(room)} className={`rounded border px-1.5 py-0.5 ${CHAT_STYLE.subtle}`}>Edit</button>
+                                        <button type="button" onClick={() => handleDeleteRoom(room)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
+                                      </div>
+                                    </div>
+                                    {(childRoomsByParentId[roomId] || []).length > 0 ? (
+                                      <ul className="mt-2 space-y-1 border-l pl-2">
+                                        {(childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder).map((childRoom) => {
+                                          const childId = String(childRoom._id);
+                                          const childProcessing = adminProcessingRoomIds.has(childId);
+                                          return (
+                                            <li key={`admin-child-${childId}`} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
+                                              <div className="min-w-0">
+                                                <p className="truncate">{childRoom.name}</p>
+                                                <p className="truncate text-[10px] uppercase opacity-70">{childRoom.type}</p>
+                                              </div>
+                                              <div className="flex items-center gap-1">
+                                                <button type="button" onClick={() => handleMoveRoom(childId, 'up')} className={`rounded border px-1.5 py-0.5 ${CHAT_STYLE.subtle}`} disabled={childProcessing}>↑</button>
+                                                <button type="button" onClick={() => handleMoveRoom(childId, 'down')} className={`rounded border px-1.5 py-0.5 ${CHAT_STYLE.subtle}`} disabled={childProcessing}>↓</button>
+                                                <button type="button" onClick={() => handleEditRoom(childRoom)} className={`rounded border px-1.5 py-0.5 ${CHAT_STYLE.subtle}`}>Edit</button>
+                                                <button type="button" onClick={() => handleDeleteRoom(childRoom)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
+                                              </div>
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    ) : null}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    </div>
+                    ) : null}
+                  </section>
+                ) : null}
+
+              </>
+            )}
+          </div>
+
+          <div className="mt-auto border-t border-[#1a1f2b] px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold border-[#1e2430] bg-[#161b25]">
+                {String(profile?.username || profile?.realName || 'U').slice(0, 1).toUpperCase()}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">@{profile?.username || 'user'}</p>
+                <p className="flex items-center gap-1 text-[10px] opacity-60">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Online
+                </p>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* ─── CENTER ───────────────────────────────────── */}
+        <section
+          className={[
+            mobileWorkspaceOpen ? 'flex' : 'hidden',
+            'min-h-0 flex-col lg:flex'
+          ].join(' ')}
+          data-testid="chat-workspace-panel"
+        >
+          {conversationHeader}
 
           {openChatTabs.length > 0 ? (
-            <>
-              <span className="mx-1 hidden h-4 w-px opacity-15 sm:inline-block" style={{ background: 'currentColor' }} />
+            <div className="flex items-center border-b border-[#1a1f2b] px-2">
               <div className="flex min-w-0 items-center gap-px" data-open-chat-tabs role="tablist" aria-label="Open chat conversations">
                 {openChatTabs.map((conversation) => {
                   const conversationId = String(conversation._id);
@@ -2298,567 +2719,27 @@ function Chat({ isGuestMode = false }) {
                   );
                 })}
               </div>
-            </>
-          ) : null}
-
-          {openChatTabs.length > 0 ? (
-            <span className="ml-auto shrink-0 px-2 py-1 text-[10px] font-medium opacity-40">
-              {openChatTabs.length}/{MAX_OPEN_CHAT_TABS}
-            </span>
-          ) : null}
-        </nav>
-
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setThemeMenuOpen((open) => !open);
-            }}
-            className="inline-flex items-center gap-1 px-3 py-2 text-[11px] font-medium opacity-60 hover:opacity-100 transition-opacity"
-            aria-label="Open chat theme menu"
-            aria-expanded={themeMenuOpen}
-          >
-            <span aria-hidden="true">🎨</span>
-            <span className="hidden sm:inline">Theme</span>
-            <span aria-hidden="true" className="text-[9px]">{themeMenuOpen ? '▴' : '▾'}</span>
-          </button>
-          {themeMenuOpen ? (
-            <div
-              className={`absolute right-0 top-[calc(100%+0.25rem)] z-[100] min-w-44 rounded-lg border p-1 text-xs shadow-xl ${activeTheme.panelGlass}`}
-              onClick={(event) => event.stopPropagation()}
-            >
-              {CHAT_THEMES.map((themeOption) => (
-                <button
-                  key={themeOption.key}
-                  type="button"
-                  onClick={() => {
-                    handleThemeChange(themeOption.key);
-                    setThemeMenuOpen(false);
-                  }}
-                  className={[
-                    'flex w-full items-center justify-between rounded px-2 py-1.5 text-left transition hover:opacity-85',
-                    theme === themeOption.key ? `${activeTheme.subtle} font-semibold` : ''
-                  ].join(' ')}
-                >
-                  <span>{themeOption.label}</span>
-                  {theme === themeOption.key ? <span>✓</span> : null}
-                </button>
-              ))}
+              <span className="ml-auto shrink-0 px-2 py-1 text-[10px] font-medium opacity-40">
+                {openChatTabs.length}/{MAX_OPEN_CHAT_TABS}
+              </span>
             </div>
           ) : null}
-        </div>
 
-        <label className="sr-only" htmlFor="chat-theme-select-fallback">Theme</label>
-        <select
-          id="chat-theme-select-fallback"
-          value={theme}
-          onChange={(event) => handleThemeChange(event.target.value)}
-          className="sr-only"
-        >
-          {CHAT_THEMES.map((themeOption) => (
-            <option key={themeOption.key} value={themeOption.key}>
-              {themeOption.label}
-            </option>
-          ))}
-        </select>
-      </div>
+          {activeConversation?.type === 'dm' ? (
+            <div
+              className="truncate px-4 py-1 text-[10px] leading-tight opacity-60 border-b border-[#1a1f2b]"
+              title={profile?.hasPGP
+                ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
+                : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
+            >
+              {profile?.hasPGP
+                ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
+                : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
+            </div>
+          ) : null}
 
-      {activeConversation?.type === 'dm' ? (
-        <div
-          className="mt-0.5 truncate text-[10px] leading-tight opacity-60"
-          title={profile?.hasPGP
-            ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
-            : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
-        >
-          {profile?.hasPGP
-            ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
-            : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
-        </div>
-      ) : null}
-    </header>
-  );
-
-  return (
-    <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${activeTheme.shell}`}>
-      <div
-        className="grid flex-1 min-h-0 grid-cols-1 gap-1 p-1 sm:gap-2 sm:p-2 md:gap-3 md:p-3 lg:grid-cols-[2.6fr_8fr_2.2fr]"
-        data-testid="chat-layout-grid"
-      >
-        <aside
-          className={[
-            mobileWorkspaceOpen ? 'hidden' : 'flex',
-            'min-h-0 flex-col rounded-2xl border p-1.5 sm:p-2 md:p-3 lg:flex',
-            activeTheme.panel
-          ].join(' ')}
-        >
-          <div className="sticky top-0 z-10 space-y-2 pb-2">
-            <h3 className="font-semibold">Conversations</h3>
-          </div>
-
-          <div className="mt-2 space-y-3 overflow-y-auto pr-1">
-            {activeChannel === 'dm' ? (
-              <>
-                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={dmQuery}
-                      onChange={(event) => setDmQuery(event.target.value)}
-                      className={`w-full rounded-lg border px-3 py-2 text-sm ${activeTheme.input}`}
-                      placeholder="Search conversations..."
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setNewDmPickerOpen((open) => !open)}
-                      className={`h-9 w-9 rounded-lg border text-lg leading-none ${activeTheme.subtle}`}
-                      aria-label="Start a new direct message"
-                    >
-                      +
-                    </button>
-                  </div>
-                  {newDmPickerOpen ? (
-                    <div className={`mt-2 rounded-lg border p-2 ${activeTheme.panel}`}>
-                      <label className="text-xs font-semibold block">New conversation</label>
-                      <input
-                        value={newDmQuery}
-                        onChange={(event) => setNewDmQuery(event.target.value)}
-                        className={`mt-1 w-full rounded border p-2 text-sm ${activeTheme.input}`}
-                        placeholder="Filter friends..."
-                      />
-                      {dmFriendsLoading ? <p className="mt-2 text-xs opacity-80">Loading friends...</p> : null}
-                      {!dmFriendsLoading && filteredFriendCandidates.length === 0 ? <p className="mt-2 text-xs opacity-80">No matching friends.</p> : null}
-                      {filteredFriendCandidates.length > 0 ? (
-                        <ul className="mt-2 space-y-1 text-xs">
-                        {filteredFriendCandidates.slice(0, MAX_DM_FRIEND_PICKER_RESULTS).map((friend) => (
-                            <li key={String(friend._id)} className="flex items-center justify-between gap-2 rounded border p-1.5">
-                              <span>@{friend.username || friend.realName || 'friend'}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleStartDM(friend._id)}
-                                className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
-                              >
-                                Start
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </section>
-                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Direct Messages</p>
-                  {filteredDmConversations.length === 0 ? (
-                    <p className="mt-2 text-xs opacity-80">No conversations available here yet.</p>
-                  ) : (
-                    <ul className="mt-2 space-y-1">
-                      {filteredDmConversations.map((conversation) => {
-                        const selected = String(conversation._id) === String(activeConversationId);
-                        const status = getPresenceState(getConversationUserPresence(conversation), presenceReferenceTime);
-                        return (
-                          <li key={String(conversation._id)}>
-                            <div className={`flex items-stretch rounded-xl border text-sm transition ${selected ? activeTheme.subtle : 'hover:opacity-85'}`}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  openConversationById(String(conversation._id));
-                                }}
-                                className="min-w-0 flex-1 px-2.5 py-2 text-left"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="truncate font-medium">{getConversationLabel(conversation)}</span>
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-jetbrains uppercase">
-                                    {conversation.__hasUnread ? <span className="h-2 w-2 rounded-full bg-sky-500" /> : null}
-                                    <span className={`h-2 w-2 rounded-full ${status.tone}`} />
-                                    <span>{status.label}</span>
-                                  </span>
-                                </div>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleDeleteConversation(String(conversation._id));
-                                }}
-                                className="shrink-0 border-l px-2 text-[10px] opacity-60 hover:opacity-100"
-                                aria-label={`Delete conversation with ${getConversationLabel(conversation)}`}
-                                title="Delete conversation"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </section>
-              </>
-            ) : (
-              <>
-                {/* ── Quick Access ────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
-                  <h3 className="text-sm font-semibold">Quick Access</h3>
-                  <div className="mt-2 space-y-1">
-                    {hubData?.zip?.current ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          openConversationById(String(hubData.zip.current._id));
-                        }}
-                        className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
-                        data-quick-access-room={getConversationLabel(hubData.zip.current)}
-                      >
-                        {getConversationLabel(hubData.zip.current)}
-                      </button>
-                    ) : null}
-                    {relationalQuickRooms.map((room) => (
-                      <button
-                        key={String(room._id)}
-                        type="button"
-                        onClick={() => handleOpenRoom(room)}
-                        className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
-                        data-quick-access-room={room.name}
-                      >
-                        <span className="block font-medium">{room.name}</span>
-                        <span className="block text-[10px] uppercase tracking-[0.12em] opacity-70">{room.type}</span>
-                      </button>
-                    ))}
-                    {nearbyCityQuickRooms.length > 0 ? (
-                      <div className={`mt-1 rounded-lg border p-2 ${activeTheme.panel}`}>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Nearby cities</p>
-                        <div className="mt-2 space-y-1">
-                          {nearbyCityQuickRooms.map((room) => (
-                            <button
-                              key={String(room._id)}
-                              type="button"
-                              onClick={() => handleOpenRoom(room)}
-                              className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${activeTheme.subtle}`}
-                              data-quick-access-city={room.name}
-                            >
-                              <span className="block font-medium">{room.name}</span>
-                              <span className="block text-[10px] opacity-70">
-                                {room.distanceMiles ? `${room.distanceMiles} mi away` : 'Nearby city room'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </section>
-
-                {/* ── Find Room ───────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
-                  <h3 className="text-sm font-semibold">Find Room</h3>
-                  <div className="relative mt-2">
-                    <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs opacity-50" aria-hidden="true">🔍</span>
-                    <input
-                      value={roomQuery}
-                      onChange={(event) => setRoomQuery(event.target.value)}
-                      className={`w-full rounded-lg border py-2 pl-8 pr-3 text-sm ${activeTheme.input}`}
-                      placeholder="Search by room or location..."
-                    />
-                  </div>
-                  {allChatRoomsLoading ? <p className="mt-2 text-xs opacity-80">Loading rooms...</p> : null}
-                  {favoriteRooms.length > 0 ? (
-                    <div className="mt-2">
-                      <p className="text-[10px] font-semibold uppercase opacity-80">Favorites</p>
-                      <ul className="mt-1 space-y-1 text-xs">
-                        {favoriteRooms.slice(0, MAX_FAVORITE_ROOMS).map((room) => (
-                          <li key={`favorite-${String(room._id)}`} className="flex items-center justify-between gap-2 rounded border p-1.5">
-                            <button type="button" onClick={() => handleOpenRoom(room)} className="truncate text-left hover:underline">{room.name}</button>
-                            <button type="button" onClick={() => handleToggleFavoriteRoom(room._id)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Remove</button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {!roomQuery.trim() ? (
-                    <p className="mt-2 text-xs opacity-80">Search to find a room when you need one.</p>
-                  ) : (
-                    <ul className="mt-2 space-y-1 text-xs">
-                      {chatRoomsByQuery.length === 0 ? <li className="rounded border p-1.5 opacity-80">No matching rooms found.</li> : null}
-                      {chatRoomsByQuery.map((room) => {
-                        const roomId = String(room._id);
-                        const joined = Boolean(joinedRoomIds[roomId]);
-                        const favorited = Boolean(favoriteRoomIds[roomId]);
-                        return (
-                          <li key={roomId} className="rounded border p-1.5" data-room-search-result={room.name}>
-                            <div className="flex items-center justify-between gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenRoom(room)}
-                                aria-label={`Open ${room.name} room`}
-                                className="min-w-0 flex-1 text-left"
-                              >
-                                <p className="truncate font-semibold">{room.name}</p>
-                                <p className="truncate opacity-75">{[room.city, room.state, room.country].filter(Boolean).join(', ') || room.type}</p>
-                              </button>
-                              <div className="flex items-center gap-1">
-                                {!joined ? (
-                                  <button type="button" onClick={() => handleOpenRoom(room)} className={`rounded border px-2 py-1 ${activeTheme.subtle}`}>Join</button>
-                                ) : (
-                                  <span className="text-[10px] font-semibold opacity-80">Joined</span>
-                                )}
-                                {joined ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleFavoriteRoom(roomId)}
-                                    className={`rounded border px-2 py-1 ${activeTheme.subtle}`}
-                                  >
-                                    {favorited ? '★' : '☆'}
-                                  </button>
-                                ) : null}
-                                {canDeleteRoom(room) ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteRoom(room)}
-                                    className="rounded border px-2 py-1 text-rose-700"
-                                    aria-label={`Delete ${room.name} room`}
-                                  >
-                                    Delete
-                                  </button>
-                                ) : null}
-                              </div>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </section>
-
-                {/* ── State Rooms ─────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
-                  <button
-                    type="button"
-                    onClick={() => setStateChatsOpen((open) => !open)}
-                    className="flex w-full items-center justify-between gap-2 text-left"
-                    aria-expanded={stateChatsOpen}
-                    aria-controls="chat-state-discovery-list"
-                  >
-                    <h3 className="text-sm font-semibold">State Rooms</h3>
-                    <span className="text-xs opacity-70" aria-hidden="true">{stateChatsOpen ? '▾' : '▸'}</span>
-                  </button>
-                  {stateChatsOpen ? (
-                    <ul id="chat-state-discovery-list" className="mt-2 space-y-1 text-xs">
-                      {managedStateRooms.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
-                      {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
-                    </ul>
-                  ) : null}
-                </section>
-
-                {/* ── Topics ──────────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`}>
-                  <button
-                    type="button"
-                    onClick={() => setTopicsOpen((open) => !open)}
-                    className="flex w-full items-center justify-between gap-2 text-left"
-                    aria-expanded={topicsOpen}
-                    aria-controls="chat-topic-discovery-list"
-                  >
-                    <h3 className="text-sm font-semibold">Topics</h3>
-                    <span className="text-xs opacity-70" aria-hidden="true">{topicsOpen ? '▾' : '▸'}</span>
-                  </button>
-                  {topicsOpen ? (
-                    <ul id="chat-topic-discovery-list" className="mt-2 space-y-1 text-xs">
-                      {managedTopicRooms.length === 0 ? <li className="opacity-75">No topic chats available.</li> : null}
-                      {managedTopicRooms.map((room) => (
-                        <React.Fragment key={String(room._id)}>
-                          {renderManagedRoomBranch(room, 0, { 'data-topic-room': room.name })}
-                        </React.Fragment>
-                      ))}
-                    </ul>
-                  ) : null}
-                </section>
-
-                {/* ── Admin Panel ─────────────────────────────── */}
-                {profile?.isAdmin ? (
-                  <section className={`rounded-xl border p-3 ${activeTheme.panelGlass}`} data-testid="chat-admin-control-panel">
-                    <button
-                      type="button"
-                      onClick={() => setAdminPanelOpen((open) => !open)}
-                      className="flex w-full items-center justify-between gap-2 text-left"
-                      aria-expanded={adminPanelOpen}
-                      aria-controls="chat-admin-control-panel-body"
-                    >
-                      <h3 className="text-sm font-semibold">Admin Panel</h3>
-                      <span className="text-xs opacity-70" aria-hidden="true">{adminPanelOpen ? '▾' : '▸'}</span>
-                    </button>
-                    <p className="mt-1 text-xs opacity-75">Add, edit, remove, and reorder state/topic rooms and nested sub-rooms.</p>
-                    {editingRoomId ? (
-                      <button
-                        type="button"
-                        onClick={resetAdminRoomForm}
-                        className={`mt-1 rounded border px-2 py-1 text-xs ${activeTheme.subtle}`}
-                      >
-                        Cancel edit
-                      </button>
-                    ) : null}
-                    {adminPanelOpen ? (
-                    <div id="chat-admin-control-panel-body">
-                    <form className="mt-2 space-y-2" onSubmit={handleSaveAdminRoom}>
-                      <input
-                        value={adminRoomForm.name}
-                        onChange={(event) => handleAdminRoomFormChange('name', event.target.value)}
-                        className={`w-full rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                        placeholder="Room name"
-                        aria-label="Admin room name"
-                      />
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <select
-                          value={adminRoomForm.discoveryGroup}
-                          onChange={(event) => handleAdminRoomFormChange('discoveryGroup', event.target.value)}
-                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                          aria-label="Admin room list"
-                        >
-                          {ROOM_DISCOVERY_GROUP_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={adminRoomForm.type}
-                          onChange={(event) => handleAdminRoomFormChange('type', event.target.value)}
-                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                          aria-label="Admin room type"
-                        >
-                          {ROOM_DISCOVERY_TYPE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={adminRoomForm.parentRoomId}
-                          onChange={(event) => handleAdminRoomFormChange('parentRoomId', event.target.value)}
-                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                          aria-label="Admin room parent"
-                        >
-                          <option value="">Top-level room</option>
-                          {roomParentOptions.map((room) => (
-                            <option key={String(room._id)} value={String(room._id)}>
-                              {`${getRoomDiscoveryGroup(room) === 'states' ? 'State' : 'Topic'} · ${room.name}`}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          value={adminRoomForm.state}
-                          onChange={(event) => handleAdminRoomFormChange('state', event.target.value)}
-                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                          placeholder="State code (optional)"
-                          aria-label="Admin room state"
-                        />
-                        <input
-                          value={adminRoomForm.city}
-                          onChange={(event) => handleAdminRoomFormChange('city', event.target.value)}
-                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                          placeholder="City label (optional)"
-                          aria-label="Admin room city"
-                        />
-                        <input
-                          value={adminRoomForm.county}
-                          onChange={(event) => handleAdminRoomFormChange('county', event.target.value)}
-                          className={`rounded-lg border p-2 text-sm ${activeTheme.input}`}
-                          placeholder="County label (optional)"
-                          aria-label="Admin room county"
-                        />
-                      </div>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={adminRoomForm.defaultLanding}
-                          onChange={(event) => handleAdminRoomFormChange('defaultLanding', event.target.checked)}
-                        />
-                        <span>Use as default room when people open /chat</span>
-                      </label>
-                      <button
-                        type="submit"
-                        className={`w-full rounded border px-3 py-2 text-sm font-semibold ${activeTheme.subtle}`}
-                        disabled={adminRoomSaving}
-                      >
-                        {adminRoomSaving ? 'Saving…' : editingRoomId ? 'Save room changes' : 'Add room'}
-                      </button>
-                    </form>
-                    <div className="mt-3 space-y-3 text-xs">
-                      {[
-                        { title: 'State room order', rooms: managedStateRooms },
-                        { title: 'Topic room order', rooms: managedTopicRooms }
-                      ].map((section) => (
-                        <div key={section.title}>
-                          <p className="font-semibold opacity-80">{section.title}</p>
-                          {section.rooms.length === 0 ? (
-                            <p className="mt-1 opacity-75">No rooms in this list.</p>
-                          ) : (
-                            <ul className="mt-1 space-y-1">
-                              {section.rooms.map((room) => {
-                                const roomId = String(room._id);
-                                const processing = adminProcessingRoomIds.has(roomId);
-                                return (
-                                  <li key={`admin-${roomId}`} className="rounded border px-2 py-1">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-medium">{room.name}</p>
-                                        <p className="truncate text-[10px] uppercase opacity-70">
-                                          {room.defaultLanding ? 'Default room' : room.type}
-                                        </p>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <button type="button" onClick={() => handleMoveRoom(roomId, 'up')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={processing}>↑</button>
-                                        <button type="button" onClick={() => handleMoveRoom(roomId, 'down')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={processing}>↓</button>
-                                        <button type="button" onClick={() => handleEditRoom(room)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Edit</button>
-                                        <button type="button" onClick={() => handleDeleteRoom(room)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
-                                      </div>
-                                    </div>
-                                    {(childRoomsByParentId[roomId] || []).length > 0 ? (
-                                      <ul className="mt-2 space-y-1 border-l pl-2">
-                                        {(childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder).map((childRoom) => {
-                                          const childId = String(childRoom._id);
-                                          const childProcessing = adminProcessingRoomIds.has(childId);
-                                          return (
-                                            <li key={`admin-child-${childId}`} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
-                                              <div className="min-w-0">
-                                                <p className="truncate">{childRoom.name}</p>
-                                                <p className="truncate text-[10px] uppercase opacity-70">{childRoom.type}</p>
-                                              </div>
-                                              <div className="flex items-center gap-1">
-                                                <button type="button" onClick={() => handleMoveRoom(childId, 'up')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={childProcessing}>↑</button>
-                                                <button type="button" onClick={() => handleMoveRoom(childId, 'down')} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`} disabled={childProcessing}>↓</button>
-                                                <button type="button" onClick={() => handleEditRoom(childRoom)} className={`rounded border px-1.5 py-0.5 ${activeTheme.subtle}`}>Edit</button>
-                                                <button type="button" onClick={() => handleDeleteRoom(childRoom)} className="rounded border px-1.5 py-0.5 text-rose-700">Remove</button>
-                                              </div>
-                                            </li>
-                                          );
-                                        })}
-                                      </ul>
-                                    ) : null}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    </div>
-                    ) : null}
-                  </section>
-                ) : null}
-
-              </>
-            )}
-          </div>
-        </aside>
-
-        <section
-          className={[
-            mobileWorkspaceOpen ? 'flex' : 'hidden',
-            'min-h-0 flex-col rounded-2xl border px-1.5 pb-1.5 pt-1 sm:px-2 sm:pb-2 md:p-3 lg:flex',
-            activeTheme.panel
-          ].join(' ')}
-          data-testid="chat-workspace-panel"
-        >
-          {chatMenuBar}
           {messagesError ? (
-            <div className={`mb-3 rounded-lg border p-2 text-sm ${activeTheme.subtle}`}>
+            <div className={`mx-3 mt-2 rounded-lg border p-2 text-sm ${CHAT_STYLE.subtle}`}>
               <span className="mr-1.5" aria-hidden="true">⚠️</span>{messagesError}
             </div>
           ) : null}
@@ -2870,7 +2751,7 @@ function Chat({ isGuestMode = false }) {
               messages={renderedMessages}
               loading={messagesLoading}
               profile={profile}
-              theme={activeTheme}
+              theme={CHAT_STYLE}
               onOpenUserMenu={openUserContextMenu}
               reactionsByMessageId={reactionByMessageId}
               reactionOptions={MESSAGE_REACTIONS}
@@ -2892,17 +2773,17 @@ function Chat({ isGuestMode = false }) {
             />
             {activeConversation?.type === 'dm' && activeConversationId && !dmUnlockedByConversation[String(activeConversationId)] ? (
               <div
-                className={`absolute inset-2 z-20 flex items-center justify-center rounded-2xl border p-3 backdrop-blur-sm sm:inset-3 sm:p-4 ${activeTheme.panelGlass}`}
+                className={`absolute inset-2 z-20 flex items-center justify-center rounded-2xl border p-3 backdrop-blur-sm sm:inset-3 sm:p-4 ${CHAT_STYLE.panelGlass}`}
                 data-testid="dm-lock-overlay"
               >
                 <form
-                  className={`w-full max-w-md rounded-2xl border bg-black/20 p-3 shadow-2xl backdrop-blur-md sm:p-4 ${activeTheme.panel}`}
+                  className={`w-full max-w-md rounded-2xl border bg-black/20 p-3 shadow-2xl backdrop-blur-md sm:p-4 ${CHAT_STYLE.panel}`}
                   onSubmit={async (event) => {
                     event.preventDefault();
                     await handleUnlockActiveDM();
                   }}
                 >
-                  <div className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border text-2xl sm:h-14 sm:w-14 sm:text-3xl ${activeTheme.subtle}`}>
+                  <div className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border text-2xl sm:h-14 sm:w-14 sm:text-3xl ${CHAT_STYLE.subtle}`}>
                     🔒
                   </div>
                   <h3 className="text-center text-base font-semibold sm:text-lg">Encrypted conversation locked</h3>
@@ -2916,7 +2797,7 @@ function Chat({ isGuestMode = false }) {
                     id="dm-unlock-password"
                     value={passwordInput}
                     onChange={(event) => setPasswordInput(event.target.value)}
-                    className={`mt-2 w-full rounded-xl px-3 py-2 text-sm ${activeTheme.input}`}
+                    className={`mt-2 w-full rounded-xl px-3 py-2 text-sm ${CHAT_STYLE.input}`}
                     placeholder="Enter password to unlock"
                     aria-label="Encryption password"
                     disabled={unlockingDm}
@@ -2928,7 +2809,7 @@ function Chat({ isGuestMode = false }) {
                     id="password-modal-unlock-duration"
                     value={String(unlockDurationMinutes)}
                     onChange={(event) => setUnlockDurationMinutes(Number(event.target.value) || DEFAULT_UNLOCK_DURATION_MINUTES)}
-                    className={`mt-2 w-full rounded-xl px-3 py-2 text-sm ${activeTheme.input}`}
+                    className={`mt-2 w-full rounded-xl px-3 py-2 text-sm ${CHAT_STYLE.input}`}
                     disabled={unlockingDm}
                   >
                     {UNLOCK_DURATION_OPTIONS.map((option) => (
@@ -2937,7 +2818,7 @@ function Chat({ isGuestMode = false }) {
                   </select>
                   <button
                     type="submit"
-                    className={`mt-4 w-full rounded-xl px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 ${activeTheme.accent}`}
+                    className={`mt-4 w-full rounded-xl px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 ${CHAT_STYLE.accent}`}
                     disabled={unlockingDm}
                   >
                     {unlockingDm ? 'Unlocking…' : 'Unlock'}
@@ -2947,9 +2828,9 @@ function Chat({ isGuestMode = false }) {
             ) : null}
           </div>
 
-          <div className="mt-1 space-y-1">
+          <div className="mt-1 space-y-1 px-3 pb-2">
             {localTyping ? (
-              <div className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-jetbrains opacity-80 ${activeTheme.subtle}`}>
+              <div className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-jetbrains opacity-80 ${CHAT_STYLE.subtle}`}>
                 <span className="animate-pulse">●</span>
                 <span className="animate-pulse [animation-delay:120ms]">●</span>
                 <span className="animate-pulse [animation-delay:240ms]">●</span>
@@ -2970,7 +2851,7 @@ function Chat({ isGuestMode = false }) {
                   ))
                 }
                 sending={sending}
-                theme={activeTheme}
+                theme={CHAT_STYLE}
                 onComposerError={(message) => toast.error(message)}
                 secondaryActionLabel={activeConversation?.type === 'dm' ? 'Lock' : ''}
                 onSecondaryAction={activeConversation?.type === 'dm' ? handleLockActiveDM : undefined}
@@ -2980,10 +2861,11 @@ function Chat({ isGuestMode = false }) {
           </div>
         </section>
 
-        <aside className={`hidden min-h-0 flex-col rounded-2xl border p-2 md:p-3 lg:flex ${activeTheme.panel}`}>
+        {/* ─── RIGHT SIDEBAR ────────────────────────────── */}
+        <aside className="hidden min-h-0 flex-col border-l border-[#1a1f2b] p-2 md:p-3 lg:flex">
           {activeConversation?.type === 'dm' ? (
             <>
-              <div className={`sticky top-0 z-10 rounded border p-3 ${activeTheme.panelGlass}`}>
+              <div className={`sticky top-0 z-10 rounded border p-3 ${CHAT_STYLE.panelGlass}`}>
                 <h3 className="font-semibold uppercase tracking-[0.1em]">Participants</h3>
                 {activeConversation ? (
                   <>
@@ -2999,7 +2881,7 @@ function Chat({ isGuestMode = false }) {
               </div>
 
               <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
-                <section className={`rounded border p-2 ${activeTheme.panelGlass}`}>
+                <section className={`rounded border p-2 ${CHAT_STYLE.panelGlass}`}>
                   <h4 className="text-sm font-semibold">People in this DM</h4>
                   <p className="mt-1 text-[11px] opacity-80">
                     Click, right-click, or long-press a user for quick actions.
@@ -3009,10 +2891,10 @@ function Chat({ isGuestMode = false }) {
                       <div className="space-y-3 p-2" aria-busy="true" aria-label="Loading users">
                         {[1, 2, 3].map((i) => (
                           <div key={`dm-user-skeleton-${i}`} className="flex items-center gap-3 animate-pulse">
-                            <span className={`inline-block h-9 w-9 shrink-0 rounded-full ${activeTheme.subtle}`} />
+                            <span className={`inline-block h-9 w-9 shrink-0 rounded-full ${CHAT_STYLE.subtle}`} />
                             <div className="flex-1 space-y-1.5">
-                              <div className={`h-3 rounded ${activeTheme.subtle}`} style={{ width: `${55 + (i * 11) % 30}%` }} />
-                              <div className={`h-2.5 rounded ${activeTheme.subtle}`} style={{ width: `${35 + (i * 7) % 25}%` }} />
+                              <div className={`h-3 rounded ${CHAT_STYLE.subtle}`} style={{ width: `${55 + (i * 11) % 30}%` }} />
+                              <div className={`h-2.5 rounded ${CHAT_STYLE.subtle}`} style={{ width: `${35 + (i * 7) % 25}%` }} />
                             </div>
                           </div>
                         ))}
@@ -3044,7 +2926,7 @@ function Chat({ isGuestMode = false }) {
                                 }
                               }}
                             >
-                              <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden ${activeTheme.subtle}`}>
+                              <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden ${CHAT_STYLE.subtle}`}>
                                 {user.avatarUrl ? (
                                   <img src={user.avatarUrl} alt={`@${user.username || 'user'}`} className="h-full w-full rounded-full object-cover" />
                                 ) : (
@@ -3082,7 +2964,7 @@ function Chat({ isGuestMode = false }) {
             </>
           ) : (
             <>
-              <div className={`sticky top-0 z-10 rounded border p-2 ${activeTheme.panelGlass}`}>
+              <div className={`sticky top-0 z-10 rounded border p-2 ${CHAT_STYLE.panelGlass}`}>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.1em]">Users in Room</h3>
                 {activeConversation ? (
                   <p className="mt-1 text-[11px] font-jetbrains opacity-80">
@@ -3102,8 +2984,8 @@ function Chat({ isGuestMode = false }) {
                   <div className="space-y-2 px-2 py-3" aria-busy="true" aria-label="Loading room users">
                     {[1, 2, 3, 4].map((i) => (
                       <div key={`user-skeleton-${i}`} className="flex items-center gap-2 animate-pulse">
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${activeTheme.subtle}`} />
-                        <span className={`h-3 rounded ${activeTheme.subtle}`} style={{ width: `${50 + (i * 13) % 35}%` }} />
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${CHAT_STYLE.subtle}`} />
+                        <span className={`h-3 rounded ${CHAT_STYLE.subtle}`} style={{ width: `${50 + (i * 13) % 35}%` }} />
                       </div>
                     ))}
                   </div>
@@ -3114,7 +2996,7 @@ function Chat({ isGuestMode = false }) {
                     {sortedRoomUsers.friends.map((user) => (
                       <li
                         key={String(user._id)}
-                        className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs ${activeTheme.roomHover}`}
+                        className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs ${CHAT_STYLE.roomHover}`}
                         onClick={(event) => openUserContextMenu(event, user)}
                         onContextMenu={(event) => openUserContextMenu(event, user)}
                       >
@@ -3139,7 +3021,7 @@ function Chat({ isGuestMode = false }) {
                     {sortedRoomUsers.others.map((user) => (
                       <li
                         key={String(user._id)}
-                        className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs ${activeTheme.roomHover}`}
+                        className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs ${CHAT_STYLE.roomHover}`}
                         onClick={(event) => openUserContextMenu(event, user)}
                         onContextMenu={(event) => openUserContextMenu(event, user)}
                       >
@@ -3167,7 +3049,7 @@ function Chat({ isGuestMode = false }) {
       </div>
       {userContextMenu.open && userContextMenu.user ? (
         <div
-          className={`fixed z-50 w-56 rounded border p-1 shadow-xl ${activeTheme.panelGlass}`}
+          className={`fixed z-50 w-56 rounded border p-1 shadow-xl ${CHAT_STYLE.panelGlass}`}
           style={{ left: userContextMenu.x, top: userContextMenu.y }}
           role="menu"
           aria-label="User actions menu"
