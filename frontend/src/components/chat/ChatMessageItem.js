@@ -249,7 +249,7 @@ function ChatMessageItem({
   const avatarNode = profileLink ? (
     <a
       href={profileLink}
-      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 ${theme.subtle}`}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1 ${theme.subtle}`}
       aria-label={isOwnMessage ? 'View your social profile' : `View @${author} social profile`}
     >
       {avatarContent}
@@ -263,7 +263,7 @@ function ChatMessageItem({
   const compactAvatarNode = profileLink ? (
     <a
       href={profileLink}
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-semibold overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 ${theme.subtle}`}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-semibold overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1 ${theme.subtle}`}
       aria-label={isOwnMessage ? 'View your social profile' : `View @${author} social profile`}
     >
       {avatarContent}
@@ -365,7 +365,7 @@ function ChatMessageItem({
       </button>
       <button
         type="button"
-        className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold text-red-600 ${theme.subtle}`}
+        className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold opacity-80 hover:opacity-100 ${theme.subtle}`}
         aria-label="Delete message"
         title="Delete message permanently"
         disabled={messageActionPending}
@@ -444,7 +444,7 @@ function ChatMessageItem({
             <div
               tabIndex={0}
               className={[
-                'relative px-2 py-0.5 sm:py-1 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1',
+                'relative px-2 py-0.5 sm:py-1 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1',
                 isOwnMessage
                   ? [
                     'rounded-[1.35rem] rounded-r-[1.35rem]',
@@ -519,7 +519,7 @@ function ChatMessageItem({
           <div className="flex items-start gap-1">
             <div
               tabIndex={0}
-              className="relative min-w-0 flex-1 rounded px-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
+              className="relative min-w-0 flex-1 rounded px-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1"
               onMouseOver={() => {
                 if (canHoverForReactions && !reactionsDisabled) {
                   openReactionPicker();

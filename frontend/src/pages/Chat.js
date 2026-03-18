@@ -2480,7 +2480,7 @@ function Chat({ isGuestMode = false }) {
                                   event.stopPropagation();
                                   handleDeleteConversation(String(conversation._id));
                                 }}
-                                className="shrink-0 border-l px-2 text-[10px] text-red-500 opacity-60 hover:opacity-100"
+                                className="shrink-0 border-l px-2 text-[10px] opacity-60 hover:opacity-100"
                                 aria-label={`Delete conversation with ${getConversationLabel(conversation)}`}
                                 title="Delete conversation"
                               >
@@ -2858,7 +2858,9 @@ function Chat({ isGuestMode = false }) {
         >
           {chatMenuBar}
           {messagesError ? (
-            <div className="mb-3 rounded border border-red-400 bg-red-50 p-2 text-sm text-red-700">{messagesError}</div>
+            <div className={`mb-3 rounded-lg border p-2 text-sm ${activeTheme.subtle}`}>
+              <span className="mr-1.5" aria-hidden="true">⚠️</span>{messagesError}
+            </div>
           ) : null}
 
           <div className="relative flex-1 min-h-0 overflow-hidden" data-testid="chat-message-panel">
@@ -2890,21 +2892,21 @@ function Chat({ isGuestMode = false }) {
             />
             {activeConversation?.type === 'dm' && activeConversationId && !dmUnlockedByConversation[String(activeConversationId)] ? (
               <div
-                className="absolute inset-2 z-20 flex items-center justify-center rounded-2xl border border-red-400/80 bg-gradient-to-br from-red-950/95 via-red-900/92 to-rose-950/95 p-3 text-red-50 shadow-[0_22px_55px_rgba(127,29,29,0.45)] backdrop-blur-sm sm:inset-3 sm:p-4"
+                className={`absolute inset-2 z-20 flex items-center justify-center rounded-2xl border p-3 backdrop-blur-sm sm:inset-3 sm:p-4 ${activeTheme.panelGlass}`}
                 data-testid="dm-lock-overlay"
               >
                 <form
-                  className="w-full max-w-md rounded-2xl border border-red-300/35 bg-black/20 p-3 shadow-2xl backdrop-blur-md sm:p-4"
+                  className={`w-full max-w-md rounded-2xl border bg-black/20 p-3 shadow-2xl backdrop-blur-md sm:p-4 ${activeTheme.panel}`}
                   onSubmit={async (event) => {
                     event.preventDefault();
                     await handleUnlockActiveDM();
                   }}
                 >
-                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-red-200/70 bg-red-500/20 text-2xl shadow-[0_0_28px_rgba(248,113,113,0.38)] sm:h-14 sm:w-14 sm:text-3xl">
+                  <div className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border text-2xl sm:h-14 sm:w-14 sm:text-3xl ${activeTheme.subtle}`}>
                     🔒
                   </div>
                   <h3 className="text-center text-base font-semibold sm:text-lg">Encrypted conversation locked</h3>
-                  <p className="mt-2 text-center text-xs text-red-100/90 sm:text-sm">
+                  <p className="mt-2 text-center text-xs opacity-80 sm:text-sm">
                     Enter your encryption password to reveal this direct message. Press Enter or use Unlock when you're ready.
                   </p>
                   <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.16em]" htmlFor="dm-unlock-password">
@@ -2914,7 +2916,7 @@ function Chat({ isGuestMode = false }) {
                     id="dm-unlock-password"
                     value={passwordInput}
                     onChange={(event) => setPasswordInput(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-red-200/45 bg-red-950/40 px-3 py-2 text-sm text-red-50 placeholder:text-red-200/60"
+                    className={`mt-2 w-full rounded-xl px-3 py-2 text-sm ${activeTheme.input}`}
                     placeholder="Enter password to unlock"
                     aria-label="Encryption password"
                     disabled={unlockingDm}
@@ -2926,7 +2928,7 @@ function Chat({ isGuestMode = false }) {
                     id="password-modal-unlock-duration"
                     value={String(unlockDurationMinutes)}
                     onChange={(event) => setUnlockDurationMinutes(Number(event.target.value) || DEFAULT_UNLOCK_DURATION_MINUTES)}
-                    className="mt-2 w-full rounded-xl border border-red-200/45 bg-red-950/40 px-3 py-2 text-sm text-red-50"
+                    className={`mt-2 w-full rounded-xl px-3 py-2 text-sm ${activeTheme.input}`}
                     disabled={unlockingDm}
                   >
                     {UNLOCK_DURATION_OPTIONS.map((option) => (
@@ -2935,7 +2937,7 @@ function Chat({ isGuestMode = false }) {
                   </select>
                   <button
                     type="submit"
-                    className="mt-4 w-full rounded-xl border border-red-100/70 bg-red-500 px-3 py-2 text-sm font-semibold text-white shadow-[0_0_24px_rgba(248,113,113,0.45)] transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-70"
+                    className={`mt-4 w-full rounded-xl px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 ${activeTheme.accent}`}
                     disabled={unlockingDm}
                   >
                     {unlockingDm ? 'Unlocking…' : 'Unlock'}
@@ -3004,7 +3006,17 @@ function Chat({ isGuestMode = false }) {
                   </p>
                   <div className="mt-2 rounded border overflow-auto h-full min-h-[20rem]">
                     {roomUsersLoading ? (
-                      <p className="p-2 text-xs opacity-80">Loading users...</p>
+                      <div className="space-y-3 p-2">
+                        {[1, 2, 3].map((i) => (
+                          <div key={`dm-user-skeleton-${i}`} className="flex items-center gap-3 animate-pulse">
+                            <span className={`inline-block h-9 w-9 shrink-0 rounded-full ${activeTheme.subtle}`} />
+                            <div className="flex-1 space-y-1.5">
+                              <div className={`h-3 rounded ${activeTheme.subtle}`} style={{ width: `${55 + (i * 11) % 30}%` }} />
+                              <div className={`h-2.5 rounded ${activeTheme.subtle}`} style={{ width: `${35 + (i * 7) % 25}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     ) : roomUsers.length === 0 ? (
                       <p className="p-2 text-xs opacity-80">No users to display.</p>
                     ) : (
@@ -3087,7 +3099,14 @@ function Chat({ isGuestMode = false }) {
 
               <div className="mt-2 min-h-0 flex-1 overflow-y-auto" data-testid="room-user-list">
                 {roomUsersLoading ? (
-                  <p className="px-2 py-3 text-xs opacity-80">Loading users…</p>
+                  <div className="space-y-2 px-2 py-3">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={`user-skeleton-${i}`} className="flex items-center gap-2 animate-pulse">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${activeTheme.subtle}`} />
+                        <span className={`h-3 rounded ${activeTheme.subtle}`} style={{ width: `${50 + (i * 13) % 35}%` }} />
+                      </div>
+                    ))}
+                  </div>
                 ) : roomUsers.length === 0 ? (
                   <p className="px-2 py-3 text-xs opacity-80">No users to display.</p>
                 ) : (
@@ -3095,7 +3114,7 @@ function Chat({ isGuestMode = false }) {
                     {sortedRoomUsers.friends.map((user) => (
                       <li
                         key={String(user._id)}
-                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-black/5"
+                        className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs ${activeTheme.roomHover}`}
                         onClick={(event) => openUserContextMenu(event, user)}
                         onContextMenu={(event) => openUserContextMenu(event, user)}
                       >
@@ -3120,7 +3139,7 @@ function Chat({ isGuestMode = false }) {
                     {sortedRoomUsers.others.map((user) => (
                       <li
                         key={String(user._id)}
-                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-black/5"
+                        className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs ${activeTheme.roomHover}`}
                         onClick={(event) => openUserContextMenu(event, user)}
                         onContextMenu={(event) => openUserContextMenu(event, user)}
                       >
