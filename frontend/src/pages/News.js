@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { newsAPI } from '../utils/api';
+import { getAuthToken, newsAPI } from '../utils/api';
 import WeatherBar from '../components/news/WeatherBar';
 import FilterBar from '../components/news/FilterBar';
 import AlgorithmicFeed from '../components/news/AlgorithmicFeed';
@@ -58,6 +58,7 @@ function News({ isGuestMode = false }) {
   const [settingsOpen, setSettingsOpen]       = useState(false);
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [desktopArticlePreview, setDesktopArticlePreview] = useState(null);
+  const [sessionError, setSessionError] = useState('');
   const desktopFeedRef = useRef(null);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
@@ -86,7 +87,21 @@ function News({ isGuestMode = false }) {
     }
 }, []);
 
-  useEffect(() => { bootstrap(); }, [bootstrap]);
+  useEffect(() => {
+    if (isGuestMode) {
+      setSessionError('');
+      bootstrap();
+      return;
+    }
+
+    if (!getAuthToken()) {
+      setSessionError('Your login session was lost or browser storage/cookies are disabled. Please log in again and enable browser storage/cookies.');
+      return;
+    }
+
+    setSessionError('');
+    bootstrap();
+  }, [bootstrap, isGuestMode]);
 
   // ── Category nav ───────────────────────────────────────────────────────────
   const handleToggleCategory = (key) => {
@@ -280,6 +295,17 @@ function News({ isGuestMode = false }) {
   const followedTeams = useMemo(() => preferences?.followedSportsTeams || [], [preferences]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
+  if (sessionError) {
+    return (
+      <div className="mx-auto my-10 w-full max-w-2xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
+        <p>{sessionError}</p>
+        <a href="/login" className="mt-2 inline-flex rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">
+          Go to login
+        </a>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* ─── Mobile layout (< lg) ──────────────────────────────────────────── */}

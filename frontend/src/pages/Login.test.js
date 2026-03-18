@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import Login from './Login';
 import { authAPI, evaluateRegisterPassword, getAuthToken } from '../utils/api';
 
@@ -56,6 +57,7 @@ describe('Login mobile-first layout', () => {
   };
 
   beforeEach(() => {
+    jest.clearAllMocks();
     mockNavigate.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -149,5 +151,33 @@ describe('Login mobile-first layout', () => {
       password: 'password123'
     });
     expect(mockNavigate).toHaveBeenCalledWith('/news');
+  });
+
+  it('does not redirect when login succeeds but auth token storage is unavailable', async () => {
+    authAPI.login.mockResolvedValueOnce({
+      data: {
+        token: 'token',
+        user: { onboardingStatus: 'pending' }
+      }
+    });
+    getAuthToken.mockReturnValueOnce(null);
+
+    await renderLogin();
+
+    const identifierInput = container.querySelector('input[name="identifier"]');
+    const passwordInput = container.querySelector('input[name="password"]');
+    const form = container.querySelector('form');
+
+    await setInputValue(identifierInput, 'demo-user');
+    await setInputValue(passwordInput, 'password123');
+
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    const expectedMessage = 'Login succeeded but browser storage/cookies are disabled or blocked. Enable them and try again.';
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(expectedMessage);
+    expect(toast.error).toHaveBeenCalledWith(expectedMessage);
   });
 });

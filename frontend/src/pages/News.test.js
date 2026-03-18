@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import News from './News';
-import { newsAPI } from '../utils/api';
+import { getAuthToken, newsAPI } from '../utils/api';
 
 jest.mock('../utils/api', () => ({
   newsAPI: {
@@ -31,7 +31,8 @@ jest.mock('../utils/api', () => ({
     updateWeatherLocations: jest.fn(),
     setWeatherLocationPrimary: jest.fn(),
     getPrefetchStatus: jest.fn()
-  }
+  },
+  getAuthToken: jest.fn()
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -173,6 +174,7 @@ describe('News inline preferences updates', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    getAuthToken.mockReturnValue('token');
     setupApiMocks();
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -207,6 +209,17 @@ describe('News inline preferences updates', () => {
       rssSources: [expect.objectContaining({ sourceId: 'src-1', enabled: false })]
     }));
     expect(newsAPI.getFeed).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows session guidance instead of rendering a blank news page when token is missing', async () => {
+    getAuthToken.mockReturnValueOnce(null);
+
+    await renderNews();
+
+    const expectedMessage = 'Your login session was lost or browser storage/cookies are disabled. Please log in again and enable browser storage/cookies.';
+    expect(newsAPI.getPreferences).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(expectedMessage);
+    expect(container.querySelector('a[href="/login"]')?.textContent).toContain('Go to login');
   });
 
   it('toggles a catalog source without DB id using provider identifier', async () => {
