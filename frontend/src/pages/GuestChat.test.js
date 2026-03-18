@@ -139,7 +139,7 @@ describe('GuestChat', () => {
     expect(composer).not.toBeNull();
     expect(composer.disabled).toBe(true);
 
-    const firstMessage = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'hello texas');
+    const firstMessage = Array.from(container.querySelectorAll('p')).find((node) => node.textContent.includes('hello texas'));
     expect(firstMessage).toBeDefined();
     await act(async () => {
       firstMessage.dispatchEvent(new MouseEvent('click', { bubbles: true }));

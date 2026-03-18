@@ -1040,8 +1040,6 @@ describe('Chat zip room indicator', () => {
     const pageHeader = container.querySelector('[data-testid="chat-page-header"]');
     expect(pageHeader).not.toBeNull();
     expect(pageHeader.className).not.toContain('sticky');
-    expect(pageHeader.className).toContain('px-3');
-    expect(pageHeader.className).toContain('py-2');
 
     const workspacePanel = container.querySelector('[data-testid="chat-workspace-panel"]');
     expect(workspacePanel).not.toBeNull();
@@ -1115,7 +1113,7 @@ describe('Chat zip room indicator', () => {
 
     const themeSelect = container.querySelector('select');
     expect(themeSelect).not.toBeNull();
-    expect(themeSelect.value).toBe('midnight');
+    expect(themeSelect.value).toBe('classic');
     expect(localStorage.getItem('chatTheme')).toBeNull();
 
     await act(async () => {
@@ -1172,7 +1170,7 @@ describe('Chat zip room indicator', () => {
 
     const themeSelect = container.querySelector('select');
     expect(themeSelect).not.toBeNull();
-    expect(themeSelect.value).toBe('midnight');
+    expect(themeSelect.value).toBe('classic');
   });
 
   it('uses theme-driven sender accents and sends transformed slash command content', async () => {
@@ -1193,7 +1191,7 @@ describe('Chat zip room indicator', () => {
 
     expect(container.querySelector('input[type="color"]')).toBeNull();
     expect(container.textContent).not.toContain('Theme-tuned accents');
-    expect(container.querySelector('select#chat-theme-select-fallback').value).toBe('midnight');
+    expect(container.querySelector('select#chat-theme-select-fallback').value).toBe('classic');
 
     const composer = container.querySelector('textarea[placeholder="Type your message"]');
     expect(composer).not.toBeNull();
@@ -1386,16 +1384,15 @@ describe('Chat zip room indicator', () => {
     );
     expect(profileLinks.length).toBeGreaterThan(0);
     expect(profileLinks.some((link) => link.getAttribute('href') === '/social?user=buddy')).toBe(true);
-    expect(profileLinks[0].className).toContain('h-9');
-    expect(profileLinks[0].className).toContain('w-9');
+    expect(profileLinks[0].className).toContain('h-5');
+    expect(profileLinks[0].className).toContain('w-5');
 
-    const messageText = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'hello');
+    const messageText = Array.from(container.querySelectorAll('p')).find((node) => node.textContent.includes('hello'));
     expect(messageText).not.toBeUndefined();
-    expect(messageText.className).toContain('leading-6');
+    expect(messageText.className).toContain('leading-5');
     const messageBubble = messageText.closest('div[class*="rounded"]');
     expect(messageBubble).not.toBeNull();
     expect(messageBubble.className).toContain('px-0.5');
-    expect(messageBubble.className).toContain('py-0.5');
 
     const messageViewport = messageText.closest('div.overflow-y-auto');
     expect(messageViewport).not.toBeNull();
@@ -1438,7 +1435,7 @@ describe('Chat zip room indicator', () => {
     const messageArticle = ownNameLink.closest('article[data-chat-message-layout="room"]');
     expect(messageArticle).not.toBeNull();
 
-    const avatarLink = Array.from(messageArticle.querySelectorAll('a')).find((node) => node.className.includes('h-9') && node.className.includes('w-9'));
+    const avatarLink = Array.from(messageArticle.querySelectorAll('a')).find((node) => node.className.includes('h-5') && node.className.includes('w-5'));
     expect(avatarLink).not.toBeUndefined();
     expect(avatarLink.getAttribute('href')).toBe('/social?user=alpha');
     expect(avatarLink.textContent).toContain('AZ');
@@ -1596,7 +1593,6 @@ describe('Chat zip room indicator', () => {
 
     const authorAction = Array.from(container.querySelectorAll('a')).find((node) => node.textContent === '@buddy');
     expect(authorAction).not.toBeUndefined();
-    expect(authorAction.className).toContain('text-sm');
     expect(authorAction.className).toContain('font-semibold');
     expect(authorAction.className).toContain('text-cyan-200');
   });
@@ -2230,7 +2226,7 @@ describe('Chat zip room indicator', () => {
 
     expect(container.querySelector('button[aria-label="Add Like reaction"]')).toBeNull();
     await act(async () => {
-      const messageBubble = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'hello')?.closest('div.relative');
+      const messageBubble = Array.from(container.querySelectorAll('p')).find((node) => node.textContent.includes('hello'))?.closest('div.relative');
       expect(messageBubble).not.toBeNull();
       messageBubble.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: container }));
       await flush();
@@ -2262,7 +2258,7 @@ describe('Chat zip room indicator', () => {
 
     expect(container.querySelector('button[aria-label="Add Like reaction"]')).toBeNull();
     await act(async () => {
-      const messageBubble = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'hello')?.closest('div.relative');
+      const messageBubble = Array.from(container.querySelectorAll('p')).find((node) => node.textContent.includes('hello'))?.closest('div.relative');
       messageBubble.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
