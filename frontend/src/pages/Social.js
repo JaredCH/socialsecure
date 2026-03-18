@@ -719,10 +719,10 @@ const Social = () => {
   // Sync activeHeroTab with URL tab query parameter (for DotNav navigation)
   useEffect(() => {
     const tabFromUrl = new URLSearchParams(location.search).get('tab');
-    if (tabFromUrl && SOCIAL_HERO_TABS.some((t) => t.id === tabFromUrl) && tabFromUrl !== activeHeroTab) {
-      setActiveHeroTab(tabFromUrl);
+    if (tabFromUrl && SOCIAL_HERO_TABS.some((t) => t.id === tabFromUrl)) {
+      setActiveHeroTab((prev) => (prev === tabFromUrl ? prev : tabFromUrl));
     }
-  }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [location.search]);
   const [heroEditingOpen, setHeroEditingOpen] = useState(false);
   const [draftSocialPreferences, setDraftSocialPreferences] = useState(null);
   const [socialConfigs, setSocialConfigs] = useState([]);

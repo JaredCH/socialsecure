@@ -141,7 +141,7 @@ function loadState() {
       return parsed;
     }
   } catch {
-    // ignore
+    // Gracefully handle corrupted data, quota exceeded, or restricted storage access
   }
   return null;
 }
@@ -150,7 +150,7 @@ function saveState(dock, assigned) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ dock, assigned }));
   } catch {
-    // ignore
+    // Gracefully handle quota exceeded or restricted storage access
   }
 }
 
@@ -220,11 +220,14 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
   const location = useLocation();
 
   // Resolve the user being viewed from URL query params or explicit prop
+  // Resolve the user being viewed from URL query params or explicit prop.
+  // Checks ?user= and ?username= query params, and /resume/:username path pattern.
   const viewingUser = useMemo(() => {
     if (viewingUserProp) return viewingUserProp;
     const params = new URLSearchParams(location.search);
     const queryUser = String(params.get('user') || params.get('username') || '').trim();
     if (queryUser) return queryUser;
+    // Resume pages use /resume/:username path pattern
     const resumeMatch = location.pathname.match(/^\/resume\/([^/?#]+)/i);
     if (resumeMatch?.[1]) return decodeURIComponent(resumeMatch[1]);
     return '';

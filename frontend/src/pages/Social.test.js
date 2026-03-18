@@ -162,6 +162,7 @@ describe('Social page hero background rendering', () => {
   };
 
   beforeEach(() => {
+    navigateRef = null;
     jest.clearAllMocks();
     require('../utils/api').getAuthToken.mockReturnValue('token');
     localStorage.setItem('token', 'token');

@@ -167,12 +167,11 @@ describe('DotNav navigation system', () => {
 
     // Click the first nav button (Main/Feed)
     const mainBtn = document.querySelector('.dotnav-nbtn[aria-label="Main"]');
-    if (mainBtn) {
-      await act(async () => { mainBtn.click(); });
-      expect(events.length).toBe(1);
-      expect(events[0].key).toBe('main');
-      expect(events[0].route).toBe('/social');
-    }
+    expect(mainBtn).not.toBeNull();
+    await act(async () => { mainBtn.click(); });
+    expect(events.length).toBe(1);
+    expect(events[0].key).toBe('main');
+    expect(events[0].route).toBe('/social');
 
     window.removeEventListener('VoidNavTrigger', handler);
   });
