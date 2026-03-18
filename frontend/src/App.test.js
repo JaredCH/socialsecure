@@ -103,7 +103,7 @@ describe('App navbar features dropdown', () => {
     jest.clearAllMocks();
   });
 
-  it('moves discover, calendar, resume, and settings links out of the main nav', async () => {
+  it('moves find friends, calendar, resume, and settings links out of the main nav', async () => {
     localStorage.setItem('token', 'token');
 
     await renderApp();
@@ -117,7 +117,7 @@ describe('App navbar features dropdown', () => {
     const navText = mainNav.textContent;
     expect(navText).not.toContain('Calendar');
     expect(navText).not.toContain('Resume');
-    expect(navText).not.toContain('Discover');
+    expect(navText).not.toContain('Find Friends');
     expect(navText).not.toContain('Control Panel');
     expect(navText).not.toContain('User Settings');
     expect(navText).not.toContain('Refer Friend');
@@ -160,7 +160,7 @@ describe('App navbar features dropdown', () => {
     const mainNav = container.querySelector('#main-nav-menu');
     expect(mainNav).not.toBeNull();
     expect(mainNav.textContent).not.toContain('Calendar');
-    expect(mainNav.textContent).toContain('Discover');
+    expect(mainNav.textContent).toContain('Find Friends');
     expect(mainNav.textContent).not.toContain('Resume');
   });
 
@@ -172,7 +172,7 @@ describe('App navbar features dropdown', () => {
     const mainNav = container.querySelector('#main-nav-menu');
     expect(mainNav).not.toBeNull();
     expect(mainNav.textContent).not.toContain('Calendar');
-    expect(mainNav.textContent).not.toContain('Discover');
+    expect(mainNav.textContent).not.toContain('Find Friends');
     expect(mainNav.textContent).not.toContain('Resume');
   });
 
@@ -247,6 +247,16 @@ describe('App navbar features dropdown', () => {
     expect(main.className).toContain('overflow-hidden');
     expect(main.className).not.toContain('overflow-y-auto');
     expect(container.textContent).toContain('News Page');
+  });
+
+  it('redirects legacy /discover URLs to /find-friends', async () => {
+    window.history.pushState({}, '', '/discover?source=legacy');
+
+    await renderApp();
+
+    expect(container.textContent).toContain('Discovery Page');
+    expect(window.location.pathname).toBe('/find-friends');
+    expect(window.location.search).toBe('?source=legacy');
   });
 
   it('renders guest-safe route views for social/news/chat', async () => {

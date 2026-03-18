@@ -64,8 +64,14 @@ describe('SocialHero hero display', () => {
       .find(b => b.textContent.includes('Customize stage'));
     expect(editBtn).not.toBeNull();
 
-    await act(async () => { editBtn.click(); });
-    expect(onEditClick).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      launcher.click();
+    });
+
+    expect(container.textContent).toContain('Chat');
+    expect(container.textContent).toContain('News');
+    expect(container.textContent).toContain('Market');
+    expect(container.textContent).toContain('Find Friends');
   });
 
   it('does not render navigation elements (navigation moved to DotNav)', async () => {

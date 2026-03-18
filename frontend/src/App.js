@@ -563,7 +563,7 @@ function App() {
                 {canUseProtectedFeatures && <Link to="/market" onClick={closeNavMenus} className={navLinkClass}>Market</Link>}
                 {canUseProtectedFeatures && <Link to="/maps" onClick={closeNavMenus} className={navLinkClass}>Maps</Link>}
                 {isGuest && <Link to="/social" onClick={closeNavMenus} className={navLinkClass}>Social</Link>}
-                {isGuest && <Link to="/discover" onClick={closeNavMenus} className={navLinkClass}>Discover</Link>}
+                {isGuest && <Link to="/find-friends" onClick={closeNavMenus} className={navLinkClass}>Find Friends</Link>}
                 {isGuest && <Link to="/chat" onClick={closeNavMenus} className={navLinkClass}>Chat</Link>}
                 {isGuest && <Link to="/news" onClick={closeNavMenus} className={navLinkClass}>News</Link>}
                 {isAuthenticated && onboardingRequired && <Link to="/onboarding" onClick={closeNavMenus} className={navEmphasisLinkClass}>Onboarding</Link>}
@@ -586,7 +586,7 @@ function App() {
                     navLinks={[
                       { to: '/calendar', label: 'Calendar' },
                       { to: '/resume', label: 'Resume' },
-                      { to: '/discover', label: 'Discover' },
+                      { to: '/find-friends', label: 'Find Friends' },
                       { to: '/friends', label: `Friends ${friendPresence.online} | ${friendPresence.offline}` },
                       ...(user?.isAdmin ? [{ to: '/control-panel', label: 'Control Panel' }] : []),
                       { to: '/settings', label: 'User Settings' },
@@ -807,7 +807,7 @@ function App() {
               )}
             />
             <Route
-              path="/discover"
+              path="/find-friends"
               element={isAuthenticated ? (
                 <ProtectedRoute
                   isAuthenticated={isAuthenticated}
@@ -819,6 +819,7 @@ function App() {
                 </ProtectedRoute>
               ) : <Discovery />}
             />
+            <Route path="/discover" element={<LegacyDiscoverRedirect />} />
             <Route
               path="/social"
               element={isAuthenticated ? (
