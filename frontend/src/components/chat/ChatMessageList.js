@@ -162,7 +162,17 @@ function ChatMessageList({
         ) : null}
 
         {loading ? (
-          <p className="text-sm opacity-80">Loading messages...</p>
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={`skeleton-${i}`} className="flex items-start gap-2 animate-pulse">
+                <span className={`inline-block h-8 w-8 shrink-0 rounded-full ${theme.subtle}`} />
+                <div className="flex-1 space-y-1.5">
+                  <div className={`h-3 rounded ${theme.subtle}`} style={{ width: `${40 + (i * 7) % 40}%` }} />
+                  <div className={`h-3 rounded ${theme.subtle}`} style={{ width: `${55 + (i * 11) % 30}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : messages.length === 0 ? (
           <p className="text-sm opacity-80">No messages yet.</p>
         ) : (

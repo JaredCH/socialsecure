@@ -132,6 +132,21 @@ const CHAT_THEMES = [
     messageOther: 'bg-white text-violet-950',
     senderAccent: 'text-violet-700',
     roomHover: 'hover:bg-violet-100/80'
+  },
+  {
+    key: 'nightwatch',
+    label: 'Nightwatch',
+    shell: 'font-outfit bg-[#0b0e14] text-[#c5cad3]',
+    panel: 'border-[#1a1f2b] bg-[#11151d]/90 backdrop-blur-xl shadow-[0_16px_40px_rgba(0,0,0,0.5)]',
+    panelGlass: 'border-[#1a1f2b] bg-[#11151d]/95 backdrop-blur-2xl shadow-[0_16px_40px_rgba(0,0,0,0.55)]',
+    accent: 'border border-emerald-500 bg-emerald-500 text-[#0b0e14] hover:bg-emerald-400 font-semibold',
+    subtle: 'border-[#1e2430] bg-[#161b25] text-[#c5cad3] hover:bg-[#1e2430]',
+    input: 'border-[#1e2430] bg-[#0d1017] text-[#c5cad3] placeholder:text-[#4a5568]',
+    messagesShell: 'bg-[#0d1017]/60',
+    messageOwn: 'bg-emerald-500/15 text-emerald-100',
+    messageOther: 'bg-[#161b25] text-[#c5cad3]',
+    senderAccent: 'text-emerald-400',
+    roomHover: 'hover:bg-[#1a1f2b]/80'
   }
 ];
 
@@ -175,7 +190,7 @@ const getPresenceState = (presence, referenceTime = Date.now()) => {
   };
 };
 
-const DEFAULT_CHAT_THEME = 'classic';
+const DEFAULT_CHAT_THEME = 'nightwatch';
 const LONG_PRESS_DELAY_MS = 550;
 const USER_MENU_WIDTH_PX = 240;
 const USER_MENU_HEIGHT_PX = 220;
@@ -2169,8 +2184,13 @@ function Chat({ isGuestMode = false }) {
 
   if (loadingHub) {
     return (
-      <div className="h-full w-full grid place-items-center bg-white">
-        <div className="text-sm opacity-80">Loading unified chat hub...</div>
+      <div className={`h-full w-full grid place-items-center ${activeTheme.shell}`}>
+        <div className="w-full max-w-md space-y-3 px-4">
+          <div className={`h-4 w-3/5 animate-pulse rounded ${activeTheme.subtle}`} />
+          <div className={`h-3 w-4/5 animate-pulse rounded ${activeTheme.subtle}`} />
+          <div className={`h-3 w-2/5 animate-pulse rounded ${activeTheme.subtle}`} />
+          <p className="mt-2 text-center text-sm opacity-60 font-outfit">Loading unified chat hub&hellip;</p>
+        </div>
       </div>
     );
   }
