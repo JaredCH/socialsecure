@@ -70,16 +70,7 @@ const normalizeConfigName = (name, fallback = 'Untitled design') => {
 
 const cloneValue = (value) => JSON.parse(JSON.stringify(value));
 
-const logSocialPageEvent = ({ eventType, userId, req, metadata = {} }) => {
-  console.log('[social-page-event]', JSON.stringify({
-    eventType,
-    userId: userId ? String(userId) : null,
-    metadata,
-    ipAddress: req.ip,
-    userAgent: req.get('user-agent') || null,
-    createdAt: new Date().toISOString()
-  }));
-};
+const logSocialPageEvent = () => {};
 
 const serializeConfig = (configDoc, viewerId = null) => ({
   _id: String(configDoc._id),

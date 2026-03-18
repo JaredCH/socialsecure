@@ -231,7 +231,7 @@ async function ingestSportsTeamNews(teamId) {
       inserted++;
     } catch (err) {
       if (err.code !== 11000) {
-        console.error(`[sports-ingest] ${teamId} item error:`, err.message);
+        // Continue ingesting remaining items.
       } else {
         duplicates++;
       }
@@ -264,11 +264,9 @@ async function ingestAllFollowedTeams() {
 
   const teamIds = [...teamIdSet];
   if (!teamIds.length) {
-    console.log('[sports-ingest] No followed teams found — skipping');
     return [];
   }
 
-  console.log(`[sports-ingest] Ingesting news for ${teamIds.length} distinct teams`);
   const results = [];
 
   for (const teamId of teamIds) {
@@ -278,13 +276,9 @@ async function ingestAllFollowedTeams() {
       // Rate limit: 1 req/sec avg
       await new Promise(r => setTimeout(r, 900 + Math.random() * 300));
     } catch (err) {
-      console.error(`[sports-ingest] Error for ${teamId}:`, err.message);
       results.push({ teamId, error: err.message });
     }
   }
-
-  const totalInserted = results.reduce((s, r) => s + (r.inserted || 0), 0);
-  console.log(`[sports-ingest] Complete: ${totalInserted} inserted across ${teamIds.length} teams`);
 
   return results;
 }

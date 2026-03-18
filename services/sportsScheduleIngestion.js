@@ -330,7 +330,6 @@ const fetchGroupedSportSchedules = async (sport, options = {}) => {
     try {
       return await fetchLeagueSchedules(league, options);
     } catch (error) {
-      console.error(`[sports-ingestion] ${sport}/${league} fetch failed:`, error.message);
       return [];
     }
   }));
@@ -405,7 +404,7 @@ const upsertSchedules = async (schedules) => {
       );
       upserts += 1;
     } catch (error) {
-      console.error(`[sports-ingestion] Error upserting schedule:`, error.message);
+      // Continue attempting remaining upserts.
     }
   }
   
@@ -432,8 +431,6 @@ const cleanupOldSchedules = async () => {
  * Fetches and stores sports schedules
  */
 const runSportsScheduleIngestion = async ({ now = new Date() } = {}) => {
-  console.log(`[sports-ingestion] Starting sports schedule ingestion at ${now.toISOString()}`);
-  
   const results = {
     sports: {},
     leagues: {},
@@ -442,10 +439,7 @@ const runSportsScheduleIngestion = async ({ now = new Date() } = {}) => {
   };
   
   try {
-    const removedLegacyMocks = await cleanupLegacyMockSchedules();
-    if (removedLegacyMocks > 0) {
-      console.log(`[sports-ingestion] Removed ${removedLegacyMocks} legacy mock schedule records`);
-    }
+    await cleanupLegacyMockSchedules();
 
     const sportFetchers = {
       football: fetchFootballSchedules,
@@ -473,8 +467,7 @@ const runSportsScheduleIngestion = async ({ now = new Date() } = {}) => {
     results.totalUpserts = upserts;
     
     // Clean up old records
-    const deleted = await cleanupOldSchedules();
-    console.log(`[sports-ingestion] Cleaned up ${deleted} old schedule records`);
+    await cleanupOldSchedules();
     
     // Update health record
     await EventSourceHealth.updateOne(
@@ -491,9 +484,7 @@ const runSportsScheduleIngestion = async ({ now = new Date() } = {}) => {
       { upsert: true }
     );
     
-    console.log(`[sports-ingestion] Completed: ${upserts} schedules upserted`);
   } catch (error) {
-    console.error(`[sports-ingestion] Error:`, error.message);
     results.errors.push(error.message);
     
     // Update health record with error
@@ -556,17 +547,16 @@ const startSportsScheduleScheduler = () => {
   
   // Run initial ingestion
   runSportsScheduleIngestion().catch((error) => {
-    console.error('[sports-ingestion] Initial ingestion failed:', error.message);
+    // Best-effort scheduler startup.
   });
   
   // Schedule next runs
   const scheduleNextRun = () => {
     const delay = getNextRunDelay();
-    console.log(`[sports-ingestion] Next run in ${Math.round(delay / 1000 / 60)} minutes`);
     
     setTimeout(() => {
       runSportsScheduleIngestion().catch((error) => {
-        console.error('[sports-ingestion] Scheduled ingestion failed:', error.message);
+        // Best-effort scheduled ingestion.
       });
       scheduleNextRun();
     }, delay);
@@ -585,13 +575,11 @@ const startSportsScheduleScheduler = () => {
       // Only run if within first 5 minutes of the hour
       if (minutes < 5) {
         runSportsScheduleIngestion().catch((error) => {
-          console.error('[sports-ingestion] Interval ingestion failed:', error.message);
+          // Best-effort interval ingestion.
         });
       }
     }
   }, 60 * 60 * 1000); // Check every hour
-  
-  console.log('[sports-ingestion] Sports schedule scheduler started (3am/3pm UTC)');
 };
 
 /**
@@ -601,7 +589,6 @@ const stopSportsScheduleScheduler = () => {
   if (schedulerInterval) {
     clearInterval(schedulerInterval);
     schedulerInterval = null;
-    console.log('[sports-ingestion] Sports schedule scheduler stopped');
   }
 };
 

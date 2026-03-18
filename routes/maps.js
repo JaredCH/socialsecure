@@ -430,7 +430,6 @@ router.post('/spotlight', authenticateToken, async (req, res) => {
     const presence = await LocationPresence.findOne({ user: req.user.userId });
     if (presence && presence.deviceType !== 'mobile') {
       // Allow but warn - in production might require mobile
-      console.log('Warning: Spotlight created from non-mobile device');
     }
     
     const spotlight = await Spotlight.createSpotlight(req.user.userId, {
@@ -756,8 +755,7 @@ router.get('/community', optionalAuth, async (req, res) => {
 // Cleanup expired spotlights
 async function cleanupJob() {
   try {
-    const result = await Spotlight.cleanupExpired();
-    console.log(`Cleaned up ${result.nModified || 0} expired spotlights`);
+    await Spotlight.cleanupExpired();
   } catch (error) {
     console.error('Error cleaning up spotlights:', error);
   }
@@ -776,8 +774,6 @@ async function heatmapJob() {
     for (const bounds of regions) {
       await HeatmapAggregation.recomputeRegion(bounds, 5);
     }
-    
-    console.log('Heatmap recomputation complete');
   } catch (error) {
     console.error('Error recomputing heatmap:', error);
   }
@@ -793,14 +789,11 @@ function startScheduledJobs() {
   
   // Recompute heatmap every 10 minutes
   heatmapInterval = setInterval(heatmapJob, 10 * 60 * 1000);
-  
-  console.log('Maps scheduled jobs started');
 }
 
 function stopScheduledJobs() {
   if (cleanupInterval) clearInterval(cleanupInterval);
   if (heatmapInterval) clearInterval(heatmapInterval);
-  console.log('Maps scheduled jobs stopped');
 }
 
 // Export for server.js

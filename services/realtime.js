@@ -395,10 +395,6 @@ const emitChatMessage = ({ userIds, message }) => {
   emitToUsers(userIds, 'chat:message', { message });
 };
 
-const emitCommentTypingRoomUpdate = ({ postId, payload }) => {
-  emitToSocketRoom(`post:${String(postId)}`, 'typing', payload);
-};
-
 const getPresenceMapForUsers = async (userIds) => {
   const normalized = [...new Set((Array.isArray(userIds) ? userIds : []).map((value) => String(value || '').trim()).filter(Boolean))];
   if (normalized.length === 0) return new Map();

@@ -25,8 +25,6 @@ const NewsPreferences = require('../models/NewsPreferences');
 const User = require('../models/User');
 const Article = require('../models/Article');
 const ArticleImpression = require('../models/ArticleImpression');
-const NewsIngestionRecord = require('../models/NewsIngestionRecord');
-const LocationNewsCache = require('../models/LocationNewsCache');
 
 // ---------------------------------------------------------------------------
 // Auth middleware (mirrors the pattern used across all route files)
@@ -41,18 +39,11 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
-const PROMOTED_THRESHOLD = parseInt(process.env.NEWS_VIRAL_PROMOTED_THRESHOLD || '65', 10);
-
-const { triggerLocationIngest } = require('../services/newsIngestion.local');
-const { ingestAllCategories } = require('../services/newsIngestion.categories');
-const { ingestAllFollowedTeams } = require('../services/newsIngestion.sports');
 const { getTeamSchedules, getLeagueStatusMap, getAllLeagueStatuses } = require('../services/sportsScheduleIngestion');
 const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocationIndex');
-const { ingestAllMonitoredSubreddits } = require('../services/newsIngestion.social');
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
 const { canonicalizeStateCode, getLocationTaxonomyPayload } = require('../utils/newsLocationTaxonomy');
 const { resolveZipLocation, resolveZipLocationByCityState } = require('../services/zipLocationIndex');
-const { buildFeed } = require('../services/newsFeedBuilder');
 const { getArticlesForLocation, getCacheMetrics, searchCachedArticles } = require('../services/locationCacheService');
 const { normalizeLocationInput, resolvePrimaryLocation } = require('../services/locationNormalizer');
 const { REFRESH_INTERVAL_MS, getCacheSchedulerState, refreshAllCachedLocations, startCacheRefreshScheduler } = require('../services/cacheRefreshWorker');
@@ -1732,7 +1723,6 @@ router.get('/search', authenticateToken, async (req, res) => {
 });
 
 const INGESTION_PIPELINES = ['cache', 'preload'];
-const INGESTION_FAST_INTERVAL_MS = REFRESH_INTERVAL_MS;
 const SOURCE_ADAPTER_KEY_MAP = {
   'Google News Cache': 'cache',
   'Google News Local': 'cache',

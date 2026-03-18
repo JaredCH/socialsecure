@@ -2,10 +2,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { DEFAULT_REALTIME_PREFERENCES, normalizeRealtimePreferences } = require('../utils/realtimePreferences');
 const {
-  SOCIAL_THEME_PRESETS,
-  SOCIAL_ACCENT_TOKENS,
   normalizeSocialPagePreferences,
-  SOCIAL_MODULE_IDS,
   buildDefaultSocialPagePreferences,
   toPublicSocialPagePreferences
 } = require('../utils/socialPagePreferences');

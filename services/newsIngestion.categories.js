@@ -210,7 +210,6 @@ async function ingestCategory(categoryKey) {
           else if (result === 'duplicate') counts.duplicates++;
         } catch (err) {
           counts.errors++;
-          console.error(`[cat-ingest] ${categoryKey}/${feed.name} item error:`, err.message);
         }
       }
     } catch (err) {
@@ -219,11 +218,6 @@ async function ingestCategory(categoryKey) {
     }
   }
 
-  console.log(
-    `[cat-ingest] ${categoryKey}: ${counts.inserted} inserted, ` +
-    `${counts.duplicates} dups, ${counts.retagged} retagged, ` +
-    `${counts.errors} errors (${counts.fetched} fetched)`
-  );
   return { categoryKey, ...counts };
 }
 
@@ -238,7 +232,6 @@ async function ingestAllCategories() {
   }
 
   const results = [];
-  const started = Date.now();
 
   for (const key of CATEGORY_ORDER) {
     if (!CATEGORY_FEEDS[key]) continue;
@@ -246,19 +239,9 @@ async function ingestAllCategories() {
       const result = await ingestCategory(key);
       results.push(result);
     } catch (err) {
-      console.error(`[cat-ingest] Unhandled error for ${key}:`, err.message);
       results.push({ categoryKey: key, error: err.message });
     }
   }
-
-  const totalInserted = results.reduce((s, r) => s + (r.inserted || 0), 0);
-  const totalDupes = results.reduce((s, r) => s + (r.duplicates || 0), 0);
-  const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-
-  console.log(
-    `[cat-ingest] Complete: ${totalInserted} inserted, ${totalDupes} dupex across ` +
-    `${results.length} categories in ${elapsed}s`
-  );
 
   return results;
 }

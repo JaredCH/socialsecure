@@ -171,17 +171,7 @@ const toPublicResumePayload = (resumeDoc) => ({
   createdAt: resumeDoc.createdAt || null
 });
 
-const logResumeEvent = ({ eventType, userId, req, metadata = {} }) => {
-  const payload = {
-    eventType,
-    userId,
-    metadata,
-    ipAddress: req.ip,
-    userAgent: req.get('user-agent') || null,
-    createdAt: new Date().toISOString()
-  };
-  console.log('[resume-event]', JSON.stringify(payload));
-};
+const logResumeEvent = () => {};
 
 const getViewerIdFromAuthHeader = (req) => {
   const token = req.headers.authorization?.split(' ')[1];

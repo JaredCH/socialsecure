@@ -149,14 +149,6 @@ router.post('/invite', [
 
     await invitation.save();
 
-    // Emit structured log for observability
-    console.log('REFERRAL_INVITE_SENT', {
-      inviterId: req.user.userId,
-      invitationId: invitation._id,
-      invitee: email || phone,
-      timestamp: new Date().toISOString()
-    });
-
     return res.status(201).json({
       success: true,
       invitation: {
@@ -381,15 +373,6 @@ router.post('/invitations/:id/qualify', referralQualificationLimiter, authentica
 
     await invitation.markAsRewarded(REFERRAL_REWARD_AMOUNT, deterministicRewardId);
 
-    console.log('REFERRAL_REWARDED', {
-      inviterId: req.user.userId,
-      invitationId: invitation._id,
-      inviteeUserId: invitation.inviteeUserId,
-      rewardAmount: REFERRAL_REWARD_AMOUNT,
-      rewardTransactionId: deterministicRewardId,
-      timestamp: new Date().toISOString()
-    });
-
     return res.json({
       success: true,
       alreadyRewarded: false,
@@ -490,14 +473,6 @@ router.post('/register-by-code', [
     // Update invitation status to registered
     await invite.markAsRegistered(user._id);
 
-    // Emit structured log
-    console.log('REFERRAL_REGISTERED', {
-      inviterId: invite.inviterId,
-      inviteeId: user._id,
-      invitationId: invite._id,
-      timestamp: new Date().toISOString()
-    });
-
     const authToken = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET || 'your-secret-key-change-in-production',
@@ -569,14 +544,6 @@ router.post('/accept/:token', [
     
     // Update invitation status to registered
     await invite.markAsRegistered(user._id);
-
-    // Emit structured log
-    console.log('REFERRAL_REGISTERED', {
-      inviterId: invite.inviterId,
-      inviteeId: user._id,
-      invitationId: invite._id,
-      timestamp: new Date().toISOString()
-    });
 
     const authToken = jwt.sign(
       { userId: user._id },

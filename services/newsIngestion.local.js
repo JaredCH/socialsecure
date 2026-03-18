@@ -52,7 +52,7 @@ async function triggerLocationIngest(zipCode) {
         normalizedLocation: normalized
       });
     } catch (error) {
-      console.error('[news-cache] triggerLocationIngest error:', error.message);
+      // Best-effort trigger.
     }
   });
 
