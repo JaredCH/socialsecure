@@ -160,6 +160,14 @@ const unifiedChatLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many chat requests, please slow down.' }
 });
+const defaultChatRouteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 240,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many chat requests, please slow down.' }
+});
+router.use(defaultChatRouteLimiter);
 
 const DEFAULT_MESSAGE_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 500;

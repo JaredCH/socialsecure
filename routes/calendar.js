@@ -34,6 +34,15 @@ const eventMutationLimiter = rateLimit({
     xForwardedForHeader: false
   }
 });
+const calendarRouteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 240,
+  message: { error: 'Too many calendar requests, please try again shortly.' },
+  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
+  validate: {
+    xForwardedForHeader: false
+  }
+});
 
 const sanitizeText = (value, maxLength) => {
   if (typeof value !== 'string') return '';
@@ -124,6 +133,8 @@ const eventResponse = (event) => ({
   createdAt: event.createdAt,
   updatedAt: event.updatedAt
 });
+
+router.use(calendarRouteLimiter);
 
 router.get('/me', requireAuth, normalizeAuthUser, async (req, res) => {
   try {
