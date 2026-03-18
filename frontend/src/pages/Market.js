@@ -1203,11 +1203,11 @@ function Market() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="bg-white rounded-lg shadow mb-4 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white rounded-lg shadow mb-2 p-3 lg:mb-4 lg:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 lg:gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Marketplace</h1>
-            <p className="text-sm text-gray-500">Buy, sell, and trade with your community</p>
+            <h1 className="text-lg font-bold text-gray-900 lg:text-2xl">Marketplace</h1>
+            <p className="hidden text-sm text-gray-500 sm:block">Buy, sell, and trade with your community</p>
           </div>
           {currentUser && (
             <button
@@ -1335,11 +1335,11 @@ function Market() {
               )}
             </form>
 
-            <div className="lg:hidden mb-4">
+            <div className="lg:hidden mb-2">
               <button
                 type="button"
                 onClick={() => setShowMobileFilters(prev => !prev)}
-                className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 shadow-sm"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm"
               >
                 {showMobileFilters ? 'Hide Filters' : 'Show Filters'}
                 {hasActiveFilters ? ' • Active' : ''}

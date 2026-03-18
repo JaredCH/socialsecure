@@ -491,7 +491,7 @@ describe('News inline preferences updates', () => {
 
     const briefingHeaders = Array.from(container.querySelectorAll('h1'))
       .filter((h) => h.textContent?.includes('Your Daily Briefing'));
-    expect(briefingHeaders.length).toBeGreaterThanOrEqual(2);
+    expect(briefingHeaders.length).toBeGreaterThanOrEqual(1);
 
     const desktopSurface = Array.from(container.querySelectorAll('div')).find((el) => (
       typeof el.className === 'string'

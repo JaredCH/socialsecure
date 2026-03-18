@@ -2134,12 +2134,12 @@ function Chat() {
 
   const chatMenuBar = (
     <header
-      className={`mb-2 rounded-2xl border px-3 py-2 shadow-sm backdrop-blur-sm ${activeTheme.panelGlass}`}
+      className={`mb-1 rounded-2xl border px-2 py-1.5 shadow-sm backdrop-blur-sm lg:mb-2 lg:px-3 lg:py-2 ${activeTheme.panelGlass}`}
       data-chat-menu-bar
       data-testid="chat-page-header"
     >
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex flex-1 items-center gap-2 overflow-x-auto">
+      <div className="flex items-center gap-1.5 lg:gap-2">
+        <div className="min-w-0 flex flex-1 items-center gap-1.5 overflow-x-auto lg:gap-2">
           <button
             type="button"
             onClick={() => setMobileWorkspaceOpen(false)}
@@ -2154,7 +2154,7 @@ function Chat() {
           </button>
 
           <div
-            className={`inline-flex shrink-0 items-center gap-1 rounded-xl border p-1 ${activeTheme.panel}`}
+            className={`inline-flex shrink-0 items-center gap-0.5 rounded-xl border p-0.5 lg:gap-1 lg:p-1 ${activeTheme.panel}`}
             data-chat-channel-tabs
             role="tablist"
             aria-label="Chat channels"
@@ -2168,7 +2168,7 @@ function Chat() {
                   setMobileWorkspaceOpen(false);
                 }}
                 className={[
-                  'rounded-lg px-3 py-1.5 text-xs font-semibold tracking-wide transition-all duration-150',
+                  'rounded-lg px-2 py-1 text-[11px] font-semibold tracking-wide transition-all duration-150 lg:px-3 lg:py-1.5 lg:text-xs',
                   activeChannel === channel.key ? `${activeTheme.subtle} shadow-sm` : 'opacity-70 hover:opacity-100'
                 ].join(' ')}
                 role="tab"
