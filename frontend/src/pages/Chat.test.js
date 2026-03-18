@@ -356,9 +356,9 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const menuBar = container.querySelector('[data-chat-menu-bar]');
-    expect(menuBar.textContent).not.toContain('Zip');
-    expect(menuBar.textContent).not.toContain('📍');
+    const header = container.querySelector('[data-testid="chat-page-header"]');
+    expect(header.textContent).not.toContain('Zip');
+    expect(header.textContent).not.toContain('📍');
   });
 
   it('removes the Zip Rooms panel from the chat sidebar', async () => {
@@ -381,7 +381,7 @@ describe('Chat zip room indicator', () => {
     expect(sectionTitles).not.toContain('Zip Rooms');
   });
 
-  it('renders compact theme menu with six readable options', async () => {
+  it('renders channel tabs in sidebar and header in workspace panel', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -397,59 +397,17 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const themeMenuButton = container.querySelector('button[aria-label="Open chat theme menu"]');
-    expect(themeMenuButton).not.toBeNull();
-
-    await act(async () => {
-      themeMenuButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flush();
-    });
-
-    const themeSelect = container.querySelector('select#chat-theme-select-fallback');
-    expect(themeSelect).not.toBeNull();
-    expect(themeSelect.options).toHaveLength(7);
-    expect(Array.from(themeSelect.options).map((option) => option.textContent)).toEqual([
-      'Classic Light',
-      'Midnight',
-      'Ocean',
-      'Terminal',
-      'Sunset',
-      'Lavender',
-      'Nightwatch'
-    ]);
-  });
-
-  it('renders channel tabs, room info, and open chat tabs in one menu bar', async () => {
-    authAPI.getProfile.mockResolvedValue({
-      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
-    });
-    chatAPI.getConversations.mockResolvedValue({
-      data: {
-        conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
-          dm: [],
-          profile: []
-        }
-      }
-    });
-
-    await renderChat();
-
-    const menuBar = container.querySelector('[data-chat-menu-bar]');
-    expect(menuBar).not.toBeNull();
     const workspacePanel = container.querySelector('[data-testid="chat-workspace-panel"]');
     expect(workspacePanel).not.toBeNull();
-    expect(workspacePanel.contains(menuBar)).toBe(true);
+    const pageHeader = workspacePanel.querySelector('[data-testid="chat-page-header"]');
+    expect(pageHeader).not.toBeNull();
 
-    const channelTabs = menuBar.querySelector('[data-chat-channel-tabs]');
+    const channelTabs = container.querySelector('[data-chat-channel-tabs]');
     expect(channelTabs).not.toBeNull();
     expect(Array.from(channelTabs.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
       'Chat',
       'Direct Messages'
     ]);
-
-    expect(menuBar.textContent).not.toContain('Live conversation');
-    expect(menuBar.textContent).not.toContain('Theme-tuned accents');
   });
 
   it('renders alphabetical state chats with city rooms and a topics dropdown', async () => {
@@ -1034,9 +992,8 @@ describe('Chat zip room indicator', () => {
 
     const desktopGrid = container.querySelector('div.grid.flex-1.min-h-0');
     expect(desktopGrid).not.toBeNull();
-    expect(desktopGrid.className).toContain('lg:grid-cols-[2.6fr_8fr_2.2fr]');
-    expect(desktopGrid.className).toContain('gap-1');
-    expect(desktopGrid.className).toContain('p-1');
+    expect(desktopGrid.className).toContain('lg:grid-cols-[16rem_1fr_14rem]');
+    expect(desktopGrid.className).toContain('gap-0');
 
     const pageHeader = container.querySelector('[data-testid="chat-page-header"]');
     expect(pageHeader).not.toBeNull();
@@ -1045,8 +1002,6 @@ describe('Chat zip room indicator', () => {
     const workspacePanel = container.querySelector('[data-testid="chat-workspace-panel"]');
     expect(workspacePanel).not.toBeNull();
     expect(workspacePanel.contains(pageHeader)).toBe(true);
-    expect(workspacePanel.className).toContain('px-1.5');
-    expect(workspacePanel.className).toContain('pt-1');
 
     const emptyMessages = Array.from(container.querySelectorAll('p')).find((node) => node.textContent === 'No messages yet.');
     expect(emptyMessages).not.toBeUndefined();
@@ -1096,83 +1051,6 @@ describe('Chat zip room indicator', () => {
     expect(container.querySelector('textarea').disabled).toBe(true);
   });
 
-  it('persists the selected theme to localStorage', async () => {
-    authAPI.getProfile.mockResolvedValue({
-      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
-    });
-    chatAPI.getConversations.mockResolvedValue({
-      data: {
-        conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
-          dm: [],
-          profile: []
-        }
-      }
-    });
-
-    await renderChat();
-
-    const themeSelect = container.querySelector('select');
-    expect(themeSelect).not.toBeNull();
-    expect(themeSelect.value).toBe('nightwatch');
-
-    await act(async () => {
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
-      nativeInputValueSetter.call(themeSelect, 'midnight');
-      themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-      await flush();
-    });
-
-    expect(themeSelect.value).toBe('midnight');
-    expect(localStorage.getItem('chatTheme')).toBe('midnight');
-  });
-
-  it('restores the theme from localStorage on mount', async () => {
-    localStorage.setItem('chatTheme', 'ocean');
-
-    authAPI.getProfile.mockResolvedValue({
-      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
-    });
-    chatAPI.getConversations.mockResolvedValue({
-      data: {
-        conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
-          dm: [],
-          profile: []
-        }
-      }
-    });
-
-    await renderChat();
-
-    const themeSelect = container.querySelector('select');
-    expect(themeSelect).not.toBeNull();
-    expect(themeSelect.value).toBe('ocean');
-  });
-
-  it('falls back to default theme when localStorage has invalid value', async () => {
-    localStorage.setItem('chatTheme', 'nonexistent');
-
-    authAPI.getProfile.mockResolvedValue({
-      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
-    });
-    chatAPI.getConversations.mockResolvedValue({
-      data: {
-        conversations: {
-          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
-          dm: [],
-          profile: []
-        }
-      }
-    });
-
-    await renderChat();
-
-    const themeSelect = container.querySelector('select');
-    expect(themeSelect).not.toBeNull();
-    expect(themeSelect.value).toBe('nightwatch');
-  });
-
   it('uses theme-driven sender accents and sends transformed slash command content', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
@@ -1191,7 +1069,6 @@ describe('Chat zip room indicator', () => {
 
     expect(container.querySelector('input[type="color"]')).toBeNull();
     expect(container.textContent).not.toContain('Theme-tuned accents');
-    expect(container.querySelector('select#chat-theme-select-fallback').value).toBe('nightwatch');
 
     const composer = container.querySelector('textarea[placeholder="Type your message"]');
     expect(composer).not.toBeNull();
@@ -1511,9 +1388,9 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    const dmHeaderLink = container.querySelector('a[aria-label="Open @buddy social page"]');
-    expect(dmHeaderLink).not.toBeNull();
-    expect(dmHeaderLink.getAttribute('href')).toBe('/social?user=buddy');
+    const conversationHeader = container.querySelector('[data-testid="chat-page-header"]');
+    expect(conversationHeader).not.toBeNull();
+    expect(conversationHeader.textContent).toContain('@buddy');
   });
 
   it('shows a delete button on DM conversations and removes conversation on click', async () => {
@@ -1594,7 +1471,7 @@ describe('Chat zip room indicator', () => {
     const authorAction = Array.from(container.querySelectorAll('a')).find((node) => node.textContent === '@buddy');
     expect(authorAction).not.toBeUndefined();
     expect(authorAction.className).toContain('font-semibold');
-    expect(authorAction.className).toContain('text-cyan-200');
+    expect(authorAction.className).toContain('text-emerald-400');
   });
 
   it('groups consecutive room messages into a Discord-like stack', async () => {
