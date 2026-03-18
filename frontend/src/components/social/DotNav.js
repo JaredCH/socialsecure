@@ -75,6 +75,7 @@ const SVG_ICONS = {
   settings: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>,
   'msg-heart': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="M12 8.5c-.5-1-1.8-1.6-3-1 -1.3.7-1.6 2.3-.7 3.5L12 15l3.7-4c.9-1.2.6-2.8-.7-3.5-1.2-.6-2.5 0-3 1z" /></svg>,
   'cal-star': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><path d="M12 13l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5L11 15z" /></svg>,
+  bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>,
 };
 
 // ═══════════════════════════════════════════
@@ -215,7 +216,7 @@ function resolveRoute(catalogEntry, loggedInUser, viewingUser) {
 // ═══════════════════════════════════════════
 // DOTNAV COMPONENT
 // ═══════════════════════════════════════════
-const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true }) => {
+const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0 }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -247,6 +248,7 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
   const [showSettings, setShowSettings] = useState(false);
   const [pickerSlotIndex, setPickerSlotIndex] = useState(null);
   const [hoveredSlot, setHoveredSlot] = useState(null);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
 
   const dotRef = useRef(null);
@@ -283,6 +285,7 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     setIsEditing(false);
     setShowSettings(false);
     setPickerSlotIndex(null);
+    setShowNotifications(false);
   }, [location.pathname, location.search]);
 
   // Compute anchor position
@@ -460,6 +463,64 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
           </svg>
         )}
       </button>
+
+      {/* Notification Bell Button - positioned near the main dot */}
+      <button
+        id="dotnav-bell"
+        className={showNotifications ? 'dotnav-bell-active' : ''}
+        style={{
+          left: anchorPos.left + (side === 'right' ? -42 : DSIZ + 6),
+          top: anchorPos.top + 10,
+        }}
+        onClick={() => setShowNotifications(prev => !prev)}
+        aria-label={`Notifications${unreadNotificationCount > 0 ? ` (${unreadNotificationCount} unread)` : ''}`}
+        type="button"
+        data-testid="dotnav-bell"
+      >
+        {SVG_ICONS.bell}
+        {unreadNotificationCount > 0 && (
+          <span className="dotnav-bell-badge">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>
+        )}
+      </button>
+
+      {/* Notification Dropdown */}
+      {showNotifications && (
+        <div
+          id="dotnav-notification-panel"
+          className="dotnav-visible"
+          style={{
+            left: Math.min(Math.max(anchorPos.left + (side === 'right' ? -260 : DSIZ + 6), 10), windowSize.w - 290),
+            top: Math.max(anchorPos.top - 220, 10),
+          }}
+          role="dialog"
+          aria-label="Notifications"
+          data-testid="dotnav-notification-panel"
+        >
+          <h3>Notifications</h3>
+          {unreadNotificationCount > 0 ? (
+            <p style={{ fontSize: 13, margin: '8px 0' }}>You have {unreadNotificationCount} unread notification{unreadNotificationCount !== 1 ? 's' : ''}.</p>
+          ) : (
+            <p style={{ fontSize: 13, margin: '8px 0', color: 'var(--dotnav-mid)' }}>No new notifications</p>
+          )}
+          <button
+            type="button"
+            onClick={() => { navigate('/social'); setShowNotifications(false); }}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid var(--dotnav-border)',
+              borderRadius: 8,
+              background: 'var(--dotnav-ink)',
+              color: 'var(--dotnav-btn-fg)',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            View All
+          </button>
+        </div>
+      )}
 
       {/* Settings Cog */}
       <button

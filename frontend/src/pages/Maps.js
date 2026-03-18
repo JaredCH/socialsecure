@@ -1195,7 +1195,7 @@ function Maps() {
             )}
           </div>
 
-          <div className="absolute bottom-4 right-3 z-[550] flex flex-col gap-2 lg:hidden">
+          <div className="absolute bottom-24 left-3 z-[550] flex flex-col gap-2 lg:hidden" data-testid="maps-mobile-overlay-buttons">
             <button
               onClick={focusCurrentLocation}
               className="h-11 w-11 rounded-full border border-white/70 bg-white/95 text-lg shadow-lg"

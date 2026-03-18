@@ -887,22 +887,20 @@ function UserSettings({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
+                  <PasswordField
                     name="passphrase"
                     value={pgpGenerationForm.passphrase}
                     onChange={handlePgpGenerationFieldChange}
                     className="w-full border rounded p-2"
                     placeholder="Key passphrase"
-                    type="password"
                     minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
                   />
-                  <input
+                  <PasswordField
                     name="confirmPassphrase"
                     value={pgpGenerationForm.confirmPassphrase}
                     onChange={handlePgpGenerationFieldChange}
                     className="w-full border rounded p-2"
                     placeholder="Confirm passphrase"
-                    type="password"
                     minLength={ENCRYPTION_PASSWORD_MIN_LENGTH}
                   />
                 </div>

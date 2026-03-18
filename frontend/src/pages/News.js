@@ -284,9 +284,8 @@ function News({ isGuestMode = false }) {
     <>
       {/* ─── Mobile layout (< lg) ──────────────────────────────────────────── */}
       <div data-testid="news-mobile-layout" className="lg:hidden flex h-full flex-col overflow-hidden bg-slate-100">
-        <div className="border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">News</p>
-          <h1 className="text-lg font-semibold text-slate-900">Your Daily Briefing</h1>
+        <div className="flex items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+          <h1 className="text-sm font-bold text-slate-900">News</h1>
         </div>
         <WeatherBar variant="sticky" />
         <div data-testid="news-mobile-filter-bar-shell" className="relative z-40 border-b border-slate-200 bg-white">

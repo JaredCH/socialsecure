@@ -113,15 +113,30 @@ const RouteMain = ({ children }) => {
   );
 };
 
+const GUEST_BANNER_DISMISSED_KEY = 'guestBannerDismissed';
+
 const GuestBanner = () => {
   const location = useLocation();
+  const [dismissed, setDismissed] = React.useState(() => {
+    try { return localStorage.getItem(GUEST_BANNER_DISMISSED_KEY) === '1'; } catch { return false; }
+  });
+  if (dismissed) return null;
   if (location.pathname === '/social' || location.pathname === '/friends') return null;
+  const handleDismiss = () => {
+    setDismissed(true);
+    try { localStorage.setItem(GUEST_BANNER_DISMISSED_KEY, '1'); } catch { /* noop */ }
+  };
   return (
-    <div className="container mx-auto mt-4">
-      <div className="rounded border border-blue-200 bg-blue-50 p-3 text-blue-900">
-        You&apos;re browsing as a guest from Austin, TX. Register to unlock all features.
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={handleDismiss}
+      className="fixed bottom-20 left-3 z-[60] flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-900 shadow-lg transition-transform active:scale-95 md:static md:mx-auto md:mt-4 md:flex md:rounded md:border md:px-3 md:py-3 md:shadow-none"
+      aria-label="Dismiss guest banner"
+      data-testid="guest-banner"
+    >
+      <span>You&apos;re browsing as a guest. Register to unlock all features.</span>
+      <span aria-hidden="true" className="ml-1 text-blue-400">✕</span>
+    </button>
   );
 };
 
@@ -532,7 +547,7 @@ function App() {
   return (
     <Router>
       <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
-        <nav className="relative z-[1200] shrink-0 border-b border-blue-100 bg-gradient-to-r from-white via-slate-50 to-blue-50/60 p-3 shadow-md">
+        <nav className="relative z-[1200] hidden shrink-0 border-b border-blue-100 bg-gradient-to-r from-white via-slate-50 to-blue-50/60 p-3 shadow-md md:block">
           <div className="relative mx-auto w-full px-2 md:px-4">
             <div className="flex items-stretch gap-4">
               <h1 className="text-3xl font-black tracking-tight text-blue-700 shrink-0">SocialSecure</h1>
@@ -916,6 +931,7 @@ function App() {
         <DotNav
           loggedInUser={user?.username || ''}
           enabled={canUseProtectedFeatures}
+          unreadNotificationCount={unreadNotificationCount}
         />
 
         <Toaster position="bottom-right" />
