@@ -26,7 +26,10 @@ function Login({ onSuccess }) {
       const { data } = await authAPI.login(form);
       onSuccess(data);
       if (!getAuthToken()) {
-        throw new Error('Login succeeded but browser storage is blocked. Enable site data/cookies and try again.');
+        const tokenError = 'Login succeeded but browser storage/cookies are disabled or blocked. Enable them and try again.';
+        setFormError(tokenError);
+        toast.error(tokenError);
+        return;
       }
       toast.success('Logged in successfully');
       navigate('/news');
