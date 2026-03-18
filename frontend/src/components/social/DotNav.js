@@ -47,9 +47,9 @@ function buildArc(side) {
 
 // 4 vertical power button offsets
 function buildPowerSlots(side) {
-  const towardEdgeSign = side === 'right' ? 1 : -1;
+  const edgeDirectionSign = side === 'right' ? 1 : -1;
   return [0, 1, 2, 3].map(i => ({
-    dl: CA + towardEdgeSign * 18,
+    dl: CA + edgeDirectionSign * 18,
     db: CA + 70 + i * 52,
   }));
 }
@@ -475,6 +475,11 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     setDragOverSlotIndex(null);
   }, []);
 
+  const handleDragOver = useCallback((e) => {
+    if (!isEditing) return;
+    e.preventDefault();
+  }, [isEditing]);
+
   const handleTouchDragStart = useCallback((e, slotIndex) => {
     if (!isEditing) return;
     e.preventDefault();
@@ -498,7 +503,8 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     }
   }, [isEditing]);
 
-  const handleTouchDragEnd = useCallback(() => {
+  const handleTouchDragEnd = useCallback((e) => {
+    if (e) e.preventDefault();
     swapSlots(draggedSlotRef.current, dragOverSlotRef.current);
     draggedSlotRef.current = null;
     dragOverSlotRef.current = null;
@@ -676,7 +682,7 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
             }}
             data-slot-index={index}
             onDragEnter={() => handleDragEnter(index)}
-            onDragOver={(e) => { if (isEditing) e.preventDefault(); }}
+            onDragOver={handleDragOver}
             onDrop={(e) => { e.preventDefault(); handleDragDrop(index); }}
             onDragEnd={handleDragEnd}
             onMouseEnter={() => setHoveredSlot(index)}
@@ -690,7 +696,7 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
                   onDragStart={() => handleDragStart(index)}
                   onTouchStart={(e) => handleTouchDragStart(e, index)}
                   onTouchMove={handleTouchDragMove}
-                  onTouchEnd={(e) => { e.preventDefault(); handleTouchDragEnd(); }}
+                  onTouchEnd={handleTouchDragEnd}
                   onClick={() => isEditing ? undefined : handleNavClick(index)}
                   aria-label={`${entry.label}${isPower ? ' (Power Button)' : ''}${entry.type === 'contextual' && effectiveViewingUser ? ` for ${effectiveViewingUser}` : ''}`}
                   title={entry.label}
