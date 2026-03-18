@@ -154,6 +154,38 @@ router.get('/news/sports-teams', async (req, res) => {
   res.json({ leagues: [...leagues.values()] });
 });
 
+router.get('/news/weather', async (req, res) => {
+  try {
+    const { internals: { fetchWeatherForLocation } } = require('./news');
+    const ctx = req.guestSessionContext;
+    const locObj = {
+      lat: ctx.location.coordinates[1],
+      lon: ctx.location.coordinates[0],
+      city: ctx.city,
+      state: ctx.state,
+      country: ctx.country,
+      zipCode: ctx.zipCode,
+      label: [ctx.city, ctx.state, ctx.zipCode].filter(Boolean).join(', '),
+      isPrimary: true
+    };
+    const result = await fetchWeatherForLocation(locObj);
+    const locData = result.resolved || locObj;
+    return res.json({
+      locations: [{
+        ...locData,
+        label: locData.label || locObj.label,
+        weather: result.weather,
+        error: result.error,
+        cacheHit: result.cacheHit
+      }],
+      fallbackSource: 'guestDefault'
+    });
+  } catch (error) {
+    console.error('Error fetching guest weather:', error);
+    return res.status(500).json({ error: 'Failed to fetch guest weather data' });
+  }
+});
+
 router.get('/news/location-taxonomy', async (req, res) => {
   const taxonomy = await getLocationTaxonomyPayload({
     preferredStateCode: req.guestSessionContext.state,

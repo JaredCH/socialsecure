@@ -140,7 +140,7 @@ api.interceptors.response.use(
     const requestUrl = String(error.config?.url || '');
     const isLoginRequest = /\/auth\/login(?:$|\?)/.test(requestUrl);
 
-    if (error.response?.status === 401 && !isLoginRequest) {
+    if (error.response?.status === 401 && !isLoginRequest && hasAuthToken()) {
       clearAuthToken();
       window.location.href = '/login';
     }
@@ -688,7 +688,7 @@ export const newsAPI = {
   // Get sports teams (all or by league)
   getSportsTeamList: (league) => api.get('/news/sports-teams', { params: league ? { league } : {} }),
   // Weather
-  getWeather: () => api.get('/news/weather'),
+  getWeather: () => api.get(hasAuthToken() ? '/news/weather' : '/guest/news/weather'),
   geocodeWeatherLocations: (q) => api.get('/news/weather/geocode', { params: { q } }),
   addWeatherLocation: (data) => api.post('/news/preferences/weather-locations', data),
   updateWeatherLocations: (locations) => api.put('/news/preferences/weather-locations', { locations }),

@@ -1,0 +1,550 @@
+/* DotNav – Floating navigation dot with radial menu
+   All selectors prefixed with dotnav- to avoid conflicts. */
+
+/* ── Theme tokens ── */
+:root {
+  --dotnav-bg: #edeae4;
+  --dotnav-ink: #1a1a1a;
+  --dotnav-mid: #888;
+  --dotnav-soft: #bbb;
+  --dotnav-btn-bg: #1a1a1a;
+  --dotnav-btn-fg: #edeae4;
+  --dotnav-border: rgba(0, 0, 0, 0.11);
+  --dotnav-shadow: 0 4px 22px rgba(0, 0, 0, 0.16);
+  --dotnav-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.10);
+  --dotnav-slot-empty: #c8c4bc;
+  --dotnav-slot-over: rgba(0, 0, 0, 0.22);
+  --dotnav-DOT: 56px;
+  --dotnav-BTN: 44px;
+  --dotnav-PAD: 26px;
+}
+
+/* ── Backdrop overlay ── */
+#dotnav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+#dotnav-backdrop.dotnav-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Main floating dot button ── */
+#dotnav-dot {
+  position: fixed;
+  z-index: 10000;
+  width: var(--dotnav-DOT);
+  height: var(--dotnav-DOT);
+  border-radius: 50%;
+  background: var(--dotnav-btn-bg);
+  color: var(--dotnav-btn-fg);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--dotnav-shadow);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.22s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  outline: none;
+  overflow: hidden;
+}
+
+#dotnav-dot:hover {
+  transform: scale(1.08);
+  box-shadow: var(--dotnav-shadow), 0 0 0 4px rgba(0, 0, 0, 0.06);
+}
+
+#dotnav-dot:active {
+  transform: scale(0.95);
+}
+
+#dotnav-dot svg {
+  width: 26px;
+  height: 26px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#dotnav-dot.dotnav-open svg {
+  transform: rotate(45deg);
+}
+
+/* ── Settings cog icon button ── */
+#dotnav-cog {
+  position: fixed;
+  z-index: 10001;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--dotnav-bg);
+  color: var(--dotnav-mid);
+  border: 1px solid var(--dotnav-border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--dotnav-shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.5);
+  transition: opacity 0.2s ease,
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.15s ease,
+              color 0.15s ease;
+}
+
+#dotnav-cog.dotnav-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+#dotnav-cog:hover {
+  background: var(--dotnav-ink);
+  color: var(--dotnav-btn-fg);
+}
+
+#dotnav-cog svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Navigation button slots ── */
+.dotnav-slot {
+  position: fixed;
+  z-index: 9999;
+  width: var(--dotnav-BTN);
+  height: var(--dotnav-BTN);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.3);
+  pointer-events: none;
+  transition: opacity 0.25s ease,
+              transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dotnav-slot.dotnav-visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.dotnav-slot.dotnav-empty {
+  background: var(--dotnav-slot-empty);
+  border: 2px dashed var(--dotnav-soft);
+  cursor: pointer;
+}
+
+.dotnav-slot.dotnav-empty:hover {
+  background: var(--dotnav-slot-over);
+  border-color: var(--dotnav-mid);
+}
+
+.dotnav-slot.dotnav-drag-over {
+  background: var(--dotnav-slot-over);
+  border-color: var(--dotnav-ink);
+  transform: scale(1.15);
+}
+
+.dotnav-slot.dotnav-editing {
+  animation: dotnav-wiggle 0.4s ease-in-out infinite alternate;
+}
+
+/* ── Navigation buttons inside slots ── */
+.dotnav-nbtn {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--dotnav-btn-bg);
+  color: var(--dotnav-btn-fg);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s ease,
+              box-shadow 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+.dotnav-nbtn:hover {
+  transform: scale(1.1);
+  box-shadow: var(--dotnav-shadow-sm);
+}
+
+.dotnav-nbtn:active {
+  transform: scale(0.93);
+}
+
+.dotnav-nbtn svg {
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+}
+
+/* ── Slot remove (X) button in edit mode ── */
+.dotnav-slot-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #e74c3c;
+  color: #fff;
+  border: 2px solid var(--dotnav-bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(0);
+  transition: opacity 0.15s ease,
+              transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dotnav-slot.dotnav-editing .dotnav-slot-remove {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.dotnav-slot-remove:hover {
+  background: #c0392b;
+  transform: scale(1.15);
+}
+
+/* ── Tooltip ── */
+.dotnav-tip {
+  position: absolute;
+  z-index: 10002;
+  background: var(--dotnav-ink);
+  color: var(--dotnav-btn-fg);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.18s ease,
+              transform 0.18s ease;
+}
+
+.dotnav-tip.dotnav-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.dotnav-tip::after {
+  content: "";
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--dotnav-ink);
+  transform: rotate(45deg);
+}
+
+/* Tip arrow positions */
+.dotnav-tip.dotnav-tip-top::after {
+  bottom: -3px;
+  left: 50%;
+  margin-left: -3px;
+}
+
+.dotnav-tip.dotnav-tip-bottom::after {
+  top: -3px;
+  left: 50%;
+  margin-left: -3px;
+}
+
+.dotnav-tip.dotnav-tip-left::after {
+  right: -3px;
+  top: 50%;
+  margin-top: -3px;
+}
+
+.dotnav-tip.dotnav-tip-right::after {
+  left: -3px;
+  top: 50%;
+  margin-top: -3px;
+}
+
+/* ── Button picker dropdown ── */
+#dotnav-btn-picker {
+  position: fixed;
+  z-index: 10003;
+  background: var(--dotnav-bg);
+  border: 1px solid var(--dotnav-border);
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: var(--dotnav-shadow);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 220px;
+  opacity: 0;
+  transform: scale(0.85) translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.2s ease,
+              transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+#dotnav-btn-picker.dotnav-visible {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+/* ── Picker items ── */
+.dotnav-picker-item {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--dotnav-btn-bg);
+  color: var(--dotnav-btn-fg);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease,
+              box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+.dotnav-picker-item:hover {
+  transform: scale(1.12);
+  box-shadow: var(--dotnav-shadow-sm);
+}
+
+.dotnav-picker-item:active {
+  transform: scale(0.92);
+}
+
+.dotnav-picker-item svg {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+/* ── Settings panel ── */
+#dotnav-settings-panel {
+  position: fixed;
+  z-index: 10003;
+  background: var(--dotnav-bg);
+  border: 1px solid var(--dotnav-border);
+  border-radius: 16px;
+  padding: var(--dotnav-PAD);
+  box-shadow: var(--dotnav-shadow);
+  min-width: 220px;
+  opacity: 0;
+  transform: scale(0.85) translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.2s ease,
+              transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+#dotnav-settings-panel.dotnav-visible {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+#dotnav-settings-panel h3 {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dotnav-ink);
+  letter-spacing: 0.01em;
+}
+
+#dotnav-settings-panel label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--dotnav-ink);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+#dotnav-settings-panel label:hover {
+  color: var(--dotnav-mid);
+}
+
+#dotnav-settings-panel input[type="radio"] {
+  accent-color: var(--dotnav-ink);
+}
+
+/* ── Edit-mode hint bar ── */
+#dotnav-hint {
+  position: fixed;
+  z-index: 10002;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--dotnav-ink);
+  color: var(--dotnav-btn-fg);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 20px;
+  border-radius: 20px;
+  white-space: nowrap;
+  box-shadow: var(--dotnav-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease,
+              transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+#dotnav-hint.dotnav-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── "navigate" label ── */
+#dotnav-nav-label {
+  position: fixed;
+  z-index: 9999;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dotnav-soft);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#dotnav-nav-label.dotnav-visible {
+  opacity: 1;
+}
+
+/* ── Ripple animation for click feedback ── */
+.dotnav-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(0);
+  animation: dotnav-ripple 0.5s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes dotnav-ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* ── Wiggle animation for edit mode ── */
+@keyframes dotnav-wiggle {
+  0% {
+    transform: rotate(-1.5deg) scale(1);
+  }
+  100% {
+    transform: rotate(1.5deg) scale(1);
+  }
+}
+
+/* ── Staggered slot entrance ── */
+.dotnav-slot:nth-child(1) { transition-delay: 0ms; }
+.dotnav-slot:nth-child(2) { transition-delay: 35ms; }
+.dotnav-slot:nth-child(3) { transition-delay: 70ms; }
+.dotnav-slot:nth-child(4) { transition-delay: 105ms; }
+.dotnav-slot:nth-child(5) { transition-delay: 140ms; }
+.dotnav-slot:nth-child(6) { transition-delay: 175ms; }
+.dotnav-slot:nth-child(7) { transition-delay: 210ms; }
+.dotnav-slot:nth-child(8) { transition-delay: 245ms; }
+
+/* ── Responsive considerations ── */
+@media (max-width: 600px) {
+  :root {
+    --dotnav-DOT: 48px;
+    --dotnav-BTN: 38px;
+    --dotnav-PAD: 18px;
+  }
+
+  #dotnav-btn-picker {
+    max-width: 190px;
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .dotnav-picker-item {
+    width: 36px;
+    height: 36px;
+  }
+
+  #dotnav-settings-panel {
+    min-width: 180px;
+  }
+
+  #dotnav-hint {
+    font-size: 12px;
+    padding: 6px 16px;
+    bottom: 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  :root {
+    --dotnav-DOT: 44px;
+    --dotnav-BTN: 34px;
+  }
+}
+
+/* ── Reduced motion preference ── */
+@media (prefers-reduced-motion: reduce) {
+  #dotnav-dot,
+  #dotnav-cog,
+  .dotnav-slot,
+  .dotnav-nbtn,
+  .dotnav-slot-remove,
+  .dotnav-tip,
+  #dotnav-btn-picker,
+  #dotnav-settings-panel,
+  #dotnav-hint,
+  #dotnav-nav-label,
+  #dotnav-backdrop {
+    transition: none !important;
+  }
+
+  .dotnav-slot.dotnav-editing {
+    animation: none;
+  }
+
+  .dotnav-ripple {
+    animation: none !important;
+  }
+}
