@@ -336,7 +336,7 @@ export const chatAPI = {
     }),
   sendE2EEMessage: (roomId, data) => api.post(`/chat/rooms/${roomId}/messages/e2ee`, data),
   getMessages: (roomId, page = 1, limit = 500) =>
-    api.get(`/chat/rooms/${roomId}/messages?page=${page}&limit=${limit}`),
+    api.get(`${hasAuthToken() ? '/chat' : '/guest/chat'}/rooms/${roomId}/messages?page=${page}&limit=${limit}`),
   getMessagesByCursor: (roomId, cursor, limit = 500) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) {
@@ -367,7 +367,7 @@ export const chatAPI = {
   updateRoom: (roomId, payload) => api.put(`/chat/rooms/${roomId}`, payload),
   moveRoom: (roomId, direction) => api.post(`/chat/rooms/${roomId}/move`, { direction }),
   getAllRooms: (page = 1, limit = 100) =>
-    api.get(`/chat/rooms/all?page=${page}&limit=${limit}`),
+    api.get(`${hasAuthToken() ? '/chat' : '/guest/chat'}/rooms/all?page=${page}&limit=${limit}`),
   getQuickAccessRooms: () => api.get(hasAuthToken() ? '/chat/rooms/quick-access' : '/guest/chat/rooms/quick-access'),
   getRoomUsers: (roomId) => api.get(`/chat/rooms/${roomId}/users`),
   syncLocationRooms: () => api.post('/chat/rooms/sync-location'),

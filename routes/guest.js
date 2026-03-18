@@ -11,6 +11,7 @@ const { guestSessionContext } = require('../utils/guestSessionContext');
 const Post = require('../models/Post');
 const User = require('../models/User');
 const ChatRoom = require('../models/ChatRoom');
+const ChatMessage = require('../models/ChatMessage');
 
 const router = express.Router();
 
@@ -32,19 +33,27 @@ const parsePagination = (query, defaultLimit = 20, maxLimit = 50) => {
   return { page, limit, skip: (page - 1) * limit };
 };
 
-const toRoomSummary = (room) => ({
-  _id: room?._id,
-  name: room?.name || '',
-  type: room?.type || '',
-  city: room?.city || null,
-  county: room?.county || null,
-  state: room?.state || null,
-  country: room?.country || null,
-  zipCode: room?.zipCode || null,
-  messageCount: Number(room?.messageCount || 0),
-  memberCount: Array.isArray(room?.members) ? room.members.length : 0,
-  lastActivity: room?.lastActivity || null
-});
+const toRoomSummary = (room) => {
+  const sortOrder = Number(room?.sortOrder);
+  return {
+    _id: room?._id,
+    name: room?.name || '',
+    type: room?.type || '',
+    stableKey: room?.stableKey || null,
+    discoveryGroup: room?.discoveryGroup || null,
+    parentRoomId: room?.parentRoomId || null,
+    sortOrder: Number.isFinite(sortOrder) ? sortOrder : null,
+    defaultLanding: Boolean(room?.defaultLanding),
+    city: room?.city || null,
+    county: room?.county || null,
+    state: room?.state || null,
+    country: room?.country || null,
+    zipCode: room?.zipCode || null,
+    messageCount: Number(room?.messageCount || 0),
+    memberCount: Array.isArray(room?.members) ? room.members.length : 0,
+    lastActivity: room?.lastActivity || null
+  };
+};
 
 const filterNewsFeedArticles = (articles = [], { category = null, maxAgeHours = null } = {}) => {
   const now = Date.now();
@@ -235,6 +244,73 @@ router.get('/chat/rooms/quick-access', async (req, res) => {
   } catch (error) {
     console.error('Error loading guest quick-access rooms:', error);
     return res.status(500).json({ error: 'Failed to load guest quick-access rooms' });
+  }
+});
+
+router.get('/chat/rooms/all', async (req, res) => {
+  try {
+    await ChatRoom.ensureDefaultDiscoveryRooms();
+    const { page, limit, skip } = parsePagination(req.query, 100, 500);
+    const filter = {
+      archivedAt: null,
+      discoverable: { $ne: false },
+      type: { $in: ['state', 'topic', 'city', 'county'] }
+    };
+
+    const [rooms, total] = await Promise.all([
+      ChatRoom.find(filter)
+        .sort({ discoveryGroup: 1, sortOrder: 1, name: 1, createdAt: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      ChatRoom.countDocuments(filter)
+    ]);
+
+    return res.json({
+      success: true,
+      page,
+      limit,
+      total,
+      hasMore: (skip + rooms.length) < total,
+      rooms: rooms.map((room) => toRoomSummary(room))
+    });
+  } catch (error) {
+    console.error('Error loading guest rooms:', error);
+    return res.status(500).json({ error: 'Failed to load guest rooms' });
+  }
+});
+
+router.get('/chat/rooms/:roomId/messages', async (req, res) => {
+  try {
+    const roomId = String(req.params.roomId || '').trim();
+    if (!roomId) {
+      return res.status(400).json({ error: 'Room ID is required' });
+    }
+
+    const room = await ChatRoom.findById(roomId).lean();
+    if (!room || room.archivedAt || room.discoverable === false) {
+      return res.status(404).json({ error: 'Chat room not found' });
+    }
+
+    const { page, limit } = parsePagination(req.query, 100, 500);
+    const messages = await ChatMessage.getRoomMessages(roomId, page, limit);
+    const total = await ChatMessage.countDocuments({ roomId });
+
+    return res.json({
+      success: true,
+      room: toRoomSummary(room),
+      messages,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.max(1, Math.ceil(total / limit)),
+        hasMore: (page * limit) < total
+      }
+    });
+  } catch (error) {
+    console.error('Error loading guest room messages:', error);
+    return res.status(500).json({ error: 'Failed to load guest room messages' });
   }
 });
 
