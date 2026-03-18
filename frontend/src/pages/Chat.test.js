@@ -407,14 +407,15 @@ describe('Chat zip room indicator', () => {
 
     const themeSelect = container.querySelector('select#chat-theme-select-fallback');
     expect(themeSelect).not.toBeNull();
-    expect(themeSelect.options).toHaveLength(6);
+    expect(themeSelect.options).toHaveLength(7);
     expect(Array.from(themeSelect.options).map((option) => option.textContent)).toEqual([
       'Classic Light',
       'Midnight',
       'Ocean',
       'Terminal',
       'Sunset',
-      'Lavender'
+      'Lavender',
+      'Nightwatch'
     ]);
   });
 
@@ -1113,8 +1114,7 @@ describe('Chat zip room indicator', () => {
 
     const themeSelect = container.querySelector('select');
     expect(themeSelect).not.toBeNull();
-    expect(themeSelect.value).toBe('classic');
-    expect(localStorage.getItem('chatTheme')).toBeNull();
+    expect(themeSelect.value).toBe('nightwatch');
 
     await act(async () => {
       const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
@@ -1170,7 +1170,7 @@ describe('Chat zip room indicator', () => {
 
     const themeSelect = container.querySelector('select');
     expect(themeSelect).not.toBeNull();
-    expect(themeSelect.value).toBe('classic');
+    expect(themeSelect.value).toBe('nightwatch');
   });
 
   it('uses theme-driven sender accents and sends transformed slash command content', async () => {
@@ -1191,7 +1191,7 @@ describe('Chat zip room indicator', () => {
 
     expect(container.querySelector('input[type="color"]')).toBeNull();
     expect(container.textContent).not.toContain('Theme-tuned accents');
-    expect(container.querySelector('select#chat-theme-select-fallback').value).toBe('classic');
+    expect(container.querySelector('select#chat-theme-select-fallback').value).toBe('nightwatch');
 
     const composer = container.querySelector('textarea[placeholder="Type your message"]');
     expect(composer).not.toBeNull();
