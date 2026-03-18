@@ -90,6 +90,17 @@ function ChatComposerBar({
           className={`max-h-36 min-h-[40px] flex-1 resize-none rounded border px-2.5 py-1.5 text-sm leading-5 ${theme.input}`}
           value={composerValue}
           onChange={(event) => setComposerValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey) {
+              event.preventDefault();
+              if (composerValue.trim() && !disabled && !sending) {
+                onSubmit(event);
+              }
+            } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+              event.preventDefault();
+              setComposerValue((value) => `${value}\n`);
+            }
+          }}
           maxLength={2000}
           disabled={disabled}
           rows={1}

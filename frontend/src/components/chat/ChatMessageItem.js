@@ -5,7 +5,7 @@ const TRAILING_PUNCTUATION_REGEX = /[),.!?;:]+$/;
 const DEFAULT_LONG_PRESS_DELAY_MS = 550;
 const LINK_PREVIEW_PERCENTAGE = 0.25;
 const DM_MESSAGE_TEXT_CLASS = 'text-[13px] leading-5';
-const ROOM_MESSAGE_TEXT_CLASS = 'text-[14px] leading-6';
+const ROOM_MESSAGE_TEXT_CLASS = 'text-[13px] leading-5';
 const REACTION_CLOSE_DELAY_MS = 300;
 
 const getAvatarInitials = (realName, fallbackLabel) => {
@@ -260,6 +260,20 @@ function ChatMessageItem({
     </span>
   );
 
+  const compactAvatarNode = profileLink ? (
+    <a
+      href={profileLink}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-semibold overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 ${theme.subtle}`}
+      aria-label={isOwnMessage ? 'View your social profile' : `View @${author} social profile`}
+    >
+      {avatarContent}
+    </a>
+  ) : (
+    <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-semibold overflow-hidden ${theme.subtle}`}>
+      {avatarContent}
+    </span>
+  );
+
   const reactionsMarkup = (
     <div className="mt-0.5 flex flex-wrap items-center gap-1">
       {reactionOptions.map((reaction) => {
@@ -430,7 +444,7 @@ function ChatMessageItem({
             <div
               tabIndex={0}
               className={[
-                'relative px-2 py-1 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1',
+                'relative px-2 py-0.5 sm:py-1 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1',
                 isOwnMessage
                   ? [
                     'rounded-[1.35rem] rounded-r-[1.35rem]',
@@ -476,7 +490,7 @@ function ChatMessageItem({
 
   return (
     <article
-      className={`group rounded-xl px-2 py-0.5 ${groupedWithPrevious ? 'mt-0' : 'mt-2'} ${theme.roomHover || ''}`}
+      className={`group rounded-lg px-2 py-px ${groupedWithPrevious ? 'mt-0' : 'mt-0.5'} ${theme.roomHover || ''}`}
       data-chat-message-layout="room"
       data-chat-grouped={groupedWithPrevious ? 'true' : 'false'}
       onClick={(event) => triggerUserMenu(event)}
@@ -497,56 +511,57 @@ function ChatMessageItem({
         }
       }}
     >
-      <div className="flex gap-2">
-        <div className="w-9 shrink-0">
-          {groupedWithPrevious ? <span className="block h-9 w-9" /> : avatarNode}
+      <div className="flex items-start gap-1.5">
+        <div className="shrink-0 pt-0.5">
+          {groupedWithPrevious ? <span className="block h-5 w-5" /> : compactAvatarNode}
         </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-1">
+            <div
+              tabIndex={0}
+              className="relative min-w-0 flex-1 rounded px-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
+              onMouseOver={() => {
+                if (canHoverForReactions && !reactionsDisabled) {
+                  openReactionPicker();
+                }
+              }}
+              onMouseLeave={(event) => {
+                if (canHoverForReactions && !reactionsDisabled) {
+                  scheduleCloseReactionPicker(event);
+                }
+              }}
+              onClick={(event) => {
+                if (reactionsDisabled) return;
+                if (canHoverForReactions) return;
+                if (event.target?.closest?.('a, button, [data-chat-no-user-menu="true"]')) return;
+                event.stopPropagation();
+                setReactionPickerOpen((open) => !open);
+              }}
+            >
+              <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>
                 {!groupedWithPrevious ? (
-                  <div className="mb-0 flex items-baseline gap-2">
+                  <>
                     <a
                       href={profileLink || '#'}
-                      className={`truncate text-left text-sm font-semibold ${theme.senderAccent} hover:underline`}
+                      className={`font-semibold ${theme.senderAccent} hover:underline`}
                       {...usernameHoverProps(menuUser)}
                     >
                       @{author}
                     </a>
-                    <span className="font-mono text-[10px] opacity-75">{timestamp}</span>
-                  </div>
+                    {message.userId?.realName ? <span className="ml-1 text-[11px] opacity-50">({message.userId.realName})</span> : null}
+                    <span className="mx-1 opacity-30">–</span>
+                  </>
                 ) : null}
-                <div
-                  tabIndex={0}
-                  className="relative rounded-xl px-0.5 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
-                  onMouseOver={() => {
-                    if (canHoverForReactions && !reactionsDisabled) {
-                      openReactionPicker();
-                    }
-                  }}
-                  onMouseLeave={(event) => {
-                    if (canHoverForReactions && !reactionsDisabled) {
-                      scheduleCloseReactionPicker(event);
-                    }
-                  }}
-                  onClick={(event) => {
-                    if (reactionsDisabled) return;
-                    if (canHoverForReactions) return;
-                    if (event.target?.closest?.('a, button, [data-chat-no-user-menu="true"]')) return;
-                    event.stopPropagation();
-                    setReactionPickerOpen((open) => !open);
-                  }}
-                >
-                  <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>{renderMessageContent(displayContent)}</p>
-                  {reactionsMarkup}
-                </div>
-                {timestamp ? <span className="mt-0.5 block text-[10px] font-mono opacity-60">{timestamp}</span> : null}
-              </div>
-              {adminActionsMarkup}
+                {renderMessageContent(displayContent)}
+                {timestamp ? <span className="ml-2 whitespace-nowrap font-mono text-[10px] opacity-40">{timestamp}</span> : null}
+              </p>
+              {reactionsMarkup}
             </div>
+            {adminActionsMarkup}
           </div>
         </div>
-      </article>
+      </div>
+    </article>
   );
 }
 
