@@ -16,7 +16,9 @@ jest.mock('../utils/api', () => ({
     getNotifications: jest.fn(),
     markAsRead: jest.fn(),
     deleteNotification: jest.fn(),
-    markAllAsRead: jest.fn()
+    markAllAsRead: jest.fn(),
+    acknowledgeNotification: jest.fn(),
+    dismissNotification: jest.fn()
   },
   friendsAPI: {
     getRelationship: jest.fn(),
@@ -142,6 +144,7 @@ describe('NotificationCenter corner behavior', () => {
     });
     friendsAPI.acceptRequest.mockResolvedValue({ data: { success: true } });
     friendsAPI.updateFriendCategory.mockResolvedValue({ data: { success: true } });
+    notificationAPI.acknowledgeNotification.mockResolvedValue({ data: { success: true } });
 
     await renderCenter({ onUnreadCountChange });
 
@@ -158,7 +161,7 @@ describe('NotificationCenter corner behavior', () => {
       circleSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    const acceptButton = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === 'Accept');
+    const acceptButton = Array.from(container.querySelectorAll('button')).find((node) => node.textContent.includes('Accept'));
     expect(acceptButton).not.toBeNull();
     await act(async () => {
       acceptButton.click();
@@ -169,7 +172,7 @@ describe('NotificationCenter corner behavior', () => {
     expect(friendsAPI.getRelationship).toHaveBeenCalledWith('sender-1');
     expect(friendsAPI.acceptRequest).toHaveBeenCalledWith('friendship-1');
     expect(friendsAPI.updateFriendCategory).toHaveBeenCalledWith('friendship-1', 'secure');
-    expect(notificationAPI.markAsRead).toHaveBeenCalledWith('notif-1');
+    expect(notificationAPI.acknowledgeNotification).toHaveBeenCalledWith('notif-1');
     expect(onUnreadCountChange).toHaveBeenCalled();
     expect(container.textContent).not.toContain('New follow request');
 
