@@ -715,6 +715,14 @@ const Social = () => {
   const [draftTopFriendIds, setDraftTopFriendIds] = useState([]);
   const [inlineEditingPanelId, setInlineEditingPanelId] = useState('');
   const [activeHeroTab, setActiveHeroTab] = useState(() => resolveInitialHeroTab(window.location.pathname, window.location.search));
+
+  // Sync activeHeroTab with URL tab query parameter (for DotNav navigation)
+  useEffect(() => {
+    const tabFromUrl = new URLSearchParams(location.search).get('tab');
+    if (tabFromUrl && SOCIAL_HERO_TABS.some((t) => t.id === tabFromUrl) && tabFromUrl !== activeHeroTab) {
+      setActiveHeroTab(tabFromUrl);
+    }
+  }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   const [heroEditingOpen, setHeroEditingOpen] = useState(false);
   const [draftSocialPreferences, setDraftSocialPreferences] = useState(null);
   const [socialConfigs, setSocialConfigs] = useState([]);
