@@ -115,7 +115,7 @@ const RouteMain = ({ children }) => {
 
 const LegacyDiscoverRedirect = () => {
   const location = useLocation();
-  return <Navigate to={`/find-friends${location.search || ''}`} replace />;
+  return <Navigate to={`/find-friends${location.search || ''}${location.hash || ''}`} replace />;
 };
 
 function App() {
