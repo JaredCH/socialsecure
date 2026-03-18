@@ -24,7 +24,7 @@ const PresenceDot = ({ presence }) => {
 
 const Avatar = ({ url, size = 'w-10 h-10' }) => (
   <div className={`${size} shrink-0 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden`}>
-    {url ? <img src={url} alt="" className={`${size} rounded-full object-cover`} /> : <span className="text-lg">👤</span>}
+    {url ? <img src={url} alt="User avatar" className={`${size} rounded-full object-cover`} /> : <span className="text-lg">👤</span>}
   </div>
 );
 
