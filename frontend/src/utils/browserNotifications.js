@@ -6,7 +6,12 @@ const TYPE_TO_PREFERENCE_KEY = {
   message: 'messages',
   system: 'system',
   security_alert: 'securityAlerts',
-  market_transaction: 'system'
+  market_transaction: 'system',
+  friend_post: 'friendPosts',
+  top5_added: 'top5',
+  top5_removed: 'top5',
+  partner_request: 'partnerRequests',
+  partner_response: 'partnerRequests'
 };
 
 export const isBrowserNotificationSupported = () => (

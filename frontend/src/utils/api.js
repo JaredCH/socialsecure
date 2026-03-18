@@ -553,6 +553,9 @@ export const notificationAPI = {
   markAsRead: (id) => api.put(`/notifications/${encodeURIComponent(id)}/read`),
   markAllAsRead: () => api.put('/notifications/read-all'),
   deleteNotification: (id) => api.delete(`/notifications/${encodeURIComponent(id)}`),
+  acknowledgeNotification: (id) => api.put(`/notifications/${encodeURIComponent(id)}/acknowledge`),
+  dismissNotification: (id) => api.put(`/notifications/${encodeURIComponent(id)}/dismiss`),
+  getHistory: (page = 1, limit = 20) => api.get(`/notifications/history?page=${page}&limit=${limit}`),
   getPreferences: () => api.get('/notifications/preferences'),
   updatePreferences: (data) => api.put('/notifications/preferences', data),
 };
