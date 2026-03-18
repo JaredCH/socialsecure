@@ -2189,7 +2189,7 @@ function Chat({ isGuestMode = false }) {
           <div className={`h-4 w-3/5 animate-pulse rounded ${activeTheme.subtle}`} />
           <div className={`h-3 w-4/5 animate-pulse rounded ${activeTheme.subtle}`} />
           <div className={`h-3 w-2/5 animate-pulse rounded ${activeTheme.subtle}`} />
-          <p className="mt-2 text-center text-sm opacity-60 font-outfit">Loading unified chat hub&hellip;</p>
+          <p className="mt-2 text-center text-sm opacity-60 font-outfit">Loading unified chat hub…</p>
         </div>
       </div>
     );
@@ -3075,9 +3075,10 @@ function Chat({ isGuestMode = false }) {
                 {activeConversation ? (
                   <p className="mt-1 text-[11px] font-jetbrains opacity-80">
                     {getConversationLabel(activeConversation)} &middot;
-                    <span className="ml-1">🟢</span>
+                    <span className="ml-1" aria-hidden="true">🟢</span>
                     <span className="ml-0.5">{roomUsers.length} {roomUsers.length === 1 ? 'user' : 'users'}</span>
-                    <span className="ml-1">👥</span>
+                    <span className="ml-1" aria-hidden="true">👥</span>
+                    <span className="sr-only">online</span>
                   </p>
                 ) : (
                   <p className="mt-1 text-[11px] opacity-80">Select a room to see who's here.</p>
