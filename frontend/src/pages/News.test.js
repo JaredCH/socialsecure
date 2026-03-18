@@ -216,8 +216,10 @@ describe('News inline preferences updates', () => {
 
     await renderNews();
 
+    const expectedMessage = 'Your login session was lost or browser storage/cookies are disabled. Please log in again and enable browser storage/cookies.';
     expect(newsAPI.getPreferences).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Your login session was lost or browser storage/cookies are disabled.');
+    expect(container.textContent).toContain(expectedMessage);
+    expect(container.querySelector('a[href="/login"]')?.textContent).toContain('Go to login');
   });
 
   it('toggles a catalog source without DB id using provider identifier', async () => {

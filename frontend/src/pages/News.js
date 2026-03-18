@@ -95,7 +95,7 @@ function News({ isGuestMode = false }) {
     }
 
     if (!getAuthToken()) {
-      setSessionError('Your login session was lost or browser storage/cookies are disabled. Please log in again and enable site data.');
+      setSessionError('Your login session was lost or browser storage/cookies are disabled. Please log in again and enable browser storage/cookies.');
       return;
     }
 
@@ -298,7 +298,10 @@ function News({ isGuestMode = false }) {
   if (sessionError) {
     return (
       <div className="mx-auto my-10 w-full max-w-2xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
-        {sessionError}
+        <p>{sessionError}</p>
+        <a href="/login" className="mt-2 inline-flex rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">
+          Go to login
+        </a>
       </div>
     );
   }
