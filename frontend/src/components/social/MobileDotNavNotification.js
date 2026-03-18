@@ -118,7 +118,7 @@ const MobileDotNavNotification = ({
     setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !(notification._ids || []).includes(n._id)));
   }, [onDismiss]);
 
-  const handlePillClick = useCallback((notification) => {
+  const handlePillClick = useCallback(() => {
     if (onNavigate) onNavigate('/notifications');
   }, [onNavigate]);
 
@@ -208,8 +208,8 @@ const MobileDotNavNotification = ({
                 role="button"
                 tabIndex={0}
                 className="dotnav-mobile-notif-action dotnav-mobile-notif-action-agree"
-                onClick={(e) => { e.stopPropagation(); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.stopPropagation(); }}
+                onClick={(e) => handleAcknowledge(e, n)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAcknowledge(e, n); }}
                 aria-label="Agree"
                 data-testid="mobile-dotnav-notification-agree"
               >
@@ -230,8 +230,8 @@ const MobileDotNavNotification = ({
                 role="button"
                 tabIndex={0}
                 className="dotnav-mobile-notif-action dotnav-mobile-notif-action-decline"
-                onClick={(e) => { e.stopPropagation(); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.stopPropagation(); }}
+                onClick={(e) => handleDismiss(e, n)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleDismiss(e, n); }}
                 aria-label="Decline"
                 data-testid="mobile-dotnav-notification-decline"
               >
