@@ -21,7 +21,7 @@ import PostRegistrationWelcome from './pages/PostRegistrationWelcome';
 import ModerationDashboard from './pages/ModerationDashboard';
 import AdminNewsReview from './pages/AdminNewsReview';
 import NotificationCenter from './components/NotificationCenter';
-import GlobalSocialLauncher from './components/social/GlobalSocialLauncher';
+import DotNav from './components/social/DotNav';
 import NotificationSettings from './pages/NotificationSettings';
 import ResumePublic from './pages/ResumePublic';
 import MobileProfile from './pages/MobileProfile';
@@ -913,9 +913,8 @@ function App() {
           </Routes>
         </RouteMain>
 
-        <GlobalSocialLauncher
-          currentUsername={user?.username || ''}
-          unreadNotificationCount={unreadNotificationCount}
+        <DotNav
+          loggedInUser={user?.username || ''}
           enabled={canUseProtectedFeatures}
         />
 
