@@ -98,7 +98,7 @@ const Discovery = () => {
   const handleSendFriendRequest = async (userId) => {
     await friendsAPI.sendRequest(userId);
     // Emit follow analytics in the background (non-blocking)
-    discoveryAPI.trackEvent('follow_click', { targetUserId: userId }).catch(() => {});
+    discoveryAPI.trackEvent('follow_click', { targetUserId: userId, surface: 'find_friends' }).catch(() => {});
   };
 
   const handleLoadMoreUsers = () => loadUsers(usersPage + 1);
@@ -117,9 +117,9 @@ const Discovery = () => {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Discover</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Find Friends</h1>
         <p className="text-gray-500 text-sm mt-1">
-          People and posts you might find interesting
+          Find people and posts you might find interesting
         </p>
       </div>
 

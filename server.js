@@ -209,6 +209,13 @@ registerRoute('/api/blog', () => require('./routes/blog'));
 registerRoute('/api/admin', () => require('./routes/admin'));
 registerRoute('/api/guest', () => require('./routes/guest'));
 
+app.get(/^\/discover(?:\/.*)?$/, (req, res) => {
+  const suffix = req.path.replace(/^\/discover/, '');
+  const queryIndex = req.originalUrl.indexOf('?');
+  const query = queryIndex >= 0 ? req.originalUrl.slice(queryIndex) : '';
+  return res.redirect(301, `/find-friends${suffix}${query}`);
+});
+
 let newsRoutes = null;
 let mapsRoutes = null;
 try {
