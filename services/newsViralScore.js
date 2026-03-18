@@ -46,7 +46,7 @@ const envNumber = (name, fallback) => toNumber(process.env[name], fallback);
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
-const normalizeToken = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalizeToken = require('../utils/normalizeToken');
 
 const getWeights = () => {
   const weights = {

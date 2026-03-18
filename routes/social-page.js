@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const { v4: uuidv4 } = require('uuid');
 const User = require('../models/User');
 const SocialPageConfig = require('../models/SocialPageConfig');
+const { logEvent } = require('../utils/logEvent');
 const {
   SOCIAL_DESIGN_TEMPLATES,
   buildDefaultSocialPagePreferences,
@@ -70,7 +71,7 @@ const normalizeConfigName = (name, fallback = 'Untitled design') => {
 
 const cloneValue = (value) => JSON.parse(JSON.stringify(value));
 
-const logSocialPageEvent = () => {};
+const logSocialPageEvent = (payload) => logEvent(payload);
 
 const serializeConfig = (configDoc, viewerId = null) => ({
   _id: String(configDoc._id),

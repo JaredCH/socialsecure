@@ -10,6 +10,11 @@ const Spotlight = require('../models/Spotlight');
 const HeatmapAggregation = require('../models/HeatmapAggregation');
 const FavoriteLocation = require('../models/FavoriteLocation');
 const User = require('../models/User');
+const {
+  requireAuth: authenticateToken,
+  optionalAuth,
+  authErrorHandler
+} = require('../middleware/parseAuthToken');
 
 const parseCoordinate = (value) => {
   const parsed = Number(value);
@@ -85,43 +90,6 @@ const serializeFavoriteLocation = (favorite) => {
     createdAt: favorite.createdAt,
     updatedAt: favorite.updatedAt
   };
-};
-
-// ============================================
-// AUTHENTICATION MIDDLEWARE
-// ============================================
-
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  
-  const jwt = require('jsonwebtoken');
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' });
-    req.user = user;
-    next();
-  });
-};
-
-// Optional authentication (for public endpoints)
-const optionalAuth = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) {
-    req.user = null;
-    return next();
-  }
-  
-  const jwt = require('jsonwebtoken');
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
-    req.user = err ? null : user;
-    next();
-  });
 };
 
 // ============================================
@@ -795,6 +763,8 @@ function stopScheduledJobs() {
   if (cleanupInterval) clearInterval(cleanupInterval);
   if (heatmapInterval) clearInterval(heatmapInterval);
 }
+
+router.use(authErrorHandler);
 
 // Export for server.js
 module.exports = {

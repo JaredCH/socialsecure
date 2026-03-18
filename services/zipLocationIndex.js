@@ -3,6 +3,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const NodeGeocoder = require('node-geocoder');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
+const normalizeToken = require('../utils/normalizeToken');
 
 const STATIC_ZIP_LOCATION_INDEX = Object.freeze({
   '78666': {
@@ -36,7 +37,6 @@ const normalizeZipCode = (value) => {
   if (typeof value !== 'string' && typeof value !== 'number') return '';
   return String(value).trim().toUpperCase().replace(/\s+/g, '').split('-')[0];
 };
-const normalizeToken = (value) => String(value || '').trim().toLowerCase();
 const normalizeCountryCode = (value) => {
   const token = normalizeToken(value);
   if (token === 'usa' || token === 'united states') return 'us';

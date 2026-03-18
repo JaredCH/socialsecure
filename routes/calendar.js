@@ -1,8 +1,12 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
+const {
+  requireAuth,
+  optionalAuth,
+  authErrorHandler
+} = require('../middleware/parseAuthToken');
 const {
   RELATIONSHIP_AUDIENCE_VALUES,
   normalizeRelationshipAudience,
@@ -62,40 +66,13 @@ const buildBoundedDateRange = (fromInput, toInput) => {
   return { from, to };
 };
 
-const requireAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', (err, user) => {
-    if (err || !user?.userId) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
-    }
-    req.user = { userId: String(user.userId) };
-    return next();
-  });
-};
-
-const optionalAuth = (req, _res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
+const normalizeAuthUser = (req, _res, next) => {
+  if (req.user?.userId) {
+    req.user = { userId: String(req.user.userId) };
+  } else if (!req.user) {
     req.user = null;
-    return next();
   }
-
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', (err, user) => {
-    if (err || !user?.userId) {
-      req.user = null;
-      return next();
-    }
-    req.user = { userId: String(user.userId) };
-    return next();
-  });
+  return next();
 };
 
 const ensureCalendarForOwner = async (ownerId) => {
@@ -148,7 +125,7 @@ const eventResponse = (event) => ({
   updatedAt: event.updatedAt
 });
 
-router.get('/me', requireAuth, async (req, res) => {
+router.get('/me', requireAuth, normalizeAuthUser, async (req, res) => {
   try {
     const ownerId = req.user.userId;
     const calendar = await ensureCalendarForOwner(ownerId);
@@ -173,7 +150,7 @@ router.get('/me', requireAuth, async (req, res) => {
   }
 });
 
-router.patch('/me/settings', requireAuth, [
+router.patch('/me/settings', requireAuth, normalizeAuthUser, [
   body('title').optional().isString().trim().isLength({ min: 1, max: 120 }),
   body('description').optional().isString().trim().isLength({ max: 500 }),
   body('guestVisibility').optional().isIn(['private', 'public_readonly', 'friends_readonly']),
@@ -206,7 +183,7 @@ router.patch('/me/settings', requireAuth, [
   }
 });
 
-router.get('/me/events', requireAuth, async (req, res) => {
+router.get('/me/events', requireAuth, normalizeAuthUser, async (req, res) => {
   try {
     const ownerId = req.user.userId;
     const range = buildBoundedDateRange(req.query.from, req.query.to);
@@ -312,7 +289,7 @@ const validateEventDates = (payload) => {
   return null;
 };
 
-router.post('/me/events', requireAuth, eventMutationLimiter, eventValidation, async (req, res) => {
+router.post('/me/events', requireAuth, normalizeAuthUser, eventMutationLimiter, eventValidation, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -344,7 +321,7 @@ router.post('/me/events', requireAuth, eventMutationLimiter, eventValidation, as
   }
 });
 
-router.put('/me/events/:eventId', requireAuth, eventMutationLimiter, eventValidation, async (req, res) => {
+router.put('/me/events/:eventId', requireAuth, normalizeAuthUser, eventMutationLimiter, eventValidation, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -386,7 +363,7 @@ router.put('/me/events/:eventId', requireAuth, eventMutationLimiter, eventValida
   }
 });
 
-router.delete('/me/events/:eventId', requireAuth, eventMutationLimiter, async (req, res) => {
+router.delete('/me/events/:eventId', requireAuth, normalizeAuthUser, eventMutationLimiter, async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.eventId)) {
     return res.status(400).json({ error: 'Invalid event ID' });
   }
@@ -414,7 +391,7 @@ router.delete('/me/events/:eventId', requireAuth, eventMutationLimiter, async (r
   }
 });
 
-router.get('/user/:username', optionalAuth, async (req, res) => {
+router.get('/user/:username', optionalAuth, normalizeAuthUser, async (req, res) => {
   try {
     const username = String(req.params.username || '').trim().toLowerCase();
     if (!username) {
@@ -460,7 +437,7 @@ router.get('/user/:username', optionalAuth, async (req, res) => {
   }
 });
 
-router.get('/user/:username/events', optionalAuth, async (req, res) => {
+router.get('/user/:username/events', optionalAuth, normalizeAuthUser, async (req, res) => {
   try {
     const username = String(req.params.username || '').trim().toLowerCase();
     if (!username) {
@@ -532,5 +509,7 @@ router.get('/user/:username/events', optionalAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to load user calendar events' });
   }
 });
+
+router.use(authErrorHandler);
 
 module.exports = router;

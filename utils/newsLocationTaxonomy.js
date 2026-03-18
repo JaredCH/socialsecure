@@ -3,6 +3,7 @@ const tvAffiliates = require('../data/news/us-tv-affiliates.json');
 const newspapers = require('../data/news/us-newspapers.json');
 const { SPORTS_TEAMS } = require('../data/news/sportsTeamLocationIndex');
 const { US_CITY_LOCATION_ENTRIES } = require('../data/news/cityLocationIndex');
+const normalizeToken = require('./normalizeToken');
 
 const US_COUNTRY_CANONICAL = 'US';
 
@@ -65,7 +66,6 @@ const US_STATES_AND_TERRITORIES = [
   { code: 'VI', name: 'U.S. Virgin Islands' }
 ];
 
-const normalizeToken = (value) => String(value || '').trim().toLowerCase();
 const titleCase = (value) => String(value || '')
   .split(/\s+/)
   .filter(Boolean)

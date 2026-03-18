@@ -19,26 +19,16 @@ const express = require('express');
 const router = express.Router();
 const https = require('https');
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
+const {
+  requireAuth: authenticateToken,
+  authErrorHandler
+} = require('../middleware/parseAuthToken');
 
 const NewsPreferences = require('../models/NewsPreferences');
 const User = require('../models/User');
 const Article = require('../models/Article');
 const ArticleImpression = require('../models/ArticleImpression');
 
-// ---------------------------------------------------------------------------
-// Auth middleware (mirrors the pattern used across all route files)
-// ---------------------------------------------------------------------------
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Authentication required' });
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production', (err, decoded) => {
-    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
-    req.user = decoded;
-    next();
-  });
-};
 const { getTeamSchedules, getLeagueStatusMap, getAllLeagueStatuses } = require('../services/sportsScheduleIngestion');
 const { SPORTS_TEAMS: SPORTS_CATALOG } = require('../data/news/sportsTeamLocationIndex');
 const { CATEGORY_FEEDS, CATEGORY_ORDER } = require('../config/newsCategoryFeeds');
@@ -1841,6 +1831,8 @@ function startIngestionScheduler() {
   schedulerStartedAt = new Date();
   startCacheRefreshScheduler();
 }
+
+router.use(authErrorHandler);
 
 module.exports = {
   router,

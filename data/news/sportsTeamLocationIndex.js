@@ -1,3 +1,5 @@
+const normalizeToken = require('../../utils/normalizeToken');
+
 const league = (id, label, icon, sport, teams) => ({ id, label, icon, sport, teams });
 
 const LEAGUE_CATALOG = [
@@ -279,8 +281,6 @@ const LEAGUE_CATALOG = [
     ['Villarreal', 'Villarreal', 'ES', ['Villarreal CF']]
   ])
 ];
-
-const normalizeToken = (value) => String(value || '').trim().toLowerCase();
 
 const toSlug = (value = '') => normalizeToken(value).replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 

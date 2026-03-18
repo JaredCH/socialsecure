@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const TopFriend = require('../models/TopFriend');
 const Presence = require('../models/Presence');
+const { logEvent } = require('../utils/logEvent');
 const { createNotification } = require('../services/notifications');
 const { buildPresencePayload, getPresenceMapForUsers } = require('../services/realtime');
 const { RELATIONSHIP_AUDIENCE_VALUES, normalizeRelationshipAudience } = require('../utils/relationshipAudience');
@@ -15,24 +16,7 @@ const VALID_FRIEND_CATEGORIES = [...RELATIONSHIP_AUDIENCE_VALUES];
 const VALID_PARTNER_ACTIONS = ['request', 'accept', 'deny', 'clear'];
 const TOP_FRIENDS_LIMIT = 5;
 
-const getClientIp = (req) => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.trim()) {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.ip || req.socket?.remoteAddress || 'unknown';
-};
-
-const logFriendEvent = ({ eventType, userId, metadata = {}, req }) => {
-  console.log('[friend-event]', JSON.stringify({
-    eventType,
-    userId: userId ? String(userId) : null,
-    metadata,
-    ipAddress: getClientIp(req),
-    userAgent: req.get('user-agent') || null,
-    createdAt: new Date().toISOString()
-  }));
-};
+const logFriendEvent = (payload) => logEvent(payload);
 
 const getViewerRelationshipAudience = (friendship, viewerId) => {
   const normalizedViewerId = String(viewerId || '');

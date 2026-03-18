@@ -1,3 +1,5 @@
+const normalizeToken = require('../../utils/normalizeToken');
+
 const STATE_NAME_BY_ABBREV = {
   AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
   CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', FL: 'Florida', GA: 'Georgia',
@@ -86,8 +88,6 @@ const EUROPE_TOP_20_CITIES = [
   { city: 'Belgrade', country: 'Serbia' },
   { city: 'Sofia', country: 'Bulgaria' }
 ];
-
-const normalizeToken = (value) => String(value || '').trim().toLowerCase();
 
 const US_CITY_LOCATION_ENTRIES = Object.entries(US_STATE_TOP_CITIES)
   .flatMap(([stateAbbrev, cities]) => cities.map((city) => ({
