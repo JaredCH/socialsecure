@@ -249,7 +249,7 @@ function resolveRoute(catalogEntry, loggedInUser, viewingUser) {
 // ═══════════════════════════════════════════
 // DOTNAV COMPONENT
 // ═══════════════════════════════════════════
-const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0, incomingNotification = null, onNotificationInteraction }) => {
+const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0, incomingNotification = null, onNotificationAcknowledge, onNotificationDismiss }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -857,8 +857,8 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
       <MobileDotNavNotification
         notification={incomingNotification}
         dotnavHeight={DSIZ + PAD}
-        onAcknowledge={onNotificationInteraction}
-        onDismiss={onNotificationInteraction}
+        onAcknowledge={onNotificationAcknowledge}
+        onDismiss={onNotificationDismiss}
       />
     </>
   );

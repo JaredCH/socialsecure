@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 // ═══════════════════════════════════════════
 const AUTO_DISMISS_MS = 6000;
 const ANIMATION_DURATION_MS = 350;
+const BOTTOM_GAP_PX = 16;
 
 /**
  * MobileDotNavNotification – overlay notification toast for the mobile DotNav.
@@ -64,7 +65,7 @@ const MobileDotNavNotification = ({ notification, dotnavHeight = 72, onAcknowled
   return (
     <div
       className={`dotnav-mobile-notification${visible ? ' dotnav-mobile-notification-visible' : ''}`}
-      style={{ bottom: dotnavHeight + 16 }}
+      style={{ bottom: dotnavHeight + BOTTOM_GAP_PX }}
       role="alert"
       aria-live="assertive"
       data-testid="mobile-dotnav-notification"
