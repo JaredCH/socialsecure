@@ -1,6 +1,16 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+
+// Mock the notification API used by MobileDotNavNotification
+jest.mock('../../utils/api', () => ({
+  notificationAPI: {
+    getNotifications: jest.fn(),
+  },
+}));
+
+const { notificationAPI } = require('../../utils/api');
+
 import DotNav, { CATALOG, resolveRoute, DEFAULT_ASSIGNED } from './DotNav';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -35,6 +45,7 @@ describe('DotNav navigation system', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [] } });
     originalWidth = window.innerWidth;
     originalHeight = window.innerHeight;
     originalUserAgent = navigator.userAgent;

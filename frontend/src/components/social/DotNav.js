@@ -249,7 +249,7 @@ function resolveRoute(catalogEntry, loggedInUser, viewingUser) {
 // ═══════════════════════════════════════════
 // DOTNAV COMPONENT
 // ═══════════════════════════════════════════
-const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0, incomingNotification = null, onNotificationAcknowledge, onNotificationDismiss }) => {
+const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0, incomingNotification = null, onNotificationAcknowledge, onNotificationDismiss, onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -855,8 +855,10 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
 
       {/* Mobile notification overlay – positioned above DotNav, never overlapping */}
       <MobileDotNavNotification
-        notification={incomingNotification}
+        isOpen={isOpen}
         dotnavHeight={DSIZ + PAD}
+        onLogout={onLogout}
+        onNavigate={(path) => { navigate(path); setIsOpen(false); }}
         onAcknowledge={onNotificationAcknowledge}
         onDismiss={onNotificationDismiss}
       />
