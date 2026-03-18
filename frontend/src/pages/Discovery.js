@@ -89,13 +89,21 @@ const Discovery = () => {
     if (activeTab === 'people' && !usersLoaded && !usersLoading) {
       loadUsers(1, searchQuery);
     }
-  }, [activeTab, loadUsers, usersLoaded, usersLoading, searchQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, loadUsers, usersLoaded, usersLoading]);
 
   useEffect(() => {
     if (activeTab === 'posts' && !postsLoaded && !postsLoading) {
       loadPosts(1);
     }
   }, [activeTab, loadPosts, postsLoaded, postsLoading]);
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
 
   // Debounced search
   const handleSearchChange = (value) => {

@@ -236,8 +236,6 @@ const SocialHero = ({
   const nameStyle = { color: nameColor };
   const locationStyle = { color: locationColor };
 
-  const hasOverlayEffects = backgroundImage && (backgroundImageOverlay > 0 || backgroundImageGrain > 0 || backgroundImageBlur > 0);
-
   return (
     <div 
       className="relative w-full overflow-visible"
