@@ -629,6 +629,13 @@ const Social = () => {
   });
   const [isGuestPreview, setIsGuestPreview] = useState(false);
   const [guestUser, setGuestUser] = useState(initialGuestUser);
+
+  // Sync guestUser with URL user query parameter on client-side navigation
+  useEffect(() => {
+    const userFromUrl = new URLSearchParams(location.search).get('user') || '';
+    setGuestUser((prev) => (prev === userFromUrl ? prev : userFromUrl));
+  }, [location.search]);
+
   const [guestProfile, setGuestProfile] = useState(null);
   const [ownerResumeMeta, setOwnerResumeMeta] = useState(null);
   const [posts, setPosts] = useState([]);

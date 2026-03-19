@@ -300,6 +300,41 @@ describe('Social page hero background rendering', () => {
     expect(locationProbe?.textContent).toBe('/social?user=buddy');
   });
 
+  it('switches to another user profile when navigating via URL after initial mount', async () => {
+    // Start on own profile
+    window.history.replaceState({}, '', '/social');
+    feedAPI.getPublicUserFeed.mockResolvedValue({
+      data: {
+        posts: [],
+        user: { _id: 'u-2', username: 'buddy', realName: 'Buddy Pal' }
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    // Verify we're on own profile first
+    const locationProbe = container.querySelector('[data-testid="location-probe"]');
+    expect(locationProbe?.textContent).toBe('/social?user=alpha');
+
+    // Now navigate to another user's profile (simulates clicking a link)
+    await act(async () => {
+      navigateRef('/social?user=buddy');
+    });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+
+    // URL should show buddy
+    expect(locationProbe?.textContent).toBe('/social?user=buddy');
+
+    // The guest public feed API should have been called for buddy
+    expect(feedAPI.getPublicUserFeed).toHaveBeenCalledWith('buddy');
+
+    // Should NOT show owner controls (compose post) since we're viewing another user
+    expect(container.textContent).not.toContain('Compose a new post');
+    // Should display the other user's name
+    expect(container.textContent).toContain('Buddy Pal');
+  });
+
   it('shows owner controls when visiting own profile with username in URL', async () => {
     window.history.replaceState({}, '', '/social?user=alpha');
 
