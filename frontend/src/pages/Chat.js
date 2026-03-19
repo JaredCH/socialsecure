@@ -1965,6 +1965,12 @@ function Chat({ isGuestMode = false }) {
     return 'Secure Chat';
   }, [activeChannel, activeConversation]);
   const activeMenuIcon = activeConversation ? getConversationTabIcon(activeConversation) : (activeChannel === 'dm' ? '✉️' : '💬');
+  const filterJoinedRooms = useCallback((rooms) => rooms.filter((room) => {
+    const roomId = normalizeId(room?._id);
+    if (joinedRoomIds[roomId]) return true;
+    const children = childRoomsByParentId[roomId] || [];
+    return children.some((child) => joinedRoomIds[normalizeId(child?._id)]);
+  }), [joinedRoomIds, childRoomsByParentId]);
   const renderManagedRoomBranch = useCallback((room, depth = 0, extraProps = {}, joinedOnly = false) => {
     const roomId = normalizeId(room?._id);
     const allChildren = (childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder);
@@ -2338,12 +2344,7 @@ function Chat({ isGuestMode = false }) {
                     </ul>
                   ) : (
                     <ul className="mt-1 space-y-0.5" data-testid="state-joined-rooms">
-                      {managedStateRooms.filter((room) => {
-                        const roomId = normalizeId(room?._id);
-                        if (joinedRoomIds[roomId]) return true;
-                        const children = childRoomsByParentId[roomId] || [];
-                        return children.some((child) => joinedRoomIds[normalizeId(child?._id)]);
-                      }).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
+                      {filterJoinedRooms(managedStateRooms).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
                     </ul>
                   )}
                 </section>
@@ -2367,12 +2368,7 @@ function Chat({ isGuestMode = false }) {
                     </ul>
                   ) : (
                     <ul className="mt-1 space-y-0.5" data-testid="county-joined-rooms">
-                      {managedCountyRooms.filter((room) => {
-                        const roomId = normalizeId(room?._id);
-                        if (joinedRoomIds[roomId]) return true;
-                        const children = childRoomsByParentId[roomId] || [];
-                        return children.some((child) => joinedRoomIds[normalizeId(child?._id)]);
-                      }).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
+                      {filterJoinedRooms(managedCountyRooms).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
                     </ul>
                   )}
                 </section>
