@@ -141,6 +141,11 @@ describe('App navbar features dropdown', () => {
 
     await renderApp();
 
+    const topNav = container.querySelector('nav');
+    expect(topNav).not.toBeNull();
+    expect(topNav.className).toContain('to-blue-50');
+    expect(topNav.className).not.toContain('to-blue-50/60');
+
     const mainNav = container.querySelector('#main-nav-menu');
     expect(mainNav).not.toBeNull();
     const navText = mainNav.textContent;
