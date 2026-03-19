@@ -82,6 +82,8 @@ describe('Chat zip room indicator', () => {
 
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const DM_DECRYPT_RETRY_DELAY_MS = 200;
+  const DM_DECRYPT_RETRY_TEST_WAIT_MS = DM_DECRYPT_RETRY_DELAY_MS + 60;
   // React 18 controlled inputs in this test style require invoking the native setter
   // so React sees a real input event and updates state from DOM interactions.
   const setInputValue = (input, value) => {
@@ -2023,7 +2025,7 @@ describe('Chat zip room indicator', () => {
 
     await unlockActiveDm();
     await act(async () => {
-      await wait(260);
+      await wait(DM_DECRYPT_RETRY_TEST_WAIT_MS);
       await flush();
       await flush();
     });

@@ -573,6 +573,7 @@ function Chat({ isGuestMode = false }) {
   const e2eeSessionRef = useRef(null);
   const decryptingMessageIdsRef = useRef(new Set());
   const dmDecryptRetryCountRef = useRef({});
+  const dmKeysHydratedByConversationRef = useRef({});
   const participantRefreshTimerRef = useRef(null);
   const lastParticipantRefreshAtRef = useRef(0);
 
@@ -1565,7 +1566,9 @@ function Chat({ isGuestMode = false }) {
   }, [profile?._id]);
 
   const hydrateConversationKeys = useCallback(async ({ conversationId, session }) => {
-    const { data } = await chatAPI.syncConversationKeyPackages(conversationId, session.deviceId);
+    const normalizedConversationId = String(conversationId || '');
+    if (!normalizedConversationId) return;
+    const { data } = await chatAPI.syncConversationKeyPackages(normalizedConversationId, session.deviceId);
     const packages = Array.isArray(data?.packages) ? data.packages : [];
     let hasNewRoomKey = false;
     for (const pkg of packages) {
@@ -1582,6 +1585,9 @@ function Chat({ isGuestMode = false }) {
     if (hasNewRoomKey) {
       await session.persist();
       setDmDecryptRetryNonce((prev) => prev + 1);
+    }
+    if (normalizedConversationId) {
+      dmKeysHydratedByConversationRef.current[normalizedConversationId] = true;
     }
   }, []);
 
@@ -1604,8 +1610,12 @@ function Chat({ isGuestMode = false }) {
     const decryptMessages = async () => {
       try {
         const session = await ensureE2EESession();
-        await hydrateConversationKeys({ conversationId, session });
+        if (!dmKeysHydratedByConversationRef.current[conversationId]) {
+          await hydrateConversationKeys({ conversationId, session });
+        }
+        const retryCount = Number(dmDecryptRetryCountRef.current[conversationId] || 0);
         const decryptedEntries = {};
+        let failedDecryptCount = 0;
         for (const message of pendingMessages) {
           const messageId = String(message._id);
           decryptingMessageIdsRef.current.add(messageId);
@@ -1616,26 +1626,26 @@ function Chat({ isGuestMode = false }) {
               envelope: message.e2ee
             });
           } catch {
+            failedDecryptCount += 1;
             // keep encrypted placeholder when key is unavailable
           } finally {
             decryptingMessageIdsRef.current.delete(messageId);
           }
         }
         if (!cancelled && Object.keys(decryptedEntries).length > 0) {
-          dmDecryptRetryCountRef.current[conversationId] = 0;
           setDecryptedDmContentById((prev) => ({
             ...prev,
             ...decryptedEntries
           }));
-          return;
         }
 
-        const retryCount = Number(dmDecryptRetryCountRef.current[conversationId] || 0);
-        if (!cancelled && retryCount < DM_DECRYPT_MAX_RETRIES) {
+        if (!cancelled && failedDecryptCount > 0 && retryCount < DM_DECRYPT_MAX_RETRIES) {
           dmDecryptRetryCountRef.current[conversationId] = retryCount + 1;
           retryTimeoutId = window.setTimeout(() => {
             setDmDecryptRetryNonce((prev) => prev + 1);
           }, DM_DECRYPT_RETRY_DELAY_MS);
+        } else if (!cancelled && failedDecryptCount === 0) {
+          dmDecryptRetryCountRef.current[conversationId] = 0;
         }
       } catch {
         // decryption waits until credentials/session are available
@@ -1988,6 +1998,7 @@ function Chat({ isGuestMode = false }) {
     try {
       await authAPI.verifyEncryptionPassword(passwordInput, unlockDurationMinutes);
       const session = await ensureE2EESession(passwordInput);
+      dmKeysHydratedByConversationRef.current[String(activeConversationId)] = false;
       await hydrateConversationKeys({ conversationId: activeConversationId, session });
       dmDecryptRetryCountRef.current[String(activeConversationId)] = 0;
       setDecryptedDmContentById({});
@@ -2044,6 +2055,7 @@ function Chat({ isGuestMode = false }) {
     setPasswordInput('');
     persistDmUnlockCache(activeConversationId, false);
     dmDecryptRetryCountRef.current[String(activeConversationId)] = 0;
+    dmKeysHydratedByConversationRef.current[String(activeConversationId)] = false;
     e2eeSessionRef.current = null;
     toast.success('Direct message locked.');
   }, [activeConversation?.type, activeConversationId, persistDmUnlockCache]);
