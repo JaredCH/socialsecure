@@ -1700,7 +1700,7 @@ router.get('/control-panel/news-review/articles', authenticateToken, requireAdmi
   try {
     const {
       city, state, zipCode, county,
-      category, source, keyword,
+      category, source, keyword, pipeline,
       dateFrom, dateTo,
       localityLevel, isActive,
       sortBy = 'publishedAt', sortDir = 'desc',
@@ -1717,6 +1717,7 @@ router.get('/control-panel/news-review/articles', authenticateToken, requireAdmi
 
     if (category) filter.category = category.trim().toLowerCase();
     if (source) filter.source = { $regex: new RegExp(source.trim(), 'i') };
+    if (pipeline) filter.pipeline = pipeline.trim().toLowerCase();
     if (localityLevel) filter.localityLevel = localityLevel.trim();
     if (typeof isActive !== 'undefined' && isActive !== '') {
       filter.isActive = isActive === 'true';
@@ -1748,7 +1749,7 @@ router.get('/control-panel/news-review/articles', authenticateToken, requireAdmi
 
     const [articles, total] = await Promise.all([
       Article.find(filter)
-        .select('title description source category publishedAt ingestTimestamp localityLevel locationTags locations viralScore scopeReason scopeConfidence isActive isPromoted feedSource url')
+        .select('title description source category pipeline publishedAt ingestTimestamp localityLevel locationTags locations viralScore scopeReason scopeConfidence isActive isPromoted feedSource url')
         .sort({ [sortField]: sortOrder })
         .skip(skip)
         .limit(limitNum)
