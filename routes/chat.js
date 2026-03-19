@@ -2826,8 +2826,8 @@ router.post('/rooms/:roomId/join', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Chat room not found' });
     }
 
-    const joiningUser = await User.findById(userId).select('_id').lean();
-    if (!joiningUser) {
+    const joiningUserExists = await User.exists({ _id: userId });
+    if (!joiningUserExists) {
       return res.status(404).json({ error: 'User not found' });
     }
 
