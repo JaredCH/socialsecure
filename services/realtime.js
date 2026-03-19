@@ -391,8 +391,8 @@ const bindSocketHandlers = () => {
             };
             emitToSocketRoom(`room:${normalizedRoomId}`, 'room:viewer-join', payload);
           }
-        } catch {
-          // best-effort
+        } catch (err) {
+          console.warn('Failed to broadcast room viewer join:', err?.message || err);
         }
       }
     });
