@@ -1082,6 +1082,8 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).toContain('View user social');
     expect(container.textContent).toContain('Request friendship');
     expect(container.textContent).toContain('Block/ignore');
+    expect(container.textContent).toContain('Mute user');
+    expect(container.textContent).toContain('Report user');
   });
 
   it('replaces attachment control with URL formatter and inserts a short link token', async () => {
@@ -2178,6 +2180,130 @@ describe('Chat zip room indicator', () => {
     expect(moderationAPI.unmuteUserByAdmin).toHaveBeenCalledWith('u2');
     expect(container.querySelector('button[aria-label="Remove message"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="Mute user for 2 hours"]')).not.toBeNull();
+  });
+
+  it('renders Topic Rooms section in chat discovery sidebar', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: null, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', defaultLanding: true, sortOrder: 0 },
+          { _id: 'topic-tech', type: 'topic', name: 'Technology', discoveryGroup: 'topics', sortOrder: 1 }
+        ]
+      }
+    });
+
+    await renderChat();
+    expect(container.textContent).toContain('Topic Rooms');
+    const topicToggle = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Topic Rooms'));
+    expect(topicToggle).toBeDefined();
+  });
+
+  it('shows channel notification counters for dm unread and room ping unread', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'topic-socialsecure', type: 'topic', title: 'SocialSecure' }, nearby: [] },
+          dm: [{ _id: 'dm-1', type: 'dm', lastMessageAt: '2024-01-01T00:00:00.000Z', peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getMessages.mockResolvedValue({ data: { messages: [], pagination: { hasMore: false } } });
+
+    await renderChat();
+    const dmTab = Array.from(container.querySelectorAll('[data-chat-channel-tabs] button'))
+      .find((button) => button.textContent.includes('DIRECT MSG'));
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    await act(async () => {
+      mockRealtimeChatHandler?.({
+        message: {
+          _id: 'm-ping-1',
+          roomId: 'topic-socialsecure',
+          content: '@alpha hi',
+          userId: { _id: 'u2', username: 'buddy' },
+          createdAt: new Date().toISOString()
+        }
+      });
+      await flush();
+    });
+
+    const directMsgTab = Array.from(container.querySelectorAll('[data-chat-channel-tabs] button'))
+      .find((button) => button.textContent.includes('DIRECT MSG'));
+    expect(directMsgTab?.textContent).toContain('DIRECT MSG');
+  });
+
+  it('shows unread divider label when opening a room with new messages after last seen', async () => {
+    localStorage.setItem('socialsecure_chat_last_seen_ts_v1', JSON.stringify({ 'topic-socialsecure': new Date('2024-01-01T00:01:30.000Z').getTime() }));
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'topic-socialsecure', type: 'topic', title: 'SocialSecure' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getMessages.mockResolvedValue({
+      data: {
+        messages: [
+          { _id: 'm1', content: 'old', roomId: 'topic-socialsecure', userId: { _id: 'u2', username: 'buddy' }, createdAt: '2024-01-01T00:01:00.000Z' },
+          { _id: 'm2', content: 'new', roomId: 'topic-socialsecure', userId: { _id: 'u3', username: 'charlie' }, createdAt: '2024-01-01T00:02:00.000Z' }
+        ],
+        pagination: { hasMore: false }
+      }
+    });
+
+    await renderChat();
+    expect(container.querySelector('[data-testid="chat-unread-divider"]')).not.toBeNull();
+  });
+
+  it('renders theme selector and presence selector with dnd option', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: null, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+    const themeSelector = container.querySelector('select[aria-label="Chat theme selector"]');
+    const presenceSelector = container.querySelector('select[aria-label="Presence status selector"]');
+    expect(themeSelector).not.toBeNull();
+    expect(presenceSelector).not.toBeNull();
+    const themeOptions = Array.from(themeSelector.querySelectorAll('option')).map((option) => option.textContent);
+    expect(themeOptions).toContain('Dark');
+    expect(themeOptions).toContain('Light');
+    expect(themeOptions).toContain('Medium');
+    expect(Array.from(presenceSelector.querySelectorAll('option')).map((option) => option.textContent)).toEqual(['Online', 'Away', 'Do Not Disturb']);
   });
 
   it('admin can permanently delete a message via the delete button', async () => {

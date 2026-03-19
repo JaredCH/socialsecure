@@ -30,7 +30,10 @@ function ChatMessageList({
   onToggleAdminUserMute,
   onAdminDeleteMessage,
   onUsernameHoverStart,
-  onUsernameHoverEnd
+  onUsernameHoverEnd,
+  unreadDividerTimestamp = 0,
+  highlightedMessageIds = {},
+  readReceiptByMessageId = {}
 }) {
   const scrollRef = useRef(null);
   const previousConversationIdRef = useRef(String(conversationId || ''));
@@ -113,6 +116,13 @@ function ChatMessageList({
       };
     })
   ), [visibleMessages]);
+  const unreadDividerIndex = useMemo(() => {
+    if (!Number.isFinite(unreadDividerTimestamp) || unreadDividerTimestamp <= 0) return -1;
+    return visibleMessagesWithGrouping.findIndex(({ message }) => {
+      const messageTs = new Date(message?.createdAt || 0).getTime();
+      return Number.isFinite(messageTs) && messageTs > unreadDividerTimestamp;
+    });
+  }, [unreadDividerTimestamp, visibleMessagesWithGrouping]);
 
   return (
     <div className={`relative flex-1 min-h-0 overflow-hidden rounded-2xl ${theme.messagesShell}`}>
@@ -180,35 +190,52 @@ function ChatMessageList({
             <p className="mt-1 text-[11px] opacity-70">Start the conversation by typing below.</p>
           </div>
         ) : (
-          visibleMessagesWithGrouping.map(({ message, groupedWithPrevious, groupedWithNext }) => (
-            <ChatMessageItem
-              key={String(message._id)}
-              message={message}
-              conversationType={conversationType}
-              groupedWithPrevious={groupedWithPrevious}
-              groupedWithNext={groupedWithNext}
-              isOwnMessage={String(message.userId?._id) === String(profile?._id)}
-              currentUserId={profile?._id}
-              censorSensitiveWords={censorSensitiveWords}
-              theme={theme}
-              onOpenUserMenu={onOpenUserMenu}
-               reactionsByType={reactionsByMessageId?.[String(message._id)] || {}}
-               reactionOptions={reactionOptions}
-                onToggleReaction={onToggleReaction}
-                reactionsDisabled={reactionsDisabled}
-                longPressDelayMs={longPressDelayMs}
-               showAdminActions={showAdminActions}
-               adminMutedUserIds={adminMutedUserIds}
-               adminProcessingMessageIds={adminProcessingMessageIds}
-               adminProcessingUserIds={adminProcessingUserIds}
-               onToggleAdminMessageRemoval={onToggleAdminMessageRemoval}
-               onToggleAdminUserMute={onToggleAdminUserMute}
-               onAdminDeleteMessage={onAdminDeleteMessage}
-               onUsernameHoverStart={onUsernameHoverStart}
-               onUsernameHoverEnd={onUsernameHoverEnd}
-             />
-           ))
-         )}
+          visibleMessagesWithGrouping.map(({ message, groupedWithPrevious, groupedWithNext }) => {
+            const messageTs = new Date(message?.createdAt || 0).getTime();
+            const shouldShowUnreadDivider = unreadDividerIndex >= 0
+              && String(visibleMessagesWithGrouping[unreadDividerIndex]?.message?._id || '') === String(message?._id || '')
+              && Number.isFinite(messageTs)
+              && messageTs > unreadDividerTimestamp;
+            return (
+              <React.Fragment key={String(message._id)}>
+                {shouldShowUnreadDivider ? (
+                  <div className="my-2 flex items-center gap-2" data-testid="chat-unread-divider">
+                    <span className={`h-px flex-1 ${theme.subtle}`} />
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-75">New Messages Below</span>
+                    <span className={`h-px flex-1 ${theme.subtle}`} />
+                  </div>
+                ) : null}
+                <ChatMessageItem
+                  message={message}
+                  conversationType={conversationType}
+                  groupedWithPrevious={groupedWithPrevious}
+                  groupedWithNext={groupedWithNext}
+                  isOwnMessage={String(message.userId?._id) === String(profile?._id)}
+                  currentUserId={profile?._id}
+                  censorSensitiveWords={censorSensitiveWords}
+                  theme={theme}
+                  onOpenUserMenu={onOpenUserMenu}
+                  reactionsByType={reactionsByMessageId?.[String(message._id)] || {}}
+                  reactionOptions={reactionOptions}
+                  onToggleReaction={onToggleReaction}
+                  reactionsDisabled={reactionsDisabled}
+                  longPressDelayMs={longPressDelayMs}
+                  showAdminActions={showAdminActions}
+                  adminMutedUserIds={adminMutedUserIds}
+                  adminProcessingMessageIds={adminProcessingMessageIds}
+                  adminProcessingUserIds={adminProcessingUserIds}
+                  onToggleAdminMessageRemoval={onToggleAdminMessageRemoval}
+                  onToggleAdminUserMute={onToggleAdminUserMute}
+                  onAdminDeleteMessage={onAdminDeleteMessage}
+                  onUsernameHoverStart={onUsernameHoverStart}
+                  onUsernameHoverEnd={onUsernameHoverEnd}
+                  highlighted={Boolean(highlightedMessageIds[String(message?._id || '')])}
+                  readReceipt={readReceiptByMessageId[String(message?._id || '')] || ''}
+                />
+              </React.Fragment>
+            );
+          })
+        )}
       </div>
     </div>
   );
