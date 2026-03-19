@@ -50,7 +50,9 @@ jest.mock('../utils/realtime', () => ({
   leaveRealtimeRoom: jest.fn(),
   onChatMessage: jest.fn(() => () => {}),
   onFriendPresence: jest.fn(() => () => {}),
-  onPresenceUpdate: jest.fn(() => () => {})
+  onPresenceUpdate: jest.fn(() => () => {}),
+  onRoomViewerJoin: jest.fn(() => () => {}),
+  onRoomViewerLeave: jest.fn(() => () => {})
 }));
 
 describe('Chat DM decrypt fallback when visible ids are unavailable', () => {

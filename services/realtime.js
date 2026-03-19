@@ -19,6 +19,12 @@ const userSocketIds = new Map();
 const replayBufferByUser = new Map();
 const typingStateBySocket = new Map();
 
+// Active room viewer tracking: which users have a socket in a given room
+// roomViewers: Map<roomId, Map<userId, Set<socketId>>>
+const roomViewers = new Map();
+// socketRooms: Map<socketId, Set<roomId>> — for disconnect cleanup
+const socketRooms = new Map();
+
 const toEventId = () => `${Date.now()}-${++eventCounter}`;
 
 const withMeta = (payload = {}) => ({
@@ -222,6 +228,49 @@ const updatePresenceConnection = async (userId, socketId, isConnected) => {
   await broadcastPresenceUpdate(normalizedUserId);
 };
 
+// ── Active room viewer helpers ─────────────────────────────────────
+const addRoomViewer = (roomId, userId, socketId) => {
+  if (!roomViewers.has(roomId)) roomViewers.set(roomId, new Map());
+  const viewers = roomViewers.get(roomId);
+  if (!viewers.has(userId)) viewers.set(userId, new Set());
+  viewers.get(userId).add(socketId);
+
+  if (!socketRooms.has(socketId)) socketRooms.set(socketId, new Set());
+  socketRooms.get(socketId).add(roomId);
+};
+
+const removeRoomViewer = (roomId, userId, socketId) => {
+  const viewers = roomViewers.get(roomId);
+  if (!viewers) return false;
+  const sockets = viewers.get(userId);
+  if (!sockets) return false;
+  sockets.delete(socketId);
+  if (sockets.size === 0) {
+    viewers.delete(userId);
+    if (viewers.size === 0) roomViewers.delete(roomId);
+    return true; // user fully left this room
+  }
+  return false; // user still has other sockets in this room
+};
+
+const cleanupSocketRooms = (socketId, userId) => {
+  const rooms = socketRooms.get(socketId);
+  if (!rooms) return [];
+  const leftRoomIds = [];
+  for (const roomId of rooms) {
+    if (removeRoomViewer(roomId, userId, socketId)) {
+      leftRoomIds.push(roomId);
+    }
+  }
+  socketRooms.delete(socketId);
+  return leftRoomIds;
+};
+
+const getRoomActiveViewerIds = (roomId) => {
+  const viewers = roomViewers.get(String(roomId || '').trim());
+  return viewers ? [...viewers.keys()] : [];
+};
+
 const replayMissedEvents = (socket, userId, lastEventId) => {
   const normalizedUserId = String(userId || '').trim();
   if (!normalizedUserId || !socket) return;
@@ -313,16 +362,57 @@ const bindSocketHandlers = () => {
       socket.leave(`post:${normalizedPostId}`);
     });
 
-    socket.on('join-room', (roomId) => {
+    socket.on('join-room', async (roomId) => {
       const normalizedRoomId = String(roomId || '').trim();
       if (!normalizedRoomId) return;
       socket.join(`room:${normalizedRoomId}`);
+
+      const userId = socket.data?.userId;
+      if (!userId) return;
+      const viewersBefore = roomViewers.get(normalizedRoomId);
+      const isNewViewer = !viewersBefore || !viewersBefore.has(userId);
+      addRoomViewer(normalizedRoomId, userId, socket.id);
+      if (isNewViewer) {
+        try {
+          const viewerUser = await User.findById(userId)
+            .select('_id username realName avatarUrl realtimePreferences')
+            .lean();
+          if (viewerUser) {
+            const presenceDoc = await Presence.findOne({ userId }).select('status lastSeen lastActivity').lean();
+            const payload = {
+              roomId: normalizedRoomId,
+              user: {
+                _id: viewerUser._id,
+                username: viewerUser.username || null,
+                realName: viewerUser.realName || null,
+                avatarUrl: viewerUser.avatarUrl || null,
+                presence: buildPresencePayload(userId, presenceDoc, viewerUser.realtimePreferences)
+              }
+            };
+            emitToSocketRoom(`room:${normalizedRoomId}`, 'room:viewer-join', payload);
+          }
+        } catch {
+          // best-effort
+        }
+      }
     });
 
     socket.on('leave-room', (roomId) => {
       const normalizedRoomId = String(roomId || '').trim();
       if (!normalizedRoomId) return;
       socket.leave(`room:${normalizedRoomId}`);
+
+      const userId = socket.data?.userId;
+      if (!userId) return;
+      const fullyLeft = removeRoomViewer(normalizedRoomId, userId, socket.id);
+      const sr = socketRooms.get(socket.id);
+      if (sr) { sr.delete(normalizedRoomId); if (sr.size === 0) socketRooms.delete(socket.id); }
+      if (fullyLeft) {
+        emitToSocketRoom(`room:${normalizedRoomId}`, 'room:viewer-leave', {
+          roomId: normalizedRoomId,
+          userId
+        });
+      }
     });
 
     socket.on('replay-missed-events', ({ lastEventId } = {}) => {
@@ -373,8 +463,13 @@ const bindSocketHandlers = () => {
         }
       }
 
-      if (socket.data?.userId) {
-        await updatePresenceConnection(socket.data.userId, socket.id, false);
+      const userId = socket.data?.userId;
+      if (userId) {
+        const leftRoomIds = cleanupSocketRooms(socket.id, userId);
+        for (const roomId of leftRoomIds) {
+          emitToSocketRoom(`room:${roomId}`, 'room:viewer-leave', { roomId, userId });
+        }
+        await updatePresenceConnection(userId, socket.id, false);
       }
     });
   });
@@ -419,5 +514,6 @@ module.exports = {
   getFriendIds,
   getPresenceMapForUsers,
   buildPresencePayload,
-  normalizePresenceRecord
+  normalizePresenceRecord,
+  getRoomActiveViewerIds
 };
