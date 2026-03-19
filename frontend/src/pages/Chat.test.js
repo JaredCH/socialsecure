@@ -1582,6 +1582,11 @@ describe('Chat zip room indicator', () => {
     expect(authorAction).not.toBeUndefined();
     expect(authorAction.className).toContain('font-semibold');
     expect(authorAction.className).toContain('text-sky-700');
+
+    const themeSelector = container.querySelector('select[aria-label="Chat theme selector"]');
+    expect(themeSelector).not.toBeNull();
+    expect(themeSelector.value).toBe('light');
+    expect(localStorage.getItem('chatTheme')).toBe('light');
   });
 
   it('keeps sender name out of the room message content line', async () => {
@@ -2496,6 +2501,42 @@ describe('Chat zip room indicator', () => {
     expect(themeOptions).toContain('Sunset');
     expect(themeOptions).toContain('Neon');
     expect(Array.from(presenceSelector.querySelectorAll('option')).map((option) => option.textContent)).toEqual(['Online', 'Away', 'Do Not Disturb']);
+  });
+
+  it('applies styling when selecting sunset and neon themes', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: null, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const themeSelector = container.querySelector('select[aria-label="Chat theme selector"]');
+    expect(themeSelector).not.toBeNull();
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+
+    await act(async () => {
+      nativeSetter.call(themeSelector, 'sunset');
+      themeSelector.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    const channelTabs = container.querySelector('[data-chat-channel-tabs]');
+    expect(channelTabs.className).toContain('border-[#fdba74]');
+
+    await act(async () => {
+      nativeSetter.call(themeSelector, 'neon');
+      themeSelector.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    expect(channelTabs.className).toContain('border-[#1f2a44]');
   });
 
   it('defaults to light theme when no saved chat theme exists', async () => {

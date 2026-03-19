@@ -2513,7 +2513,7 @@ function Chat({ isGuestMode = false }) {
           <div className="flex items-center gap-2 px-4 py-3">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500 text-sm font-bold text-[#0b0e14]">SS</span>
             {profile?.state ? (
-              <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${CHAT_STYLE.roomCategoryPill}`}>{profile.state}</span>
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${CHAT_STYLE.roomCategoryPill}`}>{profile.state}</span>
             ) : null}
           </div>
 
