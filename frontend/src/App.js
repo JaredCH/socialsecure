@@ -555,7 +555,7 @@ function App() {
   return (
     <Router>
       <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
-        <nav className="relative z-[1200] hidden shrink-0 border-b border-blue-100 bg-gradient-to-r from-white via-slate-50 to-blue-50/60 p-3 shadow-md md:block">
+        <nav className="relative z-[1200] hidden shrink-0 border-b border-blue-100 bg-gradient-to-r from-white via-slate-50 to-blue-50 p-3 shadow-md md:block">
           <div className="relative mx-auto w-full px-2 md:px-4">
             <div className="flex items-stretch gap-4">
               <h1 className="text-3xl font-black tracking-tight text-blue-700 shrink-0">SocialSecure</h1>
