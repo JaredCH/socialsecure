@@ -817,7 +817,7 @@ router.post('/post', [
       visibleToCircles: normalizedVisibleToCircles,
       visibleToUsers: effectiveVisibleToUsers,
       excludeUsers: normalizedExcludeUsers,
-      locationRadius: Number.isFinite(Number(locationRadius)) ? Number(locationRadius) : null,
+      locationRadius: Number.isFinite(Number(locationRadius)) && Number(locationRadius) >= 1 ? Number(locationRadius) : null,
       expiresAt: normalizedExpiresAt,
       mediaUrls: mediaUrlsValidation.mediaUrls,
       interaction: interactionValidation.interaction,
