@@ -643,7 +643,13 @@ function Maps() {
           });
 
           const nextLocation = [latitude, longitude];
-          setUserLocation(nextLocation);
+          setUserLocation((previousLocation) => (
+            Array.isArray(previousLocation)
+            && previousLocation[0] === latitude
+            && previousLocation[1] === longitude
+              ? previousLocation
+              : nextLocation
+          ));
           if (recenterMap && map) {
             map.setView([latitude, longitude], 12);
           }
@@ -666,6 +672,7 @@ function Maps() {
 
   useEffect(() => {
     if (!userLocation) return undefined;
+    publishCurrentLocation();
     const intervalId = window.setInterval(() => {
       publishCurrentLocation();
     }, LOCATION_PUBLISH_INTERVAL_MS);
