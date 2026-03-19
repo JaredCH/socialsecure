@@ -405,12 +405,12 @@ describe('Chat zip room indicator', () => {
     const channelTabs = container.querySelector('[data-chat-channel-tabs]');
     expect(channelTabs).not.toBeNull();
     expect(Array.from(channelTabs.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
-      'Chat',
-      'Direct Messages'
+      'CHAT',
+      'DIRECT MSG'
     ]);
   });
 
-  it('renders alphabetical state chats with city rooms and a topics dropdown', async () => {
+  it('renders alphabetical state chats with city rooms in discovery sections', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -454,18 +454,8 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const quickAccessRooms = Array.from(container.querySelectorAll('[data-quick-access-room]'))
-      .map((node) => node.getAttribute('data-quick-access-room'));
-    expect(quickAccessRooms).toEqual(['Zip 02115', 'Massachusetts', 'Suffolk County, Massachusetts']);
-    expect(Array.from(container.querySelectorAll('[data-quick-access-city]'))
-      .map((node) => node.getAttribute('data-quick-access-city'))).toEqual([
-      'Boston (ZIP 02116)',
-      'Cambridge (ZIP 02139)'
-    ]);
-
     expect(container.querySelectorAll('[data-discovery-state-summary]')).toHaveLength(0);
     expect(container.querySelectorAll('[data-discovery-city]')).toHaveLength(0);
-    expect(container.querySelectorAll('[data-topic-room]')).toHaveLength(0);
 
     const stateChatsToggle = Array.from(container.querySelectorAll('button'))
       .find((button) => button.textContent.includes('State Rooms'));
@@ -480,7 +470,6 @@ describe('Chat zip room indicator', () => {
     const stateSummaries = stateSummaryButtons
       .map((node) => node.getAttribute('data-discovery-state-summary'));
     expect(stateSummaries).toEqual(['Alabama', 'California', 'Wyoming']);
-    expect(stateSummaryButtons.map((node) => node.textContent)).toEqual(['Alabamastate · 1 sub-room', 'Californiastate · 2 sub-rooms', 'Wyomingstate']);
 
     for (const button of stateSummaryButtons) {
       await act(async () => {
@@ -496,24 +485,9 @@ describe('Chat zip room indicator', () => {
       'Los Angeles, California',
       'San Diego, California'
     ]);
-
-    const topicsToggle = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Topics'));
-    expect(topicsToggle).not.toBeNull();
-
-    await act(async () => {
-      topicsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flush();
-    });
-
-    const topicRows = Array.from(container.querySelectorAll('[data-topic-room]'))
-      .map((node) => node.getAttribute('data-topic-room'));
-    expect(topicRows).toEqual(['SocialSecure', 'AI', 'Technology']);
-    expect(container.textContent).toContain('Topics');
-    expect(container.textContent).toContain('SocialSecure');
   });
 
-  it('joins a state room and a topic room from the discovery sections', async () => {
+  it('joins a state room from the discovery section', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -548,38 +522,16 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    // Click Join on the state room
-    const stateJoinButton = Array.from(container.querySelectorAll('[data-room-tree-item="California"] button'))
-      .find((btn) => btn.textContent === 'Join');
-    expect(stateJoinButton).not.toBeUndefined();
+    // Click on the state room to open it (rooms without children open directly)
+    const stateRoomButton = container.querySelector('[data-discovery-state-summary="California"]');
+    expect(stateRoomButton).not.toBeNull();
 
     await act(async () => {
-      stateJoinButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      stateRoomButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 
     expect(chatAPI.joinRoom).toHaveBeenCalledWith('state-ca');
-
-    // Expand topics
-    const topicsToggle = Array.from(container.querySelectorAll('button'))
-      .find((btn) => btn.textContent.includes('Topics'));
-    await act(async () => {
-      topicsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flush();
-    });
-
-    // Click Join on the topic room
-    const topicJoinButton = Array.from(
-      container.querySelector('[data-topic-room="AI"]').querySelectorAll('button')
-    ).find((btn) => btn.textContent === 'Join');
-    expect(topicJoinButton).not.toBeUndefined();
-
-    await act(async () => {
-      topicJoinButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flush();
-    });
-
-    expect(chatAPI.joinRoom).toHaveBeenCalledWith('topic-ai');
   });
 
   it('loads the SocialSecure topic room by default when chat opens', async () => {
@@ -774,9 +726,8 @@ describe('Chat zip room indicator', () => {
     await renderChat();
 
     expect(container.querySelectorAll('[data-room-search-result]')).toHaveLength(0);
-    expect(container.textContent).toContain('Search to find a room when you need one.');
 
-    const roomSearchInput = container.querySelector('input[placeholder="Search by room or location..."]');
+    const roomSearchInput = container.querySelector('input[placeholder="Search rooms..."]');
     await act(async () => {
       setInputValue(roomSearchInput, 'AI');
       await flush();
@@ -822,7 +773,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const roomSearchInput = container.querySelector('input[placeholder="Search by room or location..."]');
+    const roomSearchInput = container.querySelector('input[placeholder="Search rooms..."]');
     expect(roomSearchInput).not.toBeNull();
     await act(async () => {
       setInputValue(roomSearchInput, 'AI');
@@ -885,7 +836,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const roomSearchInput = container.querySelector('input[placeholder="Search by room or location..."]');
+    const roomSearchInput = container.querySelector('input[placeholder="Search rooms..."]');
     await act(async () => {
       setInputValue(roomSearchInput, 'Room');
       await flush();
@@ -935,7 +886,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const searchTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const searchTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       searchTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1031,7 +982,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1382,7 +1333,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1410,7 +1361,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1587,7 +1538,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1644,7 +1595,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1706,7 +1657,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1743,7 +1694,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1813,7 +1764,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1845,7 +1796,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1873,7 +1824,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1971,7 +1922,7 @@ describe('Chat zip room indicator', () => {
 
     await renderChat();
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -2047,7 +1998,7 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();

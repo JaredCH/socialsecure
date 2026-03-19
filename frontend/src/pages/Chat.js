@@ -16,8 +16,8 @@ import {
 } from '../utils/e2ee';
 
 const CHANNELS = [
-  { key: 'zip', label: 'Chat' },
-  { key: 'dm', label: 'Direct Messages' }
+  { key: 'zip', label: 'CHAT' },
+  { key: 'dm', label: 'DIRECT MSG' }
 ];
 
 const UNLOCK_DURATION_OPTIONS = [
@@ -1981,7 +1981,6 @@ function Chat({ isGuestMode = false }) {
   const activeMenuIcon = activeConversation ? getConversationTabIcon(activeConversation) : (activeChannel === 'dm' ? '✉️' : '💬');
   const renderManagedRoomBranch = useCallback((room, depth = 0, extraProps = {}) => {
     const roomId = normalizeId(room?._id);
-    const joined = Boolean(joinedRoomIds[roomId]);
     const children = (childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder);
     const isExpanded = Boolean(expandedManagedRooms[roomId]);
     const hasChildren = children.length > 0;
@@ -1990,13 +1989,12 @@ function Chat({ isGuestMode = false }) {
     return (
       <li
         key={roomId}
-        className="rounded border px-2 py-1"
         style={{ marginLeft: paddingLeft }}
         data-room-tree-item={room.name}
         data-discovery-city={room.type === 'city' ? room.name : undefined}
         {...extraProps}
       >
-        <div className="flex items-center justify-between gap-2">
+        <div className={`flex items-center gap-2 rounded-lg px-2.5 py-2 cursor-pointer transition ${CHAT_STYLE.roomHover}`}>
           <button
             type="button"
             onClick={() => {
@@ -2006,41 +2004,28 @@ function Chat({ isGuestMode = false }) {
                 handleOpenRoom(room);
               }
             }}
-            className="min-w-0 flex-1 text-left"
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
             data-discovery-state-summary={room.type === 'state' && depth === 0 ? room.name : undefined}
             aria-expanded={hasChildren ? isExpanded : undefined}
           >
-            <span className="truncate font-medium">{room.name}</span>
-            <span className="block text-[10px] uppercase opacity-70">
-              {room.defaultLanding ? 'default room' : room.type}
-              {hasChildren ? ` · ${children.length} sub-room${children.length === 1 ? '' : 's'}` : ''}
+            <span className="shrink-0 text-sm opacity-50" aria-hidden="true">#</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">{room.name}</span>
+            <span className="shrink-0 rounded bg-[#1e2430] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+              {room.defaultLanding ? 'default' : room.type}
             </span>
           </button>
-          <div className="flex items-center gap-1">
-            {!joined ? (
-              <button
-                type="button"
-                onClick={() => handleOpenRoom(room)}
-                className={`rounded border px-2 py-0.5 ${CHAT_STYLE.subtle}`}
-              >
-                Join
-              </button>
-            ) : (
-              <span className="opacity-70">Joined</span>
-            )}
-            {hasChildren ? (
-              <button
-                type="button"
-                onClick={() => handleToggleExpandedManagedRoom(roomId)}
-                className={`rounded border px-2 py-0.5 ${CHAT_STYLE.subtle}`}
-              >
-                {isExpanded ? '−' : '+'}
-              </button>
-            ) : null}
-          </div>
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={() => handleToggleExpandedManagedRoom(roomId)}
+              className={`shrink-0 rounded border px-2 py-0.5 text-xs ${CHAT_STYLE.subtle}`}
+            >
+              {isExpanded ? '−' : '+'}
+            </button>
+          ) : null}
         </div>
         {isExpanded && hasChildren ? (
-          <ul className="mt-2 space-y-1">
+          <ul className="mt-0.5 space-y-0.5">
             {children.map((childRoom) => renderManagedRoomBranch(childRoom, depth + 1))}
           </ul>
         ) : null}
@@ -2285,199 +2270,104 @@ function Chat({ isGuestMode = false }) {
               </>
             ) : (
               <>
-                {/* ── Quick Access ────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
-                  <h3 className="text-sm font-semibold">Quick Access</h3>
-                  <div className="mt-2 space-y-1">
-                    {hubData?.zip?.current ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          openConversationById(String(hubData.zip.current._id));
-                        }}
-                        className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${CHAT_STYLE.subtle}`}
-                        data-quick-access-room={getConversationLabel(hubData.zip.current)}
-                      >
-                        {getConversationLabel(hubData.zip.current)}
-                      </button>
-                    ) : null}
-                    {relationalQuickRooms.map((room) => (
-                      <button
-                        key={String(room._id)}
-                        type="button"
-                        onClick={() => handleOpenRoom(room)}
-                        className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${CHAT_STYLE.subtle}`}
-                        data-quick-access-room={room.name}
-                      >
-                        <span className="block font-medium">{room.name}</span>
-                        <span className="block text-[10px] uppercase tracking-[0.12em] opacity-70">{room.type}</span>
-                      </button>
-                    ))}
-                    {nearbyCityQuickRooms.length > 0 ? (
-                      <div className={`mt-1 rounded-lg border p-2 ${CHAT_STYLE.panel}`}>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] opacity-80">Nearby cities</p>
-                        <div className="mt-2 space-y-1">
-                          {nearbyCityQuickRooms.map((room) => (
+                {/* ── Search ──────────────────────────────────── */}
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs opacity-50" aria-hidden="true">🔍</span>
+                  <input
+                    value={roomQuery}
+                    onChange={(event) => setRoomQuery(event.target.value)}
+                    className={`w-full rounded-lg border py-2 pl-8 pr-3 text-sm ${CHAT_STYLE.input}`}
+                    placeholder="Search rooms..."
+                  />
+                </div>
+                {roomQuery.trim() ? (
+                  <ul className="space-y-1 text-xs">
+                    {chatRoomsByQuery.length === 0 ? <li className="rounded border p-1.5 opacity-80">No matching rooms found.</li> : null}
+                    {chatRoomsByQuery.map((room) => {
+                      const roomId = String(room._id);
+                      const joined = Boolean(joinedRoomIds[roomId]);
+                      const favorited = Boolean(favoriteRoomIds[roomId]);
+                      return (
+                        <li key={roomId} className="rounded border p-1.5" data-room-search-result={room.name}>
+                          <div className="flex items-center justify-between gap-2">
                             <button
-                              key={String(room._id)}
                               type="button"
                               onClick={() => handleOpenRoom(room)}
-                              className={`w-full rounded-lg border px-2.5 py-2 text-left text-sm ${CHAT_STYLE.subtle}`}
-                              data-quick-access-city={room.name}
+                              aria-label={`Open ${room.name} room`}
+                              className="min-w-0 flex-1 text-left"
                             >
-                              <span className="block font-medium">{room.name}</span>
-                              <span className="block text-[10px] opacity-70">
-                                {room.distanceMiles ? `${room.distanceMiles} mi away` : 'Nearby city room'}
-                              </span>
+                              <p className="truncate font-semibold">{room.name}</p>
+                              <p className="truncate opacity-75">{[room.city, room.state, room.country].filter(Boolean).join(', ') || room.type}</p>
                             </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </section>
-
-                {/* ── Find Room ───────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
-                  <h3 className="text-sm font-semibold">Find Room</h3>
-                  <div className="relative mt-2">
-                    <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs opacity-50" aria-hidden="true">🔍</span>
-                    <input
-                      value={roomQuery}
-                      onChange={(event) => setRoomQuery(event.target.value)}
-                      className={`w-full rounded-lg border py-2 pl-8 pr-3 text-sm ${CHAT_STYLE.input}`}
-                      placeholder="Search by room or location..."
-                    />
-                  </div>
-                  {allChatRoomsLoading ? <p className="mt-2 text-xs opacity-80">Loading rooms...</p> : null}
-                  {favoriteRooms.length > 0 ? (
-                    <div className="mt-2">
-                      <p className="text-[10px] font-semibold uppercase opacity-80">Favorites</p>
-                      <ul className="mt-1 space-y-1 text-xs">
-                        {favoriteRooms.slice(0, MAX_FAVORITE_ROOMS).map((room) => (
-                          <li key={`favorite-${String(room._id)}`} className="flex items-center justify-between gap-2 rounded border p-1.5">
-                            <button type="button" onClick={() => handleOpenRoom(room)} className="truncate text-left hover:underline">{room.name}</button>
-                            <button type="button" onClick={() => handleToggleFavoriteRoom(room._id)} className={`rounded border px-1.5 py-0.5 ${CHAT_STYLE.subtle}`}>Remove</button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {!roomQuery.trim() ? (
-                    <p className="mt-2 text-xs opacity-80">Search to find a room when you need one.</p>
-                  ) : (
-                    <ul className="mt-2 space-y-1 text-xs">
-                      {chatRoomsByQuery.length === 0 ? <li className="rounded border p-1.5 opacity-80">No matching rooms found.</li> : null}
-                      {chatRoomsByQuery.map((room) => {
-                        const roomId = String(room._id);
-                        const joined = Boolean(joinedRoomIds[roomId]);
-                        const favorited = Boolean(favoriteRoomIds[roomId]);
-                        return (
-                          <li key={roomId} className="rounded border p-1.5" data-room-search-result={room.name}>
-                            <div className="flex items-center justify-between gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenRoom(room)}
-                                aria-label={`Open ${room.name} room`}
-                                className="min-w-0 flex-1 text-left"
-                              >
-                                <p className="truncate font-semibold">{room.name}</p>
-                                <p className="truncate opacity-75">{[room.city, room.state, room.country].filter(Boolean).join(', ') || room.type}</p>
-                              </button>
-                              <div className="flex items-center gap-1">
-                                {!joined ? (
-                                  <button type="button" onClick={() => handleOpenRoom(room)} className={`rounded border px-2 py-1 ${CHAT_STYLE.subtle}`}>Join</button>
-                                ) : (
-                                  <span className="text-[10px] font-semibold opacity-80">Joined</span>
-                                )}
-                                {joined ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleFavoriteRoom(roomId)}
-                                    className={`rounded border px-2 py-1 ${CHAT_STYLE.subtle}`}
-                                  >
-                                    {favorited ? '★' : '☆'}
-                                  </button>
-                                ) : null}
-                                {canDeleteRoom(room) ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteRoom(room)}
-                                    className="rounded border px-2 py-1 text-rose-700"
-                                    aria-label={`Delete ${room.name} room`}
-                                  >
-                                    Delete
-                                  </button>
-                                ) : null}
-                              </div>
+                            <div className="flex items-center gap-1">
+                              {!joined ? (
+                                <button type="button" onClick={() => handleOpenRoom(room)} className={`rounded border px-2 py-1 ${CHAT_STYLE.subtle}`}>Join</button>
+                              ) : (
+                                <span className="text-[10px] font-semibold opacity-80">Joined</span>
+                              )}
+                              {joined ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFavoriteRoom(roomId)}
+                                  className={`rounded border px-2 py-1 ${CHAT_STYLE.subtle}`}
+                                >
+                                  {favorited ? '★' : '☆'}
+                                </button>
+                              ) : null}
+                              {canDeleteRoom(room) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRoom(room)}
+                                  className="rounded border px-2 py-1 text-rose-700"
+                                  aria-label={`Delete ${room.name} room`}
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
                             </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </section>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
 
                 {/* ── State Rooms ─────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
+                <section>
                   <button
                     type="button"
                     onClick={() => setStateChatsOpen((open) => !open)}
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="flex w-full items-center justify-between gap-2 px-1 py-1 text-left"
                     aria-expanded={stateChatsOpen}
                     aria-controls="chat-state-discovery-list"
                   >
-                    <h3 className="text-sm font-semibold">📍 State Rooms</h3>
-                    <span className="text-xs opacity-70" aria-hidden="true">{stateChatsOpen ? '▾' : '▸'}</span>
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wide opacity-70">📍 State Rooms</h3>
+                    <span className="text-xs opacity-50" aria-hidden="true">{stateChatsOpen ? '▾' : '▸'}</span>
                   </button>
                   {stateChatsOpen ? (
-                    <ul id="chat-state-discovery-list" className="mt-2 space-y-1 text-xs">
-                      {managedStateRooms.length === 0 ? <li className="opacity-75">No state chats available.</li> : null}
+                    <ul id="chat-state-discovery-list" className="mt-1 space-y-0.5">
+                      {managedStateRooms.length === 0 ? <li className="px-2 py-1 text-xs opacity-75">No state chats available.</li> : null}
                       {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
                     </ul>
                   ) : null}
                 </section>
 
                 {/* ── County Rooms ────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
+                <section>
                   <button
                     type="button"
                     onClick={() => setCountyChatsOpen((open) => !open)}
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="flex w-full items-center justify-between gap-2 px-1 py-1 text-left"
                     aria-expanded={countyChatsOpen}
                     aria-controls="chat-county-discovery-list"
                   >
-                    <h3 className="text-sm font-semibold">🏛 County Rooms</h3>
-                    <span className="text-xs opacity-70" aria-hidden="true">{countyChatsOpen ? '▾' : '▸'}</span>
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wide opacity-70">🏛 County Rooms</h3>
+                    <span className="text-xs opacity-50" aria-hidden="true">{countyChatsOpen ? '▾' : '▸'}</span>
                   </button>
                   {countyChatsOpen ? (
-                    <ul id="chat-county-discovery-list" className="mt-2 space-y-1 text-xs">
-                      {managedCountyRooms.length === 0 ? <li className="opacity-75">No county chats available.</li> : null}
+                    <ul id="chat-county-discovery-list" className="mt-1 space-y-0.5">
+                      {managedCountyRooms.length === 0 ? <li className="px-2 py-1 text-xs opacity-75">No county chats available.</li> : null}
                       {managedCountyRooms.map((room) => renderManagedRoomBranch(room))}
-                    </ul>
-                  ) : null}
-                </section>
-
-                {/* ── Topics ──────────────────────────────────── */}
-                <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`}>
-                  <button
-                    type="button"
-                    onClick={() => setTopicsOpen((open) => !open)}
-                    className="flex w-full items-center justify-between gap-2 text-left"
-                    aria-expanded={topicsOpen}
-                    aria-controls="chat-topic-discovery-list"
-                  >
-                    <h3 className="text-sm font-semibold">Topics</h3>
-                    <span className="text-xs opacity-70" aria-hidden="true">{topicsOpen ? '▾' : '▸'}</span>
-                  </button>
-                  {topicsOpen ? (
-                    <ul id="chat-topic-discovery-list" className="mt-2 space-y-1 text-xs">
-                      {managedTopicRooms.length === 0 ? <li className="opacity-75">No topic chats available.</li> : null}
-                      {managedTopicRooms.map((room) => (
-                        <React.Fragment key={String(room._id)}>
-                          {renderManagedRoomBranch(room, 0, { 'data-topic-room': room.name })}
-                        </React.Fragment>
-                      ))}
                     </ul>
                   ) : null}
                 </section>
@@ -2658,8 +2548,14 @@ function Chat({ isGuestMode = false }) {
 
           <div className="mt-auto border-t border-[#1a1f2b] px-4 py-3">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold border-[#1e2430] bg-[#161b25]">
-                {String(profile?.username || profile?.realName || 'U').slice(0, 1).toUpperCase()}
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold border-[#1e2430] bg-[#161b25]">
+                {(() => {
+                  const first = profile?.firstName || '';
+                  const last = profile?.lastName || '';
+                  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
+                  const name = profile?.username || profile?.realName || 'U';
+                  return String(name).slice(0, 2).toUpperCase();
+                })()}
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">@{profile?.username || 'user'}</p>
