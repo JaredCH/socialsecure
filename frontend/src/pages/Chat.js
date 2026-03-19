@@ -1907,7 +1907,7 @@ function Chat({ isGuestMode = false }) {
     if (!normalizedRoomId) return;
     try {
       if (!isGuestMode && !joinedRoomIds[normalizedRoomId] && typeof chatAPI.joinRoom === 'function') {
-        const { data } = await chatAPI.joinRoom(normalizedRoomId);
+        await chatAPI.joinRoom(normalizedRoomId);
         setJoinedRoomIds((prev) => ({
           ...prev,
           [normalizedRoomId]: true
@@ -1917,9 +1917,6 @@ function Chat({ isGuestMode = false }) {
             ? addCurrentUserToRoomEntry(entry, profile?._id)
             : entry
         )));
-        if (data?.systemMessage) {
-          setMessages((prev) => upsertConversationMessage(prev, data.systemMessage));
-        }
         toast.success('Joined room');
       }
       openConversationById(normalizedRoomId);
