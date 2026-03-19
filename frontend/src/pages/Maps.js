@@ -23,7 +23,8 @@ const GEOLOCATION_OPTIONS_MAX_AGE_MS = 60000;
 export const HEATMAP_CIRCLE_RADIUS_METERS = 100 * 0.3048;
 export const HEATMAP_VISIBILITY_RADIUS_METERS = 2000 * 0.3048;
 export const LOCATION_PUBLISH_INTERVAL_MS = 30 * 1000;
-export const FRIENDS_REFRESH_INTERVAL_MS = 10 * 1000;
+export const FRIENDS_REFRESH_INTERVAL_MS = 5 * 1000;
+const FRIENDS_BACKGROUND_REFRESH_INTERVAL_MS = 20 * 1000;
 const MAP_REFRESH_INTERVAL_MS = 60 * 1000;
 const MAP_DATA_CACHE_TTL_MS = 90 * 1000;
 const MAP_DATA_CACHE_MAX_ENTRIES = 6;
@@ -75,6 +76,25 @@ const getFriendActivityTimestamp = (friend) => {
   const timestamp = friend?.lastActivityAt ? new Date(friend.lastActivityAt).getTime() : 0;
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
+
+const areFriendsLocationEntriesEqual = (left = {}, right = {}) => (
+  left?.user?._id === right?.user?._id
+  && left?.user?.username === right?.user?.username
+  && left?.lat === right?.lat
+  && left?.lng === right?.lng
+  && left?.isLive === right?.isLive
+  && left?.locationName === right?.locationName
+  && left?.city === right?.city
+  && left?.state === right?.state
+  && left?.country === right?.country
+  && left?.liveAgeSeconds === right?.liveAgeSeconds
+  && left?.lastActivityAt === right?.lastActivityAt
+);
+
+export const areFriendsLocationsEquivalent = (left = [], right = []) => (
+  left.length === right.length
+  && left.every((entry, index) => areFriendsLocationEntriesEqual(entry, right[index]))
+);
 
 export const sortFriendsByStatusAndActivity = (friends = []) => (
   [...friends].sort((left, right) => {
@@ -176,10 +196,77 @@ export const configureLeafletMarkerAssets = async (
   });
 };
 
+const OSM_TILE_RETRY_LIMIT = 2;
+const OSM_TILE_RETRY_BASE_DELAY_MS = 800;
+const getTileRetryDelayMs = (attempt) =>
+  Math.min(5000, OSM_TILE_RETRY_BASE_DELAY_MS * (2 ** Math.max(0, attempt - 1)));
+
+export const attachSafeTileRetry = (tileLayer) => {
+  if (
+    !tileLayer
+    || typeof tileLayer.on !== 'function'
+    || typeof tileLayer.off !== 'function'
+    || typeof tileLayer.getTileUrl !== 'function'
+  ) {
+    return () => {};
+  }
+
+  const retryAttemptsByTile = new Map();
+  const retryTimersByTile = new Map();
+
+  const clearRetryTimer = (tile) => {
+    const retryTimerId = retryTimersByTile.get(tile);
+    if (retryTimerId) {
+      window.clearTimeout(retryTimerId);
+      retryTimersByTile.delete(tile);
+    }
+  };
+
+  const handleTileLoad = (event) => {
+    if (!event?.tile) return;
+    clearRetryTimer(event.tile);
+    retryAttemptsByTile.delete(event.tile);
+  };
+
+  const handleTileError = (event) => {
+    const tile = event?.tile;
+    const coords = event?.coords;
+    if (!tile || !coords) return;
+
+    const nextAttempt = (retryAttemptsByTile.get(tile) || 0) + 1;
+    if (nextAttempt > OSM_TILE_RETRY_LIMIT) return;
+    retryAttemptsByTile.set(tile, nextAttempt);
+    clearRetryTimer(tile);
+
+    const retryDelayMs = getTileRetryDelayMs(nextAttempt);
+    const retryTimerId = window.setTimeout(() => {
+      if (!tile.isConnected) return;
+      const retryUrl = tileLayer.getTileUrl(coords);
+      if (!retryUrl) return;
+      tile.src = `${retryUrl}${retryUrl.includes('?') ? '&' : '?'}retry=${nextAttempt}`;
+    }, retryDelayMs);
+    retryTimersByTile.set(tile, retryTimerId);
+  };
+
+  tileLayer.on('tileload', handleTileLoad);
+  tileLayer.on('tileerror', handleTileError);
+
+  return () => {
+    tileLayer.off('tileload', handleTileLoad);
+    tileLayer.off('tileerror', handleTileError);
+    retryTimersByTile.forEach((timerId) => window.clearTimeout(timerId));
+    retryTimersByTile.clear();
+    retryAttemptsByTile.clear();
+  };
+};
+
 function Maps() {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const leafletRef = useRef(null);
+  const tileRetryCleanupRef = useRef(null);
+  const mapFetchInFlightRef = useRef(false);
+  const friendsFetchInFlightRef = useRef(false);
   const mobileControlsRef = useRef(null);
   const mobileLayersButtonRef = useRef(null);
   const mobilePrivacyButtonRef = useRef(null);
@@ -272,9 +359,11 @@ function Maps() {
           if (!mapRef.current || cancelled) return;
 
           const mapInstance = L.map(mapRef.current).setView(center, zoom);
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          const osmTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
-          }).addTo(mapInstance);
+          });
+          osmTiles.addTo(mapInstance);
+          tileRetryCleanupRef.current = attachSafeTileRetry(osmTiles);
 
           mapInstanceRef.current = mapInstance;
           setMap(mapInstance);
@@ -323,6 +412,10 @@ function Maps() {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
       }
+      if (typeof tileRetryCleanupRef.current === 'function') {
+        tileRetryCleanupRef.current();
+      }
+      tileRetryCleanupRef.current = null;
       mapInstanceRef.current = null;
     };
   }, [mapInitAttempt]);
@@ -349,22 +442,49 @@ function Maps() {
 
   useEffect(() => {
     if (!userLocation || !layers.friends) return undefined;
-    fetchFriendsLocations();
+    fetchFriendsLocations({ forceRefresh: true });
 
-    const intervalId = window.setInterval(() => {
-      fetchFriendsLocations();
-    }, FRIENDS_REFRESH_INTERVAL_MS);
+    const refreshFriendsNow = () => {
+      fetchFriendsLocations({ forceRefresh: true });
+    };
+
+    const setFriendPollingInterval = () => {
+      const intervalMs = document.visibilityState === 'visible'
+        ? FRIENDS_REFRESH_INTERVAL_MS
+        : FRIENDS_BACKGROUND_REFRESH_INTERVAL_MS;
+      return window.setInterval(() => {
+        fetchFriendsLocations();
+      }, intervalMs);
+    };
+
+    let intervalId = setFriendPollingInterval();
+    const handleVisibilityChange = () => {
+      window.clearInterval(intervalId);
+      intervalId = setFriendPollingInterval();
+      refreshFriendsNow();
+    };
+
+    const handleFocus = () => {
+      refreshFriendsNow();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [userLocation, layers.friends]);
 
   // Fetch map data based on view mode
   const fetchMapData = async ({ showLoading = true, forceRefresh = false } = {}) => {
     if (!userLocation) return;
+    if (mapFetchInFlightRef.current && !forceRefresh) return;
     
     try {
+      mapFetchInFlightRef.current = true;
       if (showLoading) {
         setLoading(true);
       }
@@ -418,24 +538,34 @@ function Maps() {
       console.error('Error fetching map data:', err);
       setError('Failed to load map data');
     } finally {
+      mapFetchInFlightRef.current = false;
       if (showLoading) {
         setLoading(false);
       }
     }
   };
 
-  const fetchFriendsLocations = async () => {
+  const fetchFriendsLocations = async ({ forceRefresh = false } = {}) => {
     if (!layers.friends) {
       setFriendsLocations([]);
       return;
     }
+    if (friendsFetchInFlightRef.current && !forceRefresh) return;
 
     try {
+      friendsFetchInFlightRef.current = true;
       const friendsRes = await withDataFallback(mapsAPI.getFriendsLocations(), { friends: [] });
-      setFriendsLocations(friendsRes.data.friends || []);
+      const nextFriends = friendsRes.data.friends || [];
+      setFriendsLocations((previousFriends) => (
+        areFriendsLocationsEquivalent(previousFriends, nextFriends)
+          ? previousFriends
+          : nextFriends
+      ));
       setLastFriendsRefreshAt(new Date());
     } catch (err) {
       console.error('Error fetching friend locations:', err);
+    } finally {
+      friendsFetchInFlightRef.current = false;
     }
   };
 
@@ -754,6 +884,10 @@ function Maps() {
   }, [map, userLocation, friendsLocations, favoriteLocations, spotlights, heatmapData, layers]);
 
   const retryMapInitialization = () => {
+    if (typeof tileRetryCleanupRef.current === 'function') {
+      tileRetryCleanupRef.current();
+    }
+    tileRetryCleanupRef.current = null;
     if (mapInstanceRef.current) {
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
@@ -1228,7 +1362,7 @@ function Maps() {
           <div className="p-4 border-b border-gray-200">
             <h2 className="text-xs font-semibold uppercase text-gray-500">Friends</h2>
             <p className="text-[11px] text-gray-400 mt-1">
-              Refreshes every 10 seconds
+              Refreshes every 5 seconds
             </p>
           </div>
           <div className="flex-1 overflow-y-auto">

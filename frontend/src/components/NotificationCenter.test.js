@@ -175,6 +175,8 @@ describe('NotificationCenter corner behavior', () => {
     expect(notificationAPI.acknowledgeNotification).toHaveBeenCalledWith('notif-1');
     expect(onUnreadCountChange).toHaveBeenCalled();
     expect(container.textContent).not.toContain('New follow request');
+    expect(container.textContent).not.toContain('Acknowledge');
+    expect(container.textContent).not.toContain('Dismiss');
 
     confirmSpy.mockRestore();
   });

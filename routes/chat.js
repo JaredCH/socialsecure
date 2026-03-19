@@ -876,6 +876,55 @@ const notifyRoomMembers = async ({ room, senderId, senderLabel, message, message
   }
 };
 
+const notifyMentionedConversationParticipants = async ({
+  conversation,
+  senderId,
+  senderLabel,
+  message,
+  content
+}) => {
+  if (conversation == null || conversation.type === 'dm') return;
+
+  // Keep mention fan-out bounded to protect notification throughput for large mention bursts.
+  const mentionedUsernames = extractMentions(content || '').slice(0, MAX_CHAT_MENTION_NOTIFICATIONS);
+  if (mentionedUsernames.length === 0) return;
+
+  const mentionedUsers = await User.find({ username: { $in: mentionedUsernames } })
+    .select('_id username')
+    .lean();
+
+  const participantIds = new Set(
+    getConversationParticipantIds(conversation)
+      .map((participantId) => String(participantId))
+      .filter(Boolean)
+  );
+
+  const recipientIds = [...new Set(
+    mentionedUsers
+      .map((user) => String(user?._id || ''))
+      .filter((participantId) => {
+        if (!participantId) return false;
+        if (participantId === String(senderId)) return false;
+        return participantIds.has(participantId);
+      })
+  )];
+  if (recipientIds.length === 0) return;
+
+  for (const recipientId of recipientIds) {
+    await createNotification({
+      recipientId,
+      senderId,
+      type: 'mention',
+      title: 'You were mentioned',
+      body: `${senderLabel} mentioned you in ${conversation.title || 'a conversation'}`,
+      data: {
+        messageId: message?._id,
+        url: '/chat'
+      }
+    });
+  }
+};
+
 const validateE2EEEnvelope = (envelope) => {
   if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
     return 'e2ee envelope object is required';
@@ -3700,6 +3749,36 @@ router.post(
       userIds: targetUserIds.length > 0 ? targetUserIds : [String(userId)],
       message: publicMessage
     });
+
+    if (conversation.type === 'dm') {
+      const dmRecipientIds = targetUserIds.filter((participantId) => String(participantId) !== String(userId));
+      const recipientsToNotify = dmRecipientIds.filter((recipientId) => !isUserInRealtimeRoom(recipientId, conversation._id));
+      const senderLabel = publicMessage?.userId?.username
+        || publicMessage?.userId?.realName
+        || 'Someone';
+      await Promise.all(recipientsToNotify.map((recipientId) => createNotification({
+        recipientId,
+        senderId: userId,
+        type: 'message',
+        title: 'New direct message',
+        body: `${senderLabel} sent you a direct message`,
+        data: {
+          messageId: message?._id,
+          url: '/chat'
+        }
+      })));
+    } else if (hasContent) {
+      const senderLabel = publicMessage?.userId?.username
+        || publicMessage?.userId?.realName
+        || 'Someone';
+      await notifyMentionedConversationParticipants({
+        conversation,
+        senderId: userId,
+        senderLabel,
+        message,
+        content
+      });
+    }
 
     return res.status(201).json({
       success: true,
