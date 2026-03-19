@@ -1130,7 +1130,7 @@ const Social = () => {
 
     const params = new URLSearchParams(location.search);
     const currentUserParam = String(params.get('user') || '').trim();
-    if (currentUserParam === username) {
+    if (currentUserParam) {
       return;
     }
 
