@@ -468,6 +468,12 @@ describe('Unified chat hub routes', () => {
       type: 'mention',
       title: 'You were mentioned'
     }));
+    expect(createNotification).not.toHaveBeenCalledWith(expect.objectContaining({
+      recipientId: '507f1f77bcf86cd799439033'
+    }));
+    expect(createNotification).not.toHaveBeenCalledWith(expect.objectContaining({
+      recipientId: '507f1f77bcf86cd799439011'
+    }));
   });
 
   it('creates profile thread and returns shared conversation id', async () => {

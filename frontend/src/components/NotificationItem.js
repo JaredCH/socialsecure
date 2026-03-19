@@ -89,7 +89,7 @@ const NotificationItem = ({
               className="rounded-md bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Accept"
             >
-              Accept
+              ✓ Accept
             </button>
             <button
               type="button"
@@ -98,7 +98,7 @@ const NotificationItem = ({
               className="rounded-md bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Decline"
             >
-              Decline
+              ✗ Decline
             </button>
           </div>
         ) : null}

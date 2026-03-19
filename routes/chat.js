@@ -876,15 +876,16 @@ const notifyRoomMembers = async ({ room, senderId, senderLabel, message, message
   }
 };
 
-const notifyConversationParticipants = async ({
+const notifyMentionedConversationParticipants = async ({
   conversation,
   senderId,
   senderLabel,
   message,
   content
 }) => {
-  if (!conversation || conversation.type === 'dm') return;
+  if (conversation == null || conversation.type === 'dm') return;
 
+  // Keep mention fan-out bounded to protect notification throughput for large mention bursts.
   const mentionedUsernames = extractMentions(content || '').slice(0, MAX_CHAT_MENTION_NOTIFICATIONS);
   if (mentionedUsernames.length === 0) return;
 
@@ -901,7 +902,11 @@ const notifyConversationParticipants = async ({
   const recipientIds = [...new Set(
     mentionedUsers
       .map((user) => String(user?._id || ''))
-      .filter((participantId) => participantId && participantId !== String(senderId) && participantIds.has(participantId))
+      .filter((participantId) => {
+        if (!participantId) return false;
+        if (participantId === String(senderId)) return false;
+        return participantIds.has(participantId);
+      })
   )];
   if (recipientIds.length === 0) return;
 
@@ -3763,7 +3768,7 @@ router.post(
       const senderLabel = publicMessage?.userId?.username
         || publicMessage?.userId?.realName
         || 'Someone';
-      await notifyConversationParticipants({
+      await notifyMentionedConversationParticipants({
         conversation,
         senderId: userId,
         senderLabel,
