@@ -24,6 +24,7 @@ export const HEATMAP_CIRCLE_RADIUS_METERS = 100 * 0.3048;
 export const HEATMAP_VISIBILITY_RADIUS_METERS = 2000 * 0.3048;
 export const LOCATION_PUBLISH_INTERVAL_MS = 30 * 1000;
 export const FRIENDS_REFRESH_INTERVAL_MS = 5 * 1000;
+const FRIENDS_LIVE_WINDOW_MS = 60 * 1000;
 const FRIENDS_BACKGROUND_REFRESH_INTERVAL_MS = 20 * 1000;
 const MAP_REFRESH_INTERVAL_MS = 60 * 1000;
 const MAP_DATA_CACHE_TTL_MS = 90 * 1000;
@@ -77,6 +78,24 @@ const getFriendActivityTimestamp = (friend) => {
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
 
+export const isFriendLive = (friend, now = Date.now()) => {
+  if (typeof friend?.isLive === 'boolean') {
+    return friend.isLive;
+  }
+
+  const activityTimestamp = getFriendActivityTimestamp(friend);
+  if (!activityTimestamp) {
+    return false;
+  }
+
+  const hasRecentActivity = (now - activityTimestamp) <= FRIENDS_LIVE_WINDOW_MS;
+  if (typeof friend?.isActive === 'boolean') {
+    return friend.isActive && hasRecentActivity;
+  }
+
+  return hasRecentActivity;
+};
+
 const areFriendsLocationEntriesEqual = (left = {}, right = {}) => (
   left?.user?._id === right?.user?._id
   && left?.user?.username === right?.user?.username
@@ -98,8 +117,10 @@ export const areFriendsLocationsEquivalent = (left = [], right = []) => (
 
 export const sortFriendsByStatusAndActivity = (friends = []) => (
   [...friends].sort((left, right) => {
-    if (Boolean(left?.isLive) !== Boolean(right?.isLive)) {
-      return left?.isLive ? -1 : 1;
+    const leftIsLive = isFriendLive(left);
+    const rightIsLive = isFriendLive(right);
+    if (leftIsLive !== rightIsLive) {
+      return leftIsLive ? -1 : 1;
     }
 
     return getFriendActivityTimestamp(right) - getFriendActivityTimestamp(left);
@@ -160,11 +181,12 @@ const getFriendDisplayLocation = (friend) =>
   || 'Location unavailable';
 
 const formatFriendStatus = (friend) => {
+  const friendIsLive = isFriendLive(friend);
   if (friend?.liveAgeSeconds != null) {
-    return `${friend.isLive ? 'Live' : 'Last seen'} • ${friend.liveAgeSeconds}s ago`;
+    return `${friendIsLive ? 'Live' : 'Last seen'} • ${friend.liveAgeSeconds}s ago`;
   }
 
-  return friend?.isLive ? 'Live now' : 'Offline';
+  return friendIsLive ? 'Live now' : 'Offline';
 };
 
 const getFriendMarkerLabel = (friend) =>
@@ -315,11 +337,11 @@ function Maps() {
     [friendsLocations]
   );
   const onlineFriends = useMemo(
-    () => sortedFriends.filter((friend) => friend.isLive),
+    () => sortedFriends.filter((friend) => isFriendLive(friend)),
     [sortedFriends]
   );
   const offlineFriends = useMemo(
-    () => sortedFriends.filter((friend) => !friend.isLive),
+    () => sortedFriends.filter((friend) => !isFriendLive(friend)),
     [sortedFriends]
   );
 
@@ -809,7 +831,8 @@ function Maps() {
     if (layers.friends && friendsLocations.length > 0) {
       friendsLocations.forEach(friend => {
         if (friend.lat != null && friend.lng != null) {
-          const markerColor = friend.isLive ? '#10b981' : '#9ca3af';
+          const friendIsLive = isFriendLive(friend);
+          const markerColor = friendIsLive ? '#10b981' : '#9ca3af';
           const markerLabel = getFriendMarkerLabel(friend);
           const icon = L.divIcon({
             className: 'friend-marker',
@@ -817,8 +840,8 @@ function Maps() {
             iconSize: [24, 24]
           });
           
-          L.marker([friend.lat, friend.lng], { icon, zIndexOffset: friend.isLive ? 800 : 600 })
-            .bindPopup(`<b>${friend.user?.username || 'Friend'}</b><br/>${getFriendDisplayLocation(friend)}<br/>${friend.isLive ? 'Live now' : 'Offline'}`)
+          L.marker([friend.lat, friend.lng], { icon, zIndexOffset: friendIsLive ? 800 : 600 })
+            .bindPopup(`<b>${friend.user?.username || 'Friend'}</b><br/>${getFriendDisplayLocation(friend)}<br/>${friendIsLive ? 'Live now' : 'Offline'}`)
             .addTo(map);
         }
       });
@@ -1386,29 +1409,32 @@ function Maps() {
                       <p className="px-4 pb-4 text-xs text-gray-400">No {group.label.toLowerCase()} friends.</p>
                     ) : (
                       <ul className="divide-y divide-gray-100">
-                        {group.friends.map((friend, idx) => (
-                          <li key={friend.user?._id || `${group.key}-${idx}`}>
-                            <button
-                              onClick={() => flyToFriend(friend)}
-                              className={`w-full text-left px-4 py-3 transition-colors flex items-center gap-3 hover:bg-blue-50 ${
-                                friend.isLive ? '' : 'opacity-60'
-                              }`}
-                            >
-                              <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium shrink-0 ${
-                                friend.isLive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
-                              }`}>
-                                {getFriendMarkerLabel(friend)}
-                              </span>
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium truncate">{friend.user?.username || 'Friend'}</p>
-                                <p className="text-xs text-gray-500 truncate">{getFriendDisplayLocation(friend)}</p>
-                                <p className={`text-[11px] mt-0.5 ${friend.isLive ? 'text-emerald-600' : 'text-gray-500'}`}>
-                                  {formatFriendStatus(friend)}
-                                </p>
-                              </div>
-                            </button>
-                          </li>
-                        ))}
+                        {group.friends.map((friend, idx) => {
+                          const friendIsLive = isFriendLive(friend);
+                          return (
+                            <li key={friend.user?._id || `${group.key}-${idx}`}>
+                              <button
+                                onClick={() => flyToFriend(friend)}
+                                className={`w-full text-left px-4 py-3 transition-colors flex items-center gap-3 hover:bg-blue-50 ${
+                                  friendIsLive ? '' : 'opacity-60'
+                                }`}
+                              >
+                                <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium shrink-0 ${
+                                  friendIsLive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                                }`}>
+                                  {getFriendMarkerLabel(friend)}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{friend.user?.username || 'Friend'}</p>
+                                  <p className="text-xs text-gray-500 truncate">{getFriendDisplayLocation(friend)}</p>
+                                  <p className={`text-[11px] mt-0.5 ${friendIsLive ? 'text-emerald-600' : 'text-gray-500'}`}>
+                                    {formatFriendStatus(friend)}
+                                  </p>
+                                </div>
+                              </button>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </section>
