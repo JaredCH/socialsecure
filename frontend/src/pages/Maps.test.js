@@ -416,6 +416,36 @@ describe('Maps mobile-first controls', () => {
     expect(favoritesButton).not.toBeNull();
   });
 
+  it('publishes presence immediately after map location initializes', async () => {
+    leaflet.map.mockImplementation(() => leaflet.__mapInstance);
+    leaflet.__mapInstance.setView.mockImplementation(() => leaflet.__mapInstance);
+    leaflet.tileLayer.mockImplementation(() => ({
+      addTo: jest.fn().mockReturnThis()
+    }));
+    leaflet.marker.mockImplementation(() => ({
+      bindPopup: jest.fn().mockReturnThis(),
+      addTo: jest.fn().mockReturnThis()
+    }));
+    leaflet.circle.mockImplementation(() => ({
+      addTo: jest.fn().mockReturnThis()
+    }));
+
+    navigator.geolocation.getCurrentPosition.mockImplementation((success) => {
+      success({ coords: { latitude: 30.2672, longitude: -97.7431 } });
+    });
+
+    await act(async () => {
+      root.render(<Maps />);
+    });
+    await flushPromises();
+    await flushPromises();
+
+    expect(mapsAPI.updatePresence).toHaveBeenCalledWith(expect.objectContaining({
+      latitude: 30.2672,
+      longitude: -97.7431
+    }));
+  });
+
   it('saves a favorite location from a typed address', async () => {
     await act(async () => {
       root.render(<Maps />);
