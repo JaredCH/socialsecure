@@ -1891,7 +1891,7 @@ describe('Chat zip room indicator', () => {
     expect(chatAPI.getMessages).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a live participant list across the DM side panel', async () => {
+  it('hides the right sidebar and uses a two-column grid in DM mode', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -1904,29 +1904,25 @@ describe('Chat zip room indicator', () => {
         }
       }
     });
-    let usersCallCount = 0;
     chatAPI.getConversationUsers.mockImplementation((conversationId) => {
       if (conversationId === 'zip1') {
         return Promise.resolve({ data: { users: [] } });
       }
-      usersCallCount += 1;
       return Promise.resolve({
         data: {
-          users: usersCallCount > 1
-            ? [
-              { _id: 'u1', username: 'alpha' },
-              { _id: 'u2', username: 'buddy' },
-              { _id: 'u3', username: 'charlie' }
-            ]
-            : [
-              { _id: 'u1', username: 'alpha' },
-              { _id: 'u2', username: 'buddy' }
-            ]
+          users: [
+            { _id: 'u1', username: 'alpha' },
+            { _id: 'u2', username: 'buddy' }
+          ]
         }
       });
     });
 
     await renderChat();
+
+    // In default CHAT mode the grid has three columns including the right sidebar
+    const desktopGrid = container.querySelector('[data-testid="chat-layout-grid"]');
+    expect(desktopGrid.className).toContain('lg:grid-cols-[16rem_1fr_14rem]');
 
     const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
@@ -1935,31 +1931,17 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    expect(container.textContent).toContain('Participants');
-    expect(container.textContent).toContain('People in this DM');
+    // After switching to DM mode the grid drops to two columns
+    expect(desktopGrid.className).toContain('lg:grid-cols-[16rem_1fr]');
+    expect(desktopGrid.className).not.toContain('14rem');
+
+    // Right panel content should not be rendered in DM mode
+    expect(container.textContent).not.toContain('Participants');
+    expect(container.textContent).not.toContain('People in this DM');
+    expect(container.textContent).not.toContain('Users in Room');
+
+    // DM conversation list still shows the peer username
     expect(container.textContent).toContain('@buddy');
-    expect(container.textContent).not.toContain('Shared Media / Links');
-
-    const realtimeHandler = onChatMessage.mock.calls.at(-1)?.[0];
-    expect(realtimeHandler).toEqual(expect.any(Function));
-
-    await act(async () => {
-      realtimeHandler?.({
-        message: {
-          _id: 'live-dm-1',
-          conversationId: 'dm1',
-          content: '[Encrypted message]',
-          userId: { _id: 'u3', username: 'charlie' },
-          createdAt: new Date().toISOString(),
-          e2ee: { ciphertext: 'cipher' }
-        }
-      });
-      await flush();
-      await flush();
-    });
-
-    expect(chatAPI.getConversationUsers).toHaveBeenCalledWith('dm1');
-    expect(container.textContent).toContain('@charlie');
   });
 
   it('decrypts the latest DM batch first and decrypts older messages when loading earlier history', async () => {
