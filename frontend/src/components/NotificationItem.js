@@ -37,6 +37,7 @@ const NotificationItem = ({
   const id = String(notification?._id || '');
   const isFriendRequest = notification?.type === 'follow' && !!notification?.senderId;
   const isRequest = REQUEST_TYPES.has(notification?.type) && !!notification?.senderId;
+  const showAcknowledgeDismiss = !isRequest;
 
   return (
     <div className={`border-b px-3 py-2 ${notification?.isRead ? 'bg-white' : 'bg-blue-50'}`}>
@@ -61,9 +62,9 @@ const NotificationItem = ({
         ) : null}
       </button>
 
-      <div className="mt-2 flex gap-2 flex-wrap">
+      <div className="mt-2 flex flex-col gap-2">
         {isRequest && !isHistory ? (
-          <div className="flex w-full items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5">
+          <div className="flex w-full flex-wrap items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5">
             {isFriendRequest ? (
               <>
                 <label htmlFor={`friend-circle-${id}`} className="text-xs font-medium text-slate-700">
@@ -85,51 +86,51 @@ const NotificationItem = ({
               type="button"
               disabled={friendActionLoading}
               onClick={() => onFriendRequestAction(notification, 'accept')}
-              className="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Accept"
             >
-              ✓ Accept
+              Accept
             </button>
             <button
               type="button"
               disabled={friendActionLoading}
               onClick={() => onFriendRequestAction(notification, 'decline')}
-              className="rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Decline"
             >
-              ✗ Decline
+              Decline
             </button>
           </div>
         ) : null}
         {!isHistory ? (
-          <>
-            {typeof onAcknowledge === 'function' ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {showAcknowledgeDismiss && typeof onAcknowledge === 'function' ? (
               <button
                 type="button"
                 onClick={() => onAcknowledge(id)}
-                className="text-xs text-gray-500 hover:text-gray-700"
+                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-800"
                 aria-label="Acknowledge"
                 title="Acknowledge"
               >
-                ✓
+                Acknowledge
               </button>
             ) : null}
-            {typeof onDismiss === 'function' ? (
+            {showAcknowledgeDismiss && typeof onDismiss === 'function' ? (
               <button
                 type="button"
                 onClick={() => onDismiss(id)}
-                className="text-xs text-gray-500 hover:text-gray-700"
+                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-800"
                 aria-label="Dismiss"
                 title="Dismiss"
               >
-                ✗
+                Dismiss
               </button>
             ) : null}
             {!notification?.isRead && typeof onMarkRead === 'function' ? (
               <button
                 type="button"
                 onClick={() => onMarkRead(id)}
-                className="text-xs text-blue-600 hover:text-blue-700"
+                className="text-xs font-medium text-blue-600 hover:text-blue-700"
               >
                 Mark read
               </button>
@@ -138,12 +139,12 @@ const NotificationItem = ({
               <button
                 type="button"
                 onClick={() => onDelete(id)}
-                className="text-xs text-red-600 hover:text-red-700"
+                className="text-xs font-medium text-red-600 hover:text-red-700"
               >
                 Delete
               </button>
             ) : null}
-          </>
+          </div>
         ) : (
           <span className="text-xs text-gray-400">
             {notification?.status === 'acknowledged' ? 'Acknowledged' : 'Dismissed'}

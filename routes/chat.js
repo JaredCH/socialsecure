@@ -876,6 +876,50 @@ const notifyRoomMembers = async ({ room, senderId, senderLabel, message, message
   }
 };
 
+const notifyConversationParticipants = async ({
+  conversation,
+  senderId,
+  senderLabel,
+  message,
+  content
+}) => {
+  if (!conversation || conversation.type === 'dm') return;
+
+  const mentionedUsernames = extractMentions(content || '').slice(0, MAX_CHAT_MENTION_NOTIFICATIONS);
+  if (mentionedUsernames.length === 0) return;
+
+  const mentionedUsers = await User.find({ username: { $in: mentionedUsernames } })
+    .select('_id username')
+    .lean();
+
+  const participantIds = new Set(
+    getConversationParticipantIds(conversation)
+      .map((participantId) => String(participantId))
+      .filter(Boolean)
+  );
+
+  const recipientIds = [...new Set(
+    mentionedUsers
+      .map((user) => String(user?._id || ''))
+      .filter((participantId) => participantId && participantId !== String(senderId) && participantIds.has(participantId))
+  )];
+  if (recipientIds.length === 0) return;
+
+  for (const recipientId of recipientIds) {
+    await createNotification({
+      recipientId,
+      senderId,
+      type: 'mention',
+      title: 'You were mentioned',
+      body: `${senderLabel} mentioned you in ${conversation.title || 'a conversation'}`,
+      data: {
+        messageId: message?._id,
+        url: '/chat'
+      }
+    });
+  }
+};
+
 const validateE2EEEnvelope = (envelope) => {
   if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
     return 'e2ee envelope object is required';
@@ -3698,6 +3742,35 @@ router.post(
       userIds: targetUserIds.length > 0 ? targetUserIds : [String(userId)],
       message: publicMessage
     });
+
+    if (conversation.type === 'dm') {
+      const dmRecipientIds = targetUserIds.filter((participantId) => String(participantId) !== String(userId));
+      const senderLabel = publicMessage?.userId?.username
+        || publicMessage?.userId?.realName
+        || 'Someone';
+      await Promise.all(dmRecipientIds.map((recipientId) => createNotification({
+        recipientId,
+        senderId: userId,
+        type: 'message',
+        title: 'New direct message',
+        body: `${senderLabel} sent you a direct message`,
+        data: {
+          messageId: message?._id,
+          url: '/chat'
+        }
+      })));
+    } else if (hasContent) {
+      const senderLabel = publicMessage?.userId?.username
+        || publicMessage?.userId?.realName
+        || 'Someone';
+      await notifyConversationParticipants({
+        conversation,
+        senderId: userId,
+        senderLabel,
+        message,
+        content
+      });
+    }
 
     return res.status(201).json({
       success: true,

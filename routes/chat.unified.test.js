@@ -403,6 +403,71 @@ describe('Unified chat hub routes', () => {
     expect(mockConversationMessage.create).toHaveBeenCalledWith(expect.objectContaining({
       chatScope: 'dm'
     }));
+    expect(createNotification).toHaveBeenCalledTimes(1);
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      recipientId: '507f1f77bcf86cd799439099',
+      senderId: '507f1f77bcf86cd799439011',
+      type: 'message',
+      title: 'New direct message'
+    }));
+  });
+
+  it('notifies only mentioned users in non-DM conversations', async () => {
+    const app = buildApp();
+    const savedConversation = {
+      _id: 'conv-zip',
+      type: 'zip-room',
+      title: 'Zip room thread',
+      participants: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439099', '507f1f77bcf86cd799439022'],
+      messageCount: 0,
+      save: jest.fn().mockResolvedValue(undefined)
+    };
+    const createdMessage = {
+      _id: 'profile-message-1',
+      populate: jest.fn().mockResolvedValue(undefined),
+      toPublicMessage: jest.fn().mockReturnValue({
+        _id: 'profile-message-1',
+        content: 'hello @owner and @outsider',
+        userId: {
+          _id: '507f1f77bcf86cd799439011',
+          username: 'alpha'
+        }
+      })
+    };
+
+    mockChatConversation.findById.mockResolvedValue(savedConversation);
+    mockConversationMessage.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue([])
+          })
+        })
+      })
+    });
+    mockConversationMessage.create.mockResolvedValue(createdMessage);
+    mockUser.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          { _id: '507f1f77bcf86cd799439099', username: 'owner' },
+          { _id: '507f1f77bcf86cd799439033', username: 'outsider' }
+        ])
+      })
+    });
+
+    const response = await request(app)
+      .post('/api/chat/conversations/conv-zip/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'hello @owner and @outsider' });
+
+    expect(response.status).toBe(201);
+    expect(createNotification).toHaveBeenCalledTimes(1);
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      recipientId: '507f1f77bcf86cd799439099',
+      senderId: '507f1f77bcf86cd799439011',
+      type: 'mention',
+      title: 'You were mentioned'
+    }));
   });
 
   it('creates profile thread and returns shared conversation id', async () => {
@@ -715,7 +780,7 @@ describe('Unified chat hub routes', () => {
       senderNameColor: null,
       e2ee: { enabled: false }
     });
-    expect(populate).toHaveBeenCalledWith('userId', '_id username realName');
+    expect(populate).toHaveBeenCalledWith('userId', '_id username realName avatarUrl');
     expect(emitChatMessage).toHaveBeenCalledWith({
       userIds: ['507f1f77bcf86cd799439011'],
       message: { _id: 'msg-1', content: 'hello', senderNameColor: null }
