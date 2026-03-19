@@ -1584,6 +1584,45 @@ describe('Chat zip room indicator', () => {
     expect(authorAction.className).toContain('text-emerald-400');
   });
 
+  it('keeps sender name out of the room message content line', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: null, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            _id: 'm-room-layout',
+            content: 'testing!',
+            userId: { _id: 'u2', username: 'buddy', realName: 'Buddy User' },
+            createdAt: '2024-01-01T00:00:00.000Z'
+          }
+        ],
+        pagination: { hasMore: false }
+      }
+    });
+
+    await renderChat();
+
+    const roomMessage = container.querySelector('article[data-chat-message-layout="room"]');
+    expect(roomMessage).not.toBeNull();
+    expect(roomMessage.textContent).toContain('@buddy');
+    expect(roomMessage.textContent).toContain('testing!');
+
+    const messageParagraph = roomMessage.querySelector('p');
+    expect(messageParagraph).not.toBeNull();
+    expect(messageParagraph.textContent).toBe('testing!');
+  });
+
   it('groups consecutive room messages into a Discord-like stack', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
