@@ -45,19 +45,21 @@ const PARTICIPANT_REFRESH_DEBOUNCE_MS = 1000;
 
 const CHAT_THEMES = {
   dark: {
-  shell: 'font-outfit bg-[#0b0e14] text-[#c5cad3]',
-  panel: 'border-[#1a1f2b] bg-[#11151d]/90 backdrop-blur-xl',
-  panelGlass: 'border-[#1a1f2b] bg-[#11151d]/95 backdrop-blur-2xl',
-  accent: 'border border-emerald-500 bg-emerald-500 text-[#0b0e14] hover:bg-emerald-400 font-semibold',
-  subtle: 'border-[#1e2430] bg-[#161b25] text-[#c5cad3] hover:bg-[#1e2430]',
-  input: 'border-[#1e2430] bg-[#0d1017] text-[#c5cad3] placeholder:text-[#4a5568]',
-  messagesShell: 'bg-[#0d1017]/60',
-  messageOwn: 'bg-emerald-500/15 text-emerald-100',
-  messageOther: 'bg-[#161b25] text-[#c5cad3]',
-  messagePing: 'ring-1 ring-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-100',
-  senderAccent: 'text-emerald-400',
-  roomHover: 'hover:bg-[#1a1f2b]/80',
-  roomCategoryPill: 'border border-[#2a3141] bg-[#1e2430] text-[#c5cad3]'
+    shell: 'font-outfit bg-[#0b0e14] text-[#c5cad3]',
+    panel: 'border-[#1a1f2b] bg-[#11151d]/90 backdrop-blur-xl',
+    panelGlass: 'border-[#1a1f2b] bg-[#11151d]/95 backdrop-blur-2xl',
+    accent: 'border border-emerald-500 bg-emerald-500 text-[#0b0e14] hover:bg-emerald-400 font-semibold',
+    subtle: 'border-[#1e2430] bg-[#161b25] text-[#c5cad3] hover:bg-[#1e2430]',
+    input: 'border-[#1e2430] bg-[#0d1017] text-[#c5cad3] placeholder:text-[#4a5568]',
+    messagesShell: 'bg-[#0d1017]/60',
+    messageOwn: 'bg-emerald-500/15 text-emerald-100',
+    messageOther: 'bg-[#161b25] text-[#c5cad3]',
+    messagePing: 'ring-1 ring-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-100',
+    senderAccent: 'text-emerald-400',
+    roomHover: 'hover:bg-[#1a1f2b]/80',
+    roomCategoryPill: 'border border-[#2a3141] bg-[#1e2430] text-[#c5cad3]',
+    sidebarBorder: 'border-[#1a1f2b]',
+    avatarBadge: 'border-[#1e2430] bg-[#161b25] text-[#c5cad3]'
   },
   light: {
     shell: 'font-outfit bg-[#f5f7fb] text-[#1b2432]',
@@ -72,7 +74,9 @@ const CHAT_THEMES = {
     messagePing: 'ring-1 ring-fuchsia-400 bg-fuchsia-100 text-fuchsia-900',
     senderAccent: 'text-sky-700',
     roomHover: 'hover:bg-[#e9f1fc]',
-    roomCategoryPill: 'border border-sky-200 bg-sky-100 text-sky-800'
+    roomCategoryPill: 'border border-sky-200 bg-sky-100 text-sky-800',
+    sidebarBorder: 'border-[#d9e0ea]',
+    avatarBadge: 'border-[#d6dee9] bg-white text-[#1b2432]'
   },
   medium: {
     shell: 'font-outfit bg-[#1a1f2a] text-[#d5dae2]',
@@ -87,15 +91,53 @@ const CHAT_THEMES = {
     messagePing: 'ring-1 ring-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-100',
     senderAccent: 'text-violet-300',
     roomHover: 'hover:bg-[#323d52]',
-    roomCategoryPill: 'border border-[#3b4861] bg-[#2a3344] text-[#d5dae2]'
+    roomCategoryPill: 'border border-[#3b4861] bg-[#2a3344] text-[#d5dae2]',
+    sidebarBorder: 'border-[#2b3445]',
+    avatarBadge: 'border-[#313b4f] bg-[#2a3344] text-[#d5dae2]'
+  },
+  sunset: {
+    shell: 'font-outfit bg-[#fff7ed] text-[#7c2d12]',
+    panel: 'border-[#fdba74] bg-[#fffaf5]/95 backdrop-blur-xl',
+    panelGlass: 'border-[#fdba74] bg-[#fffaf5]/95 backdrop-blur-2xl',
+    accent: 'border border-orange-500 bg-orange-500 text-white hover:bg-orange-400 font-semibold',
+    subtle: 'border-[#f5c28d] bg-[#ffedd5] text-[#7c2d12] hover:bg-[#fed7aa]',
+    input: 'border-[#f5c28d] bg-white text-[#7c2d12] placeholder:text-[#b45309]',
+    messagesShell: 'bg-[#ffedd5]/80',
+    messageOwn: 'bg-orange-200 text-orange-900',
+    messageOther: 'bg-white text-[#7c2d12]',
+    messagePing: 'ring-1 ring-rose-400 bg-rose-100 text-rose-900',
+    senderAccent: 'text-orange-700',
+    roomHover: 'hover:bg-[#ffe2c7]',
+    roomCategoryPill: 'border border-orange-200 bg-orange-100 text-orange-800',
+    sidebarBorder: 'border-[#fdba74]',
+    avatarBadge: 'border-[#f5c28d] bg-white text-[#7c2d12]'
+  },
+  neon: {
+    shell: 'font-outfit bg-[#050816] text-[#d1fae5]',
+    panel: 'border-[#1f2a44] bg-[#0b1225]/92 backdrop-blur-xl',
+    panelGlass: 'border-[#1f2a44] bg-[#0b1225]/95 backdrop-blur-2xl',
+    accent: 'border border-fuchsia-500 bg-fuchsia-500 text-white hover:bg-fuchsia-400 font-semibold',
+    subtle: 'border-[#2a3a63] bg-[#101a33] text-[#d1fae5] hover:bg-[#162447]',
+    input: 'border-[#2a3a63] bg-[#060b1a] text-[#d1fae5] placeholder:text-[#6ee7b7]',
+    messagesShell: 'bg-[#060b1a]/70',
+    messageOwn: 'bg-cyan-500/20 text-cyan-100',
+    messageOther: 'bg-[#101a33] text-[#d1fae5]',
+    messagePing: 'ring-1 ring-fuchsia-400/80 bg-fuchsia-500/15 text-fuchsia-100',
+    senderAccent: 'text-cyan-300',
+    roomHover: 'hover:bg-[#162447]',
+    roomCategoryPill: 'border border-cyan-400/40 bg-cyan-500/10 text-cyan-200',
+    sidebarBorder: 'border-[#1f2a44]',
+    avatarBadge: 'border-[#2a3a63] bg-[#101a33] text-[#d1fae5]'
   }
 };
 const CHAT_THEME_LABELS = {
   dark: 'Dark',
   light: 'Light',
-  medium: 'Medium'
+  medium: 'Medium',
+  sunset: 'Sunset',
+  neon: 'Neon'
 };
-const DEFAULT_CHAT_THEME = 'dark';
+const DEFAULT_CHAT_THEME = 'light';
 const CHAT_THEME_STORAGE_KEY = 'chatTheme';
 const CHAT_PING_BEEP_AUDIO_DATA_URL = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAAAA/////wAAAP///wAAAAA=';
 
@@ -2416,7 +2458,7 @@ function Chat({ isGuestMode = false }) {
 
       {activeConversation?.type === 'dm' && activeConversationUser ? (
         <div className="flex min-w-0 items-center gap-2">
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden border-[#1e2430] bg-[#161b25]">
+          <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden ${CHAT_STYLE.avatarBadge}`}>
             {activeConversationUser.avatarUrl
               ? <img src={activeConversationUser.avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
               : String(activeConversationUser.username || 'U').slice(0, 1).toUpperCase()}
@@ -2465,13 +2507,13 @@ function Chat({ isGuestMode = false }) {
         <aside
           className={[
             mobileWorkspaceOpen ? 'hidden' : 'flex',
-            'min-h-0 flex-col border-r border-[#1a1f2b] lg:flex'
+            `min-h-0 flex-col border-r ${CHAT_STYLE.sidebarBorder} lg:flex`
           ].join(' ')}
         >
           <div className="flex items-center gap-2 px-4 py-3">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500 text-sm font-bold text-[#0b0e14]">SS</span>
             {profile?.state ? (
-              <span className="rounded bg-[#1e2430] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">{profile.state}</span>
+              <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${CHAT_STYLE.roomCategoryPill}`}>{profile.state}</span>
             ) : null}
           </div>
 
@@ -2480,7 +2522,7 @@ function Chat({ isGuestMode = false }) {
           </a>
 
           <div
-            className="flex items-center border-b border-[#1a1f2b] px-2"
+            className={`flex items-center border-b px-2 ${CHAT_STYLE.sidebarBorder}`}
             data-chat-channel-tabs
             role="tablist"
             aria-label="Chat channels"
@@ -2759,7 +2801,7 @@ function Chat({ isGuestMode = false }) {
                 </section>
 
                 {roomPingUnreadTotal > 0 ? (
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-fuchsia-300">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">
                     Unread pings: {roomPingUnreadTotal}
                   </p>
                 ) : null}
@@ -2783,7 +2825,7 @@ function Chat({ isGuestMode = false }) {
                     <div
                       id="chat-admin-control-panel-body"
                       ref={adminPanelDialogRef}
-                      className={`fixed inset-0 z-40 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm ${CHAT_STYLE.shell}`}
+                      className={`fixed inset-0 z-[1600] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm ${CHAT_STYLE.shell}`}
                       role="dialog"
                       aria-modal="true"
                       aria-labelledby="chat-admin-control-panel-title"
@@ -2973,9 +3015,9 @@ function Chat({ isGuestMode = false }) {
             )}
           </div>
 
-          <div className="mt-auto border-t border-[#1a1f2b] px-4 py-3">
+          <div className={`mt-auto border-t px-4 py-3 ${CHAT_STYLE.sidebarBorder}`}>
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold border-[#1e2430] bg-[#161b25]">
+              <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold ${CHAT_STYLE.avatarBadge}`}>
                 {getAvatarInitials(profile)}
               </span>
               <div className="min-w-0">
@@ -3023,7 +3065,7 @@ function Chat({ isGuestMode = false }) {
 
           {activeConversation?.type === 'dm' ? (
             <div
-              className="truncate px-4 py-1 text-[10px] leading-tight opacity-60 border-b border-[#1a1f2b]"
+              className={`truncate border-b px-4 py-1 text-[10px] leading-tight opacity-60 ${CHAT_STYLE.sidebarBorder}`}
               title={profile?.hasPGP
                 ? 'BYO PGP mode: incoming DM envelopes are encrypted to your public key; server admins cannot decrypt content.'
                 : 'SocialSecure-generated key mode: DM content is E2EE and decrypts only after you unlock with your encryption password.'}
@@ -3162,7 +3204,7 @@ function Chat({ isGuestMode = false }) {
 
         {/* ─── RIGHT SIDEBAR ────────────────────────────── */}
         {activeChannel !== 'dm' && (
-        <aside className="hidden min-h-0 flex-col border-l border-[#1a1f2b] p-2 md:p-3 lg:flex">
+        <aside className={`hidden min-h-0 flex-col border-l p-2 md:p-3 lg:flex ${CHAT_STYLE.sidebarBorder}`}>
             <>
               <div className={`sticky top-0 z-10 rounded border p-2 ${CHAT_STYLE.panelGlass}`}>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.1em]">Users in Room</h3>

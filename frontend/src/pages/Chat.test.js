@@ -1549,7 +1549,7 @@ describe('Chat zip room indicator', () => {
   });
 
   it('renders sender names with theme-selected accent styling', async () => {
-    localStorage.setItem('chatTheme', 'ocean');
+    localStorage.setItem('chatTheme', 'unknown-theme');
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -1581,7 +1581,7 @@ describe('Chat zip room indicator', () => {
     const authorAction = Array.from(container.querySelectorAll('a')).find((node) => node.textContent === '@buddy');
     expect(authorAction).not.toBeUndefined();
     expect(authorAction.className).toContain('font-semibold');
-    expect(authorAction.className).toContain('text-emerald-400');
+    expect(authorAction.className).toContain('text-sky-700');
   });
 
   it('keeps sender name out of the room message content line', async () => {
@@ -2493,7 +2493,70 @@ describe('Chat zip room indicator', () => {
     expect(themeOptions).toContain('Dark');
     expect(themeOptions).toContain('Light');
     expect(themeOptions).toContain('Medium');
+    expect(themeOptions).toContain('Sunset');
+    expect(themeOptions).toContain('Neon');
     expect(Array.from(presenceSelector.querySelectorAll('option')).map((option) => option.textContent)).toEqual(['Online', 'Away', 'Do Not Disturb']);
+  });
+
+  it('defaults to light theme when no saved chat theme exists', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'state-ca', type: 'state', name: 'California', discoveryGroup: 'states', members: [] }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    const themeSelector = container.querySelector('select[aria-label="Chat theme selector"]');
+    expect(themeSelector).not.toBeNull();
+    expect(themeSelector.value).toBe('light');
+
+    const channelTabs = container.querySelector('[data-chat-channel-tabs]');
+    expect(channelTabs).not.toBeNull();
+    expect(channelTabs.className).toContain('border-[#d9e0ea]');
+  });
+
+  it('renders elevated z-index for admin modal overlay to keep controls clickable', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115', isAdmin: true } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: null, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+
+    await renderChat();
+
+    const toggleAdminControls = Array.from(container.querySelectorAll('button')).find((button) => button.textContent.includes('Admin Panel'));
+    expect(toggleAdminControls).toBeDefined();
+
+    await act(async () => {
+      toggleAdminControls.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const adminDialog = document.body.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
+    expect(adminDialog).not.toBeNull();
+    expect(adminDialog.className).toContain('z-[1600]');
   });
 
   it('admin can permanently delete a message via the delete button', async () => {
