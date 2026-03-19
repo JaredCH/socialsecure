@@ -56,6 +56,14 @@ const CHAT_STYLE = {
   roomHover: 'hover:bg-[#1a1f2b]/80'
 };
 
+const getAvatarInitials = (profile) => {
+  const first = profile?.firstName || '';
+  const last = profile?.lastName || '';
+  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
+  const name = profile?.username || profile?.realName || 'U';
+  return String(name).slice(0, 2).toUpperCase();
+};
+
 const getConversationLabel = (conversation) => {
   if (!conversation) return '';
 
@@ -2035,8 +2043,7 @@ function Chat({ isGuestMode = false }) {
     childRoomsByParentId,
     expandedManagedRooms,
     handleOpenRoom,
-    handleToggleExpandedManagedRoom,
-    joinedRoomIds
+    handleToggleExpandedManagedRoom
   ]);
 
   if (loadingHub) {
@@ -2549,13 +2556,7 @@ function Chat({ isGuestMode = false }) {
           <div className="mt-auto border-t border-[#1a1f2b] px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold border-[#1e2430] bg-[#161b25]">
-                {(() => {
-                  const first = profile?.firstName || '';
-                  const last = profile?.lastName || '';
-                  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
-                  const name = profile?.username || profile?.realName || 'U';
-                  return String(name).slice(0, 2).toUpperCase();
-                })()}
+                {getAvatarInitials(profile)}
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">@{profile?.username || 'user'}</p>

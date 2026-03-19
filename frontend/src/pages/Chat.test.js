@@ -470,6 +470,12 @@ describe('Chat zip room indicator', () => {
     const stateSummaries = stateSummaryButtons
       .map((node) => node.getAttribute('data-discovery-state-summary'));
     expect(stateSummaries).toEqual(['Alabama', 'California', 'Wyoming']);
+    // Verify new room item format: # prefix, room name, and uppercase TYPE badge
+    expect(stateSummaryButtons.map((node) => node.textContent)).toEqual([
+      '#Alabamastate',
+      '#Californiastate',
+      '#Wyomingstate'
+    ]);
 
     for (const button of stateSummaryButtons) {
       await act(async () => {
