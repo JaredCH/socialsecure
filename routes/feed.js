@@ -863,18 +863,6 @@ router.post('/post', [
       post: realtimePost
     });
 
-    if (normalizedTargetFeedId && normalizedTargetFeedId !== authorId) {
-      const authorName = post.authorId?.username || post.authorId?.realName || 'Someone';
-      await createNotification({
-        recipientId: normalizedTargetFeedId,
-        senderId: authorId,
-        type: 'friend_post',
-        title: 'New post on your feed',
-        body: `@${authorName} posted on your feed`,
-        data: { postId: post._id, url: '/social' }
-      });
-    }
-    
     res.status(201).json({
       success: true,
       message: 'Post created successfully',

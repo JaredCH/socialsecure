@@ -7,7 +7,7 @@ jest.mock('jsonwebtoken', () => ({
 
 const mockChatRoom = { findById: jest.fn() };
 const mockDeviceKey = { findOne: jest.fn() };
-const mockUser = { findById: jest.fn() };
+const mockUser = { findById: jest.fn(), find: jest.fn() };
 const mockRoomKeyPackage = {};
 const mockChatConversation = {};
 const mockConversationMessage = { findOne: jest.fn() };
@@ -65,8 +65,12 @@ jest.mock('../models/SiteContentFilter', () => mockSiteContentFilter);
 jest.mock('../services/realtime', () => ({
   emitChatMessage: jest.fn()
 }));
+jest.mock('../services/notifications', () => ({
+  createNotification: jest.fn().mockResolvedValue(null)
+}));
 
 const jwt = require('jsonwebtoken');
+const { createNotification } = require('../services/notifications');
 const chatRouter = require('./chat');
 
 const buildApp = () => {
@@ -220,6 +224,104 @@ describe('Chat E2EE boundary hardening', () => {
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('banned');
     expect(mockChatMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not notify room members for non-mention room messages', async () => {
+    const app = buildApp();
+    const populatedMessage = {
+      _id: 'msg-1',
+      content: 'hello everyone',
+      toPublicMessage: jest.fn().mockReturnValue({
+        _id: 'msg-1',
+        content: 'hello everyone',
+        userId: { _id: 'user-1', username: 'alpha' }
+      })
+    };
+
+    mockChatRoom.findById.mockResolvedValue({
+      _id: 'room-1',
+      city: 'City',
+      members: ['user-1', 'user-2'],
+      incrementMessageCount: jest.fn().mockResolvedValue(undefined),
+      addMember: jest.fn().mockResolvedValue(undefined)
+    });
+    mockUser.findById
+      .mockImplementationOnce(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] }, isAdmin: false }))
+      .mockImplementationOnce(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] }, isAdmin: false }));
+    mockChatMessage.findOne.mockReturnValue(createSelectLeanOrSort({
+      _id: 'old-message',
+      createdAt: new Date(Date.now() - 60 * 1000)
+    }));
+    mockChatMessage.mockImplementation((payload) => ({
+      ...payload,
+      save: jest.fn().mockResolvedValue(undefined),
+      populate: jest.fn().mockImplementation(async () => populatedMessage),
+      toPublicMessage: populatedMessage.toPublicMessage
+    }));
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'hello everyone' });
+
+    expect(response.status).toBe(201);
+    expect(createNotification).not.toHaveBeenCalled();
+  });
+
+  it('notifies only mentioned room members for @mention room messages', async () => {
+    const app = buildApp();
+    const populatedMessage = {
+      _id: 'msg-2',
+      content: 'hi @buddy and @outsider',
+      toPublicMessage: jest.fn().mockReturnValue({
+        _id: 'msg-2',
+        content: 'hi @buddy and @outsider',
+        userId: { _id: 'user-1', username: 'alpha' }
+      })
+    };
+
+    mockChatRoom.findById.mockResolvedValue({
+      _id: 'room-1',
+      city: 'City',
+      members: ['user-1', 'user-2'],
+      incrementMessageCount: jest.fn().mockResolvedValue(undefined),
+      addMember: jest.fn().mockResolvedValue(undefined)
+    });
+    mockUser.findById
+      .mockImplementationOnce(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] }, isAdmin: false }))
+      .mockImplementationOnce(() => createQueryResult({ _id: 'user-1', onboardingStatus: 'completed', city: 'City', location: { coordinates: [0, 0] }, isAdmin: false }));
+    mockChatMessage.findOne.mockReturnValue(createSelectLeanOrSort({
+      _id: 'old-message',
+      createdAt: new Date(Date.now() - 60 * 1000)
+    }));
+    mockUser.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          { _id: 'user-2', username: 'buddy' },
+          { _id: 'user-3', username: 'outsider' }
+        ])
+      })
+    });
+    mockChatMessage.mockImplementation((payload) => ({
+      ...payload,
+      save: jest.fn().mockResolvedValue(undefined),
+      populate: jest.fn().mockImplementation(async () => populatedMessage),
+      toPublicMessage: populatedMessage.toPublicMessage
+    }));
+
+    const response = await request(app)
+      .post('/api/chat/rooms/room-1/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ content: 'hi @buddy and @outsider' });
+
+    expect(response.status).toBe(201);
+    expect(createNotification).toHaveBeenCalledTimes(1);
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      recipientId: 'user-2',
+      senderId: 'user-1',
+      type: 'mention',
+      title: 'You were mentioned'
+    }));
   });
 
   it('supports idempotent migration and tombstones plaintext', async () => {

@@ -91,6 +91,17 @@ const getViewerContentFilterPreference = async (viewerId) => {
   return viewer?.enableMaturityWordCensor !== false;
 };
 
+const MAX_CHAT_MENTION_NOTIFICATIONS = 25;
+
+const extractMentions = (content = '') => {
+  const matches = String(content || '').match(/@([a-zA-Z0-9_.]{3,30})/g) || [];
+  const usernames = new Set();
+  for (const mention of matches) {
+    usernames.add(mention.slice(1).toLowerCase());
+  }
+  return [...usernames];
+};
+
 const enforceCompletedOnboarding = async (req, res, next) => {
   try {
     if (!req.user?.userId) {
@@ -830,17 +841,32 @@ const isRoomMember = (room, userId) => {
 const notifyRoomMembers = async ({ room, senderId, senderLabel, message, messageType = 'message' }) => {
   if (!room || !Array.isArray(room.members)) return;
 
-  const recipientIds = room.members
-    .map((memberId) => String(memberId))
-    .filter((memberId) => memberId && memberId !== String(senderId));
+  const mentionedUsernames = extractMentions(message?.content || '').slice(0, MAX_CHAT_MENTION_NOTIFICATIONS);
+  if (mentionedUsernames.length === 0) return;
+
+  const mentionedUsers = await User.find({ username: { $in: mentionedUsernames } })
+    .select('_id username')
+    .lean();
+
+  const roomMemberIds = new Set(
+    room.members
+      .map((memberId) => String(memberId))
+      .filter(Boolean)
+  );
+  const recipientIds = [...new Set(
+    mentionedUsers
+      .map((user) => String(user?._id || ''))
+      .filter((memberId) => memberId && memberId !== String(senderId) && roomMemberIds.has(memberId))
+  )];
+  if (recipientIds.length === 0) return;
 
   for (const recipientId of recipientIds) {
     await createNotification({
       recipientId,
       senderId,
-      type: messageType,
-      title: 'New message',
-      body: `${senderLabel} sent a message in ${room.name || room.city || 'a room'}`,
+      type: messageType === 'message' ? 'mention' : messageType,
+      title: 'You were mentioned',
+      body: `${senderLabel} mentioned you in ${room.name || room.city || 'a room'}`,
       data: {
         messageId: message?._id,
         roomId: room._id,

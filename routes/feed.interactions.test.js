@@ -175,6 +175,34 @@ describe('Feed interaction routes', () => {
     );
   });
 
+  it('does not create notifications when creating a post on another user feed', async () => {
+    const app = buildApp();
+    const notifications = require('../services/notifications');
+    const savedDoc = {
+      _id: 'post-2',
+      save: jest.fn().mockResolvedValue(true),
+      populate: jest.fn().mockResolvedValue(true)
+    };
+    Post.mockImplementation((payload) => ({
+      ...savedDoc,
+      ...payload
+    }));
+    Friendship.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({ _id: 'friendship-1', status: 'accepted' })
+    });
+
+    const response = await request(app)
+      .post('/api/feed/post')
+      .set('Authorization', 'Bearer token')
+      .send({
+        targetFeedId: '507f1f77bcf86cd799439022',
+        content: 'Posting on friend feed'
+      });
+
+    expect(response.status).toBe(201);
+    expect(notifications.createNotification).not.toHaveBeenCalled();
+  });
+
   it('rejects zero-tolerance words in post content', async () => {
     const app = buildApp();
     mockSiteContentFilterFindOne.mockReturnValue({
