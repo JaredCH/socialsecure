@@ -609,12 +609,10 @@ describe('Chat zip room indicator', () => {
     expect(chatAPI.joinRoom).toHaveBeenCalledWith('county-travis');
     expect(chatAPI.joinRoom).toHaveBeenCalledWith('topic-socialsecure');
     expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-socialsecure', 1, 40);
-    const openChatTabs = Array.from(container.querySelectorAll('[data-open-chat-tab]'));
-    expect(openChatTabs.map((button) => button.getAttribute('data-open-chat-tab'))).toEqual(
-      expect.arrayContaining(['SocialSecure', 'Texas', 'Travis County, Texas'])
+    const joinedRoomItems = Array.from(container.querySelectorAll('[data-room-tree-item]'));
+    expect(joinedRoomItems.map((node) => node.getAttribute('data-room-tree-item'))).toEqual(
+      expect.arrayContaining(['Texas', 'Travis County, Texas'])
     );
-    const selectedTab = openChatTabs.find((button) => button.getAttribute('aria-selected') === 'true');
-    expect(selectedTab?.getAttribute('data-open-chat-tab')).toBe('SocialSecure');
   });
 
   it('shows a collapsed admin control panel by default and expands it for room management', async () => {
@@ -751,7 +749,6 @@ describe('Chat zip room indicator', () => {
     expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-ai', 1, 40);
     expect(chatAPI.getRoomUsers).toHaveBeenCalledWith('topic-ai');
     expect(container.textContent).toContain('Welcome to AI');
-    expect(container.querySelector('[data-open-chat-tab="AI"]')).not.toBeNull();
   });
 
   it('shows a delete action for deletable rooms and confirms before deleting', async () => {
@@ -802,7 +799,7 @@ describe('Chat zip room indicator', () => {
     confirmSpy.mockRestore();
   });
 
-  it('limits open chat tabs to six most recent conversations', async () => {
+  it('opens rooms from search and loads messages for the last opened room', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
     });
@@ -857,12 +854,7 @@ describe('Chat zip room indicator', () => {
       });
     }
 
-    const openTabs = Array.from(container.querySelectorAll('[data-open-chat-tab]')).map((node) => node.getAttribute('data-open-chat-tab'));
-    expect(openTabs).toHaveLength(6);
-    expect(openTabs).not.toContain('Zip 02115');
-    expect(openTabs).not.toContain('Room 1');
-    expect(openTabs).toContain('Room 7');
-    expect(container.textContent).toContain('6/6');
+    expect(container.textContent).toContain('Loaded topic-7');
   });
 
   it('filters DM conversations and starts a new DM from the plus picker', async () => {
