@@ -108,11 +108,11 @@ const formatAssociatedLocations = (locationAssociations = {}) => {
 };
 const getIngestedTimestamp = (record = {}) => (
   record.processedAt
-  || record.scrapedAt
-  || record.ingestedAt
-  || record.persistence?.persistedAt
   || record.updatedAt
+  || record.persistence?.persistedAt
+  || record.ingestedAt
   || record.createdAt
+  || record.scrapedAt
   || null
 );
 const formatTimestampCell = (value) => (value ? new Date(value).toLocaleString() : '—');
@@ -869,7 +869,7 @@ function ModerationDashboard() {
                       <SortableHeader label="Category" field="normalized.category" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <SortableHeader label="Title" field="normalized.title" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <SortableHeader label="Published" field="normalized.publishedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
-                      <SortableHeader label="Processed" field="scrapedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <th className="px-3 py-2.5">Processed</th>
                       <SortableHeader label="Status" field="processingStatus" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <SortableHeader label="Scope" field="resolvedScope" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <th className="px-3 py-2.5">Topics</th>
