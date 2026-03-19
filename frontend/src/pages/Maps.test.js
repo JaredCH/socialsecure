@@ -1,6 +1,8 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import Maps, {
+  areFriendsLocationsEquivalent,
+  attachSafeTileRetry,
   FRIENDS_REFRESH_INTERVAL_MS,
   HEATMAP_CIRCLE_RADIUS_METERS,
   HEATMAP_VISIBILITY_RADIUS_METERS,
@@ -178,8 +180,8 @@ describe('map polling intervals', () => {
     expect(LOCATION_PUBLISH_INTERVAL_MS).toBe(30000);
   });
 
-  it('refreshes friend locations every 10 seconds', () => {
-    expect(FRIENDS_REFRESH_INTERVAL_MS).toBe(10000);
+  it('refreshes friend locations every 5 seconds', () => {
+    expect(FRIENDS_REFRESH_INTERVAL_MS).toBe(5000);
   });
 
   it('renders heatmap circles at a 200 foot diameter (100 foot radius)', () => {
@@ -188,6 +190,101 @@ describe('map polling intervals', () => {
 
   it('limits heatmap visibility to a 2000 foot radius', () => {
     expect(HEATMAP_VISIBILITY_RADIUS_METERS).toBeCloseTo(609.6, 1);
+  });
+});
+
+describe('areFriendsLocationsEquivalent', () => {
+  it('returns true when friend location payloads are equivalent', () => {
+    const left = [{
+      user: { _id: 'u1', username: 'alice' },
+      lat: 30.2672,
+      lng: -97.7431,
+      isLive: true,
+      locationName: 'Downtown',
+      city: 'Austin',
+      state: 'TX',
+      country: 'US',
+      liveAgeSeconds: 2,
+      lastActivityAt: '2026-03-19T10:00:00.000Z'
+    }];
+    const right = [{
+      user: { _id: 'u1', username: 'alice' },
+      lat: 30.2672,
+      lng: -97.7431,
+      isLive: true,
+      locationName: 'Downtown',
+      city: 'Austin',
+      state: 'TX',
+      country: 'US',
+      liveAgeSeconds: 2,
+      lastActivityAt: '2026-03-19T10:00:00.000Z'
+    }];
+
+    expect(areFriendsLocationsEquivalent(left, right)).toBe(true);
+  });
+
+  it('returns false when any friend status or location field differs', () => {
+    const left = [{
+      user: { _id: 'u1', username: 'alice' },
+      lat: 30.2672,
+      lng: -97.7431,
+      isLive: true,
+      lastActivityAt: '2026-03-19T10:00:00.000Z'
+    }];
+    const right = [{
+      user: { _id: 'u1', username: 'alice' },
+      lat: 30.2672,
+      lng: -97.7431,
+      isLive: false,
+      lastActivityAt: '2026-03-19T10:00:00.000Z'
+    }];
+
+    expect(areFriendsLocationsEquivalent(left, right)).toBe(false);
+  });
+});
+
+describe('attachSafeTileRetry', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('retries failed tile loads with bounded attempts and cleanup', () => {
+    const listeners = new Map();
+    const tileLayer = {
+      on: jest.fn((eventName, handler) => {
+        listeners.set(eventName, handler);
+      }),
+      off: jest.fn((eventName, handler) => {
+        if (listeners.get(eventName) === handler) {
+          listeners.delete(eventName);
+        }
+      }),
+      getTileUrl: jest.fn(() => 'https://a.tile.openstreetmap.org/1/2/3.png')
+    };
+    const tile = { src: '', isConnected: true };
+    const coords = { x: 2, y: 3, z: 1 };
+
+    const detachRetryHandlers = attachSafeTileRetry(tileLayer);
+    expect(typeof detachRetryHandlers).toBe('function');
+
+    listeners.get('tileerror')({ tile, coords });
+    jest.advanceTimersByTime(800);
+    expect(tile.src).toContain('retry=1');
+
+    listeners.get('tileerror')({ tile, coords });
+    jest.advanceTimersByTime(1600);
+    expect(tile.src).toContain('retry=2');
+
+    listeners.get('tileerror')({ tile, coords });
+    jest.advanceTimersByTime(5000);
+    expect(tile.src).toContain('retry=2');
+
+    detachRetryHandlers();
+    expect(tileLayer.off).toHaveBeenCalled();
   });
 });
 
