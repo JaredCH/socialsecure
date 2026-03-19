@@ -2295,6 +2295,33 @@ function Chat({ isGuestMode = false }) {
     const children = childRoomsByParentId[roomId] || [];
     return children.some((child) => joinedRoomIds[normalizeId(child?._id)]);
   }), [joinedRoomIds, childRoomsByParentId]);
+  const collapsedStateRooms = useMemo(() => {
+    const quickAccessStateId = normalizeId(quickAccessRooms.state?._id);
+    const fallbackRooms = filterJoinedRooms(managedStateRooms);
+    if (!quickAccessStateId || !joinedRoomIds[quickAccessStateId]) return fallbackRooms;
+
+    const quickAccessStateRoom = managedStateRooms.find((room) => normalizeId(room?._id) === quickAccessStateId);
+    return quickAccessStateRoom ? [quickAccessStateRoom] : fallbackRooms;
+  }, [filterJoinedRooms, joinedRoomIds, managedStateRooms, quickAccessRooms.state?._id]);
+  const collapsedTopicRooms = useMemo(() => {
+    const defaultJoinedRoomIds = new Set(
+      defaultLandingRooms
+        .map((room) => normalizeId(room?._id))
+        .filter((roomId) => roomId && joinedRoomIds[roomId])
+    );
+    if (defaultJoinedRoomIds.size === 0) {
+      return filterJoinedRooms(managedTopicRooms);
+    }
+    return managedTopicRooms.filter((room) => defaultJoinedRoomIds.has(normalizeId(room?._id)));
+  }, [defaultLandingRooms, filterJoinedRooms, joinedRoomIds, managedTopicRooms]);
+  const collapsedCountyRooms = useMemo(() => {
+    const quickAccessCountyId = normalizeId(quickAccessRooms.county?._id);
+    const fallbackRooms = filterJoinedRooms(managedCountyRooms);
+    if (!quickAccessCountyId || !joinedRoomIds[quickAccessCountyId]) return fallbackRooms;
+
+    const quickAccessCountyRoom = managedCountyRooms.find((room) => normalizeId(room?._id) === quickAccessCountyId);
+    return quickAccessCountyRoom ? [quickAccessCountyRoom] : fallbackRooms;
+  }, [filterJoinedRooms, joinedRoomIds, managedCountyRooms, quickAccessRooms.county?._id]);
   const renderManagedRoomBranch = useCallback((room, depth = 0, extraProps = {}, joinedOnly = false) => {
     const roomId = normalizeId(room?._id);
     const allChildren = (childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder);
@@ -2676,7 +2703,11 @@ function Chat({ isGuestMode = false }) {
                       {managedStateRooms.length === 0 ? <li className="px-2 py-1 text-xs opacity-75">No state chats available.</li> : null}
                     {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
                   </ul>
-                ) : null}
+                ) : (
+                  <ul className="mt-1 space-y-0.5" data-testid="state-joined-rooms">
+                    {collapsedStateRooms.map((room) => renderManagedRoomBranch(room, 0, {}, true))}
+                  </ul>
+                )}
               </section>
 
                 {/* ── Topic Rooms ─────────────────────────────── */}
@@ -2698,7 +2729,7 @@ function Chat({ isGuestMode = false }) {
                     </ul>
                   ) : (
                     <ul className="mt-1 space-y-0.5" data-testid="topic-joined-rooms">
-                      {filterJoinedRooms(managedTopicRooms).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
+                      {collapsedTopicRooms.map((room) => renderManagedRoomBranch(room, 0, {}, true))}
                     </ul>
                   )}
                 </section>
@@ -2722,7 +2753,7 @@ function Chat({ isGuestMode = false }) {
                     </ul>
                   ) : (
                     <ul className="mt-1 space-y-0.5" data-testid="county-joined-rooms">
-                      {filterJoinedRooms(managedCountyRooms).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
+                      {collapsedCountyRooms.map((room) => renderManagedRoomBranch(room, 0, {}, true))}
                     </ul>
                   )}
                 </section>
