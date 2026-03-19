@@ -651,10 +651,10 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    const adminDialog = container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
+    const adminDialog = document.body.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
     expect(adminDialog).not.toBeNull();
-    const adminNameInput = container.querySelector('input[aria-label="Admin room name"]');
-    const adminParentSelect = container.querySelector('select[aria-label="Admin room parent"]');
+    const adminNameInput = document.body.querySelector('input[aria-label="Admin room name"]');
+    const adminParentSelect = document.body.querySelector('select[aria-label="Admin room parent"]');
     expect(adminNameInput).not.toBeNull();
     expect(adminParentSelect).not.toBeNull();
 
@@ -666,7 +666,7 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    const addRoomButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Add room');
+    const addRoomButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === 'Add room');
     expect(addRoomButton).not.toBeUndefined();
 
     await act(async () => {
@@ -679,7 +679,7 @@ describe('Chat zip room indicator', () => {
       parentRoomId: 'state-ca'
     }));
 
-    const moveDownButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '↓');
+    const moveDownButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === '↓');
     expect(moveDownButton).not.toBeUndefined();
 
     await act(async () => {
@@ -720,35 +720,35 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
-    let adminDialog = container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
+    let adminDialog = document.body.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
     expect(adminDialog).not.toBeNull();
 
-    const adminNameInput = container.querySelector('input[aria-label="Admin room name"]');
+    const adminNameInput = document.body.querySelector('input[aria-label="Admin room name"]');
     expect(adminNameInput).not.toBeNull();
     await act(async () => {
       adminNameInput.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
-    adminDialog = container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
+    adminDialog = document.body.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
     expect(adminDialog).not.toBeNull();
 
     await act(async () => {
       adminDialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await flush();
     });
-    expect(container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]')).toBeNull();
+    expect(document.body.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]')).toBeNull();
 
     await act(async () => {
       toggleAdminControls.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
-    adminDialog = container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
+    adminDialog = document.body.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
     expect(adminDialog).not.toBeNull();
     await act(async () => {
       adminDialog.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
-    expect(container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]')).toBeNull();
+    expect(document.body.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]')).toBeNull();
   });
 
   it('uses readable light-theme category pills and compact DM conversation row sizing', async () => {

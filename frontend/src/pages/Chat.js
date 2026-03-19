@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import ChatComposerBar from '../components/chat/ChatComposerBar';
 import ChatMessageList from '../components/chat/ChatMessageList';
@@ -2747,7 +2748,7 @@ function Chat({ isGuestMode = false }) {
                       <span className="text-xs opacity-70" aria-hidden="true">{adminPanelOpen ? '▾' : '▸'}</span>
                     </button>
                     <p className="mt-1 text-xs opacity-75">Manage rooms in a popup workspace.</p>
-                    {adminPanelOpen ? (
+                    {adminPanelOpen ? createPortal((
                     <div
                       id="chat-admin-control-panel-body"
                       ref={adminPanelDialogRef}
@@ -2933,7 +2934,7 @@ function Chat({ isGuestMode = false }) {
                     </div>
                     </div>
                     </div>
-                    ) : null}
+                    ), document.body) : null}
                   </section>
                 ) : null}
 
