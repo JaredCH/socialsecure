@@ -13,7 +13,8 @@ const mockSession = {
 
 const mockSessionModel = {
   findOne: jest.fn().mockResolvedValue(mockSession),
-  findOneAndUpdate: jest.fn().mockResolvedValue({})
+  findOneAndUpdate: jest.fn().mockResolvedValue({}),
+  updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 })
 };
 
 const mockSecurityEventModel = {
@@ -81,6 +82,14 @@ describe('Auth password change endpoint', () => {
     expect(mutableUser.passwordHash).toMatch(/^\$2[aby]\$\d{2}\$/);
     expect(mutableUser.mustResetPassword).toBe(false);
     expect(mutableUser.save).toHaveBeenCalled();
+    expect(mockSessionModel.updateMany).toHaveBeenCalledWith(
+      { userId: 'user-1', isRevoked: false },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          isRevoked: true
+        })
+      })
+    );
     expect(response.body.user.mustResetPassword).toBe(false);
   });
 });

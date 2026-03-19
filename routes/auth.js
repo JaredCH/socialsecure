@@ -40,6 +40,9 @@ const ONBOARDING_TOTAL_STEPS = 4;
 const LOCATION_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const LOCATION_CHANGE_FIELDS = ['city', 'state', 'country', 'zipCode'];
 const PROFILE_VISIBILITY_OPTIONS = ['public', 'social', 'secure'];
+// Development-only process-local fallback generated at startup.
+// Tokens signed with this value are intentionally invalidated on server restart.
+const DEV_JWT_SECRET_FALLBACK = crypto.randomBytes(64).toString('hex');
 const passwordChangeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -67,6 +70,20 @@ const addressApprovalResponseLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many address approval responses. Please try again later.' }
+});
+const sensitiveAuthActionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication requests. Please try again later.' }
+});
+const profileUpdateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many profile update requests. Please try again later.' }
 });
 
 const isSafeHttpUrl = (value) => {
@@ -181,10 +198,23 @@ const toAuthenticatedUserProfile = (user) => {
 };
 
 // Generate JWT token
+const getJwtSecret = () => {
+  const secret = String(process.env.JWT_SECRET || '').trim();
+  if (secret) {
+    return secret;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is required in production');
+  }
+
+  return DEV_JWT_SECRET_FALLBACK;
+};
+
 const generateToken = (userId, onboardingStatus = 'pending') => {
   return jwt.sign(
     { userId, onboardingStatus },
-    process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+    getJwtSecret(),
     { expiresIn: '24h' }
   );
 };
@@ -278,7 +308,7 @@ const getUserFromBearerToken = async (req, select = '') => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const decoded = jwt.verify(token, getJwtSecret());
 
     const tokenHash = hashToken(token);
     const session = await Session.findOne({ userId: decoded.userId, tokenHash, isRevoked: false });
@@ -757,7 +787,19 @@ router.post('/password/change', [
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
-    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    const nextPasswordHash = await bcrypt.hash(newPassword, 12);
+    await Session.updateMany(
+      { userId: user._id, isRevoked: false },
+      {
+        $set: {
+          isRevoked: true,
+          revokedAt: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    user.passwordHash = nextPasswordHash;
     user.mustResetPassword = false;
     await user.save();
 
@@ -1081,14 +1123,14 @@ router.post('/onboarding/complete', [
 });
 
 // Get encryption-password status
-router.get('/encryption-password/status', async (req, res) => {
+router.get('/encryption-password/status', sensitiveAuthActionLimiter, async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const decoded = jwt.verify(token, getJwtSecret());
     const user = await User.findById(decoded.userId).select('encryptionPasswordHash encryptionPasswordSetAt encryptionPasswordVersion');
 
     if (!user) {
@@ -1108,6 +1150,7 @@ router.get('/encryption-password/status', async (req, res) => {
 
 // Set initial encryption password
 router.post('/encryption-password/set', [
+  sensitiveAuthActionLimiter,
   body('encryptionPassword')
     .isString()
     .withMessage('Encryption password is required')
@@ -1133,7 +1176,7 @@ router.post('/encryption-password/set', [
       return res.status(400).json({ error: 'Encryption password confirmation does not match' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const decoded = jwt.verify(token, getJwtSecret());
     const user = await User.findById(decoded.userId);
 
     if (!user) {
@@ -1170,6 +1213,7 @@ router.post('/encryption-password/set', [
 
 // Change existing encryption password
 router.post('/encryption-password/change', [
+  sensitiveAuthActionLimiter,
   body('currentEncryptionPassword')
     .isString()
     .withMessage('Current encryption password is required'),
@@ -1201,7 +1245,7 @@ router.post('/encryption-password/change', [
       return res.status(400).json({ error: 'New encryption password must be different from current password' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const decoded = jwt.verify(token, getJwtSecret());
     const user = await User.findById(decoded.userId);
 
     if (!user) {
@@ -1246,6 +1290,7 @@ const DEFAULT_ENCRYPTION_UNLOCK_MINUTES = 30;
 
 // Verify encryption password and create unlock session
 router.post('/encryption-password/verify', [
+  sensitiveAuthActionLimiter,
   body('encryptionPassword')
     .isString()
     .withMessage('Encryption password is required'),
@@ -1268,7 +1313,7 @@ router.post('/encryption-password/verify', [
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const decoded = jwt.verify(token, getJwtSecret());
     const user = await User.findById(decoded.userId);
 
     if (!user || user.registrationStatus !== 'active') {
@@ -1297,7 +1342,7 @@ router.post('/encryption-password/verify', [
         type: 'encryption_unlock',
         version: user.encryptionPasswordVersion
       },
-      process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+      getJwtSecret(),
       { expiresIn: `${unlockDurationSeconds}s` }
     );
 
@@ -1321,7 +1366,7 @@ router.post('/encryption-password/verify', [
 });
 
 // Check if encryption is currently unlocked (via cookie)
-router.get('/encryption-password/status/unlock', async (req, res) => {
+router.get('/encryption-password/status/unlock', sensitiveAuthActionLimiter, async (req, res) => {
   try {
     const unlockToken = req.cookies?.encryption_unlock;
     
@@ -1330,7 +1375,7 @@ router.get('/encryption-password/status/unlock', async (req, res) => {
     }
 
     try {
-      const decoded = jwt.verify(unlockToken, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+      const decoded = jwt.verify(unlockToken, getJwtSecret());
       
       if (decoded.type !== 'encryption_unlock') {
         return res.json({ unlocked: false });
@@ -1490,14 +1535,18 @@ router.post('/address-approval/respond', [
 });
 
 router.put('/profile', [
+  profileUpdateLimiter,
   body('realName').optional().trim().notEmpty().withMessage('Real name cannot be empty'),
   body('phone')
     .optional({ nullable: true })
-    .isString()
-    .trim()
-    .isLength({ max: 30 })
-    .withMessage('Phone must be at most 30 characters')
-    .matches(/^(?:(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})$/)
+    .custom((value) => {
+      if (value === null || value === undefined) return true;
+      if (typeof value !== 'string') return false;
+      const normalized = value.trim();
+      if (!normalized) return true;
+      if (normalized.length > 30) return false;
+      return /^(?:(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})$/.test(normalized);
+    })
     .withMessage('Phone number format is invalid'),
   body('worksAt').optional({ nullable: true }).isString().trim().isLength({ max: 120 }).withMessage('Place of employment must be at most 120 characters'),
   body('streetAddress').optional({ nullable: true }).isString().trim().isLength({ max: 200 }).withMessage('Home address must be at most 200 characters'),
@@ -1650,7 +1699,7 @@ router.put('/profile', [
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const decoded = jwt.verify(token, getJwtSecret());
     const user = await User.findById(decoded.userId);
     
     if (!user) {
@@ -1930,6 +1979,7 @@ router.put('/profile', [
 
 // Setup PGP public key
 router.post('/pgp/setup', [
+  sensitiveAuthActionLimiter,
   body('publicKey').isString().withMessage('PGP public key is required')
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -1943,7 +1993,7 @@ router.post('/pgp/setup', [
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const decoded = jwt.verify(token, getJwtSecret());
     const user = await User.findById(decoded.userId);
     
     if (!user) {
