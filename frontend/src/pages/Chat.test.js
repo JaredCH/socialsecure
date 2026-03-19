@@ -1939,6 +1939,100 @@ describe('Chat zip room indicator', () => {
     expect(container.textContent).not.toContain('[Encrypted message]');
   });
 
+  it('does not auto-unlock DM from cookie cache when local vault is still locked', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    const expiresAt = Date.now() + (10 * 60 * 1000);
+    document.cookie = `socialsecure_dm_unlock_v1=${encodeURIComponent(JSON.stringify({
+      expiresAt,
+      conversationIds: ['dm1']
+    }))}; Path=/`;
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    expect(container.querySelector('[data-testid="dm-lock-overlay"]')).not.toBeNull();
+    expect(container.querySelector('textarea').disabled).toBe(true);
+  });
+
+  it('retries DM message decrypt after unlock when first decrypt attempts fail', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getConversationMessages.mockImplementation((conversationId) => {
+      if (conversationId === 'dm1') {
+        return Promise.resolve({
+          data: {
+            messages: [{
+              _id: 'dm-message-1',
+              content: '[Encrypted message]',
+              userId: { _id: 'u2', username: 'buddy' },
+              createdAt: new Date().toISOString(),
+              e2ee: {
+                ciphertext: 'cipher',
+                nonce: 'nonce',
+                aad: '',
+                keyVersion: 1,
+                senderDeviceId: 'device-2',
+                clientMessageId: 'client-1',
+                signature: 'sig',
+                ciphertextHash: 'h'.repeat(64)
+              }
+            }]
+          }
+        });
+      }
+      return Promise.resolve({ data: { messages: [] } });
+    });
+    decryptEnvelope
+      .mockRejectedValueOnce(new Error('Missing room key for this message version.'))
+      .mockRejectedValueOnce(new Error('Missing room key for this message version.'))
+      .mockResolvedValueOnce('hello after retry');
+
+    await renderChat();
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    await unlockActiveDm();
+    await act(async () => {
+      await wait(260);
+      await flush();
+      await flush();
+    });
+
+    expect(decryptEnvelope).toHaveBeenCalledTimes(3);
+    expect(container.textContent).toContain('hello after retry');
+    expect(container.textContent).not.toContain('[Encrypted message]');
+  });
+
   it('supports configurable secure unlock duration in DM flow', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }

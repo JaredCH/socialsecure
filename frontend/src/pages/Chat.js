@@ -158,6 +158,8 @@ const LOCKED_DM_PLACEHOLDER = '🔒 Conversation locked. Unlock to view encrypte
 const INITIAL_MESSAGES_PAGE_SIZE = 40;
 const OLDER_MESSAGES_PAGE_SIZE = 10;
 const DM_DECRYPT_BATCH_SIZE = 5;
+const DM_DECRYPT_RETRY_DELAY_MS = 200;
+const DM_DECRYPT_MAX_RETRIES = 3;
 const MAX_CHAT_ROOM_FETCH = 500;
 const MAX_CHAT_ROOM_RESULTS = 20;
 const MAX_FAVORITE_ROOMS = 8;
@@ -458,6 +460,7 @@ function Chat({ isGuestMode = false }) {
   const [expandedManagedRooms, setExpandedManagedRooms] = useState({});
   const [dmUnlockedByConversation, setDmUnlockedByConversation] = useState({});
   const [unlockDurationMinutes, setUnlockDurationMinutes] = useState(DEFAULT_UNLOCK_DURATION_MINUTES);
+  const [dmDecryptRetryNonce, setDmDecryptRetryNonce] = useState(0);
   const [unlockingDm, setUnlockingDm] = useState(false);
   const [dmFriends, setDmFriends] = useState([]);
   const [dmFriendsLoading, setDmFriendsLoading] = useState(false);
@@ -569,6 +572,7 @@ function Chat({ isGuestMode = false }) {
   const userLongPressTimerRef = useRef(null);
   const e2eeSessionRef = useRef(null);
   const decryptingMessageIdsRef = useRef(new Set());
+  const dmDecryptRetryCountRef = useRef({});
   const participantRefreshTimerRef = useRef(null);
   const lastParticipantRefreshAtRef = useRef(0);
 
@@ -923,6 +927,7 @@ function Chat({ isGuestMode = false }) {
     const conversationId = String(activeConversationId);
     const cache = readDmUnlockCache();
     if (!cache.conversationIds.includes(conversationId)) return;
+    if (!e2eeSessionRef.current) return;
     setDmUnlockedByConversation((prev) => ({
       ...prev,
       [conversationId]: true
@@ -1559,76 +1564,6 @@ function Chat({ isGuestMode = false }) {
     return session;
   }, [profile?._id]);
 
-  useEffect(() => {
-    if (!activeConversationId || activeConversation?.type !== 'dm') return;
-    if (!dmUnlockedByConversation[String(activeConversationId)]) return;
-    if (encryptedDmMessages.length === 0) return;
-    const pendingMessages = [...encryptedDmMessages]
-      .reverse()
-      .filter((message) => (
-        !Object.prototype.hasOwnProperty.call(decryptedDmContentById, String(message._id))
-        && !decryptingMessageIdsRef.current.has(String(message._id))
-      ))
-      .slice(0, DM_DECRYPT_BATCH_SIZE);
-    if (pendingMessages.length === 0) return;
-
-    let cancelled = false;
-    const decryptMessages = async () => {
-      try {
-        const session = await ensureE2EESession();
-        const decryptedEntries = {};
-        for (const message of pendingMessages) {
-          const messageId = String(message._id);
-          decryptingMessageIdsRef.current.add(messageId);
-          try {
-            decryptedEntries[messageId] = await decryptEnvelope({
-              session,
-              roomId: activeConversationId,
-              envelope: message.e2ee
-            });
-          } catch {
-            // keep encrypted placeholder when key is unavailable
-          } finally {
-            decryptingMessageIdsRef.current.delete(messageId);
-          }
-        }
-        if (!cancelled && Object.keys(decryptedEntries).length > 0) {
-          setDecryptedDmContentById((prev) => ({
-            ...prev,
-            ...decryptedEntries
-          }));
-        }
-      } catch {
-        // decryption waits until credentials/session are available
-      }
-    };
-
-    decryptMessages();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeConversation?.type,
-    activeConversationId,
-    decryptedDmContentById,
-    dmUnlockedByConversation,
-    encryptedDmMessages,
-    ensureE2EESession
-  ]);
-
-  const persistDmUnlockCache = useCallback((conversationId, shouldCache, durationMinutes = DEFAULT_UNLOCK_DURATION_MINUTES) => {
-    const normalizedId = String(conversationId || '').trim();
-    if (!normalizedId) return;
-    const existing = readDmUnlockCache();
-    const nextSet = new Set(existing.conversationIds);
-    if (shouldCache) {
-      nextSet.add(normalizedId);
-    } else {
-      nextSet.delete(normalizedId);
-    }
-    writeDmUnlockCache([...nextSet], durationMinutes);
-  }, []);
-
   const hydrateConversationKeys = useCallback(async ({ conversationId, session }) => {
     const { data } = await chatAPI.syncConversationKeyPackages(conversationId, session.deviceId);
     const packages = Array.isArray(data?.packages) ? data.packages : [];
@@ -1646,7 +1581,96 @@ function Chat({ isGuestMode = false }) {
     }
     if (hasNewRoomKey) {
       await session.persist();
+      setDmDecryptRetryNonce((prev) => prev + 1);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!activeConversationId || activeConversation?.type !== 'dm') return;
+    const conversationId = String(activeConversationId);
+    if (!dmUnlockedByConversation[conversationId]) return;
+    if (encryptedDmMessages.length === 0) return;
+    const pendingMessages = [...encryptedDmMessages]
+      .reverse()
+      .filter((message) => (
+        !Object.prototype.hasOwnProperty.call(decryptedDmContentById, String(message._id))
+        && !decryptingMessageIdsRef.current.has(String(message._id))
+      ))
+      .slice(0, DM_DECRYPT_BATCH_SIZE);
+    if (pendingMessages.length === 0) return;
+
+    let cancelled = false;
+    let retryTimeoutId = null;
+    const decryptMessages = async () => {
+      try {
+        const session = await ensureE2EESession();
+        await hydrateConversationKeys({ conversationId, session });
+        const decryptedEntries = {};
+        for (const message of pendingMessages) {
+          const messageId = String(message._id);
+          decryptingMessageIdsRef.current.add(messageId);
+          try {
+            decryptedEntries[messageId] = await decryptEnvelope({
+              session,
+              roomId: activeConversationId,
+              envelope: message.e2ee
+            });
+          } catch {
+            // keep encrypted placeholder when key is unavailable
+          } finally {
+            decryptingMessageIdsRef.current.delete(messageId);
+          }
+        }
+        if (!cancelled && Object.keys(decryptedEntries).length > 0) {
+          dmDecryptRetryCountRef.current[conversationId] = 0;
+          setDecryptedDmContentById((prev) => ({
+            ...prev,
+            ...decryptedEntries
+          }));
+          return;
+        }
+
+        const retryCount = Number(dmDecryptRetryCountRef.current[conversationId] || 0);
+        if (!cancelled && retryCount < DM_DECRYPT_MAX_RETRIES) {
+          dmDecryptRetryCountRef.current[conversationId] = retryCount + 1;
+          retryTimeoutId = window.setTimeout(() => {
+            setDmDecryptRetryNonce((prev) => prev + 1);
+          }, DM_DECRYPT_RETRY_DELAY_MS);
+        }
+      } catch {
+        // decryption waits until credentials/session are available
+      }
+    };
+
+    decryptMessages();
+    return () => {
+      cancelled = true;
+      if (retryTimeoutId) {
+        window.clearTimeout(retryTimeoutId);
+      }
+    };
+  }, [
+    activeConversation?.type,
+    activeConversationId,
+    decryptedDmContentById,
+    dmDecryptRetryNonce,
+    dmUnlockedByConversation,
+    encryptedDmMessages,
+    ensureE2EESession,
+    hydrateConversationKeys
+  ]);
+
+  const persistDmUnlockCache = useCallback((conversationId, shouldCache, durationMinutes = DEFAULT_UNLOCK_DURATION_MINUTES) => {
+    const normalizedId = String(conversationId || '').trim();
+    if (!normalizedId) return;
+    const existing = readDmUnlockCache();
+    const nextSet = new Set(existing.conversationIds);
+    if (shouldCache) {
+      nextSet.add(normalizedId);
+    } else {
+      nextSet.delete(normalizedId);
+    }
+    writeDmUnlockCache([...nextSet], durationMinutes);
   }, []);
 
   const handleSend = async (event) => {
@@ -1965,6 +1989,7 @@ function Chat({ isGuestMode = false }) {
       await authAPI.verifyEncryptionPassword(passwordInput, unlockDurationMinutes);
       const session = await ensureE2EESession(passwordInput);
       await hydrateConversationKeys({ conversationId: activeConversationId, session });
+      dmDecryptRetryCountRef.current[String(activeConversationId)] = 0;
       setDecryptedDmContentById({});
       decryptingMessageIdsRef.current = new Set();
       const latestMessages = await loadLatestConversationMessages(activeConversationId);
@@ -2018,6 +2043,7 @@ function Chat({ isGuestMode = false }) {
     setDecryptedDmContentById({});
     setPasswordInput('');
     persistDmUnlockCache(activeConversationId, false);
+    dmDecryptRetryCountRef.current[String(activeConversationId)] = 0;
     e2eeSessionRef.current = null;
     toast.success('Direct message locked.');
   }, [activeConversation?.type, activeConversationId, persistDmUnlockCache]);
