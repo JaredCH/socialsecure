@@ -171,7 +171,9 @@ function ChatMessageItem({
   onToggleAdminUserMute,
   onAdminDeleteMessage,
   onUsernameHoverStart,
-  onUsernameHoverEnd
+  onUsernameHoverEnd,
+  highlighted = false,
+  readReceipt = ''
 }) {
   const author = message.userId?.username || message.userId?.realName || 'user';
   const usernameForProfileLink = typeof message.userId?.username === 'string' ? message.userId.username.trim() : '';
@@ -456,7 +458,8 @@ function ChatMessageItem({
                     groupedWithPrevious ? 'rounded-tl-md' : '',
                     groupedWithNext ? 'rounded-bl-md' : ''
                   ].join(' '),
-                isOwnMessage ? theme.messageOwn : theme.messageOther
+                isOwnMessage ? theme.messageOwn : theme.messageOther,
+                highlighted ? (theme.messagePing || '') : ''
               ].join(' ')}
               onMouseOver={() => {
                 if (canHoverForReactions && !reactionsDisabled) {
@@ -480,8 +483,15 @@ function ChatMessageItem({
               {reactionsMarkup}
             </div>
             {timestamp ? (
-              <span className="mt-0.5 px-2 text-[10px] font-jetbrains opacity-65">{timestamp}</span>
-            ) : null}
+              <span className="mt-0.5 px-2 text-[10px] font-jetbrains opacity-65">
+                {timestamp}
+                {isOwnMessage && readReceipt ? <span className="ml-1 uppercase">{readReceipt}</span> : null}
+              </span>
+            ) : (
+              isOwnMessage && readReceipt
+                ? <span className="mt-0.5 px-2 text-[10px] font-jetbrains uppercase opacity-65">{readReceipt}</span>
+                : null
+            )}
           </div>
         </div>
       </article>

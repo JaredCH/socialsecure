@@ -42,7 +42,8 @@ const MESSAGE_REACTIONS = [
 
 const PARTICIPANT_REFRESH_DEBOUNCE_MS = 1000;
 
-const CHAT_STYLE = {
+const CHAT_THEMES = {
+  dark: {
   shell: 'font-outfit bg-[#0b0e14] text-[#c5cad3]',
   panel: 'border-[#1a1f2b] bg-[#11151d]/90 backdrop-blur-xl',
   panelGlass: 'border-[#1a1f2b] bg-[#11151d]/95 backdrop-blur-2xl',
@@ -52,9 +53,47 @@ const CHAT_STYLE = {
   messagesShell: 'bg-[#0d1017]/60',
   messageOwn: 'bg-emerald-500/15 text-emerald-100',
   messageOther: 'bg-[#161b25] text-[#c5cad3]',
+  messagePing: 'ring-1 ring-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-100',
   senderAccent: 'text-emerald-400',
   roomHover: 'hover:bg-[#1a1f2b]/80'
+  },
+  light: {
+    shell: 'font-outfit bg-[#f5f7fb] text-[#1b2432]',
+    panel: 'border-[#d9e0ea] bg-white/95 backdrop-blur-xl',
+    panelGlass: 'border-[#d9e0ea] bg-white/95 backdrop-blur-2xl',
+    accent: 'border border-sky-600 bg-sky-600 text-white hover:bg-sky-500 font-semibold',
+    subtle: 'border-[#d6dee9] bg-[#f3f7fd] text-[#1b2432] hover:bg-[#eaf2fc]',
+    input: 'border-[#d6dee9] bg-white text-[#1b2432] placeholder:text-[#728197]',
+    messagesShell: 'bg-[#edf2fb]/80',
+    messageOwn: 'bg-sky-100 text-sky-900',
+    messageOther: 'bg-white text-[#1b2432]',
+    messagePing: 'ring-1 ring-fuchsia-400 bg-fuchsia-100 text-fuchsia-900',
+    senderAccent: 'text-sky-700',
+    roomHover: 'hover:bg-[#e9f1fc]'
+  },
+  medium: {
+    shell: 'font-outfit bg-[#1a1f2a] text-[#d5dae2]',
+    panel: 'border-[#2b3445] bg-[#222a38]/92 backdrop-blur-xl',
+    panelGlass: 'border-[#2b3445] bg-[#222a38]/95 backdrop-blur-2xl',
+    accent: 'border border-violet-500 bg-violet-500 text-white hover:bg-violet-400 font-semibold',
+    subtle: 'border-[#313b4f] bg-[#2a3344] text-[#d5dae2] hover:bg-[#323d52]',
+    input: 'border-[#313b4f] bg-[#1f2734] text-[#d5dae2] placeholder:text-[#8690a3]',
+    messagesShell: 'bg-[#1f2734]/70',
+    messageOwn: 'bg-violet-500/20 text-violet-100',
+    messageOther: 'bg-[#2a3344] text-[#d5dae2]',
+    messagePing: 'ring-1 ring-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-100',
+    senderAccent: 'text-violet-300',
+    roomHover: 'hover:bg-[#323d52]'
+  }
 };
+const CHAT_THEME_LABELS = {
+  dark: 'Dark',
+  light: 'Light',
+  medium: 'Medium'
+};
+const DEFAULT_CHAT_THEME = 'dark';
+const CHAT_THEME_STORAGE_KEY = 'chatTheme';
+const CHAT_PING_BEEP_AUDIO_DATA_URL = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAAAA/////wAAAP///wAAAAA=';
 
 const getAvatarInitials = (profile) => {
   const first = profile?.firstName || '';
@@ -161,6 +200,27 @@ const createRoomAdminForm = (room = null) => ({
 });
 const isRoomConversation = (conversation) => ROOM_CHAT_TYPES.includes(String(conversation?.type || ''));
 const getConversationActivityAt = (conversation) => conversation?.lastMessageAt || conversation?.lastActivity || null;
+const getConversationLatestMessageTs = (conversation) => {
+  const lastMessageAtTs = new Date(conversation?.lastMessageAt || 0).getTime();
+  return Number.isFinite(lastMessageAtTs) ? lastMessageAtTs : 0;
+};
+const escapeRegExp = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const extractMentionsFromText = (text = '') => {
+  const mentionRegex = /(^|\s)@([a-zA-Z0-9_]{1,32})\b/g;
+  const mentions = new Set();
+  let match;
+  while ((match = mentionRegex.exec(String(text || ''))) !== null) {
+    if (match[2]) {
+      mentions.add(match[2].toLowerCase());
+    }
+  }
+  return mentions;
+};
+const getChatTabTypeLabel = (conversation) => {
+  if (conversation?.type === 'dm') return 'DM';
+  if (isRoomConversation(conversation)) return 'Room';
+  return 'Zip';
+};
 const getConversationTabIcon = (conversation) => {
   if (conversation?.type === 'dm') return '✉️';
   if (isRoomConversation(conversation)) return '#';
@@ -259,6 +319,15 @@ function Chat({ isGuestMode = false }) {
   const [profile, setProfile] = useState(null);
   const [loadingHub, setLoadingHub] = useState(true);
   const [activeChannel, setActiveChannel] = useState('zip');
+  const [chatTheme, setChatTheme] = useState(() => {
+    try {
+      const saved = String(localStorage.getItem(CHAT_THEME_STORAGE_KEY) || '').trim().toLowerCase();
+      return Object.prototype.hasOwnProperty.call(CHAT_THEMES, saved) ? saved : DEFAULT_CHAT_THEME;
+    } catch {
+      return DEFAULT_CHAT_THEME;
+    }
+  });
+  const CHAT_STYLE = CHAT_THEMES[chatTheme] || CHAT_THEMES[DEFAULT_CHAT_THEME];
   const [hubData, setHubData] = useState({
     zip: { current: null, nearby: [] },
     dm: [],
@@ -304,6 +373,41 @@ function Chat({ isGuestMode = false }) {
       return {};
     }
   });
+  const [userPresenceStatus, setUserPresenceStatus] = useState('online');
+  const [mutedUserIds, setMutedUserIds] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('socialsecure_room_muted_users_v1') || '[]');
+      if (!Array.isArray(parsed)) return {};
+      return parsed.reduce((acc, userId) => {
+        const normalizedId = normalizeId(userId);
+        if (normalizedId) acc[normalizedId] = true;
+        return acc;
+      }, {});
+    } catch {
+      return {};
+    }
+  });
+  const [lastSeenMessageTsByConversation, setLastSeenMessageTsByConversation] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('socialsecure_chat_last_seen_ts_v1') || '{}');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      return Object.entries(parsed).reduce((acc, [conversationId, ts]) => {
+        const normalizedId = normalizeId(conversationId);
+        const parsedTs = Number(ts);
+        if (normalizedId && Number.isFinite(parsedTs) && parsedTs > 0) {
+          acc[normalizedId] = parsedTs;
+        }
+        return acc;
+      }, {});
+    } catch {
+      return {};
+    }
+  });
+  const [roomPingUnreadByConversation, setRoomPingUnreadByConversation] = useState({});
+  const [dmUnreadCount, setDmUnreadCount] = useState(0);
+  const [highlightedMessageIds, setHighlightedMessageIds] = useState({});
+  const pingSoundAudioRef = useRef(null);
+  const [unreadDividerAnchorTs, setUnreadDividerAnchorTs] = useState(0);
   const [dmReadByConversation, setDmReadByConversation] = useState(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem(DM_READ_CACHE_KEY) || '{}');
@@ -500,6 +604,19 @@ function Chat({ isGuestMode = false }) {
       return normalizedNext;
     });
   }, []);
+  const profileUsernameLower = String(profile?.username || '').trim().toLowerCase();
+  const mentionRegexForCurrentUser = useMemo(() => {
+    if (!profileUsernameLower) return null;
+    return new RegExp(`(^|\\s)@${escapeRegExp(profileUsernameLower)}\\b`, 'i');
+  }, [profileUsernameLower]);
+  useEffect(() => {
+    const conversationId = String(activeConversationId || '');
+    if (!conversationId) {
+      setUnreadDividerAnchorTs(0);
+      return;
+    }
+    setUnreadDividerAnchorTs(Number(lastSeenMessageTsByConversation[conversationId] || 0));
+  }, [activeConversationId]);
 
   const conversationList = useMemo(() => {
     if (activeChannel === 'zip') {
@@ -597,6 +714,21 @@ function Chat({ isGuestMode = false }) {
     () => workspaceEntries.get(String(activeConversationId)) || null,
     [workspaceEntries, activeConversationId]
   );
+  const roomPingUnreadTotal = useMemo(
+    () => Object.values(roomPingUnreadByConversation).reduce((sum, value) => sum + Number(value || 0), 0),
+    [roomPingUnreadByConversation]
+  );
+  const readReceiptByMessageId = useMemo(() => {
+    if (activeConversation?.type !== 'dm' || !activeConversationId) return {};
+    const conversationReadAt = Number(dmReadByConversation[String(activeConversationId)] || 0);
+    return messages.reduce((acc, message) => {
+      const messageId = String(message?._id || '');
+      if (!messageId) return acc;
+      const messageTs = new Date(message?.createdAt || 0).getTime();
+      acc[messageId] = Number.isFinite(messageTs) && messageTs <= conversationReadAt ? 'Read' : 'Delivered';
+      return acc;
+    }, {});
+  }, [activeConversation?.type, activeConversationId, dmReadByConversation, messages]);
 
   useEffect(() => {
     if (activeConversation?.type !== 'dm' || !activeConversationId) return;
@@ -833,16 +965,23 @@ function Chat({ isGuestMode = false }) {
   }, []);
 
   const renderedMessages = useMemo(() => {
-    if (activeConversation?.type !== 'dm') return messages;
+    let baseMessages = messages;
+    if (isRoomConversation(activeConversation)) {
+      baseMessages = messages.filter((message) => {
+        const authorId = normalizeId(message?.userId?._id || message?.userId);
+        return !mutedUserIds[authorId];
+      });
+    }
+    if (activeConversation?.type !== 'dm') return baseMessages;
     if (!dmUnlockedByConversation[String(activeConversationId || '')]) {
-      return messages.map((message) => {
+      return baseMessages.map((message) => {
         return {
           ...message,
           content: LOCKED_DM_PLACEHOLDER
         };
       });
     }
-    return messages.map((message) => {
+    return baseMessages.map((message) => {
       const messageId = String(message._id);
       if (!Object.prototype.hasOwnProperty.call(decryptedDmContentById, messageId)) return message;
       const decrypted = decryptedDmContentById[messageId];
@@ -851,7 +990,7 @@ function Chat({ isGuestMode = false }) {
         content: decrypted
       };
     });
-  }, [activeConversation?.type, activeConversationId, decryptedDmContentById, dmUnlockedByConversation, messages]);
+  }, [activeConversation, activeConversation?.type, activeConversationId, decryptedDmContentById, dmUnlockedByConversation, messages, mutedUserIds]);
 
   const openConversationById = useCallback((conversationId, { openWorkspace = true } = {}) => {
     const normalizedConversationId = normalizeId(conversationId);
@@ -1200,7 +1339,43 @@ function Chat({ isGuestMode = false }) {
       if (!incomingMessage) return;
       const incomingTargetId = String(incomingMessage.conversationId || incomingMessage.roomId || '');
       if (!incomingTargetId) return;
+      const incomingAuthorId = String(incomingMessage?.userId?._id || incomingMessage?.userId || '');
+      const isMine = incomingAuthorId && incomingAuthorId === String(profile?._id || '');
+      const incomingContent = String(incomingMessage?.content || '');
+      const mentionsCurrentUser = Boolean(mentionRegexForCurrentUser && mentionRegexForCurrentUser.test(incomingContent));
+      const containsAnyMention = extractMentionsFromText(incomingContent).size > 0;
+      const shouldHighlight = Boolean(mentionsCurrentUser || containsAnyMention);
+
+      if (shouldHighlight && incomingMessage?._id) {
+        setHighlightedMessageIds((prev) => ({ ...prev, [String(incomingMessage._id)]: true }));
+      }
+
+      const awayFromMentionedConversation = activeChannel === 'dm' || String(activeConversationId || '') !== incomingTargetId;
+      if (!isMine && awayFromMentionedConversation) {
+        if (incomingMessage?.roomId && containsAnyMention) {
+          setRoomPingUnreadByConversation((prev) => ({
+            ...prev,
+            [incomingTargetId]: Number(prev[incomingTargetId] || 0) + 1
+          }));
+        }
+        if (mentionsCurrentUser) {
+          toast(`🔔 @${profile?.username || 'you'} were mentioned`, { duration: 2400 });
+          if (userPresenceStatus !== 'dnd') {
+            try {
+              if (!pingSoundAudioRef.current) {
+                pingSoundAudioRef.current = new Audio(CHAT_PING_BEEP_AUDIO_DATA_URL);
+              }
+              pingSoundAudioRef.current.currentTime = 0;
+              pingSoundAudioRef.current.play().catch(() => {});
+            } catch {
+              // no-op
+            }
+          }
+        }
+      }
+
       if (incomingTargetId !== String(activeConversationId || '')) return;
+      if (isRoomConversation(activeConversation) && mutedUserIds[incomingAuthorId]) return;
       setMessages((prev) => upsertConversationMessage(prev, incomingMessage));
       scheduleConversationUsersRefresh();
     });
@@ -1209,7 +1384,7 @@ function Chat({ isGuestMode = false }) {
         unsubscribe();
       }
     };
-  }, [activeConversationId, scheduleConversationUsersRefresh]);
+  }, [activeChannel, activeConversation, activeConversationId, mentionRegexForCurrentUser, mutedUserIds, profile?._id, profile?.username, scheduleConversationUsersRefresh, userPresenceStatus]);
 
   useEffect(() => {
     const loadRoomUsers = async () => {
@@ -1246,6 +1421,66 @@ function Chat({ isGuestMode = false }) {
     const timer = setTimeout(() => setLocalTyping(false), 1200);
     return () => clearTimeout(timer);
   }, [composerValue]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_THEME_STORAGE_KEY, chatTheme);
+    } catch {
+      // no-op
+    }
+  }, [chatTheme]);
+
+  useEffect(() => {
+    try {
+      const mutedIds = Object.keys(mutedUserIds).filter((id) => mutedUserIds[id]);
+      localStorage.setItem('socialsecure_room_muted_users_v1', JSON.stringify(mutedIds));
+    } catch {
+      // no-op
+    }
+  }, [mutedUserIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('socialsecure_chat_last_seen_ts_v1', JSON.stringify(lastSeenMessageTsByConversation));
+    } catch {
+      // no-op
+    }
+  }, [lastSeenMessageTsByConversation]);
+
+  useEffect(() => {
+    const nextDmUnread = (Array.isArray(hubData?.dm) ? hubData.dm : []).reduce((count, conversation) => {
+      const latestTs = getConversationLatestMessageTs(conversation);
+      const readAtTs = Number(dmReadByConversation[String(conversation?._id)] || 0);
+      if (latestTs > readAtTs) return count + 1;
+      return count;
+    }, 0);
+    setDmUnreadCount(nextDmUnread);
+  }, [dmReadByConversation, hubData?.dm]);
+
+  useEffect(() => {
+    if (!activeConversationId || messagesLoading || messages.length === 0) return;
+    const latestTs = messages.reduce((maxTs, message) => {
+      const ts = new Date(message?.createdAt || 0).getTime();
+      return Number.isFinite(ts) && ts > maxTs ? ts : maxTs;
+    }, 0);
+    if (!latestTs) return;
+    setLastSeenMessageTsByConversation((prev) => {
+      const conversationId = String(activeConversationId);
+      if (Number(prev[conversationId] || 0) >= latestTs) return prev;
+      return {
+        ...prev,
+        [conversationId]: latestTs
+      };
+    });
+    if (activeChannel !== 'dm' && isRoomConversation(activeConversation)) {
+      setRoomPingUnreadByConversation((prev) => {
+        if (!Object.prototype.hasOwnProperty.call(prev, String(activeConversationId))) return prev;
+        return {
+          ...prev,
+          [String(activeConversationId)]: 0
+        };
+      });
+    }
+  }, [activeChannel, activeConversation, activeConversationId, messages, messagesLoading]);
 
   const ensureE2EESession = useCallback(async (encryptionPassword) => {
     if (e2eeSessionRef.current) {
@@ -1797,6 +2032,39 @@ function Chat({ isGuestMode = false }) {
     }
   };
 
+  const handleReportUser = async (user) => {
+    if (!user?._id || String(user._id) === String(profile?._id)) return;
+    try {
+      await moderationAPI.report({
+        targetType: 'user',
+        targetId: String(user._id),
+        targetUserId: String(user._id),
+        category: 'harassment',
+        description: 'Reported from chat user hover/actions'
+      });
+      toast.success(`Reported @${user.username || user.realName || 'user'} to moderators`);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to submit report');
+    }
+  };
+
+  const handleToggleUserMute = useCallback((user) => {
+    const userId = normalizeId(user?._id);
+    if (!userId || userId === normalizeId(profile?._id)) return;
+    setMutedUserIds((prev) => {
+      const nextMuted = !prev[userId];
+      const next = { ...prev, [userId]: nextMuted };
+      if (!nextMuted) {
+        delete next[userId];
+      }
+      return next;
+    });
+    const currentlyMuted = Boolean(mutedUserIds[userId]);
+    toast.success(currentlyMuted
+      ? `Unmuted @${user.username || user.realName || 'user'}`
+      : `Muted @${user.username || user.realName || 'user'} in rooms`);
+  }, [mutedUserIds, profile?._id]);
+
   const handleToggleMessageReaction = useCallback((messageId, reactionKey) => {
     if (isGuestMode) return;
     const normalizedMessageId = String(messageId || '').trim();
@@ -2136,6 +2404,7 @@ function Chat({ isGuestMode = false }) {
           >
             {CHANNELS.map((channel) => {
               const channelDisabled = isGuestMode && channel.key === 'dm';
+              const channelUnreadCount = channel.key === 'dm' ? dmUnreadCount : roomPingUnreadTotal;
               return (
                 <button
                   key={channel.key}
@@ -2157,6 +2426,11 @@ function Chat({ isGuestMode = false }) {
                   style={activeChannel === channel.key ? { boxShadow: 'inset 0 -2px 0 currentColor' } : undefined}
                 >
                   {channel.label}
+                  {channelUnreadCount > 0 ? (
+                    <span className="ml-1 inline-flex min-w-[1.05rem] items-center justify-center rounded-full border px-1 text-[9px] leading-4">
+                      {channelUnreadCount}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -2221,6 +2495,7 @@ function Chat({ isGuestMode = false }) {
                       {filteredDmConversations.map((conversation) => {
                         const selected = String(conversation._id) === String(activeConversationId);
                         const status = getPresenceState(getConversationUserPresence(conversation), presenceReferenceTime);
+                        const hasUnreadIndicator = Boolean(conversation.__hasUnread);
                         return (
                           <li key={String(conversation._id)}>
                             <div className={`flex items-stretch rounded-xl border text-sm transition ${selected ? CHAT_STYLE.subtle : 'hover:opacity-85'}`}>
@@ -2234,7 +2509,7 @@ function Chat({ isGuestMode = false }) {
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="truncate font-medium">{getConversationLabel(conversation)}</span>
                                   <span className="inline-flex items-center gap-1 text-[10px] font-jetbrains uppercase">
-                                    {conversation.__hasUnread ? <span className="h-2 w-2 rounded-full bg-sky-500" /> : null}
+                                    {hasUnreadIndicator ? <span className="rounded-full border px-1 text-[9px] leading-4">1</span> : null}
                                     <span className={`h-2 w-2 rounded-full ${status.tone}`} />
                                     <span>{status.label}</span>
                                   </span>
@@ -2340,7 +2615,27 @@ function Chat({ isGuestMode = false }) {
                   {stateChatsOpen ? (
                     <ul id="chat-state-discovery-list" className="mt-1 space-y-0.5">
                       {managedStateRooms.length === 0 ? <li className="px-2 py-1 text-xs opacity-75">No state chats available.</li> : null}
-                      {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
+                    {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
+                  </ul>
+                ) : null}
+              </section>
+
+                {/* ── Topic Rooms ─────────────────────────────── */}
+                <section>
+                  <button
+                    type="button"
+                    onClick={() => setTopicsOpen((open) => !open)}
+                    className="flex w-full items-center justify-between gap-2 px-1 py-1 text-left"
+                    aria-expanded={topicsOpen}
+                    aria-controls="chat-topic-discovery-list"
+                  >
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wide opacity-70">📰 Topic Rooms</h3>
+                    <span className="text-xs opacity-50" aria-hidden="true">{topicsOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {topicsOpen ? (
+                    <ul id="chat-topic-discovery-list" className="mt-1 space-y-0.5">
+                      {managedTopicRooms.length === 0 ? <li className="px-2 py-1 text-xs opacity-75">No topic rooms available.</li> : null}
+                      {managedTopicRooms.map((room) => renderManagedRoomBranch(room))}
                     </ul>
                   ) : (
                     <ul className="mt-1 space-y-0.5" data-testid="state-joined-rooms">
@@ -2372,6 +2667,12 @@ function Chat({ isGuestMode = false }) {
                     </ul>
                   )}
                 </section>
+
+                {roomPingUnreadTotal > 0 ? (
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-fuchsia-300">
+                    Unread pings: {roomPingUnreadTotal}
+                  </p>
+                ) : null}
 
                 {/* ── Admin Panel ─────────────────────────────── */}
                 {profile?.isAdmin ? (
@@ -2555,10 +2856,32 @@ function Chat({ isGuestMode = false }) {
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">@{profile?.username || 'user'}</p>
                 <p className="flex items-center gap-1 text-[10px] opacity-60">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  Online
+                  <span className={`h-1.5 w-1.5 rounded-full ${userPresenceStatus === 'dnd' ? 'bg-rose-400' : userPresenceStatus === 'away' ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                  {userPresenceStatus === 'dnd' ? 'DND' : userPresenceStatus === 'away' ? 'Away' : 'Online'}
                 </p>
               </div>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <select
+                aria-label="Chat theme selector"
+                className={`rounded border px-2 py-1 text-xs ${CHAT_STYLE.input}`}
+                value={chatTheme}
+                onChange={(event) => setChatTheme(event.target.value)}
+              >
+                {Object.keys(CHAT_THEMES).map((key) => (
+                  <option key={key} value={key}>{CHAT_THEME_LABELS[key] || key}</option>
+                ))}
+              </select>
+              <select
+                aria-label="Presence status selector"
+                className={`rounded border px-2 py-1 text-xs ${CHAT_STYLE.input}`}
+                value={userPresenceStatus}
+                onChange={(event) => setUserPresenceStatus(event.target.value)}
+              >
+                <option value="online">Online</option>
+                <option value="away">Away</option>
+                <option value="dnd">Do Not Disturb</option>
+              </select>
             </div>
           </div>
         </aside>
@@ -2618,6 +2941,9 @@ function Chat({ isGuestMode = false }) {
               onAdminDeleteMessage={handleAdminDeleteMessage}
               onUsernameHoverStart={handleUsernameHoverStart}
               onUsernameHoverEnd={handleUsernameHoverEnd}
+              unreadDividerTimestamp={unreadDividerAnchorTs}
+              highlightedMessageIds={highlightedMessageIds}
+              readReceiptByMessageId={readReceiptByMessageId}
             />
             {activeConversation?.type === 'dm' && activeConversationId && !dmUnlockedByConversation[String(activeConversationId)] ? (
               <div
@@ -2846,6 +3172,28 @@ function Chat({ isGuestMode = false }) {
           >
             Block/ignore
           </button>
+          <button
+            type="button"
+            className="w-full rounded px-2 py-1 text-left text-sm hover:opacity-80 disabled:opacity-50"
+            disabled={String(userContextMenu.user._id) === String(profile?._id)}
+            onClick={async () => {
+              await handleToggleUserMute(userContextMenu.user);
+              closeUserContextMenu();
+            }}
+          >
+            {mutedUserIds[normalizeId(userContextMenu.user._id)] ? 'Unmute user' : 'Mute user'}
+          </button>
+          <button
+            type="button"
+            className="w-full rounded px-2 py-1 text-left text-sm hover:opacity-80 disabled:opacity-50"
+            disabled={String(userContextMenu.user._id) === String(profile?._id)}
+            onClick={async () => {
+              await handleReportUser(userContextMenu.user);
+              closeUserContextMenu();
+            }}
+          >
+            Report user
+          </button>
         </div>
       ) : null}
       {userHoverPopup.visible && userHoverPopup.rect ? (() => {
@@ -2889,6 +3237,41 @@ function Chat({ isGuestMode = false }) {
                   <a href={`/social?user=${encodeURIComponent(pd.username || pd._id)}`} className="mt-2 block text-center rounded border px-2 py-1 text-[11px] font-semibold hover:opacity-80" style={{ borderColor: headerColor, color: headerColor }}>
                     View Social Page
                   </a>
+                  <div className="mt-2 grid grid-cols-1 gap-1">
+                    <button
+                      type="button"
+                      className="rounded border px-2 py-1 text-[11px] font-semibold hover:opacity-80"
+                      style={{ borderColor: headerColor, color: headerColor }}
+                      disabled={String(pd?._id || '') === String(profile?._id || '')}
+                      onClick={async () => {
+                        await handleRequestFriendship(pd);
+                      }}
+                    >
+                      Request Friend
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border px-2 py-1 text-[11px] font-semibold hover:opacity-80"
+                      style={{ borderColor: headerColor, color: headerColor }}
+                      disabled={String(pd?._id || '') === String(profile?._id || '')}
+                      onClick={async () => {
+                        await handleBlockIgnore(pd);
+                      }}
+                    >
+                      Block
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border px-2 py-1 text-[11px] font-semibold hover:opacity-80"
+                      style={{ borderColor: headerColor, color: headerColor }}
+                      disabled={String(pd?._id || '') === String(profile?._id || '')}
+                      onClick={async () => {
+                        await handleReportUser(pd);
+                      }}
+                    >
+                      Report
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (
