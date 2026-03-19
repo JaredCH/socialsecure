@@ -33,11 +33,16 @@ const { getArticlesForLocation, getCacheMetrics, searchCachedArticles } = requir
 const { normalizeLocationInput, resolvePrimaryLocation } = require('../services/locationNormalizer');
 const { REFRESH_INTERVAL_MS, getCacheSchedulerState, refreshAllCachedLocations, startCacheRefreshScheduler } = require('../services/cacheRefreshWorker');
 const { preloadCommonLocations } = require('../services/locationPreloader');
+const { ingestAllKnownLocations } = require('../services/newsIngestion.local');
+const { ingestAllCategories } = require('../services/newsIngestion.categories');
+const { ingestAllFollowedTeams } = require('../services/newsIngestion.sports');
+const { ingestAllMonitoredSubreddits } = require('../services/newsIngestion.social');
 
 const NewsPreferences = require('../models/NewsPreferences');
 const User = require('../models/User');
 const Article = require('../models/Article');
 const ArticleImpression = require('../models/ArticleImpression');
+const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 
 const router = express.Router();
 
@@ -1714,26 +1719,38 @@ router.get('/search', authenticateToken, async (req, res) => {
   }
 });
 
-const INGESTION_PIPELINES = ['cache', 'preload'];
+const INGESTION_PIPELINES = ['local', 'categories', 'sports', 'social'];
 const SOURCE_ADAPTER_KEY_MAP = {
-  'Google News Cache': 'cache',
-  'Google News Local': 'cache',
-  'Google News State': 'cache',
-  'Google News National': 'cache',
-  preload: 'preload'
+  'Google News Cache': 'local',
+  'Google News Local': 'local',
+  'Google News State': 'local',
+  'Google News National': 'local',
+  preload: 'local',
 };
+
+const CATEGORY_INGEST_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 let _schedulerStarted = false;
 let schedulerStartedAt = null;
 let lastIngestionRunAt = null;
+let _categoryIngestHandle = null;
+let _lastCategoryIngestAt = null;
 
 function enqueuePipeline(pipeline) {
   let task = Promise.resolve();
-  if (pipeline === 'cache') {
-    task = refreshAllCachedLocations({ force: true }).catch((err) => console.error('[news-cache] refresh error:', err));
-  }
-  if (pipeline === 'preload') {
-    task = preloadCommonLocations().catch((err) => console.error('[news-cache] preload error:', err));
+  if (pipeline === 'local') {
+    task = Promise.all([
+      refreshAllCachedLocations({ force: true }).catch((err) => console.error('[news-local] refresh error:', err)),
+      ingestAllKnownLocations().catch((err) => console.error('[news-local] ingest error:', err)),
+    ]);
+  } else if (pipeline === 'categories') {
+    task = ingestAllCategories()
+      .then(() => { _lastCategoryIngestAt = new Date(); })
+      .catch((err) => console.error('[news-categories] ingest error:', err));
+  } else if (pipeline === 'sports') {
+    task = ingestAllFollowedTeams().catch((err) => console.error('[news-sports] ingest error:', err));
+  } else if (pipeline === 'social') {
+    task = ingestAllMonitoredSubreddits().catch((err) => console.error('[news-social] ingest error:', err));
   }
 
   return task.finally(() => {
@@ -1780,41 +1797,79 @@ router.post('/ingest/:sourceKey', authenticateToken, requireAdminUser, async (re
 });
 
 router.get('/schedule-info', authenticateToken, requireAdminUser, async (req, res) => {
-  return res.json(getCacheSchedulerState());
+  const cacheState = getCacheSchedulerState();
+  const categoryNextRunAt = _categoryIngestHandle
+    ? new Date((_lastCategoryIngestAt || schedulerStartedAt || new Date()).getTime() + CATEGORY_INGEST_INTERVAL_MS)
+    : null;
+
+  return res.json({
+    ...cacheState,
+    categoryPipeline: {
+      schedulerRunning: Boolean(_categoryIngestHandle),
+      lastRunAt: _lastCategoryIngestAt,
+      nextRunAt: categoryNextRunAt,
+      intervalMs: CATEGORY_INGEST_INTERVAL_MS,
+    },
+  });
 });
 
 router.get('/ingestion-stats', authenticateToken, requireAdminUser, async (req, res) => {
   try {
     const now = new Date();
-    const metrics = await getCacheMetrics();
-    const sourceRows = buildCacheSourceDescriptors(metrics).map((source) => ({
-      source: source.name,
-      total: metrics.totalArticles,
-      processed: metrics.freshCount,
-      failed: metrics.errorCount
-    }));
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(startOfWeek.getDate() - 7);
+
+    const todayCount = await NewsIngestionRecord.countDocuments({ ingestedAt: { $gte: startOfToday } });
+    const weekCount = await NewsIngestionRecord.countDocuments({ ingestedAt: { $gte: startOfWeek } });
+    const activeArticles = await Article.countDocuments({ isActive: true });
+
+    const [scopeAgg, statusAgg, sourceAgg] = await Promise.all([
+      NewsIngestionRecord.aggregate([
+        { $match: { ingestedAt: { $gte: startOfToday } } },
+        { $group: { _id: '$metadata.localityLevel', count: { $sum: 1 } } }
+      ]),
+      NewsIngestionRecord.aggregate([
+        { $match: { ingestedAt: { $gte: startOfToday } } },
+        { $group: { _id: '$eventType', count: { $sum: 1 } } }
+      ]),
+      NewsIngestionRecord.aggregate([
+        { $match: { ingestedAt: { $gte: startOfToday } } },
+        { $group: {
+          _id: '$metadata.source',
+          total: { $sum: 1 },
+          processed: { $sum: { $cond: [{ $eq: ['$eventType', 'inserted'] }, 1, 0] } },
+          failed: { $sum: { $cond: [{ $eq: ['$eventType', 'error'] }, 1, 0] } }
+        }}
+      ]),
+    ]);
+
+    const byScope = {};
+    for (const row of scopeAgg) {
+      if (row._id) byScope[row._id] = row.count;
+    }
+
+    const byStatus = {};
+    for (const row of statusAgg) {
+      if (row._id) byStatus[row._id] = row.count;
+    }
+
+    const bySource = sourceAgg
+      .filter((row) => row._id)
+      .map((row) => ({ source: row._id, total: row.total, processed: row.processed, failed: row.failed }));
+
+    const nameToAdapterKey = {};
+    for (const row of bySource) {
+      nameToAdapterKey[row.source] = SOURCE_ADAPTER_KEY_MAP[row.source] || 'categories';
+    }
+
     return res.json({
-      totals: {
-        today: metrics.freshCount,
-        week: metrics.cachedLocations,
-        activeArticles: metrics.totalArticles,
-        cachedLocations: metrics.cachedLocations
-      },
-      byScope: {
-        local: 0,
-        state: 0,
-        national: 0
-      },
-      byStatus: {
-        fresh: metrics.freshCount,
-        stale: metrics.staleCount,
-        errors: metrics.errorCount
-      },
-      bySource: sourceRows,
-      nameToAdapterKey: sourceRows.reduce((acc, row) => {
-        acc[row.source] = SOURCE_ADAPTER_KEY_MAP[row.source] || 'cache';
-        return acc;
-      }, {}),
+      totals: { today: todayCount, week: weekCount, activeArticles },
+      byScope,
+      byStatus,
+      bySource,
+      nameToAdapterKey,
       generatedAt: now.toISOString()
     });
   } catch (error) {
@@ -1831,7 +1886,23 @@ function startIngestionScheduler() {
   if (_schedulerStarted) return;
   _schedulerStarted = true;
   schedulerStartedAt = new Date();
+
+  // Start location cache refresh scheduler (Pipeline 1)
   startCacheRefreshScheduler();
+
+  // Category ingestion: run every 1 hour (Pipeline 2)
+  _categoryIngestHandle = setInterval(() => {
+    ingestAllCategories()
+      .then(() => { _lastCategoryIngestAt = new Date(); })
+      .catch((err) => console.error('[cat-ingest] scheduled run error:', err));
+  }, CATEGORY_INGEST_INTERVAL_MS);
+
+  // Run initial category ingest 10 seconds after startup
+  setTimeout(() => {
+    ingestAllCategories()
+      .then(() => { _lastCategoryIngestAt = new Date(); })
+      .catch((err) => console.error('[cat-ingest] initial run error:', err));
+  }, 10000);
 }
 
 router.use(authErrorHandler);

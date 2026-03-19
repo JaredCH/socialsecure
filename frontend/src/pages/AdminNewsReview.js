@@ -65,6 +65,7 @@ const EMPTY_FILTERS = {
   state: '',
   zipCode: '',
   category: '',
+  pipeline: '',
   source: '',
   localityLevel: '',
   dateFrom: '',
@@ -120,6 +121,17 @@ function ArticleFilterBar({ filters, onChange, onSearch, loading }) {
         <div>
           <label className={labelCls}>Category</label>
           <input type="text" value={filters.category} onChange={set('category')} placeholder="e.g. sports" className={`${inputCls} w-full`} />
+        </div>
+
+        <div>
+          <label className={labelCls}>Pipeline</label>
+          <select value={filters.pipeline} onChange={set('pipeline')} className={`${inputCls} w-full`}>
+            <option value="">All pipelines</option>
+            <option value="local">Local</option>
+            <option value="category">Category</option>
+            <option value="sports">Sports</option>
+            <option value="social">Social</option>
+          </select>
         </div>
 
         <div>
@@ -242,6 +254,7 @@ function ArticlesTable({ articles, total, page, pages, limit, onPageChange, load
                 <th className="px-3 py-2.5 min-w-[200px]">Title</th>
                 <th className="px-3 py-2.5">Source</th>
                 <th className="px-3 py-2.5">Category</th>
+                <th className="px-3 py-2.5">Pipeline</th>
                 <th className="px-3 py-2.5">Locality</th>
                 <th className="px-3 py-2.5 min-w-[130px]">Locations</th>
                 <th className="px-3 py-2.5">Score</th>
@@ -274,6 +287,7 @@ function ArticlesTable({ articles, total, page, pages, limit, onPageChange, load
                   </td>
                   <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{a.source || '—'}</td>
                   <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{a.category || '—'}</td>
+                  <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{a.pipeline || '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {a.localityLevel ? <StatusBadge status={a.localityLevel} /> : '—'}
                   </td>
