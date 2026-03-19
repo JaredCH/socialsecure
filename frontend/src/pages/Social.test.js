@@ -300,6 +300,26 @@ describe('Social page hero background rendering', () => {
     expect(locationProbe?.textContent).toBe('/social?user=buddy');
   });
 
+  it('does not load authenticated timeline when viewing another user profile', async () => {
+    window.history.replaceState({}, '', '/social?user=buddy');
+    feedAPI.getPublicUserFeed.mockResolvedValue({
+      data: {
+        posts: [{ _id: 'p-1', content: 'buddy post', authorId: { _id: 'u-2', username: 'buddy' }, likes: [], comments: [], mediaUrls: [], createdAt: new Date().toISOString() }],
+        user: { _id: 'u-2', username: 'buddy' }
+      }
+    });
+    feedAPI.getTimeline.mockClear();
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    // The guest/public feed should have been fetched for buddy
+    expect(feedAPI.getPublicUserFeed).toHaveBeenCalledWith('buddy');
+
+    // The authenticated timeline should NOT have been called because we are
+    // viewing another user's profile, not our own.
+    expect(feedAPI.getTimeline).not.toHaveBeenCalled();
+  });
+
   it('switches to another user profile when navigating via URL after initial mount', async () => {
     // Start on own profile
     window.history.replaceState({}, '', '/social');

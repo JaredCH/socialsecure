@@ -620,6 +620,18 @@ const Social = () => {
 
   const [isAuthenticated, setIsAuthenticated] = useState(Boolean(getAuthToken()));
   const [currentUser, setCurrentUser] = useState(null);
+
+  // When an authenticated user lands on /social?user=<someone>, we must know
+  // the current user's identity *before* choosing whether to load the
+  // authenticated timeline or the guest/public feed.  Without this the first
+  // render sees currentUser===null, computes isViewingAnotherProfile===false,
+  // and incorrectly calls loadAuthenticatedFeed which then overwrites the
+  // guest data in a race with the corrected second render.
+  const [identityResolved, setIdentityResolved] = useState(() => {
+    if (!getAuthToken()) return true;           // no token → guest, no pre-flight needed
+    if (!initialGuestUser) return true;          // no ?user= param → own profile, resolve inline
+    return false;                                // need to resolve identity first
+  });
   const [heroOverlayOpen, setHeroOverlayOpen] = useState(false);
   const [heroOverlayActivity, setHeroOverlayActivity] = useState({
     unreadNotificationCount: 0,
@@ -635,6 +647,22 @@ const Social = () => {
     const userFromUrl = new URLSearchParams(location.search).get('user') || '';
     setGuestUser((prev) => (prev === userFromUrl ? prev : userFromUrl));
   }, [location.search]);
+
+  // Pre-flight: resolve current user identity before the feed-loading effect
+  // fires so that isViewingAnotherProfile is accurate on the first pass.
+  useEffect(() => {
+    if (identityResolved) return;
+    let cancelled = false;
+    authAPI.getProfile()
+      .then((res) => {
+        if (cancelled) return;
+        const user = res.data?.user;
+        if (user) setCurrentUser(user);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setIdentityResolved(true); });
+    return () => { cancelled = true; };
+  }, [identityResolved]);
 
   const [guestProfile, setGuestProfile] = useState(null);
   const [ownerResumeMeta, setOwnerResumeMeta] = useState(null);
@@ -1806,8 +1834,9 @@ const Social = () => {
   }, [loadAuthenticatedFeed, loadGuestFeed, isViewingAnotherProfile]);
 
   useEffect(() => {
+    if (!identityResolved) return;
     loadFeed();
-  }, [loadFeed]);
+  }, [loadFeed, identityResolved]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
