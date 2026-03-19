@@ -125,6 +125,8 @@ export const onChatMessage = (callback) => bindListener('chat:message', callback
 export const onTyping = (callback) => bindListener('typing', callback);
 export const onFriendPresence = (callback) => bindListener('friend:presence', callback);
 export const onPresenceUpdate = (callback) => bindListener('presence:update', callback);
+export const onRoomViewerJoin = (callback) => bindListener('room:viewer-join', callback);
+export const onRoomViewerLeave = (callback) => bindListener('room:viewer-leave', callback);
 
 export const disconnectRealtime = () => {
   if (!socket) return;

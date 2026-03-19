@@ -6,7 +6,7 @@ import ChatMessageList from '../components/chat/ChatMessageList';
 import PasswordField from '../components/PasswordField';
 import { authAPI, chatAPI, friendsAPI, moderationAPI, userAPI } from '../utils/api';
 import { parseSlashCommand, runSlashCommand } from '../utils/chatCommands';
-import { joinRealtimeRoom, leaveRealtimeRoom, onChatMessage, onFriendPresence, onPresenceUpdate } from '../utils/realtime';
+import { joinRealtimeRoom, leaveRealtimeRoom, onChatMessage, onFriendPresence, onPresenceUpdate, onRoomViewerJoin, onRoomViewerLeave } from '../utils/realtime';
 import { getPresenceMeta } from '../utils/presence';
 import {
   createWrappedRoomKeyPackage,
@@ -572,6 +572,34 @@ function Chat({ isGuestMode = false }) {
       }
     };
   }, []);
+
+  // Live viewer tracking: add/remove users from the room user list in real time
+  useEffect(() => {
+    const unsubJoin = onRoomViewerJoin((payload) => {
+      const incomingRoomId = String(payload?.roomId || '');
+      if (!incomingRoomId || incomingRoomId !== String(activeConversationId || '')) return;
+      const newUser = payload?.user;
+      if (!newUser?._id) return;
+      setRoomUsers((prev) => {
+        if (prev.some((u) => normalizeId(u._id) === normalizeId(newUser._id))) return prev;
+        return [...prev, newUser];
+      });
+    });
+
+    const unsubLeave = onRoomViewerLeave((payload) => {
+      const incomingRoomId = String(payload?.roomId || '');
+      if (!incomingRoomId || incomingRoomId !== String(activeConversationId || '')) return;
+      const leftUserId = normalizeId(payload?.userId);
+      if (!leftUserId) return;
+      setRoomUsers((prev) => prev.filter((u) => normalizeId(u._id) !== leftUserId));
+    });
+
+    return () => {
+      if (typeof unsubJoin === 'function') unsubJoin();
+      if (typeof unsubLeave === 'function') unsubLeave();
+    };
+  }, [activeConversationId]);
+
   const [passwordInput, setPasswordInput] = useState('');
   const [reactionByMessageId, setReactionByMessageId] = useState({});
   const [adminMessageActionIds, setAdminMessageActionIds] = useState([]);
@@ -3245,14 +3273,14 @@ function Chat({ isGuestMode = false }) {
         <aside className={`hidden min-h-0 flex-col border-l p-2 md:p-3 lg:flex ${CHAT_STYLE.sidebarBorder}`}>
             <>
               <div className={`sticky top-0 z-10 rounded border p-2 ${CHAT_STYLE.panelGlass}`}>
-                <h3 className="text-sm font-semibold uppercase tracking-[0.1em]">Users in Room</h3>
+                <h3 className="text-sm font-semibold uppercase tracking-[0.1em]">Active in Room</h3>
                 {activeConversation ? (
                   <p className="mt-1 text-[11px] font-jetbrains opacity-80">
                     {getConversationLabel(activeConversation)} &middot;
                     <span className="ml-1" aria-hidden="true">🟢</span>
-                    <span className="ml-0.5">{roomUsers.length} {roomUsers.length === 1 ? 'user' : 'users'}</span>
+                    <span className="ml-0.5">{roomUsers.length} {roomUsers.length === 1 ? 'viewer' : 'viewers'}</span>
                     <span className="ml-1" aria-hidden="true">👥</span>
-                    <span className="sr-only">online</span>
+                    <span className="sr-only">active</span>
                   </p>
                 ) : (
                   <p className="mt-1 text-[11px] opacity-80">Select a room to see who's here.</p>
@@ -3273,6 +3301,9 @@ function Chat({ isGuestMode = false }) {
                   <p className="px-2 py-3 text-xs opacity-80">No users to display.</p>
                 ) : (
                   <ul>
+                    {sortedRoomUsers.friends.length > 0 ? (
+                      <li className="px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider opacity-50">Friends</li>
+                    ) : null}
                     {sortedRoomUsers.friends.map((user) => (
                       <li
                         key={String(user._id)}
@@ -3296,7 +3327,10 @@ function Chat({ isGuestMode = false }) {
                       </li>
                     ))}
                     {sortedRoomUsers.friends.length > 0 && sortedRoomUsers.others.length > 0 ? (
-                      <li aria-hidden="true" className="my-1 border-b opacity-30" />
+                      <li aria-hidden="true" className="my-1.5 mx-2 border-b opacity-20" />
+                    ) : null}
+                    {sortedRoomUsers.others.length > 0 && sortedRoomUsers.friends.length > 0 ? (
+                      <li className="px-2 pt-0.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider opacity-50">Others</li>
                     ) : null}
                     {sortedRoomUsers.others.map((user) => (
                       <li
@@ -3407,17 +3441,27 @@ function Chat({ isGuestMode = false }) {
         const heroPrefs = prefs?.hero || {};
         const globalStyles = prefs?.globalStyles || {};
         const panelColor = globalStyles.panelColor || '#ffffff';
-        const headerColor = globalStyles.headerColor || '#0f172a';
+        const headerColor = heroPrefs.backgroundColor || globalStyles.headerColor || '#1e293b';
         const fontColor = globalStyles.fontColor || '#0f172a';
+        const nameColor = heroPrefs.nameColor || '#ffffff';
+        const locationColor = heroPrefs.locationColor || '#94a3b8';
+        const heroFont = heroPrefs.fontFamily || globalStyles.fontFamily || '';
         const heroImg = heroPrefs.backgroundImage || pd?.bannerUrl || '';
         const profileImg = heroPrefs.profileImage || pd?.avatarUrl || '';
-        const popupLeft = Math.min(userHoverPopup.rect.left, window.innerWidth - 260);
+        const showLocation = heroPrefs.showLocation !== false;
+        const showOnlineStatus = heroPrefs.showOnlineStatus !== false;
+        const locationParts = [pd?.city, pd?.state, pd?.country].filter(Boolean);
+        const locationText = locationParts.length > 0 ? locationParts.join(', ') : (pd?.zipCode || '');
+        const popupLeft = Math.min(userHoverPopup.rect.left, window.innerWidth - 280);
         const popupTop = userHoverPopup.rect.bottom + 4;
         const createdDate = pd?.createdAt ? new Date(pd.createdAt).toLocaleDateString() : '';
+        const viewerPresence = roomUsers.find((u) => normalizeId(u?._id) === normalizeId(pd?._id))?.presence;
+        const presenceStatus = viewerPresence?.status || pd?.presence?.status || 'offline';
+        const presenceDot = presenceStatus === 'online' ? 'bg-emerald-400' : presenceStatus === 'away' || presenceStatus === 'inactive' ? 'bg-amber-400' : presenceStatus === 'dnd' ? 'bg-rose-400' : 'bg-gray-400';
         return (
           <div
-            className="fixed z-[60] w-60 rounded-lg border shadow-xl overflow-hidden"
-            style={{ left: popupLeft, top: Math.min(popupTop, window.innerHeight - 340), backgroundColor: panelColor, color: fontColor }}
+            className="fixed z-[60] w-[272px] rounded-lg shadow-xl overflow-hidden"
+            style={{ left: popupLeft, top: Math.min(popupTop, window.innerHeight - 380), backgroundColor: panelColor, color: fontColor, border: `1px solid ${headerColor}22`, fontFamily: heroFont || undefined }}
             data-testid="user-hover-popup"
             onMouseEnter={handleHoverPopupMouseEnter}
             onMouseLeave={handleHoverPopupMouseLeave}
@@ -3426,53 +3470,64 @@ function Chat({ isGuestMode = false }) {
               <div className="p-4 text-center text-xs opacity-60">Loading...</div>
             ) : pd ? (
               <>
-                <div className="relative h-20 w-full" style={{ backgroundColor: headerColor }}>
-                  {heroImg ? <img src={heroImg} alt={`Header image for ${pd.username || 'user'}`} className="h-full w-full object-cover" /> : null}
-                  <div className="absolute -bottom-5 left-3">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white text-sm font-bold overflow-hidden" style={{ borderColor: panelColor }}>
-                      {profileImg ? <img src={profileImg} alt={`${pd.username || 'user'} profile`} className="h-full w-full rounded-full object-cover" /> : (pd.username || 'U').slice(0, 1).toUpperCase()}
+                {/* Hero banner — mirrors the Social page hero section */}
+                <div className="relative w-full" style={{ height: 80, backgroundColor: headerColor }}>
+                  {heroImg ? <img src={heroImg} alt="" className="h-full w-full object-cover" /> : null}
+                  {/* Gradient fade at bottom */}
+                  <div className="absolute inset-x-0 bottom-0 h-6" style={{ background: `linear-gradient(to top, ${headerColor}, transparent)` }} />
+                  {/* Avatar overlapping banner bottom */}
+                  <div className="absolute -bottom-6 left-3">
+                    <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border-[3px] bg-white text-sm font-bold overflow-hidden shadow-md" style={{ borderColor: panelColor }}>
+                      {profileImg ? <img src={profileImg} alt="" className="h-full w-full rounded-full object-cover" /> : <span style={{ color: headerColor }}>{(pd.username || 'U').slice(0, 1).toUpperCase()}</span>}
                     </span>
                   </div>
+                  {/* Online status badge */}
+                  {showOnlineStatus ? (
+                    <div className="absolute -bottom-6 left-[46px]">
+                      <span className={`block h-3 w-3 rounded-full border-2 ${presenceDot}`} style={{ borderColor: panelColor }} />
+                    </div>
+                  ) : null}
                 </div>
-                <div className="px-3 pt-7 pb-3 text-xs" style={{ color: fontColor }}>
-                  <p className="font-bold text-sm truncate">@{pd.username || 'user'}</p>
-                  {pd.realName ? <p className="truncate opacity-75">{pd.realName}</p> : null}
-                  {pd.zipCode ? <p className="mt-1 opacity-60">📍 {pd.zipCode}</p> : null}
-                  {createdDate ? <p className="mt-0.5 opacity-60">Joined {createdDate}</p> : null}
-                  <a href={`/social?user=${encodeURIComponent(pd.username || pd._id)}`} className="mt-2 block text-center rounded border px-2 py-1 text-[11px] font-semibold hover:opacity-80" style={{ borderColor: headerColor, color: headerColor }}>
+                {/* Profile info section */}
+                <div className="px-3 pt-8 pb-3 text-xs" style={{ color: fontColor, fontFamily: heroFont || undefined }}>
+                  <p className="font-bold text-sm truncate" style={{ color: fontColor }}>@{pd.username || 'user'}</p>
+                  {pd.realName ? <p className="truncate opacity-75 text-[11px]">{pd.realName}</p> : null}
+                  {showLocation && locationText ? <p className="mt-1 text-[11px]" style={{ color: locationColor }}>📍 {locationText}</p> : null}
+                  {createdDate ? <p className="mt-0.5 text-[11px] opacity-50">Joined {createdDate}</p> : null}
+                  {/* View Social Page — primary action */}
+                  <a
+                    href={`/social?user=${encodeURIComponent(pd.username || pd._id)}`}
+                    className="mt-2 block text-center rounded-md px-2 py-1.5 text-[11px] font-semibold transition-opacity hover:opacity-80"
+                    style={{ backgroundColor: headerColor, color: nameColor }}
+                  >
                     View Social Page
                   </a>
-                  <div className="mt-2 grid grid-cols-1 gap-1">
+                  {/* Secondary actions */}
+                  <div className="mt-1.5 flex gap-1">
                     <button
                       type="button"
-                      className="rounded border px-2 py-1 text-[11px] font-semibold hover:opacity-80"
-                      style={{ borderColor: headerColor, color: headerColor }}
+                      className="flex-1 rounded-md border px-1 py-1 text-[10px] font-medium transition-opacity hover:opacity-80"
+                      style={{ borderColor: `${headerColor}44`, color: fontColor }}
                       disabled={String(pd?._id || '') === String(profile?._id || '')}
-                      onClick={async () => {
-                        await handleRequestFriendship(pd);
-                      }}
+                      onClick={async () => { await handleRequestFriendship(pd); }}
                     >
-                      Request Friend
+                      Add Friend
                     </button>
                     <button
                       type="button"
-                      className="rounded border px-2 py-1 text-[11px] font-semibold hover:opacity-80"
-                      style={{ borderColor: headerColor, color: headerColor }}
+                      className="flex-1 rounded-md border px-1 py-1 text-[10px] font-medium transition-opacity hover:opacity-80"
+                      style={{ borderColor: `${headerColor}44`, color: fontColor }}
                       disabled={String(pd?._id || '') === String(profile?._id || '')}
-                      onClick={async () => {
-                        await handleBlockIgnore(pd);
-                      }}
+                      onClick={async () => { await handleBlockIgnore(pd); }}
                     >
                       Block
                     </button>
                     <button
                       type="button"
-                      className="rounded border px-2 py-1 text-[11px] font-semibold hover:opacity-80"
-                      style={{ borderColor: headerColor, color: headerColor }}
+                      className="flex-1 rounded-md border px-1 py-1 text-[10px] font-medium transition-opacity hover:opacity-80"
+                      style={{ borderColor: `${headerColor}44`, color: fontColor }}
                       disabled={String(pd?._id || '') === String(profile?._id || '')}
-                      onClick={async () => {
-                        await handleReportUser(pd);
-                      }}
+                      onClick={async () => { await handleReportUser(pd); }}
                     >
                       Report
                     </button>

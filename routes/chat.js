@@ -12,7 +12,7 @@ const {
   authErrorHandler
 } = require('../middleware/parseAuthToken');
 const { createNotification } = require('../services/notifications');
-const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload, isUserInRealtimeRoom } = require('../services/realtime');
+const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload, getRoomActiveViewerIds } = require('../services/realtime');
 const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
 const {
   findExactFilterWord,
@@ -2941,12 +2941,14 @@ router.get('/rooms/:roomId/users', roomReadLimiter, authenticateToken, async (re
       return res.status(404).json({ error: 'Chat room not found' });
     }
 
-    const memberIds = Array.isArray(room.members) ? room.members : [];
+    // Return only users who are actively viewing the room (have a socket in the room)
+    const activeViewerIds = getRoomActiveViewerIds(roomId);
+    const lookupIds = activeViewerIds.length > 0 ? activeViewerIds : [];
     const [users, presenceMap] = await Promise.all([
-      memberIds.length > 0
-        ? User.find({ _id: { $in: memberIds } }).select('_id username realName avatarUrl mutedUntil realtimePreferences').lean()
+      lookupIds.length > 0
+        ? User.find({ _id: { $in: lookupIds } }).select('_id username realName avatarUrl mutedUntil realtimePreferences').lean()
         : [],
-      getPresenceMapForUsers(memberIds)
+      getPresenceMapForUsers(lookupIds)
     ]);
 
     const sortedUsers = users

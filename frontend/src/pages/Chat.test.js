@@ -66,6 +66,8 @@ jest.mock('../utils/realtime', () => ({
   leaveRealtimeRoom: jest.fn(),
   onFriendPresence: jest.fn(() => jest.fn()),
   onPresenceUpdate: jest.fn(() => jest.fn()),
+  onRoomViewerJoin: jest.fn(() => jest.fn()),
+  onRoomViewerLeave: jest.fn(() => jest.fn()),
   onChatMessage: jest.fn((handler) => {
     mockRealtimeChatHandler = handler;
     return () => {
