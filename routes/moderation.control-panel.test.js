@@ -391,6 +391,29 @@ describe('Moderation control panel admin actions', () => {
     expect(response.body.pagination.total).toBe(1);
   });
 
+  it('applies a quality filter so cache-only observability records are excluded', async () => {
+    const app = buildApp();
+    mockNewsIngestionRecordFind.mockReturnValue(buildChain([]));
+    mockNewsIngestionRecordCountDocuments.mockResolvedValue(0);
+
+    const response = await request(app)
+      .get('/api/moderation/control-panel/news-ingestion')
+      .set('Authorization', 'Bearer token');
+
+    expect(response.status).toBe(200);
+    const query = mockNewsIngestionRecordFind.mock.calls[0][0];
+    expect(Array.isArray(query.$and)).toBe(true);
+    const qualityClause = query.$and.find((entry) => Array.isArray(entry.$or));
+    expect(qualityClause).toBeTruthy();
+    expect(qualityClause.$or).toEqual(expect.arrayContaining([
+      { 'normalized.title': { $exists: true, $ne: '' } },
+      { 'normalized.url': { $exists: true, $ne: '' } },
+      { 'source.name': { $exists: true, $ne: '' } },
+      { 'dedupe.outcome': { $exists: true } },
+      { 'persistence.operation': { $exists: true } }
+    ]));
+  });
+
   it('returns ingestion drill-down detail, timeline, and log endpoints', async () => {
     const app = buildApp();
     const record = {
@@ -496,7 +519,10 @@ describe('Moderation control panel admin actions', () => {
     expect(response.status).toBe(200);
     const query = mockNewsIngestionRecordFind.mock.calls[0][0];
     expect(query.$and).toBeTruthy();
-    const locationClause = query.$and.find((entry) => Array.isArray(entry.$or));
+    const locationClause = query.$and.find((entry) =>
+      Array.isArray(entry.$or)
+      && entry.$or.some((candidate) => candidate['normalized.locationTags.cities'])
+    );
     expect(locationClause).toBeTruthy();
     const cityClause = locationClause.$or.find((entry) => entry['normalized.locationTags.cities']);
     const countyClause = locationClause.$or.find((entry) => entry['normalized.locationTags.counties']);

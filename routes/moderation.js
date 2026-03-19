@@ -1023,7 +1023,17 @@ router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, asy
       if (toDate && !Number.isNaN(toDate.getTime())) query.scrapedAt.$lte = toDate;
       if (Object.keys(query.scrapedAt).length === 0) delete query.scrapedAt;
     }
-    const andClauses = [];
+    const andClauses = [
+      {
+        $or: [
+          { 'normalized.title': { $exists: true, $ne: '' } },
+          { 'normalized.url': { $exists: true, $ne: '' } },
+          { 'source.name': { $exists: true, $ne: '' } },
+          { 'dedupe.outcome': { $exists: true } },
+          { 'persistence.operation': { $exists: true } }
+        ]
+      }
+    ];
     if (search) {
       andClauses.push({
         $or: [
