@@ -587,7 +587,9 @@ describe('Chat zip room indicator', () => {
         rooms: [
           { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', defaultLanding: true, members: [] },
           { _id: 'state-tx', type: 'state', name: 'Texas', discoveryGroup: 'states', members: [] },
-          { _id: 'county-travis', type: 'county', name: 'Travis County, Texas', discoveryGroup: 'counties', members: [] }
+          { _id: 'county-travis', type: 'county', name: 'Travis County, Texas', discoveryGroup: 'counties', members: [] },
+          { _id: 'county-fairfield', type: 'county', name: 'Fairfield County, Connecticut', discoveryGroup: 'counties', members: ['u1'] },
+          { _id: 'county-montgomery', type: 'county', name: 'Montgomery County, Maryland', discoveryGroup: 'counties', members: ['u1'] }
         ]
       }
     });
@@ -614,6 +616,11 @@ describe('Chat zip room indicator', () => {
       expect.arrayContaining(['SocialSecure', 'Travis County, Texas'])
     );
     expect(container.querySelector('[data-testid="topic-joined-rooms"]')?.textContent).toContain('SocialSecure');
+    expect(container.querySelector('[data-testid="state-joined-rooms"]')?.textContent).toContain('Texas');
+    const countyJoinedText = container.querySelector('[data-testid="county-joined-rooms"]')?.textContent || '';
+    expect(countyJoinedText).toContain('Travis County, Texas');
+    expect(countyJoinedText).not.toContain('Fairfield County, Connecticut');
+    expect(countyJoinedText).not.toContain('Montgomery County, Maryland');
   });
 
   it('shows a collapsed admin control panel by default and expands it for room management', async () => {
