@@ -2121,7 +2121,7 @@ function Chat({ isGuestMode = false }) {
   return (
     <div className={`h-full w-full min-h-0 overflow-hidden flex flex-col ${CHAT_STYLE.shell}`}>
       <div
-        className="grid flex-1 min-h-0 grid-cols-1 gap-0 lg:grid-cols-[16rem_1fr_14rem]"
+        className={`grid flex-1 min-h-0 grid-cols-1 gap-0 ${activeChannel === 'dm' ? 'lg:grid-cols-[16rem_1fr]' : 'lg:grid-cols-[16rem_1fr_14rem]'}`}
         data-testid="chat-layout-grid"
       >
         {/* ─── LEFT SIDEBAR ─────────────────────────────── */}
@@ -2759,107 +2759,8 @@ function Chat({ isGuestMode = false }) {
         </section>
 
         {/* ─── RIGHT SIDEBAR ────────────────────────────── */}
+        {activeChannel !== 'dm' && (
         <aside className="hidden min-h-0 flex-col border-l border-[#1a1f2b] p-2 md:p-3 lg:flex">
-          {activeConversation?.type === 'dm' ? (
-            <>
-              <div className={`sticky top-0 z-10 rounded border p-3 ${CHAT_STYLE.panelGlass}`}>
-                <h3 className="font-semibold uppercase tracking-[0.1em]">Participants</h3>
-                {activeConversation ? (
-                  <>
-                    <p className="text-xs opacity-80">{getConversationLabel(activeConversation)}</p>
-                    <p className="mt-1 text-[11px] font-mono opacity-80">
-                      {`${roomUsers.length || (Array.isArray(activeConversation?.participants) ? activeConversation.participants.length : 0) || 0} participants`}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-xs opacity-80">Select a conversation to view details.</p>
-                )}
-                <p className="mt-2 text-xs opacity-80">This panel stays focused on everyone inside the direct message.</p>
-              </div>
-
-              <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
-                <section className={`rounded border p-2 ${CHAT_STYLE.panelGlass}`}>
-                  <h4 className="text-sm font-semibold">People in this DM</h4>
-                  <p className="mt-1 text-[11px] opacity-80">
-                    Click, right-click, or long-press a user for quick actions.
-                  </p>
-                  <div className="mt-2 rounded border overflow-auto h-full min-h-[20rem]">
-                    {roomUsersLoading ? (
-                      <div className="space-y-3 p-2" aria-busy="true" aria-label="Loading users">
-                        {[1, 2, 3].map((i) => (
-                          <div key={`dm-user-skeleton-${i}`} className="flex items-center gap-3 animate-pulse">
-                            <span className={`inline-block h-9 w-9 shrink-0 rounded-full ${CHAT_STYLE.subtle}`} />
-                            <div className="flex-1 space-y-1.5">
-                              <div className={`h-3 rounded ${CHAT_STYLE.subtle}`} style={{ width: `${55 + (i * 11) % 30}%` }} />
-                              <div className={`h-2.5 rounded ${CHAT_STYLE.subtle}`} style={{ width: `${35 + (i * 7) % 25}%` }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : roomUsers.length === 0 ? (
-                      <p className="p-2 text-xs opacity-80">No users to display.</p>
-                    ) : (
-                      <ul className="divide-y">
-                        {roomUsers.map((user) => {
-                          const presenceState = getPresenceState(user.presence, presenceReferenceTime);
-                          return (
-                            <li
-                              key={String(user._id)}
-                              className="flex cursor-pointer items-center gap-3 p-2 text-sm"
-                              onClick={(event) => openUserContextMenu(event, user)}
-                              onContextMenu={(event) => openUserContextMenu(event, user)}
-                              onTouchStart={(event) => {
-                                const touch = event.touches?.[0];
-                                if (!touch) return;
-                                if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
-                                userLongPressTimerRef.current = setTimeout(() => {
-                                  openUserContextMenu(event, user, { x: touch.clientX, y: touch.clientY });
-                                }, LONG_PRESS_DELAY_MS);
-                              }}
-                              onTouchEnd={() => {
-                                if (userLongPressTimerRef.current) {
-                                  clearTimeout(userLongPressTimerRef.current);
-                                  userLongPressTimerRef.current = null;
-                                }
-                              }}
-                            >
-                              <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold overflow-hidden ${CHAT_STYLE.subtle}`}>
-                                {user.avatarUrl ? (
-                                  <img src={user.avatarUrl} alt={`@${user.username || 'user'}`} className="h-full w-full rounded-full object-cover" />
-                                ) : (
-                                  String(user.username || user.realName || 'user').slice(0, 1).toUpperCase()
-                                )}
-                              </span>
-                              <div className="min-w-0">
-                                <a
-                                  href={`/social?user=${encodeURIComponent(user.username || user._id)}`}
-                                  className="truncate font-semibold hover:underline block"
-                                  onMouseEnter={(event) => {
-                                    const rect = event.currentTarget.getBoundingClientRect();
-                                    handleUsernameHoverStart(user, rect);
-                                  }}
-                                  onMouseLeave={handleUsernameHoverEnd}
-                                >
-                                  @{user.username || user.realName || 'user'}
-                                </a>
-                                <p className="truncate text-[11px] opacity-75">
-                                  {String(user._id) === String(profile?._id) ? 'You' : 'Available in this conversation'}
-                                </p>
-                                <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] opacity-75">
-                                  <span className={`h-2 w-2 rounded-full ${presenceState.tone}`} />
-                                  <span>{presenceState.description}</span>
-                                </p>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                </section>
-              </div>
-            </>
-          ) : (
             <>
               <div className={`sticky top-0 z-10 rounded border p-2 ${CHAT_STYLE.panelGlass}`}>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.1em]">Users in Room</h3>
@@ -2941,8 +2842,8 @@ function Chat({ isGuestMode = false }) {
                 )}
               </div>
             </>
-          )}
         </aside>
+        )}
       </div>
       {userContextMenu.open && userContextMenu.user ? (
         <div
