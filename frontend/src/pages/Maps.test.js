@@ -11,6 +11,7 @@ import Maps, {
   configureLeafletMarkerAssets,
   createMapDataCacheKey,
   haversineDistance,
+  isFriendLive,
   resolveMapHeatmapData,
   resolveLeafletModule,
   sortFriendsByStatusAndActivity,
@@ -316,6 +317,18 @@ describe('sortFriendsByStatusAndActivity', () => {
       'newest-offline',
       'older-offline'
     ]);
+  });
+
+  it('treats recent active friends as live when isLive is missing', () => {
+    const now = new Date('2026-03-19T17:53:16.000Z').getTime();
+    const sorted = sortFriendsByStatusAndActivity([
+      { user: { username: 'offline' }, isActive: false, lastActivityAt: '2026-03-19T17:53:00.000Z' },
+      { user: { username: 'online' }, isActive: true, lastActivityAt: '2026-03-19T17:53:05.000Z' }
+    ]);
+
+    expect(isFriendLive(sorted[0], now)).toBe(true);
+    expect(sorted[0].user.username).toBe('online');
+    expect(isFriendLive(sorted[1], now)).toBe(false);
   });
 });
 
