@@ -460,8 +460,8 @@ function Maps() {
     let intervalId = setFriendPollingInterval();
     const handleVisibilityChange = () => {
       window.clearInterval(intervalId);
-      refreshFriendsNow();
       intervalId = setFriendPollingInterval();
+      refreshFriendsNow();
     };
 
     const handleFocus = () => {
