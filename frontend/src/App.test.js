@@ -65,7 +65,7 @@ describe('App navbar features dropdown', () => {
     localStorage.clear();
     sessionStorage.clear();
     jest.clearAllMocks();
-    getAuthToken.mockImplementation(() => localStorage.getItem('token'));
+    getAuthToken.mockImplementation(() => sessionStorage.getItem('authToken'));
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -104,7 +104,7 @@ describe('App navbar features dropdown', () => {
   });
 
   it('moves find friends, calendar, resume, and settings links out of the main nav', async () => {
-    localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
 
     await renderApp();
 
@@ -127,7 +127,7 @@ describe('App navbar features dropdown', () => {
   });
 
   it('does not redirect completed users to onboarding when onboarding status refresh fails', async () => {
-    localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
     authAPI.getOnboardingStatus.mockRejectedValueOnce(new Error('network error'));
 
     await renderApp();
@@ -137,7 +137,7 @@ describe('App navbar features dropdown', () => {
   });
 
   it('main nav contains core section links for authenticated users', async () => {
-    localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
 
     await renderApp();
 
@@ -165,7 +165,7 @@ describe('App navbar features dropdown', () => {
   });
 
   it('calendar link is not shown in main nav even when authenticated', async () => {
-    localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
 
     await renderApp();
 
@@ -177,7 +177,7 @@ describe('App navbar features dropdown', () => {
   });
 
   it('toggles the mobile nav menu with the hamburger button', async () => {
-    localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
 
     await renderApp();
 
@@ -198,7 +198,7 @@ describe('App navbar features dropdown', () => {
   });
 
   it('orders the primary nav links in a more familiar sequence', async () => {
-    localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
 
     await renderApp();
 
@@ -213,7 +213,7 @@ describe('App navbar features dropdown', () => {
   });
 
   it('right-aligns desktop core links and removes logout from the primary link row', async () => {
-    localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
 
     await renderApp();
 
@@ -224,7 +224,7 @@ describe('App navbar features dropdown', () => {
   });
 
   it('uses full-width main layout on the social route', async () => {
-    localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
     window.history.pushState({}, '', '/social');
 
     await renderApp();
@@ -237,7 +237,7 @@ describe('App navbar features dropdown', () => {
   });
 
   it('uses non-window scrolling shell on the news route', async () => {
-    localStorage.setItem('token', 'token');
+    sessionStorage.setItem('authToken', 'token');
     window.history.pushState({}, '', '/news');
 
     await renderApp();

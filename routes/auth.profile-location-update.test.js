@@ -131,6 +131,25 @@ describe('Auth profile location update cooldown', () => {
     expect(user.save).toHaveBeenCalled();
   });
 
+  it('accepts empty phone when profile payload includes it', async () => {
+    const app = buildApp();
+    const user = buildUserDoc({
+      phone: '225-614-6012'
+    });
+    mockUserModel.findById.mockResolvedValue(user);
+
+    const response = await request(app)
+      .put('/api/auth/profile')
+      .set('Authorization', 'Bearer token')
+      .send({
+        phone: ''
+      });
+
+    expect(response.status).toBe(200);
+    expect(user.phone).toBe('');
+    expect(user.save).toHaveBeenCalled();
+  });
+
   it('updates optional onboarding info fields and social/secure visibility controls', async () => {
     const app = buildApp();
     const user = buildUserDoc({

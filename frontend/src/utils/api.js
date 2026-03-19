@@ -3,34 +3,11 @@ import axios from 'axios';
 const AUTH_TOKEN_KEY = 'authToken';
 
 export const getAuthToken = () => {
-  let canUseSessionStorage = true;
   try {
     const sessionToken = sessionStorage.getItem(AUTH_TOKEN_KEY);
     if (sessionToken) {
       return sessionToken;
     }
-  } catch {
-    canUseSessionStorage = false;
-  }
-
-  try {
-    // Legacy/fallback storage key.
-    const legacyToken = localStorage.getItem('token');
-    if (!legacyToken) {
-      return null;
-    }
-
-    // One-time migration only when sessionStorage is available.
-    if (canUseSessionStorage) {
-      try {
-        sessionStorage.setItem(AUTH_TOKEN_KEY, legacyToken);
-        localStorage.removeItem('token');
-      } catch {
-        // Keep legacy token if migration fails.
-      }
-    }
-
-    return legacyToken;
   } catch {
     // Ignore storage access failures and treat as logged out.
   }
@@ -39,33 +16,17 @@ export const getAuthToken = () => {
 };
 
 export const setAuthToken = (token) => {
-  let wroteSessionToken = false;
   try {
     if (token) {
       sessionStorage.setItem(AUTH_TOKEN_KEY, token);
     } else {
       sessionStorage.removeItem(AUTH_TOKEN_KEY);
     }
-    wroteSessionToken = true;
   } catch {
-    wroteSessionToken = false;
+    // Ignore storage access failures.
   }
 
-  // Fallback path when sessionStorage is blocked/unavailable.
-  if (!wroteSessionToken) {
-    try {
-      if (token) {
-        localStorage.setItem('token', token);
-      } else {
-        localStorage.removeItem('token');
-      }
-    } catch {
-      // Ignore storage access failures.
-    }
-    return;
-  }
-
-  // Clear legacy key to avoid cross-tab account bleed from old storage behavior.
+  // Always clear legacy key to avoid unsafe persistence and stale token bleed.
   try {
     localStorage.removeItem('token');
   } catch {
