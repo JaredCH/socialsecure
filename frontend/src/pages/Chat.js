@@ -161,11 +161,6 @@ const createRoomAdminForm = (room = null) => ({
 });
 const isRoomConversation = (conversation) => ROOM_CHAT_TYPES.includes(String(conversation?.type || ''));
 const getConversationActivityAt = (conversation) => conversation?.lastMessageAt || conversation?.lastActivity || null;
-const getChatTabTypeLabel = (conversation) => {
-  if (conversation?.type === 'dm') return 'DM';
-  if (isRoomConversation(conversation)) return 'Room';
-  return 'Zip';
-};
 const getConversationTabIcon = (conversation) => {
   if (conversation?.type === 'dm') return '✉️';
   if (isRoomConversation(conversation)) return '#';
@@ -597,11 +592,6 @@ function Chat({ isGuestMode = false }) {
       || dmFriendPresenceMap.get(targetUserId)
       || null;
   }, [dmFriendPresenceMap, roomUserPresenceMap]);
-
-  const openChatTabs = useMemo(
-    () => openChatTabIds.map((tabId) => workspaceEntries.get(String(tabId))).filter(Boolean),
-    [openChatTabIds, workspaceEntries]
-  );
 
   const activeConversation = useMemo(
     () => workspaceEntries.get(String(activeConversationId)) || null,
@@ -1509,7 +1499,7 @@ function Chat({ isGuestMode = false }) {
         setDecryptedDmContentById({});
         setMobileWorkspaceOpen(false);
       }
-      setOpenChatTabs((prev) => prev.filter((tab) => String(tab._id) !== String(conversationId)));
+      setOpenChatTabIds((prev) => prev.filter((tabId) => String(tabId) !== String(conversationId)));
       await refreshHub('dm');
       toast.success('Conversation deleted');
     } catch (error) {
@@ -1542,18 +1532,6 @@ function Chat({ isGuestMode = false }) {
       toast.error(error.response?.data?.error || 'Failed to join room');
     }
   }, [isGuestMode, joinedRoomIds, openConversationById, profile?._id]);
-
-  const handleCloseOpenTab = useCallback((conversationId) => {
-    const normalizedConversationId = normalizeId(conversationId);
-    if (!normalizedConversationId) return;
-    let remainingTabIds = [];
-    setOpenChatTabIds((prev) => {
-      remainingTabIds = prev.filter((tabId) => tabId !== normalizedConversationId);
-      return remainingTabIds;
-    });
-    if (normalizedConversationId !== String(activeConversationId)) return;
-    setActiveConversationId(remainingTabIds[remainingTabIds.length - 1] || '');
-  }, [activeConversationId]);
 
   const handleToggleFavoriteRoom = useCallback((roomId) => {
     const normalizedRoomId = normalizeId(roomId);
@@ -1987,9 +1965,10 @@ function Chat({ isGuestMode = false }) {
     return 'Secure Chat';
   }, [activeChannel, activeConversation]);
   const activeMenuIcon = activeConversation ? getConversationTabIcon(activeConversation) : (activeChannel === 'dm' ? '✉️' : '💬');
-  const renderManagedRoomBranch = useCallback((room, depth = 0, extraProps = {}) => {
+  const renderManagedRoomBranch = useCallback((room, depth = 0, extraProps = {}, joinedOnly = false) => {
     const roomId = normalizeId(room?._id);
-    const children = (childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder);
+    const allChildren = (childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder);
+    const children = joinedOnly ? allChildren.filter((child) => joinedRoomIds[normalizeId(child?._id)]) : allChildren;
     const isExpanded = Boolean(expandedManagedRooms[roomId]);
     const hasChildren = children.length > 0;
     const paddingLeft = `${Math.min(depth, 3) * 0.75}rem`;
@@ -2032,9 +2011,9 @@ function Chat({ isGuestMode = false }) {
             </button>
           ) : null}
         </div>
-        {isExpanded && hasChildren ? (
+        {(joinedOnly || isExpanded) && hasChildren ? (
           <ul className="mt-0.5 space-y-0.5">
-            {children.map((childRoom) => renderManagedRoomBranch(childRoom, depth + 1))}
+            {children.map((childRoom) => renderManagedRoomBranch(childRoom, depth + 1, {}, joinedOnly))}
           </ul>
         ) : null}
       </li>
@@ -2043,7 +2022,8 @@ function Chat({ isGuestMode = false }) {
     childRoomsByParentId,
     expandedManagedRooms,
     handleOpenRoom,
-    handleToggleExpandedManagedRoom
+    handleToggleExpandedManagedRoom,
+    joinedRoomIds
   ]);
 
   if (loadingHub) {
@@ -2356,7 +2336,16 @@ function Chat({ isGuestMode = false }) {
                       {managedStateRooms.length === 0 ? <li className="px-2 py-1 text-xs opacity-75">No state chats available.</li> : null}
                       {managedStateRooms.map((room) => renderManagedRoomBranch(room))}
                     </ul>
-                  ) : null}
+                  ) : (
+                    <ul className="mt-1 space-y-0.5" data-testid="state-joined-rooms">
+                      {managedStateRooms.filter((room) => {
+                        const roomId = normalizeId(room?._id);
+                        if (joinedRoomIds[roomId]) return true;
+                        const children = childRoomsByParentId[roomId] || [];
+                        return children.some((child) => joinedRoomIds[normalizeId(child?._id)]);
+                      }).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
+                    </ul>
+                  )}
                 </section>
 
                 {/* ── County Rooms ────────────────────────────── */}
@@ -2376,7 +2365,16 @@ function Chat({ isGuestMode = false }) {
                       {managedCountyRooms.length === 0 ? <li className="px-2 py-1 text-xs opacity-75">No county chats available.</li> : null}
                       {managedCountyRooms.map((room) => renderManagedRoomBranch(room))}
                     </ul>
-                  ) : null}
+                  ) : (
+                    <ul className="mt-1 space-y-0.5" data-testid="county-joined-rooms">
+                      {managedCountyRooms.filter((room) => {
+                        const roomId = normalizeId(room?._id);
+                        if (joinedRoomIds[roomId]) return true;
+                        const children = childRoomsByParentId[roomId] || [];
+                        return children.some((child) => joinedRoomIds[normalizeId(child?._id)]);
+                      }).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
+                    </ul>
+                  )}
                 </section>
 
                 {/* ── Admin Panel ─────────────────────────────── */}
@@ -2578,49 +2576,6 @@ function Chat({ isGuestMode = false }) {
           data-testid="chat-workspace-panel"
         >
           {conversationHeader}
-
-          {openChatTabs.length > 0 ? (
-            <div className="flex items-center border-b border-[#1a1f2b] px-2">
-              <div className="flex min-w-0 items-center gap-px" data-open-chat-tabs role="tablist" aria-label="Open chat conversations">
-                {openChatTabs.map((conversation) => {
-                  const conversationId = String(conversation._id);
-                  const selected = conversationId === String(activeConversationId);
-                  const label = getConversationLabel(conversation);
-                  return (
-                    <div
-                      key={`open-chat-tab-${conversationId}`}
-                      className={`flex shrink-0 items-stretch transition-all duration-150 ${selected ? 'opacity-100' : 'opacity-50 hover:opacity-80'}`}
-                      style={selected ? { boxShadow: 'inset 0 -2px 0 currentColor' } : undefined}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => openConversationById(conversationId)}
-                        className="inline-flex min-w-0 max-w-32 items-center gap-1 px-2 py-2 text-left text-[11px] font-medium"
-                        data-open-chat-tab={label}
-                        title={`${getChatTabTypeLabel(conversation)} · ${label}`}
-                        role="tab"
-                        aria-selected={selected}
-                      >
-                        <span aria-hidden="true" className="shrink-0 text-[9px] opacity-60">{getConversationTabIcon(conversation)}</span>
-                        <span className="truncate">{label}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCloseOpenTab(conversationId)}
-                        className="px-1 text-[10px] opacity-40 hover:opacity-100 transition-opacity"
-                        aria-label={`Close ${label} tab`}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              <span className="ml-auto shrink-0 px-2 py-1 text-[10px] font-medium opacity-40">
-                {openChatTabs.length}/{MAX_OPEN_CHAT_TABS}
-              </span>
-            </div>
-          ) : null}
 
           {activeConversation?.type === 'dm' ? (
             <div
