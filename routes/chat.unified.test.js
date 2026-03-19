@@ -48,6 +48,7 @@ jest.mock('../services/notifications', () => ({ createNotification: jest.fn() })
 jest.mock('../services/realtime', () => ({
   emitChatMessage: jest.fn(),
   getPresenceMapForUsers: jest.fn(),
+  isUserInRealtimeRoom: jest.fn(),
   buildPresencePayload: jest.fn((userId, presence) => ({
     userId: String(userId),
     status: presence?.status || 'offline',
@@ -56,7 +57,12 @@ jest.mock('../services/realtime', () => ({
 }));
 
 const jwt = require('jsonwebtoken');
-const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload } = require('../services/realtime');
+const {
+  emitChatMessage,
+  getPresenceMapForUsers,
+  isUserInRealtimeRoom,
+  buildPresencePayload
+} = require('../services/realtime');
 const { createNotification } = require('../services/notifications');
 const chatRouter = require('./chat');
 
@@ -114,6 +120,7 @@ describe('Unified chat hub routes', () => {
       })
     });
     getPresenceMapForUsers.mockResolvedValue(new Map());
+    isUserInRealtimeRoom.mockReturnValue(false);
     mockBlockList.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue(null)
@@ -410,6 +417,41 @@ describe('Unified chat hub routes', () => {
       type: 'message',
       title: 'New direct message'
     }));
+  });
+
+  it('skips DM notification when recipient is already active in the same conversation room', async () => {
+    const app = buildApp();
+    const savedConversation = {
+      _id: 'conv-dm',
+      type: 'dm',
+      participants: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439099'],
+      messageCount: 0,
+      save: jest.fn().mockResolvedValue(undefined)
+    };
+    const createdMessage = {
+      _id: 'dm-message-2',
+      populate: jest.fn().mockResolvedValue(undefined),
+      toPublicMessage: jest.fn().mockReturnValue({
+        _id: 'dm-message-2',
+        content: '[Encrypted message]'
+      })
+    };
+
+    mockChatConversation.findById.mockResolvedValue(savedConversation);
+    mockConversationMessage.findOne.mockReturnValueOnce(createSelectLeanOrSort(null));
+    mockConversationMessage.create.mockResolvedValue(createdMessage);
+    isUserInRealtimeRoom.mockImplementation((userId, roomId) => (
+      String(userId) === '507f1f77bcf86cd799439099' && String(roomId) === 'conv-dm'
+    ));
+
+    const response = await request(app)
+      .post('/api/chat/conversations/conv-dm/messages')
+      .set('Authorization', 'Bearer token')
+      .send({ e2ee: validDmEnvelope });
+
+    expect(response.status).toBe(201);
+    expect(isUserInRealtimeRoom).toHaveBeenCalledWith('507f1f77bcf86cd799439099', 'conv-dm');
+    expect(createNotification).not.toHaveBeenCalled();
   });
 
   it('notifies only mentioned users in non-DM conversations', async () => {

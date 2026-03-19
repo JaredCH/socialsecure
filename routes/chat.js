@@ -12,7 +12,7 @@ const {
   authErrorHandler
 } = require('../middleware/parseAuthToken');
 const { createNotification } = require('../services/notifications');
-const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload } = require('../services/realtime');
+const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload, isUserInRealtimeRoom } = require('../services/realtime');
 const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
 const {
   findExactFilterWord,
@@ -3750,10 +3750,11 @@ router.post(
 
     if (conversation.type === 'dm') {
       const dmRecipientIds = targetUserIds.filter((participantId) => String(participantId) !== String(userId));
+      const recipientsToNotify = dmRecipientIds.filter((recipientId) => !isUserInRealtimeRoom(recipientId, conversation._id));
       const senderLabel = publicMessage?.userId?.username
         || publicMessage?.userId?.realName
         || 'Someone';
-      await Promise.all(dmRecipientIds.map((recipientId) => createNotification({
+      await Promise.all(recipientsToNotify.map((recipientId) => createNotification({
         recipientId,
         senderId: userId,
         type: 'message',

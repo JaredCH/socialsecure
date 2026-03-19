@@ -397,6 +397,25 @@ const emitChatMessage = ({ userIds, message }) => {
   emitToUsers(userIds, 'chat:message', { message });
 };
 
+const isUserInRealtimeRoom = (userId, roomId) => {
+  const normalizedUserId = String(userId || '').trim();
+  const normalizedRoomId = String(roomId || '').trim();
+  if (!normalizedUserId || !normalizedRoomId || !ioInstance) return false;
+
+  const userSockets = userSocketIds.get(normalizedUserId);
+  if (!userSockets || userSockets.size === 0) return false;
+
+  const roomMembers = ioInstance.sockets?.adapter?.rooms?.get(`room:${normalizedRoomId}`);
+  if (!roomMembers || roomMembers.size === 0) return false;
+
+  for (const socketId of userSockets) {
+    if (roomMembers.has(socketId)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const getPresenceMapForUsers = async (userIds) => {
   const normalized = [...new Set((Array.isArray(userIds) ? userIds : []).map((value) => String(value || '').trim()).filter(Boolean))];
   if (normalized.length === 0) return new Map();
@@ -416,6 +435,7 @@ module.exports = {
   emitFeedPost,
   emitFeedInteraction,
   emitChatMessage,
+  isUserInRealtimeRoom,
   getFriendIds,
   getPresenceMapForUsers,
   buildPresencePayload,
