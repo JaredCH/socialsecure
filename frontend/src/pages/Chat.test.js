@@ -611,8 +611,9 @@ describe('Chat zip room indicator', () => {
     expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-socialsecure', 1, 40);
     const joinedRoomItems = Array.from(container.querySelectorAll('[data-room-tree-item]'));
     expect(joinedRoomItems.map((node) => node.getAttribute('data-room-tree-item'))).toEqual(
-      expect.arrayContaining(['Texas', 'Travis County, Texas'])
+      expect.arrayContaining(['SocialSecure', 'Travis County, Texas'])
     );
+    expect(container.querySelector('[data-testid="topic-joined-rooms"]')?.textContent).toContain('SocialSecure');
   });
 
   it('shows a collapsed admin control panel by default and expands it for room management', async () => {
@@ -650,6 +651,8 @@ describe('Chat zip room indicator', () => {
       await flush();
     });
 
+    const adminDialog = container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
+    expect(adminDialog).not.toBeNull();
     const adminNameInput = container.querySelector('input[aria-label="Admin room name"]');
     const adminParentSelect = container.querySelector('select[aria-label="Admin room parent"]');
     expect(adminNameInput).not.toBeNull();
@@ -685,6 +688,112 @@ describe('Chat zip room indicator', () => {
     });
 
     expect(chatAPI.moveRoom).toHaveBeenCalled();
+  });
+
+  it('closes the admin popup on escape and backdrop click but not dialog content click', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115', isAdmin: true } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'state-ca', type: 'state', name: 'California', state: 'CA', discoveryGroup: 'states', sortOrder: 0 },
+          { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', sortOrder: 0, defaultLanding: true }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    const toggleAdminControls = Array.from(container.querySelectorAll('button')).find((button) => button.textContent.includes('Admin Panel'));
+    await act(async () => {
+      toggleAdminControls.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    let adminDialog = container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
+    expect(adminDialog).not.toBeNull();
+
+    const adminNameInput = container.querySelector('input[aria-label="Admin room name"]');
+    expect(adminNameInput).not.toBeNull();
+    await act(async () => {
+      adminNameInput.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    adminDialog = container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
+    expect(adminDialog).not.toBeNull();
+
+    await act(async () => {
+      adminDialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await flush();
+    });
+    expect(container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]')).toBeNull();
+
+    await act(async () => {
+      toggleAdminControls.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    adminDialog = container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]');
+    expect(adminDialog).not.toBeNull();
+    await act(async () => {
+      adminDialog.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    expect(container.querySelector('[role="dialog"][aria-labelledby="chat-admin-control-panel-title"]')).toBeNull();
+  });
+
+  it('uses readable light-theme category pills and compact DM conversation row sizing', async () => {
+    localStorage.setItem('chatTheme', 'light');
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [{ _id: 'dm1', type: 'dm', participants: ['u1', 'u2'], peer: { _id: 'u2', username: 'buddy' } }],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'state-ca', type: 'state', name: 'California', discoveryGroup: 'states', members: [] }
+        ]
+      }
+    });
+
+    await renderChat();
+
+    const stateChatsToggle = Array.from(container.querySelectorAll('button'))
+      .find((btn) => btn.textContent.includes('State Rooms'));
+    await act(async () => {
+      stateChatsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    const statePill = Array.from(container.querySelectorAll('[data-room-tree-item="California"] span'))
+      .find((node) => node.textContent === 'state');
+    expect(statePill?.className || '').toContain('text-sky-800');
+
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
+    await act(async () => {
+      dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+    const dmRowButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('@buddy') && button.className.includes('text-xs'));
+    expect(dmRowButton).not.toBeUndefined();
+    expect(dmRowButton.className).toContain('py-1.5');
   });
 
   it('only shows room search results after a query and opens a clicked room by joining it', async () => {

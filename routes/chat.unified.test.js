@@ -281,6 +281,11 @@ describe('Unified chat hub routes', () => {
         })
       })
     });
+    mockChatRoom.find = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([])
+      })
+    });
     const duplicateError = new Error('E11000 duplicate key error');
     duplicateError.code = 11000;
     mockChatRoom.create = jest.fn().mockRejectedValue(duplicateError);
@@ -298,6 +303,43 @@ describe('Unified chat hub routes', () => {
 
     expect(response.status).toBe(409);
     expect(response.body.error).toBe('A chat room with this unique key already exists');
+  });
+
+  it('rejects admin room creation when a similar sibling room name already exists', async () => {
+    const app = buildApp();
+    mockUser.findById
+      .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
+      .mockImplementationOnce(() => createSelectLean({ _id: '507f1f77bcf86cd799439011', isAdmin: true }));
+    mockChatRoom.findOne = jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue(null)
+        })
+      })
+    });
+    mockChatRoom.find = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          { _id: 'room-existing', name: 'hays county texas', type: 'county', country: 'US' }
+        ])
+      })
+    });
+    mockChatRoom.create = jest.fn();
+
+    const response = await request(app)
+      .post('/api/chat/rooms/admin')
+      .set('Authorization', 'Bearer token')
+      .send({
+        name: 'hays county texas hays county, tx',
+        type: 'county',
+        discoveryGroup: 'states',
+        country: 'US',
+        defaultLanding: false
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe('A similar room already exists in this list');
+    expect(mockChatRoom.create).not.toHaveBeenCalled();
   });
 
   it('applies a 20 second global cooldown to non-DM conversation messages', async () => {
