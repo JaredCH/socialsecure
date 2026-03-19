@@ -548,23 +548,22 @@ function ChatMessageItem({
                 setReactionPickerOpen((open) => !open);
               }}
             >
+              {!groupedWithPrevious ? (
+                <div className="mb-0.5 flex min-w-0 items-end gap-1">
+                  <a
+                    href={profileLink || '#'}
+                    className={`shrink-0 font-semibold ${theme.senderAccent} hover:underline`}
+                    {...usernameHoverProps(menuUser)}
+                  >
+                    @{author}
+                  </a>
+                  {message.userId?.realName ? <span className="max-w-[120px] truncate align-bottom text-[11px] opacity-50">({message.userId.realName})</span> : null}
+                </div>
+              ) : null}
               <p className={`whitespace-pre-wrap break-words ${ROOM_MESSAGE_TEXT_CLASS}`}>
-                {!groupedWithPrevious ? (
-                  <>
-                    <a
-                      href={profileLink || '#'}
-                      className={`font-semibold ${theme.senderAccent} hover:underline`}
-                      {...usernameHoverProps(menuUser)}
-                    >
-                      @{author}
-                    </a>
-                    {message.userId?.realName ? <span className="ml-1 max-w-[120px] truncate align-bottom text-[11px] opacity-50">({message.userId.realName})</span> : null}
-                    <span className="mx-1 opacity-30">–</span>
-                  </>
-                ) : null}
                 {renderMessageContent(displayContent)}
-                {timestamp ? <span className="ml-2 whitespace-nowrap font-jetbrains text-[10px] opacity-40">{timestamp}</span> : null}
               </p>
+              {timestamp ? <span className="ml-0.5 whitespace-nowrap font-jetbrains text-[10px] opacity-40">{timestamp}</span> : null}
               {reactionsMarkup}
             </div>
             {adminActionsMarkup}
