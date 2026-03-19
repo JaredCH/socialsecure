@@ -120,14 +120,23 @@ describe('GuestChat', () => {
     expect(chatAPI.getAllRooms).toHaveBeenCalledWith(1, 500);
     expect(chatAPI.getQuickAccessRooms).toHaveBeenCalledTimes(2);
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     expect(dmTab).toBeDefined();
     expect(dmTab.disabled).toBe(true);
 
-    const quickAccessTexasButton = Array.from(container.querySelectorAll('button')).find((button) => button.getAttribute('data-quick-access-room') === 'Texas');
-    expect(quickAccessTexasButton).toBeDefined();
+    // Expand State Rooms to find Texas
+    const stateChatsToggle = Array.from(container.querySelectorAll('button'))
+      .find((btn) => btn.textContent.includes('State Rooms'));
+    expect(stateChatsToggle).toBeDefined();
     await act(async () => {
-      quickAccessTexasButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      stateChatsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+    });
+
+    const texasButton = container.querySelector('[data-discovery-state-summary="Texas"]');
+    expect(texasButton).not.toBeNull();
+    await act(async () => {
+      texasButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
     });
 

@@ -142,7 +142,7 @@ describe('Chat DM decrypt fallback when visible ids are unavailable', () => {
       await flush();
     });
 
-    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Direct Messages');
+    const dmTab = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'DIRECT MSG');
     await act(async () => {
       dmTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
