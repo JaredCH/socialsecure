@@ -40,9 +40,10 @@ const ONBOARDING_TOTAL_STEPS = 4;
 const LOCATION_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const LOCATION_CHANGE_FIELDS = ['city', 'state', 'country', 'zipCode'];
 const PROFILE_VISIBILITY_OPTIONS = ['public', 'social', 'secure'];
-// Development-only process-local fallback generated at startup.
-// Tokens signed with this value are intentionally invalidated on server restart.
-const DEV_JWT_SECRET_FALLBACK = crypto.randomBytes(64).toString('hex');
+// Development-only fallback shared with all route files.
+// Must match the literal used in other routes so tokens issued here can be
+// verified everywhere.  In production JWT_SECRET is required (see getJwtSecret).
+const DEV_JWT_SECRET_FALLBACK = 'your-secret-key-change-in-production';
 const passwordChangeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
