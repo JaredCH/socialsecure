@@ -231,6 +231,27 @@ const getDiscoveryGroupForRoom = (room) => {
   if (room.type === 'topic') return 'topics';
   return null;
 };
+const normalizeRoomNameForDuplicateKey = (value) => String(value || '')
+  .toLowerCase()
+  .replace(/\btexas\b/g, 'tx')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim()
+  .split(/\s+/)
+  .filter(Boolean);
+const buildRoomDuplicateNameKey = (value) => {
+  const tokens = normalizeRoomNameForDuplicateKey(value);
+  if (tokens.length === 0) return '';
+  const seen = new Set();
+  const deduped = [];
+  tokens.forEach((token) => {
+    if (!seen.has(token)) {
+      seen.add(token);
+      deduped.push(token);
+    }
+  });
+  return deduped.join(' ');
+};
+const normalizeCountryCode = (value, fallback = 'US') => String(value || fallback).trim().toUpperCase();
 const isArchivedRoom = (room) => Boolean(room?.archivedAt);
 const normalizeRoomSortOrder = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -2432,8 +2453,24 @@ router.post('/rooms/admin', roomWriteLimiter, authenticateToken, [
       .lean();
 
     const type = req.body.type || (discoveryGroup === 'states' ? 'state' : 'topic');
+    const incomingName = req.body.name.trim();
+    const duplicateNameKey = buildRoomDuplicateNameKey(incomingName);
+    if (duplicateNameKey) {
+      const siblingRooms = await ChatRoom.find(siblingFilter)
+        .select('_id name type discoveryGroup parentRoomId country')
+        .lean();
+      const targetCountryCode = normalizeCountryCode(req.body.country || parentRoom?.country);
+      const hasDuplicateSibling = siblingRooms.some((existingRoom) => (
+        String(existingRoom?.type || '') === String(type || '')
+        && normalizeCountryCode(existingRoom?.country || parentRoom?.country) === targetCountryCode
+        && buildRoomDuplicateNameKey(existingRoom?.name) === duplicateNameKey
+      ));
+      if (hasDuplicateSibling) {
+        return res.status(409).json({ error: 'A similar room already exists in this list' });
+      }
+    }
     const room = await ChatRoom.create({
-      name: req.body.name.trim(),
+      name: incomingName,
       type,
       discoveryGroup,
       parentRoomId: parentRoom ? parentRoom._id : null,
@@ -2530,7 +2567,7 @@ router.put('/rooms/:roomId', roomWriteLimiter, authenticateToken, [
       return res.status(400).json({ error: 'A valid room list is required' });
     }
 
-    if (typeof req.body.name === 'string') room.name = req.body.name.trim();
+    const nextName = typeof req.body.name === 'string' ? req.body.name.trim() : room.name;
     if (typeof req.body.type === 'string') room.type = req.body.type;
     if (Object.prototype.hasOwnProperty.call(req.body, 'city')) room.city = req.body.city || undefined;
     if (Object.prototype.hasOwnProperty.call(req.body, 'county')) room.county = req.body.county || undefined;
@@ -2538,6 +2575,25 @@ router.put('/rooms/:roomId', roomWriteLimiter, authenticateToken, [
     if (Object.prototype.hasOwnProperty.call(req.body, 'country')) room.country = req.body.country || parentRoom?.country || 'US';
     room.discoveryGroup = discoveryGroup;
     room.parentRoomId = parentRoom ? parentRoom._id : null;
+    room.name = nextName;
+
+    const duplicateNameKey = buildRoomDuplicateNameKey(room.name);
+    if (duplicateNameKey) {
+      const siblingRooms = await ChatRoom.find({
+        ...formatRoomSiblingFilter(room),
+        _id: { $ne: room._id }
+      })
+        .select('_id name type country')
+        .lean();
+      const hasDuplicateSibling = siblingRooms.some((existingRoom) => (
+        String(existingRoom?.type || '') === String(room?.type || '')
+        && String(existingRoom?.country || '').toUpperCase() === String(room?.country || '').toUpperCase()
+        && buildRoomDuplicateNameKey(existingRoom?.name) === duplicateNameKey
+      ));
+      if (hasDuplicateSibling) {
+        return res.status(409).json({ error: 'A similar room already exists in this list' });
+      }
+    }
 
     if (Object.prototype.hasOwnProperty.call(req.body, 'defaultLanding')) {
       room.defaultLanding = Boolean(req.body.defaultLanding);

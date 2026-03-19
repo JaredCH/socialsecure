@@ -55,7 +55,8 @@ const CHAT_THEMES = {
   messageOther: 'bg-[#161b25] text-[#c5cad3]',
   messagePing: 'ring-1 ring-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-100',
   senderAccent: 'text-emerald-400',
-  roomHover: 'hover:bg-[#1a1f2b]/80'
+  roomHover: 'hover:bg-[#1a1f2b]/80',
+  roomCategoryPill: 'border border-[#2a3141] bg-[#1e2430] text-[#c5cad3]'
   },
   light: {
     shell: 'font-outfit bg-[#f5f7fb] text-[#1b2432]',
@@ -69,7 +70,8 @@ const CHAT_THEMES = {
     messageOther: 'bg-white text-[#1b2432]',
     messagePing: 'ring-1 ring-fuchsia-400 bg-fuchsia-100 text-fuchsia-900',
     senderAccent: 'text-sky-700',
-    roomHover: 'hover:bg-[#e9f1fc]'
+    roomHover: 'hover:bg-[#e9f1fc]',
+    roomCategoryPill: 'border border-sky-200 bg-sky-100 text-sky-800'
   },
   medium: {
     shell: 'font-outfit bg-[#1a1f2a] text-[#d5dae2]',
@@ -83,7 +85,8 @@ const CHAT_THEMES = {
     messageOther: 'bg-[#2a3344] text-[#d5dae2]',
     messagePing: 'ring-1 ring-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-100',
     senderAccent: 'text-violet-300',
-    roomHover: 'hover:bg-[#323d52]'
+    roomHover: 'hover:bg-[#323d52]',
+    roomCategoryPill: 'border border-[#3b4861] bg-[#2a3344] text-[#d5dae2]'
   }
 };
 const CHAT_THEME_LABELS = {
@@ -171,6 +174,26 @@ const ROOM_DISCOVERY_TYPE_OPTIONS = [
   { value: 'county', label: 'County / sub-room' }
 ];
 const normalizeId = (value) => String(value || '').trim();
+const normalizeRoomNameForComparison = (value) => String(value || '')
+  .toLowerCase()
+  .replace(/\btexas\b/g, 'tx')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim()
+  .split(/\s+/)
+  .filter(Boolean);
+const getCanonicalRoomNameKey = (value) => {
+  const tokens = normalizeRoomNameForComparison(value);
+  if (tokens.length === 0) return '';
+  const seen = new Set();
+  const deduped = [];
+  tokens.forEach((token) => {
+    if (!seen.has(token)) {
+      seen.add(token);
+      deduped.push(token);
+    }
+  });
+  return deduped.join(' ');
+};
 const sortRoomsByName = (left, right) => String(left?.name || '').localeCompare(String(right?.name || ''));
 const normalizeRoomSortOrder = (room, fallback = Number.MAX_SAFE_INTEGER) => {
   const parsed = Number(room?.sortOrder);
@@ -510,6 +533,9 @@ function Chat({ isGuestMode = false }) {
   const [adminRoomForm, setAdminRoomForm] = useState(() => createRoomAdminForm());
   const [editingRoomId, setEditingRoomId] = useState('');
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const adminPanelDialogRef = useRef(null);
+  const adminPanelTriggerRef = useRef(null);
+  const previousAdminPanelOpenRef = useRef(false);
   const [adminRoomSaving, setAdminRoomSaving] = useState(false);
   const [adminRoomActionIds, setAdminRoomActionIds] = useState([]);
   const adminMutedUserIds = useMemo(() => new Set(
@@ -781,8 +807,28 @@ function Chat({ isGuestMode = false }) {
       }
       const { data } = await chatAPI.getAllRooms(1, MAX_CHAT_ROOM_FETCH);
       const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
-      setAllChatRooms(rooms);
-      const nextJoinedIds = rooms.reduce((acc, room) => {
+      const dedupedRooms = [];
+      const seenStableKeys = new Set();
+      const seenCanonicalNameKeys = new Set();
+      rooms.forEach((room) => {
+        const roomId = normalizeId(room?._id);
+        if (!roomId) return;
+        const stableKey = String(room?.stableKey || '').trim().toLowerCase();
+        if (stableKey && seenStableKeys.has(stableKey)) return;
+        const canonicalNameKey = [
+          String(room?.type || '').toLowerCase(),
+          String(room?.discoveryGroup || '').toLowerCase(),
+          normalizeId(room?.parentRoomId?._id || room?.parentRoomId),
+          getCanonicalRoomNameKey(room?.name),
+          String(room?.country || '').toLowerCase()
+        ].join('|');
+        if (canonicalNameKey !== '||||' && seenCanonicalNameKeys.has(canonicalNameKey)) return;
+        dedupedRooms.push(room);
+        if (stableKey) seenStableKeys.add(stableKey);
+        if (canonicalNameKey !== '||||') seenCanonicalNameKeys.add(canonicalNameKey);
+      });
+      setAllChatRooms(dedupedRooms);
+      const nextJoinedIds = dedupedRooms.reduce((acc, room) => {
         const roomId = normalizeId(room?._id);
         if (!roomId) return acc;
         if (isGuestMode) {
@@ -861,6 +907,15 @@ function Chat({ isGuestMode = false }) {
       // ignore localStorage errors
     }
   }, [dmReadByConversation]);
+
+  useEffect(() => {
+    if (adminPanelOpen) {
+      adminPanelDialogRef.current?.focus();
+    } else if (previousAdminPanelOpenRef.current) {
+      adminPanelTriggerRef.current?.focus();
+    }
+    previousAdminPanelOpenRef.current = adminPanelOpen;
+  }, [adminPanelOpen]);
 
   useEffect(() => {
     if (!activeConversationId || activeConversation?.type !== 'dm') return;
@@ -2271,7 +2326,7 @@ function Chat({ isGuestMode = false }) {
           >
             <span className="shrink-0 text-sm opacity-50" aria-hidden="true">#</span>
             <span className="min-w-0 flex-1 truncate text-sm font-medium">{room.name}</span>
-            <span className="shrink-0 rounded bg-[#1e2430] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${CHAT_STYLE.roomCategoryPill}`}>
               {room.defaultLanding ? 'default' : room.type}
             </span>
           </button>
@@ -2498,13 +2553,13 @@ function Chat({ isGuestMode = false }) {
                         const hasUnreadIndicator = Boolean(conversation.__hasUnread);
                         return (
                           <li key={String(conversation._id)}>
-                            <div className={`flex items-stretch rounded-xl border text-sm transition ${selected ? CHAT_STYLE.subtle : 'hover:opacity-85'}`}>
+                            <div className={`flex items-stretch rounded-xl border transition ${selected ? CHAT_STYLE.subtle : 'hover:opacity-85'}`}>
                               <button
                                 type="button"
                                 onClick={() => {
                                   openConversationById(String(conversation._id));
                                 }}
-                                className="min-w-0 flex-1 px-2.5 py-2 text-left"
+                                className="min-w-0 flex-1 px-2 py-1.5 text-left text-xs"
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="truncate font-medium">{getConversationLabel(conversation)}</span>
@@ -2514,7 +2569,10 @@ function Chat({ isGuestMode = false }) {
                                     <span>{status.label}</span>
                                   </span>
                                 </div>
-                                <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] opacity-50">🔒 encrypted</span>
+                                  <span className="mt-0.5 inline-flex items-center gap-1 text-[9px] opacity-50">
+                                    <span aria-hidden="true">🔒</span>
+                                    <span>encrypted</span>
+                                  </span>
                               </button>
                               <button
                                 type="button"
@@ -2522,7 +2580,7 @@ function Chat({ isGuestMode = false }) {
                                   event.stopPropagation();
                                   handleDeleteConversation(String(conversation._id));
                                 }}
-                                className="shrink-0 border-l px-2 text-[10px] opacity-60 hover:opacity-100"
+                                className="shrink-0 border-l px-1.5 text-[9px] opacity-60 hover:opacity-100"
                                 aria-label={`Delete conversation with ${getConversationLabel(conversation)}`}
                                 title="Delete conversation"
                               >
@@ -2638,8 +2696,8 @@ function Chat({ isGuestMode = false }) {
                       {managedTopicRooms.map((room) => renderManagedRoomBranch(room))}
                     </ul>
                   ) : (
-                    <ul className="mt-1 space-y-0.5" data-testid="state-joined-rooms">
-                      {filterJoinedRooms(managedStateRooms).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
+                    <ul className="mt-1 space-y-0.5" data-testid="topic-joined-rooms">
+                      {filterJoinedRooms(managedTopicRooms).map((room) => renderManagedRoomBranch(room, 0, {}, true))}
                     </ul>
                   )}
                 </section>
@@ -2678,6 +2736,7 @@ function Chat({ isGuestMode = false }) {
                 {profile?.isAdmin ? (
                   <section className={`rounded-xl border p-3 ${CHAT_STYLE.panelGlass}`} data-testid="chat-admin-control-panel">
                     <button
+                      ref={adminPanelTriggerRef}
                       type="button"
                       onClick={() => setAdminPanelOpen((open) => !open)}
                       className="flex w-full items-center justify-between gap-2 text-left"
@@ -2687,18 +2746,51 @@ function Chat({ isGuestMode = false }) {
                       <h3 className="text-sm font-semibold">Admin Panel</h3>
                       <span className="text-xs opacity-70" aria-hidden="true">{adminPanelOpen ? '▾' : '▸'}</span>
                     </button>
-                    <p className="mt-1 text-xs opacity-75">Add, edit, remove, and reorder state/topic rooms and nested sub-rooms.</p>
+                    <p className="mt-1 text-xs opacity-75">Manage rooms in a popup workspace.</p>
+                    {adminPanelOpen ? (
+                    <div
+                      id="chat-admin-control-panel-body"
+                      ref={adminPanelDialogRef}
+                      className={`fixed inset-0 z-40 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm ${CHAT_STYLE.shell}`}
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="chat-admin-control-panel-title"
+                      tabIndex={-1}
+                      onClick={() => setAdminPanelOpen(false)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          event.stopPropagation();
+                          setAdminPanelOpen(false);
+                        }
+                      }}
+                    >
+                    <div
+                      className={`w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border p-4 shadow-2xl ${CHAT_STYLE.panelGlass}`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 id="chat-admin-control-panel-title" className="text-base font-semibold">Admin Panel</h3>
+                        <p className="mt-1 text-xs opacity-75">Add, edit, remove, and reorder state/topic rooms and nested sub-rooms.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAdminPanelOpen(false)}
+                        className={`rounded border px-2 py-1 text-xs ${CHAT_STYLE.subtle}`}
+                        aria-label="Close admin panel"
+                      >
+                        Close
+                      </button>
+                    </div>
                     {editingRoomId ? (
                       <button
                         type="button"
                         onClick={resetAdminRoomForm}
-                        className={`mt-1 rounded border px-2 py-1 text-xs ${CHAT_STYLE.subtle}`}
+                        className={`mt-2 rounded border px-2 py-1 text-xs ${CHAT_STYLE.subtle}`}
                       >
                         Cancel edit
                       </button>
                     ) : null}
-                    {adminPanelOpen ? (
-                    <div id="chat-admin-control-panel-body">
                     <form className="mt-2 space-y-2" onSubmit={handleSaveAdminRoom}>
                       <input
                         value={adminRoomForm.name}
@@ -2838,6 +2930,7 @@ function Chat({ isGuestMode = false }) {
                           )}
                         </div>
                       ))}
+                    </div>
                     </div>
                     </div>
                     ) : null}
