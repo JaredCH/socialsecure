@@ -900,6 +900,18 @@ describe('Chat zip room indicator', () => {
 
     const roomResult = container.querySelector('[data-room-search-result="AI"] button');
     expect(roomResult).not.toBeNull();
+    chatAPI.joinRoom.mockResolvedValueOnce({
+      data: {
+        success: true,
+        systemMessage: {
+          _id: 'system-join-1',
+          roomId: 'topic-ai',
+          content: 'alpha joined AI',
+          messageType: 'system',
+          createdAt: '2024-01-01T00:00:01.000Z'
+        }
+      }
+    });
 
     await act(async () => {
       roomResult.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -910,6 +922,7 @@ describe('Chat zip room indicator', () => {
     expect(chatAPI.getMessages).toHaveBeenCalledWith('topic-ai', 1, 40);
     expect(chatAPI.getRoomUsers).toHaveBeenCalledWith('topic-ai');
     expect(container.textContent).toContain('Welcome to AI');
+    expect(container.textContent).not.toContain('alpha joined AI');
   });
 
   it('shows a delete action for deletable rooms and confirms before deleting', async () => {

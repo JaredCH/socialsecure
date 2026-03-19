@@ -2826,41 +2826,17 @@ router.post('/rooms/:roomId/join', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Chat room not found' });
     }
 
-    const joiningUser = await User.findById(userId).select('username realName').lean();
+    const joiningUser = await User.findById(userId).select('_id').lean();
     if (!joiningUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const wasMember = isRoomMember(room, userId);
-    
     await room.addMember(userId);
-
-    let systemMessage = null;
-    if (!wasMember) {
-      const displayName = joiningUser.username || joiningUser.realName || 'user';
-      const event = await createRoomEventMessage({
-        roomId,
-        userId,
-        content: `${displayName} joined ${room.name || 'the room'}`,
-        messageType: 'system',
-        commandData: {
-          command: 'join',
-          targetUserId: String(joiningUser._id),
-          targetUsername: displayName
-        }
-      });
-      await room.incrementMessageCount();
-      systemMessage = event.toPublicMessage();
-      emitChatMessage({
-        userIds: room.members,
-        message: systemMessage
-      });
-    }
     
     res.json({
       success: true,
       message: 'Joined chat room successfully',
-      systemMessage,
+      systemMessage: null,
       room: {
         _id: room._id,
         name: room.name,
