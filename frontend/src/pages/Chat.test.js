@@ -623,6 +623,49 @@ describe('Chat zip room indicator', () => {
     expect(countyJoinedText).not.toContain('Montgomery County, Maryland');
   });
 
+  it('does not auto-join county rooms flagged as default landing', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115' } }
+    });
+    chatAPI.getConversations.mockResolvedValue({
+      data: {
+        conversations: {
+          zip: { current: { _id: 'zip1', type: 'zip-room', zipCode: '02115', title: 'Zip 02115' }, nearby: [] },
+          dm: [],
+          profile: []
+        }
+      }
+    });
+    chatAPI.getAllRooms.mockResolvedValue({
+      data: {
+        rooms: [
+          { _id: 'topic-socialsecure', type: 'topic', name: 'SocialSecure', discoveryGroup: 'topics', defaultLanding: true, members: [] },
+          { _id: 'state-tx', type: 'state', name: 'Texas', discoveryGroup: 'states', members: [] },
+          { _id: 'county-hays', type: 'county', name: 'Hays County, Texas', discoveryGroup: 'counties', defaultLanding: true, members: [] }
+        ]
+      }
+    });
+    chatAPI.getQuickAccessRooms.mockResolvedValue({
+      data: {
+        rooms: {
+          state: { _id: 'state-tx', type: 'state', name: 'Texas' },
+          county: { _id: 'county-hays', type: 'county', name: 'Hays County, Texas' },
+          zip: null,
+          cities: []
+        }
+      }
+    });
+    chatAPI.getMessages.mockResolvedValue({ data: { messages: [], pagination: { hasMore: false } } });
+
+    await renderChat();
+
+    expect(chatAPI.joinRoom).toHaveBeenCalledWith('state-tx');
+    expect(chatAPI.joinRoom).toHaveBeenCalledWith('county-hays');
+    expect(chatAPI.joinRoom).toHaveBeenCalledWith('topic-socialsecure');
+    const countyJoinCalls = chatAPI.joinRoom.mock.calls.filter(([roomId]) => roomId === 'county-hays');
+    expect(countyJoinCalls).toHaveLength(1);
+  });
+
   it('shows a collapsed admin control panel by default and expands it for room management', async () => {
     authAPI.getProfile.mockResolvedValue({
       data: { user: { _id: 'u1', username: 'alpha', zipCode: '02115', isAdmin: true } }

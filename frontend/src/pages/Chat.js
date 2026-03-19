@@ -986,7 +986,7 @@ function Chat({ isGuestMode = false }) {
     [allChatRooms]
   );
   const defaultLandingRooms = useMemo(
-    () => allChatRooms.filter((room) => room?.defaultLanding),
+    () => allChatRooms.filter((room) => room?.defaultLanding && getRoomDiscoveryGroup(room) === 'topics'),
     [allChatRooms]
   );
   const defaultLandingRoom = useMemo(
@@ -2317,11 +2317,11 @@ function Chat({ isGuestMode = false }) {
   const collapsedCountyRooms = useMemo(() => {
     const quickAccessCountyId = normalizeId(quickAccessRooms.county?._id);
     const fallbackRooms = filterJoinedRooms(managedCountyRooms);
-    if (!quickAccessCountyId || !joinedRoomIds[quickAccessCountyId]) return fallbackRooms;
+    if (!quickAccessCountyId) return fallbackRooms;
 
     const quickAccessCountyRoom = managedCountyRooms.find((room) => normalizeId(room?._id) === quickAccessCountyId);
     return quickAccessCountyRoom ? [quickAccessCountyRoom] : fallbackRooms;
-  }, [filterJoinedRooms, joinedRoomIds, managedCountyRooms, quickAccessRooms.county?._id]);
+  }, [filterJoinedRooms, managedCountyRooms, quickAccessRooms.county?._id]);
   const renderManagedRoomBranch = useCallback((room, depth = 0, extraProps = {}, joinedOnly = false) => {
     const roomId = normalizeId(room?._id);
     const allChildren = (childRoomsByParentId[roomId] || []).slice().sort(sortRoomsByDiscoveryOrder);
