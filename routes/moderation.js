@@ -1072,6 +1072,7 @@ router.get('/control-panel/news-ingestion', authenticateToken, requireAdmin, asy
         ingestionRunId: record.ingestionRunId,
         source: record.source,
         scrapedAt: record.scrapedAt,
+        processedAt: record.updatedAt || record.persistence?.persistedAt || record.ingestedAt || record.createdAt || null,
         locationDetection: {
           usedPlainText: Boolean(matchedLocationToken),
           matchedToken: matchedLocationToken

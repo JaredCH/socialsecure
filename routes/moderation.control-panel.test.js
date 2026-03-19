@@ -368,6 +368,7 @@ describe('Moderation control panel admin actions', () => {
         processingStatus: 'processed',
         tags: ['politics'],
         events: [{ eventType: 'insert' }],
+        updatedAt: new Date('2026-03-06T00:00:45.000Z'),
         ingestedAt: new Date('2026-03-06T00:00:30.000Z'),
         createdAt: new Date('2026-03-06T00:00:00.000Z')
       }
@@ -387,6 +388,7 @@ describe('Moderation control panel admin actions', () => {
       usedPlainText: true,
       matchedToken: 'Texas'
     });
+    expect(response.body.records[0].processedAt).toBe('2026-03-06T00:00:45.000Z');
     expect(response.body.records[0].ingestedAt).toBeTruthy();
     expect(response.body.pagination.total).toBe(1);
   });

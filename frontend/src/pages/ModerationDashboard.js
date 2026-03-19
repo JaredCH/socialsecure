@@ -106,7 +106,15 @@ const formatAssociatedLocations = (locationAssociations = {}) => {
     ...zipCodes.map((value) => `zip:${value}`)
   ];
 };
-const getIngestedTimestamp = (record = {}) => record.ingestedAt || record.createdAt || null;
+const getIngestedTimestamp = (record = {}) => (
+  record.processedAt
+  || record.scrapedAt
+  || record.ingestedAt
+  || record.persistence?.persistedAt
+  || record.updatedAt
+  || record.createdAt
+  || null
+);
 const formatTimestampCell = (value) => (value ? new Date(value).toLocaleString() : '—');
 
 function SortableHeader({ label, field, sortBy, sortDir, onSort }) {
@@ -622,7 +630,7 @@ function ModerationDashboard() {
                   {scheduleInfo?.schedulerRunning ? 'Running' : 'Stopped'}
                 </p>
                 {scheduleInfo?.lastIngestionRunAt && (
-                  <p><span className="text-gray-500">Last run:</span> {new Date(scheduleInfo.lastIngestionRunAt).toLocaleTimeString()}</p>
+                  <p><span className="text-gray-500">Last run:</span> {new Date(scheduleInfo.lastIngestionRunAt).toLocaleString()}</p>
                 )}
                 {scheduleInfo?.schedulerRunning && (
                   <p><span className="text-gray-500">Next run:</span> <span className="font-mono font-semibold text-indigo-600">{formatCountdown(countdownMs)}</span></p>
@@ -861,7 +869,7 @@ function ModerationDashboard() {
                       <SortableHeader label="Category" field="normalized.category" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <SortableHeader label="Title" field="normalized.title" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <SortableHeader label="Published" field="normalized.publishedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
-                      <SortableHeader label="Scraped" field="scrapedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
+                      <SortableHeader label="Processed" field="scrapedAt" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <SortableHeader label="Status" field="processingStatus" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <SortableHeader label="Scope" field="resolvedScope" sortBy={ingestionFilters.sortBy} sortDir={ingestionFilters.sortDir} onSort={handleIngestionSort} />
                       <th className="px-3 py-2.5">Topics</th>
@@ -915,7 +923,7 @@ function ModerationDashboard() {
                               {row.normalized?.title || <span className="text-gray-400 italic">untitled</span>}
                             </td>
                             <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{formatTimestampCell(row.normalized?.publishedAt)}</td>
-                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{formatTimestampCell(row.scrapedAt || getIngestedTimestamp(row))}</td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{formatTimestampCell(getIngestedTimestamp(row))}</td>
                             <td className="px-3 py-2.5">
                               <StatusBadge status={row.processingStatus} />
                             </td>
