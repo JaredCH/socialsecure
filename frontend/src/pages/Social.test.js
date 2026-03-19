@@ -285,6 +285,21 @@ describe('Social page hero background rendering', () => {
     expect(locationProbe?.textContent).toBe('/social?user=alpha');
   });
 
+  it('preserves explicit profile user in URL when authenticated viewer opens another profile', async () => {
+    window.history.replaceState({}, '', '/social?user=buddy');
+    feedAPI.getPublicUserFeed.mockResolvedValue({
+      data: {
+        posts: [],
+        user: { _id: 'u-2', username: 'buddy' }
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const locationProbe = container.querySelector('[data-testid="location-probe"]');
+    expect(locationProbe?.textContent).toBe('/social?user=buddy');
+  });
+
   it('shows owner controls when visiting own profile with username in URL', async () => {
     window.history.replaceState({}, '', '/social?user=alpha');
 
