@@ -480,7 +480,7 @@ function ModerationDashboard() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-8">
+    <div className="relative z-[1400] max-w-7xl mx-auto p-4 md:p-6 space-y-8">
       <div className="rounded-2xl bg-gradient-to-r from-gray-900 to-gray-700 px-6 py-5 text-white shadow-lg">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
