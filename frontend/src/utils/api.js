@@ -26,7 +26,7 @@ export const setAuthToken = (token) => {
     // Ignore storage access failures.
   }
 
-  // Always clear legacy key to avoid unsafe persistence and stale token bleed.
+  // Always clear legacy key to avoid unsafe persistence and stale token leakage.
   try {
     localStorage.removeItem('token');
   } catch {

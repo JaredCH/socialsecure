@@ -40,7 +40,9 @@ const ONBOARDING_TOTAL_STEPS = 4;
 const LOCATION_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const LOCATION_CHANGE_FIELDS = ['city', 'state', 'country', 'zipCode'];
 const PROFILE_VISIBILITY_OPTIONS = ['public', 'social', 'secure'];
-const DEV_JWT_SECRET_FALLBACK = 'your-secret-key-change-in-production';
+// Development-only process-local fallback generated at startup.
+// Tokens signed with this value are intentionally invalidated on server restart.
+const DEV_JWT_SECRET_FALLBACK = crypto.randomBytes(64).toString('hex');
 const passwordChangeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -68,6 +70,20 @@ const addressApprovalResponseLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many address approval responses. Please try again later.' }
+});
+const sensitiveAuthActionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication requests. Please try again later.' }
+});
+const profileUpdateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many profile update requests. Please try again later.' }
 });
 
 const isSafeHttpUrl = (value) => {
@@ -771,10 +787,7 @@ router.post('/password/change', [
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
-    user.passwordHash = await bcrypt.hash(newPassword, 12);
-    user.mustResetPassword = false;
-    await user.save();
-
+    const nextPasswordHash = await bcrypt.hash(newPassword, 12);
     await Session.updateMany(
       { userId: user._id, isRevoked: false },
       {
@@ -785,6 +798,10 @@ router.post('/password/change', [
         }
       }
     );
+
+    user.passwordHash = nextPasswordHash;
+    user.mustResetPassword = false;
+    await user.save();
 
     await logSecurityEvent({
       userId: user._id,
@@ -1106,7 +1123,7 @@ router.post('/onboarding/complete', [
 });
 
 // Get encryption-password status
-router.get('/encryption-password/status', async (req, res) => {
+router.get('/encryption-password/status', sensitiveAuthActionLimiter, async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
@@ -1133,6 +1150,7 @@ router.get('/encryption-password/status', async (req, res) => {
 
 // Set initial encryption password
 router.post('/encryption-password/set', [
+  sensitiveAuthActionLimiter,
   body('encryptionPassword')
     .isString()
     .withMessage('Encryption password is required')
@@ -1195,6 +1213,7 @@ router.post('/encryption-password/set', [
 
 // Change existing encryption password
 router.post('/encryption-password/change', [
+  sensitiveAuthActionLimiter,
   body('currentEncryptionPassword')
     .isString()
     .withMessage('Current encryption password is required'),
@@ -1271,6 +1290,7 @@ const DEFAULT_ENCRYPTION_UNLOCK_MINUTES = 30;
 
 // Verify encryption password and create unlock session
 router.post('/encryption-password/verify', [
+  sensitiveAuthActionLimiter,
   body('encryptionPassword')
     .isString()
     .withMessage('Encryption password is required'),
@@ -1346,7 +1366,7 @@ router.post('/encryption-password/verify', [
 });
 
 // Check if encryption is currently unlocked (via cookie)
-router.get('/encryption-password/status/unlock', async (req, res) => {
+router.get('/encryption-password/status/unlock', sensitiveAuthActionLimiter, async (req, res) => {
   try {
     const unlockToken = req.cookies?.encryption_unlock;
     
@@ -1515,14 +1535,18 @@ router.post('/address-approval/respond', [
 });
 
 router.put('/profile', [
+  profileUpdateLimiter,
   body('realName').optional().trim().notEmpty().withMessage('Real name cannot be empty'),
   body('phone')
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .trim()
-    .isLength({ max: 30 })
-    .withMessage('Phone must be at most 30 characters')
-    .matches(/^(?:(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})$/)
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined) return true;
+      if (typeof value !== 'string') return false;
+      const normalized = value.trim();
+      if (!normalized) return true;
+      if (normalized.length > 30) return false;
+      return /^(?:(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})$/.test(normalized);
+    })
     .withMessage('Phone number format is invalid'),
   body('worksAt').optional({ nullable: true }).isString().trim().isLength({ max: 120 }).withMessage('Place of employment must be at most 120 characters'),
   body('streetAddress').optional({ nullable: true }).isString().trim().isLength({ max: 200 }).withMessage('Home address must be at most 200 characters'),
@@ -1955,6 +1979,7 @@ router.put('/profile', [
 
 // Setup PGP public key
 router.post('/pgp/setup', [
+  sensitiveAuthActionLimiter,
   body('publicKey').isString().withMessage('PGP public key is required')
 ], async (req, res) => {
   const errors = validationResult(req);
