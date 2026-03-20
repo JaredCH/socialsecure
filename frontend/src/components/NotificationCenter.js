@@ -116,6 +116,11 @@ const NotificationCenter = ({
     }
   };
 
+  const viewDirectMessage = (notification) => {
+    navigate('/chat?tab=dm');
+    setOpen(false);
+  };
+
   const setFriendActionLoading = (id, loadingValue) => {
     setFriendActionLoadingById((prev) => ({ ...prev, [String(id)]: loadingValue }));
   };
@@ -312,6 +317,7 @@ const NotificationCenter = ({
                 onDelete={deleteNotification}
                 onAcknowledge={acknowledgeNotification}
                 onDismiss={dismissNotification}
+                onView={viewDirectMessage}
                 onFriendRequestAction={handleFriendRequestAction}
                 onFriendCircleChange={handleFriendCircleChange}
                 friendActionLoading={Boolean(friendActionLoadingById[String(notification._id)])}

@@ -231,4 +231,78 @@ describe('NotificationCenter corner behavior', () => {
     expect(onLogout).toHaveBeenCalled();
     expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
   });
+
+  it('shows Mark Read, Dismiss, and View for direct message notifications', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [{
+          _id: 'dm-notif-1',
+          senderId: 'sender-dm',
+          type: 'message',
+          title: 'New message',
+          body: 'alice sent you a message',
+          isRead: false,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          data: { roomId: 'room-1' }
+        }],
+        pagination: { hasMore: false }
+      }
+    });
+    notificationAPI.acknowledgeNotification.mockResolvedValue({ data: { success: true } });
+
+    const onUnreadCountChange = jest.fn();
+    await renderCenter({ onUnreadCountChange });
+
+    const toggleButton = container.querySelector('button[aria-label="Notifications"]');
+    await act(async () => {
+      toggleButton.click();
+      await Promise.resolve();
+    });
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const labels = buttons.map((b) => b.textContent.trim());
+
+    expect(labels).toContain('Mark Read');
+    expect(labels).toContain('Dismiss');
+    expect(labels).toContain('View');
+    expect(labels).not.toContain('Acknowledge');
+    expect(labels).not.toContain('Delete');
+  });
+
+  it('navigates to /chat?tab=dm when View is clicked on a DM notification', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [{
+          _id: 'dm-notif-2',
+          senderId: 'sender-dm',
+          type: 'message',
+          title: 'New message',
+          body: 'bob sent you a message',
+          isRead: false,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          data: { roomId: 'room-2' }
+        }],
+        pagination: { hasMore: false }
+      }
+    });
+
+    await renderCenter();
+
+    const toggleButton = container.querySelector('button[aria-label="Notifications"]');
+    await act(async () => {
+      toggleButton.click();
+      await Promise.resolve();
+    });
+
+    const viewButton = Array.from(container.querySelectorAll('button'))
+      .find((b) => b.textContent.trim() === 'View');
+    expect(viewButton).not.toBeNull();
+
+    await act(async () => {
+      viewButton.click();
+      await Promise.resolve();
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('/chat?tab=dm');
+  });
 });
