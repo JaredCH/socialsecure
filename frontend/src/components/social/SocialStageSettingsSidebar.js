@@ -110,7 +110,7 @@ const SocialStageSettingsSidebar = ({
         tabIndex={-1}
         aria-label="Close stage settings backdrop"
         onClick={onClose}
-        onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
+        onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
         className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
       />
       <div

@@ -357,7 +357,7 @@ const SocialHero = ({
                       isActive ? 'bg-white/20' : 'hover:bg-white/10'
                     }`}
                     style={{ color: isActive ? menuActiveColor : menuTextColor }}
-                    aria-current={isActive ? 'true' : undefined}
+                    aria-current={isActive ? 'page' : undefined}
                   >
                     <TabIcon icon={tab.icon} className="h-3.5 w-3.5" />
                     {tab.label}
