@@ -176,11 +176,11 @@ function News({ isGuestMode = false }) {
   // Listen for DotNav close requests to close the article drawer
   useEffect(() => {
     const handleCloseRequest = () => {
-      if (selectedArticle) setSelectedArticle(null);
+      setSelectedArticle(null);
     };
     window.addEventListener('DotNavCloseRequest', handleCloseRequest);
     return () => window.removeEventListener('DotNavCloseRequest', handleCloseRequest);
-  }, [selectedArticle]);
+  }, []);
 
   const handleMobileArticleSelect = useCallback((article) => {
     setDesktopArticlePreview(null);

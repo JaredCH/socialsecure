@@ -643,7 +643,8 @@
   transform: scale(1);
 }
 
-.dotnav-util-btn:active {
+#dotnav-back:active,
+#dotnav-close.dotnav-visible:active {
   transform: scale(0.9);
 }
 
