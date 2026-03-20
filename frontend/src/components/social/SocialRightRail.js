@@ -1,7 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { getInitials } from '../../utils/initials';
 
-const SocialRightRail = ({ sectionId, topFriends, onSectionClick }) => (
+const DEFAULT_ACCENT_COLORS = ['#6366f1', '#8b5cf6'];
+
+const SocialRightRail = ({ sectionId, topFriends, onSectionClick, accentColor, accentColor2 }) => {
+  const color1 = accentColor || DEFAULT_ACCENT_COLORS[0];
+  const color2 = accentColor2 || DEFAULT_ACCENT_COLORS[1];
+  return (
   <aside id={sectionId} data-social-section={sectionId} className="xl:col-span-3 space-y-4 xl:sticky xl:top-6">
     <section className="bg-white rounded-xl shadow p-5 border border-gray-100" onClick={() => onSectionClick('chat_panel')}>
       <h3 className="text-sm uppercase tracking-wide text-gray-500 font-semibold">Chat Panel</h3>
@@ -18,9 +24,14 @@ const SocialRightRail = ({ sectionId, topFriends, onSectionClick }) => (
       ) : (
         <ul className="mt-3 space-y-2 text-sm text-gray-700">
           {topFriends.slice(0, 5).map((friend) => (
-            <li key={friend._id || friend.username} className="rounded border border-gray-100 px-3 py-2">
-              <p className="font-medium">@{friend.username}</p>
-              {friend.realName ? <p className="text-xs text-gray-500">{friend.realName}</p> : null}
+            <li key={friend._id || friend.username} className="flex items-center gap-3 rounded-lg border border-gray-100 px-3 py-2">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${color1}, ${color2})` }}>
+                {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : getInitials(friend.realName, friend.username)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">@{friend.username}</p>
+                {friend.realName ? <p className="truncate text-xs text-gray-500">{friend.realName}</p> : null}
+              </div>
             </li>
           ))}
         </ul>
@@ -36,6 +47,7 @@ const SocialRightRail = ({ sectionId, topFriends, onSectionClick }) => (
       </ul>
     </section>
   </aside>
-);
+  );
+};
 
 export default SocialRightRail;
