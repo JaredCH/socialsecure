@@ -24,14 +24,16 @@ const MACINTOSH_USER_AGENT_RE = /Macintosh/i;
 const UTIL_BTN = 34;
 const UTIL_BELOW = 10;
 const UTIL_OFFSET = 22;
+// Extra vertical space reserved below the dot for the utility buttons
+const UTIL_SPACE = UTIL_BELOW + UTIL_BTN;
 
 // ═══════════════════════════════════════════
 // DOCK POSITION CONFIGS
 // ═══════════════════════════════════════════
 const DOCK_CONFIGS = {
-  br:  { label: 'Bottom Right',  anchor: (w, h) => ({ left: w - PAD - DSIZ, top: h - PAD - DSIZ }),  cogCorner: 'tl', labelSide: 'left' },
+  br:  { label: 'Bottom Right',  anchor: (w, h) => ({ left: w - PAD - DSIZ, top: h - PAD - DSIZ - UTIL_SPACE }),  cogCorner: 'tl', labelSide: 'left' },
   ubr: { label: 'Mid Right',     anchor: (w, h) => ({ left: w - PAD - DSIZ, top: Math.round(h * 2 / 3) - DSIZ }), cogCorner: 'tl', labelSide: 'left' },
-  bl:  { label: 'Bottom Left',   anchor: (w, h) => ({ left: PAD, top: h - PAD - DSIZ }),             cogCorner: 'tr', labelSide: 'right' },
+  bl:  { label: 'Bottom Left',   anchor: (w, h) => ({ left: PAD, top: h - PAD - DSIZ - UTIL_SPACE }),             cogCorner: 'tr', labelSide: 'right' },
   ubl: { label: 'Mid Left',      anchor: (w, h) => ({ left: PAD, top: Math.round(h * 2 / 3) - DSIZ }), cogCorner: 'tr', labelSide: 'right' },
 };
 

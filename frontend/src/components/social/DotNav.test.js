@@ -462,6 +462,81 @@ describe('DotNav navigation system', () => {
 
     window.removeEventListener('VoidNavTrigger', handler);
   });
+
+  it('renders the Back button (always visible on mobile)', async () => {
+    await renderNav();
+
+    const back = document.getElementById('dotnav-back');
+    expect(back).not.toBeNull();
+    expect(back.getAttribute('aria-label')).toBe('Go back');
+  });
+
+  it('does not render Back button on desktop viewport', async () => {
+    setViewport(1200, 900);
+    await renderNav();
+
+    const back = document.getElementById('dotnav-back');
+    expect(back).toBeNull();
+  });
+
+  it('renders the Close button (hidden by default)', async () => {
+    await renderNav();
+
+    const close = document.getElementById('dotnav-close');
+    expect(close).not.toBeNull();
+    expect(close.classList.contains('dotnav-visible')).toBe(false);
+  });
+
+  it('shows Close button when a closeable popup is registered', async () => {
+    await renderNav();
+
+    const close = document.getElementById('dotnav-close');
+    expect(close.classList.contains('dotnav-visible')).toBe(false);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('DotNavRegisterCloseable', { detail: { id: 'test-popup' } }));
+    });
+    expect(close.classList.contains('dotnav-visible')).toBe(true);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('DotNavUnregisterCloseable', { detail: { id: 'test-popup' } }));
+    });
+    expect(close.classList.contains('dotnav-visible')).toBe(false);
+  });
+
+  it('dispatches DotNavCloseRequest when Close button is tapped', async () => {
+    await renderNav();
+
+    // Register a closeable so the button becomes visible
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('DotNavRegisterCloseable', { detail: { id: 'test-popup' } }));
+    });
+
+    const events = [];
+    const handler = () => events.push(true);
+    window.addEventListener('DotNavCloseRequest', handler);
+
+    const close = document.getElementById('dotnav-close');
+    await act(async () => { close.click(); });
+
+    expect(events.length).toBe(1);
+
+    window.removeEventListener('DotNavCloseRequest', handler);
+
+    // Clean up
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('DotNavUnregisterCloseable', { detail: { id: 'test-popup' } }));
+    });
+  });
+
+  it('sets CSS custom properties for anchor position', async () => {
+    await renderNav();
+
+    const left = document.documentElement.style.getPropertyValue('--dotnav-anchor-left');
+    const top = document.documentElement.style.getPropertyValue('--dotnav-anchor-top');
+    expect(left).toMatch(/^\d+px$/);
+    expect(top).toMatch(/^\d+px$/);
+  });
 });
 
 describe('resolveRoute', () => {
