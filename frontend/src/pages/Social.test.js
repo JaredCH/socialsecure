@@ -848,6 +848,5 @@ describe('Social page hero background rendering', () => {
     const editResumeLink = container.querySelector('a[title="Edit resume in settings"]');
     expect(editResumeLink).toBeTruthy();
     expect(editResumeLink?.getAttribute('href')).toBe('/resume');
-
   });
 });
