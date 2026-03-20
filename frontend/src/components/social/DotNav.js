@@ -13,7 +13,6 @@ const BSIZ = 44;
 const CA = (DSIZ - BSIZ) / 2;
 const TOTAL_SLOTS = 16;
 const STORAGE_KEY = 'dotnav-state';
-const NOTIF_PANEL_W = 260;
 const EDGE_INSET = 10;
 const MOBILE_MAX_WIDTH = 768;
 const TOUCH_DEVICE_MAX_WIDTH = 1024;
@@ -286,7 +285,6 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
   const [showSettings, setShowSettings] = useState(false);
   const [pickerSlotIndex, setPickerSlotIndex] = useState(null);
   const [hoveredSlot, setHoveredSlot] = useState(null);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   const [draggedSlotIndex, setDraggedSlotIndex] = useState(null);
   const [dragOverSlotIndex, setDragOverSlotIndex] = useState(null);
@@ -327,7 +325,6 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     setIsEditing(false);
     setShowSettings(false);
     setPickerSlotIndex(null);
-    setShowNotifications(false);
   }, [location.pathname, location.search]);
 
   // Compute anchor position
@@ -576,7 +573,7 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
         className={isOpen ? 'dotnav-open' : ''}
         style={{ left: anchorPos.left, top: anchorPos.top }}
         onClick={handleDotClick}
-        aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
+        aria-label={isOpen ? 'Close navigation menu' : `Open navigation menu${unreadNotificationCount > 0 ? ` (${unreadNotificationCount} unread notifications)` : ''}`}
         aria-expanded={isOpen}
         type="button"
       >
@@ -592,65 +589,12 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
             <circle cx="12" cy="19" r="1" />
           </svg>
         )}
-      </button>
-
-      {/* Notification Bell Button - positioned near the main dot */}
-      <button
-        id="dotnav-bell"
-        className={showNotifications ? 'dotnav-bell-active' : ''}
-        style={{
-          left: anchorPos.left + (side === 'right' ? -42 : DSIZ + 6),
-          top: anchorPos.top + 10,
-        }}
-        onClick={() => setShowNotifications(prev => !prev)}
-        aria-label={`Notifications${unreadNotificationCount > 0 ? ` (${unreadNotificationCount} unread)` : ''}`}
-        type="button"
-        data-testid="dotnav-bell"
-      >
-        {SVG_ICONS.bell}
-        {unreadNotificationCount > 0 && (
-          <span className="dotnav-bell-badge">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>
+        {!isOpen && unreadNotificationCount > 0 && (
+          <span className="dotnav-dot-badge" data-testid="dotnav-dot-badge">
+            {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+          </span>
         )}
       </button>
-
-      {/* Notification Dropdown */}
-      {showNotifications && (
-        <div
-          id="dotnav-notification-panel"
-          className="dotnav-visible"
-          style={{
-            left: Math.min(Math.max(anchorPos.left + (side === 'right' ? -NOTIF_PANEL_W : DSIZ + 6), EDGE_INSET), windowSize.w - NOTIF_PANEL_W - PAD),
-            top: Math.max(anchorPos.top - 220, EDGE_INSET),
-          }}
-          role="dialog"
-          aria-label="Notifications"
-          data-testid="dotnav-notification-panel"
-        >
-          <h3>Notifications</h3>
-          {unreadNotificationCount > 0 ? (
-            <p style={{ fontSize: 13, margin: '8px 0' }}>You have {unreadNotificationCount} unread notification{unreadNotificationCount !== 1 ? 's' : ''}.</p>
-          ) : (
-            <p style={{ fontSize: 13, margin: '8px 0', color: 'var(--dotnav-mid)' }}>No new notifications</p>
-          )}
-          <button
-            type="button"
-            onClick={() => { navigate('/social'); setShowNotifications(false); }}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid var(--dotnav-border)',
-              borderRadius: 8,
-              background: 'var(--dotnav-ink)',
-              color: 'var(--dotnav-btn-fg)',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            View All
-          </button>
-        </div>
-      )}
 
       {/* Settings Cog */}
       <button
