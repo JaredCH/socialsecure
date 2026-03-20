@@ -314,6 +314,7 @@ module.exports = {
   PRESENCE_STATES,
   VALID_STATES,
   INACTIVE_WINDOW_MS,
+  INACTIVE_PRESENCE_WINDOW_MS: INACTIVE_WINDOW_MS, // alias used by realtime.js
   HEARTBEAT_STALE_MS,
 
   // State derivation (authoritative)

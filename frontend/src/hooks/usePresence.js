@@ -108,10 +108,10 @@ export const usePresence = (userId) => {
  * Returns a Map<userId, presenceRecord>.
  */
 export const usePresenceMap = (userIds) => {
+  const idsKey = (Array.isArray(userIds) ? userIds : []).map((v) => String(v || '')).filter(Boolean).sort().join(',');
   const ids = useMemo(
-    () => [...new Set((Array.isArray(userIds) ? userIds : []).map((v) => String(v || '')).filter(Boolean))],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(userIds)]
+    () => [...new Set(idsKey.split(',').filter(Boolean))],
+    [idsKey]
   );
 
   const buildMap = useCallback(() => {

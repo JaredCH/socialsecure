@@ -11,7 +11,7 @@ const User = require('../models/User');
 
 const MAX_REPLAY_EVENTS = 50;
 const TYPING_RATE_LIMIT_MS = 800;
-const INACTIVE_PRESENCE_WINDOW_MS = presenceService.INACTIVE_WINDOW_MS;
+const INACTIVE_PRESENCE_WINDOW_MS = presenceService.INACTIVE_PRESENCE_WINDOW_MS;
 
 let ioInstance = null;
 let eventCounter = 0;
