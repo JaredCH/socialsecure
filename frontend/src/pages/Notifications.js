@@ -1,79 +1,25 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { notificationAPI } from '../utils/api';
+import useInfiniteNotifications from '../hooks/useInfiniteNotifications';
 import NotificationItem from '../components/NotificationItem';
 
-const PAGE_SIZE = 20;
-
 const Notifications = () => {
-  const [notifications, setNotifications] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const loadNotifications = useCallback(async (nextPage = 1, replace = false) => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await notificationAPI.getNotifications(nextPage, PAGE_SIZE);
-      const incoming = Array.isArray(response.data?.notifications)
-        ? response.data.notifications
-        : [];
-
-      setNotifications((prev) => (replace || nextPage === 1) ? incoming : [...prev, ...incoming]);
-      setPage(nextPage);
-      setHasMore(Boolean(response.data?.pagination?.hasMore));
-    } catch {
-      setError('Failed to load notifications.');
-      if (replace) setNotifications([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadNotifications(1, true);
-  }, [loadNotifications]);
-
-  const loadMore = () => {
-    if (hasMore && !loading) {
-      loadNotifications(page + 1);
-    }
-  };
+  const {
+    notifications,
+    loading,
+    error,
+    hasMore,
+    loadMore,
+    markRead,
+    acknowledge,
+    dismiss,
+    remove,
+  } = useInfiniteNotifications();
 
   const handleOpen = (notification) => {
     if (notification?.data?.url) {
       window.location.href = notification.data.url;
     }
-  };
-
-  const handleMarkRead = async (id) => {
-    try {
-      await notificationAPI.markAsRead(id);
-      setNotifications((prev) => prev.map((n) => String(n._id) === id ? { ...n, isRead: true } : n));
-    } catch { /* ignore */ }
-  };
-
-  const handleAcknowledge = async (id) => {
-    try {
-      await notificationAPI.acknowledgeNotification(id);
-      setNotifications((prev) => prev.filter((n) => String(n._id) !== id));
-    } catch { /* ignore */ }
-  };
-
-  const handleDismiss = async (id) => {
-    try {
-      await notificationAPI.dismissNotification(id);
-      setNotifications((prev) => prev.filter((n) => String(n._id) !== id));
-    } catch { /* ignore */ }
-  };
-
-  const handleDelete = async (id) => {
-    try {
-      await notificationAPI.deleteNotification(id);
-      setNotifications((prev) => prev.filter((n) => String(n._id) !== id));
-    } catch { /* ignore */ }
   };
 
   const noop = () => {};
@@ -108,10 +54,10 @@ const Notifications = () => {
               key={String(notification._id)}
               notification={notification}
               onOpen={handleOpen}
-              onMarkRead={handleMarkRead}
-              onAcknowledge={handleAcknowledge}
-              onDismiss={handleDismiss}
-              onDelete={handleDelete}
+              onMarkRead={(id) => markRead(id)}
+              onAcknowledge={(id) => acknowledge(id)}
+              onDismiss={(id) => dismiss(id)}
+              onDelete={(id) => remove(id)}
               onFriendRequestAction={noop}
               onFriendCircleChange={noop}
             />
