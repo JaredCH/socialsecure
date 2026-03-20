@@ -228,28 +228,13 @@ function resolveRoute(catalogEntry, loggedInUser, viewingUser) {
 
   const target = catalogEntry.target;
 
-  // Calendar has its own route
-  if (target === 'calendar') {
-    if (targetUser && targetUser !== loggedInUser) {
-      return `/calendar?user=${encodeURIComponent(targetUser)}`;
-    }
-    return '/calendar';
-  }
-
-  // Chat with context
-  if (target === 'chat') {
-    if (targetUser && targetUser !== loggedInUser) {
-      return `/chat?user=${encodeURIComponent(targetUser)}`;
-    }
-    return '/chat';
-  }
-
   // Social sub-sections via tab parameter
-  if (['gallery', 'friends', 'blog', 'resume', 'about'].includes(target)) {
+  if (['gallery', 'friends', 'blog', 'resume', 'about', 'chat', 'calendar'].includes(target)) {
+    const tabTarget = target === 'about' ? 'aboutme' : target;
     if (targetUser && targetUser !== loggedInUser) {
-      return `/social?user=${encodeURIComponent(targetUser)}&tab=${target === 'about' ? 'aboutme' : target}`;
+      return `/social?user=${encodeURIComponent(targetUser)}&tab=${tabTarget}`;
     }
-    return `/social?tab=${target === 'about' ? 'aboutme' : target}`;
+    return `/social?tab=${tabTarget}`;
   }
 
   return '/social';

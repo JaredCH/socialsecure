@@ -480,19 +480,19 @@ describe('resolveRoute', () => {
 
   it('resolves absolute routes to logged-in user', () => {
     expect(resolveRoute(findCatalogEntry('my-gallery'), 'me', 'other')).toBe('/social?tab=gallery');
-    expect(resolveRoute(findCatalogEntry('my-calendar'), 'me', 'other')).toBe('/calendar');
+    expect(resolveRoute(findCatalogEntry('my-calendar'), 'me', 'other')).toBe('/social?tab=calendar');
   });
 
   it('resolves contextual routes to the viewed user when different from logged-in user', () => {
     expect(resolveRoute(findCatalogEntry('gallery'), 'me', 'other')).toBe('/social?user=other&tab=gallery');
-    expect(resolveRoute(findCatalogEntry('calendar'), 'me', 'other')).toBe('/calendar?user=other');
-    expect(resolveRoute(findCatalogEntry('chat'), 'me', 'other')).toBe('/chat?user=other');
+    expect(resolveRoute(findCatalogEntry('calendar'), 'me', 'other')).toBe('/social?user=other&tab=calendar');
+    expect(resolveRoute(findCatalogEntry('chat'), 'me', 'other')).toBe('/social?user=other&tab=chat');
     expect(resolveRoute(findCatalogEntry('friends'), 'me', 'other')).toBe('/social?user=other&tab=friends');
   });
 
   it('resolves contextual routes to own profile when viewing self', () => {
     expect(resolveRoute(findCatalogEntry('gallery'), 'me', 'me')).toBe('/social?tab=gallery');
-    expect(resolveRoute(findCatalogEntry('calendar'), 'me', 'me')).toBe('/calendar');
+    expect(resolveRoute(findCatalogEntry('calendar'), 'me', 'me')).toBe('/social?tab=calendar');
     expect(resolveRoute(findCatalogEntry('gallery'), 'me', '')).toBe('/social?tab=gallery');
   });
 
