@@ -131,25 +131,26 @@ describe('MobileDotNavNotification', () => {
     await renderPanel({ isOpen: true });
     await act(async () => { jest.advanceTimersByTime(50); });
     await act(async () => { await Promise.resolve(); });
-    const ack = document.querySelector('[data-testid="mobile-dotnav-notification-ack"]');
-    const agree = document.querySelector('[data-testid="mobile-dotnav-notification-agree"]');
+    const markRead = document.querySelector('[data-testid="mobile-dotnav-notification-markread"]');
     const dismiss = document.querySelector('[data-testid="mobile-dotnav-notification-dismiss"]');
-    const decline = document.querySelector('[data-testid="mobile-dotnav-notification-decline"]');
-    expect(ack).not.toBeNull();
-    expect(agree).not.toBeNull();
+    const view = document.querySelector('[data-testid="mobile-dotnav-notification-view"]');
+    expect(markRead).not.toBeNull();
+    expect(markRead.textContent).toBe('Mark Read');
     expect(dismiss).not.toBeNull();
-    expect(decline).not.toBeNull();
+    expect(dismiss.textContent).toBe('Dismiss');
+    expect(view).not.toBeNull();
+    expect(view.textContent).toBe('View');
   });
 
-  it('calls onAcknowledge when Ack action is clicked', async () => {
+  it('calls onAcknowledge when Mark Read action is clicked', async () => {
     const onAck = jest.fn();
     const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
     notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
     await renderPanel({ isOpen: true, onAcknowledge: onAck });
     await act(async () => { jest.advanceTimersByTime(50); });
     await act(async () => { await Promise.resolve(); });
-    const ackBtn = document.querySelector('[data-testid="mobile-dotnav-notification-ack"]');
-    await act(async () => { ackBtn.click(); });
+    const markReadBtn = document.querySelector('[data-testid="mobile-dotnav-notification-markread"]');
+    await act(async () => { markReadBtn.click(); });
     expect(onAck).toHaveBeenCalledTimes(1);
   });
 
@@ -172,16 +173,28 @@ describe('MobileDotNavNotification', () => {
     expect(el.classList.contains('dotnav-mobile-notif-panel-visible')).toBe(true);
   });
 
-  it('navigates to /notifications when pill is clicked', async () => {
+  it('navigates to /notifications when View action is clicked', async () => {
     const onNavigate = jest.fn();
     const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
     notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
     await renderPanel({ isOpen: true, onNavigate });
     await act(async () => { jest.advanceTimersByTime(50); });
     await act(async () => { await Promise.resolve(); });
-    const pill = document.querySelector('[data-testid="mobile-dotnav-notification-pill"]');
-    await act(async () => { pill.click(); });
+    const viewBtn = document.querySelector('[data-testid="mobile-dotnav-notification-view"]');
+    await act(async () => { viewBtn.click(); });
     expect(onNavigate).toHaveBeenCalledWith('/notifications');
+  });
+
+  it('navigates to /chat?tab=dm when View is clicked on a message notification', async () => {
+    const onNavigate = jest.fn();
+    const notif = { _id: 'n1', title: 'New message', body: 'B', type: 'message', createdAt: new Date().toISOString() };
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
+    await renderPanel({ isOpen: true, onNavigate });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const viewBtn = document.querySelector('[data-testid="mobile-dotnav-notification-view"]');
+    await act(async () => { viewBtn.click(); });
+    expect(onNavigate).toHaveBeenCalledWith('/chat?tab=dm');
   });
 
   it('hides panel when isOpen changes to false', async () => {
