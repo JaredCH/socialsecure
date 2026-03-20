@@ -106,7 +106,7 @@ const MobileDotNavNotification = ({
     return () => { cancelled = true; };
   }, [isOpen]);
 
-  const handleAcknowledge = useCallback((e, notification) => {
+  const handleMarkRead = useCallback((e, notification) => {
     e.stopPropagation();
     if (onAcknowledge) onAcknowledge(notification);
     setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !(notification._ids || []).includes(n._id)));
@@ -118,8 +118,12 @@ const MobileDotNavNotification = ({
     setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !(notification._ids || []).includes(n._id)));
   }, [onDismiss]);
 
-  const handlePillClick = useCallback(() => {
-    if (onNavigate) onNavigate('/notifications');
+  const handleView = useCallback((e, notification) => {
+    e.stopPropagation();
+    if (onNavigate) {
+      const target = notification?.type === 'message' ? '/chat?tab=dm' : '/notifications';
+      onNavigate(target);
+    }
   }, [onNavigate]);
 
   const handleLogout = useCallback(() => {
@@ -173,7 +177,7 @@ const MobileDotNavNotification = ({
             key={n._id}
             type="button"
             className="dotnav-mobile-notif-pill"
-            onClick={() => handlePillClick(n)}
+            onClick={(e) => handleView(e, n)}
             data-testid="mobile-dotnav-notification-pill"
           >
             <div className="dotnav-mobile-notif-pill-content">
@@ -196,24 +200,13 @@ const MobileDotNavNotification = ({
               <span
                 role="button"
                 tabIndex={0}
-                className="dotnav-mobile-notif-action dotnav-mobile-notif-action-ack"
-                onClick={(e) => handleAcknowledge(e, n)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAcknowledge(e, n); }}
-                aria-label="Acknowledge"
-                data-testid="mobile-dotnav-notification-ack"
+                className="dotnav-mobile-notif-action dotnav-mobile-notif-action-markread"
+                onClick={(e) => handleMarkRead(e, n)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleMarkRead(e, n); }}
+                aria-label="Mark Read"
+                data-testid="mobile-dotnav-notification-markread"
               >
-                Ack
-              </span>
-              <span
-                role="button"
-                tabIndex={0}
-                className="dotnav-mobile-notif-action dotnav-mobile-notif-action-agree"
-                onClick={(e) => handleAcknowledge(e, n)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAcknowledge(e, n); }}
-                aria-label="Agree"
-                data-testid="mobile-dotnav-notification-agree"
-              >
-                Agree
+                Mark Read
               </span>
               <span
                 role="button"
@@ -229,13 +222,13 @@ const MobileDotNavNotification = ({
               <span
                 role="button"
                 tabIndex={0}
-                className="dotnav-mobile-notif-action dotnav-mobile-notif-action-decline"
-                onClick={(e) => handleDismiss(e, n)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleDismiss(e, n); }}
-                aria-label="Decline"
-                data-testid="mobile-dotnav-notification-decline"
+                className="dotnav-mobile-notif-action dotnav-mobile-notif-action-view"
+                onClick={(e) => handleView(e, n)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleView(e, n); }}
+                aria-label="View"
+                data-testid="mobile-dotnav-notification-view"
               >
-                Decline
+                View
               </span>
             </div>
           </button>

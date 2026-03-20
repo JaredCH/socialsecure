@@ -57,7 +57,7 @@
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   outline: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 #dotnav-dot:hover {
@@ -749,20 +749,12 @@
   transition: background 0.15s ease;
 }
 
-.dotnav-mobile-notif-action-ack {
+.dotnav-mobile-notif-action-markread {
   background: #dcfce7;
   color: #166534;
 }
-.dotnav-mobile-notif-action-ack:active {
+.dotnav-mobile-notif-action-markread:active {
   background: #bbf7d0;
-}
-
-.dotnav-mobile-notif-action-agree {
-  background: #dbeafe;
-  color: #1e40af;
-}
-.dotnav-mobile-notif-action-agree:active {
-  background: #bfdbfe;
 }
 
 .dotnav-mobile-notif-action-dismiss {
@@ -773,12 +765,12 @@
   background: #fde68a;
 }
 
-.dotnav-mobile-notif-action-decline {
-  background: #fee2e2;
-  color: #991b1b;
+.dotnav-mobile-notif-action-view {
+  background: #dbeafe;
+  color: #1e40af;
 }
-.dotnav-mobile-notif-action-decline:active {
-  background: #fecaca;
+.dotnav-mobile-notif-action-view:active {
+  background: #bfdbfe;
 }
 
 /* ── Reduced motion preference ── */
