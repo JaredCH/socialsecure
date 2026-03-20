@@ -1056,10 +1056,22 @@ function Chat({ isGuestMode = false }) {
     [allChatRooms]
   );
   const managedCountyRooms = useMemo(
-    () => allChatRooms
-      .filter((room) => room?.type === 'county')
-      .sort(sortRoomsByDiscoveryOrder),
-    [allChatRooms]
+    () => {
+      const countyRooms = allChatRooms
+        .filter((room) => room?.type === 'county')
+        .sort(sortRoomsByDiscoveryOrder);
+      if (profile?.isAdmin) return countyRooms;
+      const userState = String(profile?.state || '').trim().toUpperCase();
+      const userCounty = String(profile?.county || '').trim().toLowerCase();
+      if (!userState) return countyRooms;
+      return countyRooms.filter((room) => {
+        const roomState = String(room?.state || '').trim().toUpperCase();
+        if (roomState !== userState) return false;
+        if (userCounty && String(room?.county || '').trim().toLowerCase() === userCounty) return true;
+        return true;
+      });
+    },
+    [allChatRooms, profile?.isAdmin, profile?.state, profile?.county]
   );
   const defaultLandingRooms = useMemo(
     () => allChatRooms.filter((room) => room?.defaultLanding && getRoomDiscoveryGroup(room) === 'topics'),
