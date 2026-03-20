@@ -11,7 +11,7 @@ describe('newsCategoryFeeds production URL sanity', () => {
     }
   });
 
-  it('uses known-working replacements for previously failing sources', () => {
+  it('verifies critical feed URLs match expected working endpoints', () => {
     expect(CATEGORY_FEEDS.general.feeds).toContainEqual(
       expect.objectContaining({
         name: 'AP Top News',
