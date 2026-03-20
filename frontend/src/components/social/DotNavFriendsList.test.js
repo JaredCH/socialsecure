@@ -355,4 +355,44 @@ describe('DotNavFriendsList', () => {
     expect(initials).not.toBeNull();
     expect(initials.textContent).toBe('AB');
   });
+
+  it('parses friend locations from backend { friends: [...] } response format', async () => {
+    const geo = { getCurrentPosition: jest.fn(), watchPosition: jest.fn(), clearWatch: jest.fn() };
+    geo.watchPosition.mockImplementation((success) => {
+      success({ coords: { latitude: 30.2672, longitude: -97.7431 } });
+      return 1;
+    });
+    Object.defineProperty(global.navigator, 'geolocation', { value: geo, configurable: true });
+
+    const friend = makeFriend({
+      _id: 'u1',
+      username: 'alice',
+      realName: 'Alice A',
+      presence: { status: 'online' },
+    });
+
+    friendsAPI.getFriends.mockResolvedValue({ data: { friends: [friend] } });
+    // Backend returns { friends: [...] } format (not { locations: [...] })
+    mapsAPI.getFriendsLocations.mockResolvedValue({
+      data: {
+        friends: [
+          { user: { _id: 'u1' }, lat: 30.2672, lng: -97.7431 },
+        ],
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <DotNavFriendsList isOpen={true} side="right" loggedInUser="me" userId="uid1" />
+        </MemoryRouter>
+      );
+    });
+
+    // The distance badge should render because locations were parsed correctly
+    const distBadge = document.querySelector('.dotnav-friend-distance');
+    expect(distBadge).not.toBeNull();
+    // Distance from self (same coords) should be 0 Ft
+    expect(distBadge.textContent).toBe('0 Ft');
+  });
 });
