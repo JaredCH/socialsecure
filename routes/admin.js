@@ -30,7 +30,6 @@ const NewsPreferences = require('../models/NewsPreferences');
 const NewsLocation = require('../models/NewsLocation');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
 const RssSource = require('../models/RssSource');
-const ChatMessage = require('../models/ChatMessage');
 
 const router = express.Router();
 
@@ -994,57 +993,6 @@ router.post('/articles/dedup', async (req, res) => {
   } catch (err) {
     console.error('[admin] POST /articles/dedup error:', err);
     return res.status(500).json({ error: 'Dedup failed', message: err.message });
-  }
-});
-
-/**
- * POST /api/admin/cleanup/legacy-join-messages
- * TEMPORARY: Removes legacy system messages from chat rooms (e.g., "username joined RoomName")
- * This endpoint should be removed after the cleanup is complete.
- */
-router.post('/cleanup/legacy-join-messages', async (req, res) => {
-  const dryRun = req.query.dryRun === 'true';
-  const report = {
-    dryRun,
-    pattern: 'messageType=system AND content matches "[username] joined [room]"',
-    deletedMessages: [],
-    totalDeleted: 0,
-    errors: []
-  };
-
-  try {
-    // Find all system messages that match the legacy join pattern: "username joined ..."
-    const joinPattern = /^[^\s]+ joined /i;
-    
-    const systemMessages = await ChatMessage.find({
-      messageType: 'system',
-      content: { $regex: '.*joined.*' }
-    }).lean();
-
-    report.totalScanned = systemMessages.length;
-
-    // Filter to only those matching the exact pattern (username joined RoomName)
-    const legacyMessages = systemMessages.filter(msg => joinPattern.test(msg.content));
-
-    report.matchingCount = legacyMessages.length;
-
-    if (!dryRun && legacyMessages.length > 0) {
-      const messageIds = legacyMessages.map(msg => msg._id);
-      const deleteResult = await ChatMessage.deleteMany({ _id: { $in: messageIds } });
-      report.totalDeleted = deleteResult.deletedCount;
-      report.deletedMessages = legacyMessages.map(msg => ({
-        _id: msg._id.toString(),
-        roomId: msg.roomId.toString(),
-        content: msg.content
-      }));
-      console.log(`[admin] Deleted ${deleteResult.deletedCount} legacy join messages`);
-    }
-
-    return res.json({ ok: true, ...report });
-  } catch (err) {
-    console.error('[admin] POST /cleanup/legacy-join-messages error:', err);
-    report.errors.push(err.message);
-    return res.status(500).json({ ok: false, ...report });
   }
 });
 
