@@ -305,7 +305,7 @@ class JobRuntime {
 
       for (const { hour, minute } of timesUTC) {
         const candidate = new Date(now);
-        candidate.setUTCHours(hour, minute || 0, 0, 0);
+        candidate.setUTCHours(hour, minute ?? 0, 0, 0);
         if (candidate.getTime() <= now.getTime()) {
           candidate.setUTCDate(candidate.getUTCDate() + 1);
         }
@@ -336,14 +336,15 @@ class JobRuntime {
 
     scheduleNextRun();
 
-    // Fallback interval check
+    // Fallback interval check — detects missed executions within a 5-minute window
     job._timeOfDayHandle = setInterval(() => {
       const now = new Date();
       const hours = now.getUTCHours();
       const minutes = now.getUTCMinutes();
 
       for (const t of timesUTC) {
-        if (hours === t.hour && minutes < 5) {
+        const targetMinute = t.minute ?? 0;
+        if (hours === t.hour && minutes >= targetMinute && minutes < targetMinute + 5) {
           this.runJob(job.name).catch((err) => {
             console.error(`[jobRuntime] Fallback run error for "${job.name}":`, err);
           });

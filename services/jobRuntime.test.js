@@ -196,7 +196,7 @@ describe('JobRuntime', () => {
       // Advance time and verify handler isn't called more than expected
       jest.advanceTimersByTime(5000);
       // Handler called once from initial run, once from first interval tick
-      expect(handler.mock.calls.length).toBeLessThanOrEqual(2);
+      expect(handler.mock.calls.length).toBe(2);
     });
 
     test('throws for unknown job on start/stop', () => {

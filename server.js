@@ -26,6 +26,9 @@ const cleanEnv = (value) => {
   return trimmed.replace(/^['\"]|['\"]$/g, '');
 };
 
+const parseIntervalMinutes = (envVar, defaultVal, minVal) =>
+  Math.max(parseInt(process.env[envVar] || String(defaultVal), 10) || defaultVal, minVal);
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const nodeEnv = cleanEnv(process.env.NODE_ENV || 'development');
@@ -293,7 +296,7 @@ if (process.env.NODE_ENV !== 'test') {
     });
 
     // Event schedule ingestion
-    const eventIntervalMinutes = Math.max(parseInt(process.env.EVENT_INGESTION_CHECK_INTERVAL_MINUTES || '15', 10) || 15, 5);
+    const eventIntervalMinutes = parseIntervalMinutes('EVENT_INGESTION_CHECK_INTERVAL_MINUTES', 15, 5);
     jobRuntime.define('event-schedule-ingest', {
       handler: () => runEventScheduleIngestion(),
       queue: 'events',
@@ -302,7 +305,7 @@ if (process.env.NODE_ENV !== 'test') {
     });
 
     // Event room lifecycle reconciliation
-    const roomIntervalMinutes = Math.max(parseInt(process.env.EVENT_ROOM_LIFECYCLE_INTERVAL_MINUTES || '15', 10) || 15, 5);
+    const roomIntervalMinutes = parseIntervalMinutes('EVENT_ROOM_LIFECYCLE_INTERVAL_MINUTES', 15, 5);
     jobRuntime.define('event-room-lifecycle', {
       handler: () => reconcileEventRooms(),
       queue: 'events',
