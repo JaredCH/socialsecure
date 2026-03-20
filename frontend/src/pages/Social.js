@@ -4276,7 +4276,7 @@ const Social = () => {
                   return (
                     <article key={image._id} className="overflow-hidden rounded-[1.5rem] border shadow-sm" style={{ background: 'var(--bg-panel)', borderColor: 'color-mix(in srgb, var(--social-text-muted) 20%, transparent)' }}>
                       <button type="button" onClick={() => handleOpenGalleryImage(image._id)} className="block w-full">
-                        <img src={image.mediaUrl} alt="Gallery item" className="h-40 w-full cursor-zoom-in object-cover" />
+                        <img src={image.mediaUrl} alt="Gallery item" className="h-40 w-full cursor-zoom-in object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                       </button>
                       <div className="space-y-2.5 p-3">
                         <div className="flex items-start justify-between gap-3">
@@ -6176,7 +6176,7 @@ const Social = () => {
           </button>
           <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-4 lg:flex-row">
             <div className="relative flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-white/20 bg-black/40 p-2 sm:p-4">
-              <img src={activeGalleryImage.mediaUrl} alt={activeGalleryImage.title || 'Gallery item'} className="max-h-full max-w-full rounded-xl object-contain" />
+              <img src={activeGalleryImage.mediaUrl} alt={activeGalleryImage.title || 'Gallery item'} className="max-h-full max-w-full rounded-xl object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             </div>
             <aside className="flex w-full flex-col rounded-2xl border border-white/20 bg-white/95 p-4 text-slate-900 lg:w-[360px]">
               <div className="mb-3">

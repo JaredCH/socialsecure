@@ -138,6 +138,59 @@ app.use('/api/', (req, res, next) => {
 app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Serve uploaded gallery images with a MongoDB fallback.  Gallery uploads are
+// written to the local filesystem *and* persisted as binary data in MongoDB.
+// On platforms with ephemeral filesystems (e.g. Railway) the disk copy is lost
+// after every deploy, so when express.static would 404 we fall back to the
+// database copy and lazily restore the file on disk for future requests.
+const GALLERY_UPLOAD_PATH_REGEX = /^\/([a-f0-9]{24})\/([a-z0-9._-]+\.(jpe?g|png|gif|webp|bmp))$/i;
+const galleryUploadsDir = path.join(__dirname, 'uploads', 'gallery');
+app.use('/uploads/gallery', async (req, res, next) => {
+  if (req.method !== 'GET') return next();
+  const match = req.path.match(GALLERY_UPLOAD_PATH_REGEX);
+  if (!match) return next();
+
+  const [, ownerId, fileName] = match;
+
+  // Defence-in-depth: reject filenames containing path traversal sequences.
+  if (fileName.includes('..')) return next();
+
+  const filePath = path.join(galleryUploadsDir, ownerId, fileName);
+
+  try {
+    // If the file exists on disk, let express.static serve it.
+    await fs.promises.access(filePath);
+    return next();
+  } catch {
+    // File is missing from disk — try to serve from MongoDB.
+  }
+
+  try {
+    const GalleryImage = require('./models/GalleryImage');
+    const image = await GalleryImage.findOne(
+      { ownerId, storageFileName: fileName, mediaType: 'upload' }
+    ).select('+imageData +mimeType').lean();
+
+    if (!image?.imageData) return next();
+
+    // Lazily restore the file on disk so future requests are served by express.static.
+    const ownerDir = path.join(galleryUploadsDir, ownerId);
+    await fs.promises.mkdir(ownerDir, { recursive: true }).catch((err) => {
+      console.warn('Gallery fallback: failed to create directory', ownerDir, err.message);
+    });
+    await fs.promises.writeFile(filePath, image.imageData).catch((err) => {
+      console.warn('Gallery fallback: failed to restore file', filePath, err.message);
+    });
+
+    res.set('Content-Type', image.mimeType || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    return res.send(image.imageData);
+  } catch (error) {
+    console.error('Gallery MongoDB fallback error:', error);
+    return next();
+  }
+});
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // MongoDB connection
