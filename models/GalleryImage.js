@@ -77,6 +77,15 @@ const galleryImageSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  imageData: {
+    type: Buffer,
+    default: null,
+    select: false
+  },
+  mimeType: {
+    type: String,
+    default: null
+  },
   reactions: {
     type: [galleryReactionSchema],
     default: []

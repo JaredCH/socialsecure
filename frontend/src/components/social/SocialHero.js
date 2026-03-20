@@ -275,6 +275,7 @@ const SocialHero = ({
                 src={avatarUrl} 
                 alt={name}
                 className="w-full h-full object-cover"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             ) : (
               <div 

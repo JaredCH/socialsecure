@@ -217,7 +217,7 @@ const SocialStageSettingsSidebar = ({
             {heroBackgroundImage ? (
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex h-20 items-center justify-center overflow-hidden rounded-xl bg-slate-200">
-                  <img src={heroBackgroundImage} alt="Hero background preview" className="h-full w-full object-cover" />
+                  <img src={heroBackgroundImage} alt="Hero background preview" className="h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-700">Display Mode</label>
@@ -437,7 +437,7 @@ const SocialStageSettingsSidebar = ({
             {bodyBackgroundImage ? (
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex h-20 items-center justify-center overflow-hidden rounded-xl bg-slate-200">
-                  <img src={bodyBackgroundImage} alt="Body background preview" className="h-full w-full object-cover" />
+                  <img src={bodyBackgroundImage} alt="Body background preview" className="h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-700">Display Mode</label>

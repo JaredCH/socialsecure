@@ -437,6 +437,9 @@ router.post(
       let mediaType = 'url';
       let storageFileName = null;
 
+      let uploadedMimeType = null;
+      let uploadedBuffer = null;
+
       if (req.file) {
         const mimeType = String(req.file.mimetype || '').toLowerCase();
         const ext = path.extname(String(req.file.originalname || '')).toLowerCase();
@@ -460,6 +463,8 @@ router.post(
         mediaUrl = `/uploads/gallery/${String(owner._id)}/${fileName}`;
         mediaType = 'upload';
         storageFileName = fileName;
+        uploadedMimeType = mimeType;
+        uploadedBuffer = req.file.buffer;
       } else {
         const validation = validateImageUrl(getRequestedMediaUrl(req.body));
         if (!validation.ok) {
@@ -475,7 +480,8 @@ router.post(
         storageFileName,
         title,
         caption,
-        relationshipAudience
+        relationshipAudience,
+        ...(uploadedBuffer ? { imageData: uploadedBuffer, mimeType: uploadedMimeType } : {})
       });
 
       logRelationshipAudienceEvent({
