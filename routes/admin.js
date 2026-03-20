@@ -996,4 +996,38 @@ router.post('/articles/dedup', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Job Runtime – health & status
+// ---------------------------------------------------------------------------
+
+const { runtime: jobRuntime } = require('../services/jobRuntime');
+
+/**
+ * GET /api/admin/jobs/health
+ * Returns an overall health report for all registered jobs.
+ */
+router.get('/jobs/health', (_req, res) => {
+  res.json(jobRuntime.getHealthReport());
+});
+
+/**
+ * GET /api/admin/jobs
+ * Returns status of all registered jobs.
+ */
+router.get('/jobs', (_req, res) => {
+  res.json({ jobs: jobRuntime.getAllStatus(), timestamp: new Date().toISOString() });
+});
+
+/**
+ * GET /api/admin/jobs/:name
+ * Returns status of a single job by name.
+ */
+router.get('/jobs/:name', (req, res) => {
+  const status = jobRuntime.getStatus(req.params.name);
+  if (!status) {
+    return res.status(404).json({ error: `Job "${req.params.name}" not found` });
+  }
+  return res.json(status);
+});
+
 module.exports = router;

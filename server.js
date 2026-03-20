@@ -9,10 +9,11 @@ const path = require('path');
 require('dotenv').config();
 const { initializeRealtime } = require('./services/realtime');
 const { ensureUniversalAdminAccount } = require('./services/universalAdmin');
-const { startEventScheduleIngestionScheduler } = require('./services/eventScheduleIngestion');
-const { startEventRoomLifecycleScheduler } = require('./services/eventRoomLifecycle');
-const { startSportsScheduleScheduler } = require('./services/sportsScheduleIngestion');
-const { startArticleCleanupScheduler } = require('./services/newsArticleCleanup');
+const { runEventScheduleIngestion } = require('./services/eventScheduleIngestion');
+const { reconcileEventRooms } = require('./services/eventRoomLifecycle');
+const { runSportsScheduleIngestion } = require('./services/sportsScheduleIngestion');
+const { purgeOldArticles } = require('./services/newsArticleCleanup');
+const { runtime: jobRuntime } = require('./services/jobRuntime');
 
 const UNIVERSAL_ADMIN_USERNAME = 'ADMIN';
 const UNIVERSAL_ADMIN_EMAIL = 'admin@socialsecure.local';
@@ -232,34 +233,95 @@ try {
   console.error('Failed to mount route /api/maps:', error);
 }
 
-// Start news ingestion scheduler
+// ── Job Runtime: register all scheduled/background jobs ─────────────────
 if (process.env.NODE_ENV !== 'test') {
   try {
-    if (newsRoutes && typeof newsRoutes.startIngestionScheduler === 'function') {
-      newsRoutes.startIngestionScheduler();
+    // Maps jobs
+    if (mapsRoutes) {
+      if (typeof mapsRoutes.cleanupJob === 'function') {
+        jobRuntime.define('spotlight-cleanup', {
+          handler: mapsRoutes.cleanupJob,
+          queue: 'maps',
+          description: 'Remove expired spotlights',
+          schedule: { type: 'interval', intervalMs: 15 * 60 * 1000 },
+        });
+      }
+      if (typeof mapsRoutes.heatmapJob === 'function') {
+        jobRuntime.define('heatmap-recompute', {
+          handler: mapsRoutes.heatmapJob,
+          queue: 'maps',
+          description: 'Recompute heatmap aggregation tiles',
+          schedule: { type: 'interval', intervalMs: 10 * 60 * 1000 },
+        });
+      }
     }
-  } catch (error) {
-    console.error('Failed to start news ingestion scheduler:', error);
-  }
-}
 
-// Start sports schedule ingestion scheduler (3am/3pm UTC)
-if (process.env.NODE_ENV !== 'test') {
-  try {
-    startSportsScheduleScheduler();
-  } catch (error) {
-    console.error('Failed to start sports schedule scheduler:', error);
-  }
-}
+    // News ingestion jobs
+    if (newsRoutes) {
+      const { ingestAllCategories } = require('./services/newsIngestion.categories');
+      const { refreshAllCachedLocations } = require('./services/cacheRefreshWorker');
+      const { CACHE_TTL_MS } = require('./services/locationCacheService');
 
-// Start maps scheduled jobs
-if (process.env.NODE_ENV !== 'test') {
-  try {
-    if (mapsRoutes && typeof mapsRoutes.startScheduledJobs === 'function') {
-      mapsRoutes.startScheduledJobs();
+      const REFRESH_LEAD_MS = 5 * 60 * 1000;
+      const REFRESH_INTERVAL_MS = CACHE_TTL_MS - REFRESH_LEAD_MS;
+
+      jobRuntime.define('news-cache-refresh', {
+        handler: () => refreshAllCachedLocations(),
+        queue: 'news',
+        description: 'Refresh stale location news caches',
+        schedule: { type: 'interval', intervalMs: REFRESH_INTERVAL_MS, initialDelayMs: 5000 },
+      });
+
+      jobRuntime.define('news-category-ingest', {
+        handler: () => ingestAllCategories(),
+        queue: 'news',
+        description: 'Ingest category RSS feeds',
+        schedule: { type: 'interval', intervalMs: 60 * 60 * 1000, initialDelayMs: 10000 },
+      });
     }
+
+    // Sports schedule ingestion (3am & 3pm UTC)
+    jobRuntime.define('sports-schedule-ingest', {
+      handler: () => runSportsScheduleIngestion(),
+      queue: 'news',
+      description: 'Fetch sports schedules from ESPN',
+      schedule: {
+        type: 'timeOfDay',
+        timesUTC: [{ hour: 3, minute: 0 }, { hour: 15, minute: 0 }],
+        fallbackIntervalMs: 60 * 60 * 1000,
+      },
+    });
+
+    // Event schedule ingestion
+    const eventIntervalMinutes = Math.max(parseInt(process.env.EVENT_INGESTION_CHECK_INTERVAL_MINUTES || '15', 10) || 15, 5);
+    jobRuntime.define('event-schedule-ingest', {
+      handler: () => runEventScheduleIngestion(),
+      queue: 'events',
+      description: 'Poll for new community events',
+      schedule: { type: 'interval', intervalMs: eventIntervalMinutes * 60 * 1000 },
+    });
+
+    // Event room lifecycle reconciliation
+    const roomIntervalMinutes = Math.max(parseInt(process.env.EVENT_ROOM_LIFECYCLE_INTERVAL_MINUTES || '15', 10) || 15, 5);
+    jobRuntime.define('event-room-lifecycle', {
+      handler: () => reconcileEventRooms(),
+      queue: 'events',
+      description: 'Reconcile event chat rooms',
+      schedule: { type: 'interval', intervalMs: roomIntervalMinutes * 60 * 1000 },
+    });
+
+    // Article cleanup (daily)
+    jobRuntime.define('article-cleanup', {
+      handler: () => purgeOldArticles(),
+      queue: 'maintenance',
+      description: 'Purge old articles and ingestion records',
+      schedule: { type: 'interval', intervalMs: 24 * 60 * 60 * 1000, initialDelayMs: 30000 },
+    });
+
+    // Start all registered jobs
+    jobRuntime.startAll();
   } catch (error) {
-    console.error('Failed to start maps scheduled jobs:', error);
+    console.error('Failed to register/start job runtime:', error);
   }
 }
 
@@ -330,18 +392,4 @@ setNotificationIo(io);
 
 initializeRealtime(io);
 
-if (process.env.NODE_ENV !== 'test') {
-  try {
-    startEventScheduleIngestionScheduler();
-    startEventRoomLifecycleScheduler();
-  } catch (error) {
-    console.error('Failed to start event schedulers:', error);
-  }
-  try {
-    startArticleCleanupScheduler();
-  } catch (error) {
-    console.error('Failed to start article cleanup scheduler:', error);
-  }
-}
-
-module.exports = { app, server };
+module.exports = { app, server, jobRuntime };
