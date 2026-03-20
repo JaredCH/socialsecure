@@ -3153,7 +3153,7 @@ function Chat({ isGuestMode = false }) {
             </div>
           ) : null}
 
-          <div className="relative flex-1 min-h-0 overflow-hidden" data-testid="chat-message-panel">
+          <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden" data-testid="chat-message-panel">
             <ChatMessageList
               conversationId={activeConversationId}
               conversationType={activeConversation?.type}
@@ -3240,7 +3240,7 @@ function Chat({ isGuestMode = false }) {
             ) : null}
           </div>
 
-          <div className="mt-1 space-y-1 px-3 pb-2">
+          <div className="shrink-0 mt-1 space-y-1 px-3 pb-2">
             {localTyping ? (
               <div className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-jetbrains opacity-80 ${CHAT_STYLE.subtle}`}>
                 <span className="animate-pulse">●</span>
