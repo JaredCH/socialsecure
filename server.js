@@ -152,6 +152,10 @@ app.use('/uploads/gallery', async (req, res, next) => {
   if (!match) return next();
 
   const [, ownerId, fileName] = match;
+
+  // Defence-in-depth: reject filenames containing path traversal sequences.
+  if (fileName.includes('..')) return next();
+
   const filePath = path.join(galleryUploadsDir, ownerId, fileName);
 
   try {
@@ -172,8 +176,12 @@ app.use('/uploads/gallery', async (req, res, next) => {
 
     // Lazily restore the file on disk so future requests are served by express.static.
     const ownerDir = path.join(galleryUploadsDir, ownerId);
-    await fs.promises.mkdir(ownerDir, { recursive: true }).catch(() => {});
-    await fs.promises.writeFile(filePath, image.imageData).catch(() => {});
+    await fs.promises.mkdir(ownerDir, { recursive: true }).catch((err) => {
+      console.warn('Gallery fallback: failed to create directory', ownerDir, err.message);
+    });
+    await fs.promises.writeFile(filePath, image.imageData).catch((err) => {
+      console.warn('Gallery fallback: failed to restore file', filePath, err.message);
+    });
 
     res.set('Content-Type', image.mimeType || 'image/jpeg');
     res.set('Cache-Control', 'public, max-age=86400');
