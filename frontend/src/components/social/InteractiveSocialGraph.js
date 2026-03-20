@@ -593,10 +593,13 @@ function InteractiveSocialGraph({ circles = [], profileLabel = 'User', accentCol
     if (!ctx) return;
 
     let running = true;
+    let lastTimestamp = 0;
 
-    const tick = () => {
+    const tick = (timestamp) => {
       if (!running) return;
-      timeRef.current += 16; // ~60fps
+      const delta = lastTimestamp ? timestamp - lastTimestamp : 16;
+      lastTimestamp = timestamp;
+      timeRef.current += delta;
 
       const currentMode = modeRef.current;
       const tr = transitionRef.current;
