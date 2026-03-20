@@ -416,7 +416,7 @@ export default function Friends({ user }) {
               >
                 {i < topFriends.length
                   ? (topFriends[i].avatarUrl
-                      ? <img src={topFriends[i].avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+                      ? <img src={topFriends[i].avatarUrl} alt={topFriends[i].username} className="h-full w-full rounded-full object-cover" />
                       : <span className="text-sm">⭐</span>)
                   : (i + 1)}
               </div>
@@ -428,7 +428,7 @@ export default function Friends({ user }) {
               <p className="text-lg">⭐</p>
               <p className="mt-1 text-sm font-medium text-slate-500">No top friends yet</p>
               <p className="mt-1 text-xs text-slate-400">
-                Switch to the <button type="button" onClick={() => setActiveTab('friends')} className="font-semibold text-blue-600 hover:underline">Friends</button> tab and click <span className="font-semibold text-amber-600">⭐ Top</span> to add.
+                Switch to the <button type="button" onClick={() => setActiveTab('friends')} className="font-semibold text-blue-600 hover:underline" aria-label="Switch to Friends tab">Friends</button> tab and click <span className="font-semibold text-amber-600">⭐ Top</span> to add.
               </p>
             </div>
           ) : (
