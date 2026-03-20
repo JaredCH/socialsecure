@@ -299,7 +299,7 @@ export default function Friends({ user }) {
 
   const tabs = [
     { id: 'friends', label: `Friends (${friends.length})` },
-    { id: 'top', label: 'Top 5' },
+    { id: 'top', label: '⭐ Top 5' },
     { id: 'requests', label: `Requests${incomingRequests.length ? ` (${incomingRequests.length})` : ''}` },
     { id: 'search', label: 'Find Friends' },
     { id: 'circles', label: `Circles (${circles.length})` },
@@ -378,7 +378,7 @@ export default function Friends({ user }) {
                       ariaLabel={`Category for ${f.username}`}
                     />
                     {!topFriends.some((tf) => tf._id === f._id) && topFriends.length < TOP_FRIENDS_LIMIT && (
-                      <button onClick={() => addToTop(f)} className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">⭐ Top</button>
+                      <button onClick={() => addToTop(f)} className="rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100">⭐ Top</button>
                     )}
                     <button onClick={() => removeFriend(f.friendshipId)} className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100">Remove</button>
                   </div>
@@ -392,15 +392,53 @@ export default function Friends({ user }) {
       {/* ═══ TOP 5 TAB ═══ */}
       {activeTab === 'top' && (
         <div>
-          <p className="mb-4 text-sm text-slate-500">Your top {TOP_FRIENDS_LIMIT} friends are highlighted on your profile. Drag to reorder.</p>
+          <div className="mb-5 flex items-center gap-3">
+            <span className="text-2xl">⭐</span>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Your Top {TOP_FRIENDS_LIMIT}</h2>
+              <p className="text-sm text-slate-500">Featured on your profile. Use arrows to reorder.</p>
+            </div>
+            <span className="ml-auto rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+              {topFriends.length}/{TOP_FRIENDS_LIMIT}
+            </span>
+          </div>
+
+          {/* Slot indicators */}
+          <div className="mb-5 flex gap-2">
+            {Array.from({ length: TOP_FRIENDS_LIMIT }).map((_, i) => (
+              <div
+                key={i}
+                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors ${
+                  i < topFriends.length
+                    ? 'border-amber-400 bg-amber-50 text-amber-600'
+                    : 'border-dashed border-slate-200 bg-slate-50 text-slate-300'
+                }`}
+              >
+                {i < topFriends.length
+                  ? (topFriends[i].avatarUrl
+                      ? <img src={topFriends[i].avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+                      : <span className="text-sm">⭐</span>)
+                  : (i + 1)}
+              </div>
+            ))}
+          </div>
+
           {topFriends.length === 0 ? (
-            <p className="py-8 text-center text-slate-400">No top friends set. Go to Friends tab and click ⭐ Top to add.</p>
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 py-10 text-center">
+              <p className="text-lg">⭐</p>
+              <p className="mt-1 text-sm font-medium text-slate-500">No top friends yet</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Switch to the <button type="button" onClick={() => setActiveTab('friends')} className="font-semibold text-blue-600 hover:underline">Friends</button> tab and click <span className="font-semibold text-amber-600">⭐ Top</span> to add.
+              </p>
+            </div>
           ) : (
             <div className="space-y-2">
               {topFriends.map((tf, idx) => (
-                <div key={tf._id} className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                <div key={tf._id} className="flex items-center justify-between rounded-lg border border-amber-200/60 bg-amber-50/40 p-3 transition-colors hover:bg-amber-50/70">
                   <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-blue-400">#{idx + 1}</span>
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">
+                      {idx + 1}
+                    </span>
                     <Avatar url={tf.avatarUrl} size="w-9 h-9" />
                     <div>
                       <Link to={`/social?user=${encodeURIComponent(tf.username)}`} className="text-sm font-semibold text-slate-900 hover:text-blue-700">
@@ -409,10 +447,10 @@ export default function Friends({ user }) {
                       {tf.realName && <p className="text-xs text-slate-500">{tf.realName}</p>}
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button disabled={idx === 0} onClick={() => moveTop(idx, 'up')} className="rounded bg-slate-100 px-2 py-1 text-xs disabled:opacity-40">↑</button>
-                    <button disabled={idx === topFriends.length - 1} onClick={() => moveTop(idx, 'down')} className="rounded bg-slate-100 px-2 py-1 text-xs disabled:opacity-40">↓</button>
-                    <button onClick={() => removeFromTop(tf._id)} className="rounded bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100">✕</button>
+                  <div className="flex items-center gap-1">
+                    <button disabled={idx === 0} onClick={() => moveTop(idx, 'up')} className="rounded bg-white px-2 py-1 text-xs font-medium text-slate-500 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:shadow-none">↑</button>
+                    <button disabled={idx === topFriends.length - 1} onClick={() => moveTop(idx, 'down')} className="rounded bg-white px-2 py-1 text-xs font-medium text-slate-500 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:shadow-none">↓</button>
+                    <button onClick={() => removeFromTop(tf._id)} className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100">✕</button>
                   </div>
                 </div>
               ))}
