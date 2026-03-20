@@ -86,8 +86,36 @@ describe('Friends category and top5 routes', () => {
 
     expect(response.status).toBe(200);
     expect(friendshipDoc.requesterCategory).toBe('secure');
+    expect(friendshipDoc.requesterRelationshipAudience).toBe('secure');
     expect(friendshipDoc.save).toHaveBeenCalled();
     expect(response.body).toMatchObject({ success: true, category: 'secure' });
+  });
+
+  it('syncs requesterRelationshipAudience when demoting from secure to social', async () => {
+    const friendshipDoc = {
+      _id: '507f1f77bcf86cd799439099',
+      requester: { toString: () => '507f1f77bcf86cd799439011' },
+      recipient: { toString: () => '507f1f77bcf86cd799439022' },
+      status: 'accepted',
+      requesterCategory: 'secure',
+      requesterRelationshipAudience: 'secure',
+      recipientCategory: 'social',
+      recipientRelationshipAudience: 'social',
+      save: jest.fn().mockResolvedValue(true)
+    };
+    mockFriendship.findById.mockResolvedValue(friendshipDoc);
+
+    const app = buildApp();
+    const response = await request(app)
+      .put('/api/friends/507f1f77bcf86cd799439099/category')
+      .set('Authorization', 'Bearer token')
+      .send({ category: 'social' });
+
+    expect(response.status).toBe(200);
+    expect(friendshipDoc.requesterCategory).toBe('social');
+    expect(friendshipDoc.requesterRelationshipAudience).toBe('social');
+    expect(friendshipDoc.save).toHaveBeenCalled();
+    expect(response.body).toMatchObject({ success: true, category: 'social' });
   });
 
   it('rejects category updates when friendship is not accepted', async () => {
