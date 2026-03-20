@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 
 const { createNotification, publish } = require('../services/notifications');
+const { normalizeSecurityPreferences } = require('../services/unifiedPreferences');
 const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
 const { resolveCanonicalLocationInput } = require('../services/newsLocationMaster');
 const {
@@ -342,31 +343,7 @@ const authenticateToken = async (req, res, next) => {
   next();
 };
 
-const sanitizeSecurityPreferences = (input = {}) => {
-  const defaults = {
-    loginNotifications: true,
-    sessionTimeout: 60,
-    requirePasswordForSensitive: true
-  };
-
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return defaults;
-  }
-
-  const sessionTimeout = Number.parseInt(input.sessionTimeout, 10);
-
-  return {
-    loginNotifications: typeof input.loginNotifications === 'boolean'
-      ? input.loginNotifications
-      : defaults.loginNotifications,
-    sessionTimeout: Number.isInteger(sessionTimeout)
-      ? Math.min(Math.max(sessionTimeout, 5), 1440)
-      : defaults.sessionTimeout,
-    requirePasswordForSensitive: typeof input.requirePasswordForSensitive === 'boolean'
-      ? input.requirePasswordForSensitive
-      : defaults.requirePasswordForSensitive
-  };
-};
+const sanitizeSecurityPreferences = (input = {}) => normalizeSecurityPreferences(input);
 
 const buildCompletedSteps = (status, onboardingStep) => {
   if (status === 'completed') {
