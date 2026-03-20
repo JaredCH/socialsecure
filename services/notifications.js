@@ -123,6 +123,8 @@ const emitRealtime = (recipientId, payload) => {
 
 /**
  * Check whether the current time falls inside the user's quiet hours.
+ * NOTE: Currently evaluates in UTC. The timezone field is stored for future
+ * use when a timezone library (e.g. luxon) is added.
  */
 const isInQuietHours = (preferences) => {
   const qh = preferences?.quietHours;

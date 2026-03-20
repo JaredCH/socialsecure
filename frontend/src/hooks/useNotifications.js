@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { notificationAPI } from '../utils/api';
 
+const DEFAULT_PAGE_SIZE = 20;
+
 /**
  * Shared hook for the notification inbox (active or history).
  *
  * @param {Object}  options
  * @param {boolean} options.history  – when true, fetches history instead of active
  * @param {Object}  options.incomingNotification – latest incoming real-time notification
+ * @param {number}  options.pageSize – items per page (default: 20)
  */
-export function useNotificationInbox({ history = false, incomingNotification = null } = {}) {
+export function useNotificationInbox({ history = false, incomingNotification = null, pageSize = DEFAULT_PAGE_SIZE } = {}) {
   const [notifications, setNotifications] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -21,7 +24,7 @@ export function useNotificationInbox({ history = false, incomingNotification = n
     setError(null);
     try {
       const fetcher = history ? notificationAPI.getHistory : notificationAPI.getNotifications;
-      const res = await fetcher(p, 20);
+      const res = await fetcher(p, pageSize);
       const data = res.data;
       const items = data.notifications || [];
 

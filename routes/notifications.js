@@ -390,7 +390,7 @@ router.put('/preferences', [
 
 router.get('/grouped', authenticateToken, async (req, res) => {
   try {
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
 
     const groups = await Notification.aggregate([
       { $match: { recipientId: req.user._id, status: 'active' } },

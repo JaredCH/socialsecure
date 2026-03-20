@@ -52,8 +52,10 @@ const deliveryAttemptSchema = new mongoose.Schema({
   timestamps: true
 });
 
+const DELIVERY_ATTEMPT_RETENTION_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
 deliveryAttemptSchema.index({ notificationId: 1, channel: 1 });
 deliveryAttemptSchema.index({ status: 1, nextRetryAt: 1 });
-deliveryAttemptSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 });
+deliveryAttemptSchema.index({ createdAt: 1 }, { expireAfterSeconds: DELIVERY_ATTEMPT_RETENTION_SECONDS });
 
 module.exports = mongoose.model('DeliveryAttempt', deliveryAttemptSchema);
