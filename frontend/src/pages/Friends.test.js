@@ -10,8 +10,10 @@ jest.mock('../utils/api', () => ({
     getIncomingRequests: jest.fn(),
     getOutgoingRequests: jest.fn(),
     getTopFriends: jest.fn(),
+    updateTopFriends: jest.fn(),
     sendRequest: jest.fn(),
-    removeFriend: jest.fn()
+    removeFriend: jest.fn(),
+    updateFriendCategory: jest.fn()
   },
   circlesAPI: {
     getCircles: jest.fn()
@@ -141,5 +143,93 @@ describe('Friends page request flow', () => {
     });
 
     expect(discoveryAPI.getUsers).toHaveBeenCalledWith('alice', 1, 25);
+  });
+
+  it('renders the Top 5 tab with existing top friends', async () => {
+    friendsAPI.getTopFriends.mockResolvedValueOnce({
+      data: {
+        topFriends: [
+          { _id: 'tf-1', username: 'alice', realName: 'Alice A', avatarUrl: '' },
+          { _id: 'tf-2', username: 'bob', realName: 'Bob B', avatarUrl: '' }
+        ]
+      }
+    });
+
+    await renderPage();
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((b) => b.textContent.includes('Top 5'))?.click();
+    });
+
+    expect(container.textContent).toContain('@alice');
+    expect(container.textContent).toContain('@bob');
+    expect(container.textContent).toContain('2/5');
+  });
+
+  it('shows empty state with link to friends tab when no top friends exist', async () => {
+    await renderPage();
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((b) => b.textContent.includes('Top 5'))?.click();
+    });
+
+    expect(container.textContent).toContain('No top friends yet');
+    expect(container.textContent).toContain('0/5');
+  });
+
+  it('adds a friend to top 5 via the star button in friends tab', async () => {
+    friendsAPI.getFriends.mockResolvedValueOnce({
+      data: {
+        friends: [
+          { _id: 'u-1', username: 'carol', realName: 'Carol C', friendshipId: 'fs-1', category: 'social' }
+        ]
+      }
+    });
+    friendsAPI.updateTopFriends.mockResolvedValue({ data: { success: true } });
+    friendsAPI.getTopFriends
+      .mockResolvedValueOnce({ data: { topFriends: [] } })
+      .mockResolvedValueOnce({
+        data: { topFriends: [{ _id: 'u-1', username: 'carol', realName: 'Carol C' }] }
+      });
+
+    await renderPage();
+
+    const starBtn = Array.from(container.querySelectorAll('button'))
+      .find((b) => b.textContent === '⭐ Top');
+    expect(starBtn).toBeTruthy();
+
+    await act(async () => {
+      starBtn.click();
+    });
+
+    expect(friendsAPI.updateTopFriends).toHaveBeenCalledWith(['u-1']);
+  });
+
+  it('removes a friend from top 5 via the remove button', async () => {
+    friendsAPI.getTopFriends.mockResolvedValueOnce({
+      data: {
+        topFriends: [
+          { _id: 'tf-1', username: 'alice', realName: 'Alice A', avatarUrl: '' }
+        ]
+      }
+    });
+    friendsAPI.updateTopFriends.mockResolvedValue({ data: { success: true } });
+    friendsAPI.getTopFriends.mockResolvedValueOnce({ data: { topFriends: [] } });
+
+    await renderPage();
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((b) => b.textContent.includes('Top 5'))?.click();
+    });
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((b) => b.textContent === '✕')?.click();
+    });
+
+    expect(friendsAPI.updateTopFriends).toHaveBeenCalledWith([]);
   });
 });

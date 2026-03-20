@@ -62,7 +62,7 @@ topFriendSchema.statics.updateOrder = async function(userId, friendIds) {
   
   // Validate all friends are accepted
   const Friendship = require('./Friendship');
-  const userObjectId = mongoose.Types.ObjectId(userId);
+  const userObjectId = new mongoose.Types.ObjectId(userId);
   
   for (const friendId of uniqueFriendIds) {
     const friendship = await Friendship.findFriendship(userObjectId, friendId);
@@ -76,7 +76,7 @@ topFriendSchema.statics.updateOrder = async function(userId, friendIds) {
   // Update the order (removes duplicates, keeps order)
   topFriend.maxFriends = TOP_FRIENDS_LIMIT;
   topFriend.friends = uniqueFriendIds.map(id => 
-    mongoose.Types.ObjectId(id)
+    new mongoose.Types.ObjectId(id)
   );
   
   await topFriend.save();
@@ -121,7 +121,7 @@ topFriendSchema.methods.reorder = async function(newOrder) {
     }
   }
   
-  this.friends = newOrder.map(id => mongoose.Types.ObjectId(id));
+  this.friends = newOrder.map(id => new mongoose.Types.ObjectId(id));
   await this.save();
   return this;
 };

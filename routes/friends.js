@@ -789,13 +789,14 @@ router.get('/top/:userIdOrUsername', authenticateToken, async (req, res) => {
     const isFriend = await Friendship.findFriendship(req.user._id, targetUser._id);
     const isFriendStatus = isFriend && isFriend.status === 'accepted';
     
-    let canViewTopFriends = false;
-    if (targetUser.topFriendsPrivacy === 'public') {
-      canViewTopFriends = true;
-    } else if (targetUser.topFriendsPrivacy === 'friends' && (isOwner || isFriendStatus)) {
-      canViewTopFriends = true;
-    } else if (targetUser.topFriendsPrivacy === 'private' && isOwner) {
-      canViewTopFriends = true;
+    let canViewTopFriends = isOwner;
+    if (!canViewTopFriends) {
+      const privacy = targetUser.topFriendsPrivacy || 'public';
+      if (privacy === 'public') {
+        canViewTopFriends = true;
+      } else if (privacy === 'friends' && isFriendStatus) {
+        canViewTopFriends = true;
+      }
     }
     
     if (!canViewTopFriends) {
