@@ -94,6 +94,9 @@ const SocialStageSettingsSidebar = ({
     setBodyBgDraft(bodyBackgroundImage || '');
   }, [bodyBackgroundImage]);
 
+  const [heroAdvancedOpen, setHeroAdvancedOpen] = useState(false);
+  const [bodyAdvancedOpen, setBodyAdvancedOpen] = useState(false);
+
   if (!isOpen) return null;
   const themeValues = themeOptions.map((option) => option.value);
   const resolvedThemePreset = themeValues.includes(themePreset)
@@ -101,18 +104,23 @@ const SocialStageSettingsSidebar = ({
     : (themeValues[0] || 'default');
 
   return createPortal(
-    <div className={`fixed inset-0 ${SIDEBAR_OVERLAY_Z_INDEX_CLASS} pointer-events-none`}>
-      <button
-        type="button"
+    <div className={`fixed inset-0 ${SIDEBAR_OVERLAY_Z_INDEX_CLASS}`}>
+      <div
+        role="button"
+        tabIndex={-1}
         aria-label="Close stage settings backdrop"
         onClick={onClose}
-        className="absolute inset-0 z-0 bg-slate-950/55 backdrop-blur-sm pointer-events-auto"
+        onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
+        className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
       />
-      <div className={`relative z-10 ml-auto flex h-full w-full max-w-[26rem] flex-col border-l border-slate-200 bg-white ${SIDEBAR_PANEL_SHADOW_CLASS} pointer-events-auto`}>
-        <div className="flex items-center justify-between border-b border-blue-100 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-5 py-4 text-white">
+      <div
+        className={`absolute inset-y-0 right-0 z-10 flex w-full max-w-full sm:max-w-[26rem] flex-col border-l border-slate-200 bg-white ${SIDEBAR_PANEL_SHADOW_CLASS}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-blue-100 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-4 py-3 text-white sm:px-5 sm:py-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-blue-100">Profile Customizer</p>
-            <h2 className="text-xl font-semibold">Stage Settings</h2>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-blue-100 sm:text-xs">Profile Customizer</p>
+            <h2 className="text-lg font-semibold sm:text-xl">Stage Settings</h2>
           </div>
           <button
             type="button"
@@ -123,7 +131,7 @@ const SocialStageSettingsSidebar = ({
           </button>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto bg-slate-50 px-5 py-5">
+        <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50 px-4 py-4 sm:space-y-5 sm:px-5 sm:py-5">
           {error ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
           {successMessage ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{successMessage}</div> : null}
 
@@ -233,7 +241,7 @@ const SocialStageSettingsSidebar = ({
                 </div>
                 <div>
                   <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                    Dark overlay
+                    Darkness
                     <span className="text-slate-400">{Math.round((heroBackgroundOverlay || 0) * 100)}%</span>
                   </label>
                   <input
@@ -247,38 +255,51 @@ const SocialStageSettingsSidebar = ({
                     data-testid="hero-overlay-slider"
                   />
                 </div>
-                <div>
-                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                    Grain / Noise
-                    <span className="text-slate-400">{Math.round((heroBackgroundGrain || 0) * 100)}%</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={heroBackgroundGrain || 0}
-                    onChange={(event) => onHeroBackgroundGrainChange(parseFloat(event.target.value))}
-                    className="mt-1 w-full accent-blue-600"
-                    data-testid="hero-grain-slider"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                    Blur
-                    <span className="text-slate-400">{heroBackgroundBlur || 0}px</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="20"
-                    step="1"
-                    value={heroBackgroundBlur || 0}
-                    onChange={(event) => onHeroBackgroundBlurChange(parseInt(event.target.value, 10))}
-                    className="mt-1 w-full accent-blue-600"
-                    data-testid="hero-blur-slider"
-                  />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setHeroAdvancedOpen((prev) => !prev)}
+                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  data-testid="hero-advanced-toggle"
+                >
+                  Advanced
+                  <span className={`transition-transform ${heroAdvancedOpen ? 'rotate-180' : ''}`}>▾</span>
+                </button>
+                {heroAdvancedOpen && (
+                  <div className="space-y-3" data-testid="hero-advanced-section">
+                    <div>
+                      <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                        Grain / Noise
+                        <span className="text-slate-400">{Math.round((heroBackgroundGrain || 0) * 100)}%</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={heroBackgroundGrain || 0}
+                        onChange={(event) => onHeroBackgroundGrainChange(parseFloat(event.target.value))}
+                        className="mt-1 w-full accent-blue-600"
+                        data-testid="hero-grain-slider"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                        Blur
+                        <span className="text-slate-400">{heroBackgroundBlur || 0}px</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="20"
+                        step="1"
+                        value={heroBackgroundBlur || 0}
+                        onChange={(event) => onHeroBackgroundBlurChange(parseInt(event.target.value, 10))}
+                        className="mt-1 w-full accent-blue-600"
+                        data-testid="hero-blur-slider"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </section>
@@ -440,7 +461,7 @@ const SocialStageSettingsSidebar = ({
                 </div>
                 <div>
                   <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                    Dark overlay
+                    Darkness
                     <span className="text-slate-400">{Math.round((bodyBackgroundOverlay || 0) * 100)}%</span>
                   </label>
                   <input
@@ -453,36 +474,49 @@ const SocialStageSettingsSidebar = ({
                     className="mt-1 w-full accent-blue-600"
                   />
                 </div>
-                <div>
-                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                    Grain / Noise
-                    <span className="text-slate-400">{Math.round((bodyBackgroundGrain || 0) * 100)}%</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={bodyBackgroundGrain || 0}
-                    onChange={(event) => onBodyBackgroundGrainChange(parseFloat(event.target.value))}
-                    className="mt-1 w-full accent-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                    Blur
-                    <span className="text-slate-400">{bodyBackgroundBlur || 0}px</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="20"
-                    step="1"
-                    value={bodyBackgroundBlur || 0}
-                    onChange={(event) => onBodyBackgroundBlurChange(parseInt(event.target.value, 10))}
-                    className="mt-1 w-full accent-blue-600"
-                  />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setBodyAdvancedOpen((prev) => !prev)}
+                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  data-testid="body-advanced-toggle"
+                >
+                  Advanced
+                  <span className={`transition-transform ${bodyAdvancedOpen ? 'rotate-180' : ''}`}>▾</span>
+                </button>
+                {bodyAdvancedOpen && (
+                  <div className="space-y-3" data-testid="body-advanced-section">
+                    <div>
+                      <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                        Grain / Noise
+                        <span className="text-slate-400">{Math.round((bodyBackgroundGrain || 0) * 100)}%</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={bodyBackgroundGrain || 0}
+                        onChange={(event) => onBodyBackgroundGrainChange(parseFloat(event.target.value))}
+                        className="mt-1 w-full accent-blue-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                        Blur
+                        <span className="text-slate-400">{bodyBackgroundBlur || 0}px</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="20"
+                        step="1"
+                        value={bodyBackgroundBlur || 0}
+                        onChange={(event) => onBodyBackgroundBlurChange(parseInt(event.target.value, 10))}
+                        className="mt-1 w-full accent-blue-600"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </section>
@@ -546,68 +580,9 @@ const SocialStageSettingsSidebar = ({
               ))}
             </select>
           </section>
-
-          <section className="space-y-4 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Top Friends</h3>
-              <p className="mt-1 text-xs text-slate-500">Select up to {topFriendsLimit} friends for the Pulse rail and hero story bar.</p>
-            </div>
-
-            <div className="space-y-2">
-              {selectedTopFriends.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500">No top friends selected yet.</p>
-              ) : selectedTopFriends.map((friend, index) => (
-                <div key={friend._id || friend.username} className="flex items-center gap-3 rounded-2xl border border-blue-100 bg-white px-3 py-2 shadow-sm">
-                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl bg-blue-100 text-sm font-semibold text-blue-700">
-                    {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-900">@{friend.username}</p>
-                    <p className="truncate text-xs text-slate-500">{friend.realName || 'Friend'}</p>
-                  </div>
-                  <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-700">#{index + 1}</span>
-                  <div className="flex flex-col gap-1">
-                    <button type="button" onClick={() => onMoveTopFriend(index, 'up')} disabled={index === 0} className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40">↑</button>
-                    <button type="button" onClick={() => onMoveTopFriend(index, 'down')} disabled={index === selectedTopFriends.length - 1} className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40">↓</button>
-                  </div>
-                  <button type="button" onClick={() => onToggleTopFriend(friend._id)} className="rounded-xl border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Remove</button>
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Available friends</p>
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                {availableFriends.length === 0 ? (
-                  <p className="rounded-2xl border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500">Add friends to unlock Top Friends customization.</p>
-                ) : availableFriends.map((friend) => {
-                  const isSelected = selectedTopFriends.some((selected) => String(selected._id) === String(friend._id));
-                  return (
-                    <button
-                      key={friend._id}
-                      type="button"
-                      onClick={() => onToggleTopFriend(friend._id)}
-                      className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2 text-left shadow-sm transition ${isSelected ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40'}`}
-                    >
-                      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 text-sm font-semibold text-slate-700">
-                        {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-900">@{friend.username}</p>
-                        <p className="truncate text-xs text-slate-500">{friend.realName || 'Friend'}</p>
-                      </div>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${isSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {isSelected ? 'Selected' : 'Add'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
         </div>
 
-        <div className="border-t border-slate-200 bg-white px-5 py-4">
+        <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4">
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
