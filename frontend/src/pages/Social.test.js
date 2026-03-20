@@ -360,8 +360,7 @@ describe('Social page hero background rendering', () => {
 
     await expect(renderPage()).resolves.toBeUndefined();
 
-    // Owner controls like compose post should still be present (navigation moved to DotNav)
-    expect(container.textContent).toContain('Compose a new post');
+    // Owner controls should be present; post publishing restriction notice should not appear
     expect(container.textContent).not.toContain('Post publishing is available only in owner view.');
   });
 
@@ -510,9 +509,8 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).toContain('This owner has hidden calendar events for your current access level.');
   });
 
-  it('keeps composer hidden by default with a reveal action', async () => {
+  it('keeps composer hidden by default', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
-    expect(container.textContent).toContain('Compose');
     expect(container.textContent).not.toContain('The composer stays tucked away until you need to post.');
     expect(container.textContent).not.toContain('Publish Post');
   });
@@ -520,11 +518,11 @@ describe('Social page hero background rendering', () => {
   it('shows a 3-way Social/Secure/Public audience toggle and removes privacy chips', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
 
-    const revealComposerButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Compose a new post'));
-    expect(revealComposerButton).toBeTruthy();
+    const createPostButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Create a post'));
+    expect(createPostButton).toBeTruthy();
 
     await act(async () => {
-      revealComposerButton?.click();
+      createPostButton?.click();
     });
 
     expect(container.querySelector('[data-testid="composer-audience-social"]')).toBeTruthy();

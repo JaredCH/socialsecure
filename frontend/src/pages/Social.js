@@ -51,8 +51,6 @@ const MAX_HOBBIES = 10;
 const TYPING_TIMEOUT_MS = 900;
 const REMOTE_TYPING_TTL_MS = 3000;
 const MAX_UPCOMING_CALENDAR_ITEMS = 6;
-const GENTLE_PROFILE_HINT_STORAGE_KEY = 'socialsecure:social-profile-hints-disabled';
-const GENTLE_PROFILE_HINT_CHANCE = 0.15;
 const CODE_MODE_SNIPPETS = [
   { label: 'Bold', value: '**bold**', syntax: '**text**', description: 'Bold text', icon: 'B', requiresSelection: false },
   { label: 'Italic', value: '*italic*', syntax: '*text*', description: 'Italic text', icon: 'I', requiresSelection: false },
@@ -807,7 +805,6 @@ const Social = () => {
   const [personalInfoSaveBusy, setPersonalInfoSaveBusy] = useState(false);
   const [personalInfoSaveError, setPersonalInfoSaveError] = useState('');
   const [composerVisible, setComposerVisible] = useState(false);
-  const [showProfileCompletionHint, setShowProfileCompletionHint] = useState(false);
   const [showSlimHeader, setShowSlimHeader] = useState(false);
   const [enabledSections, setEnabledSections] = useState({ blog: false, resume: false, aboutme: false });
   const [blogPosts, setBlogPosts] = useState([]);
@@ -1097,31 +1094,6 @@ const Social = () => {
     }
     return `/friends?user=${encodeURIComponent(friendsUsername)}`;
   }, [resolvedProfileUsername, isOwnSocialContext]);
-  const handleProfileCompletionAction = useCallback((actionId) => {
-    if (actionId === 'details') {
-      setPersonalInfoModalOpen(true);
-      setShowProfileCompletionHint(false);
-      return;
-    }
-
-    if (actionId === 'gallery') {
-      setActiveHeroTab('gallery');
-      setShowProfileCompletionHint(false);
-      return;
-    }
-
-    if (actionId === 'post') {
-      setActiveHeroTab('main');
-      setComposerVisible(true);
-      setShowProfileCompletionHint(false);
-    }
-  }, []);
-  const dismissProfileCompletionHint = useCallback((persist = false) => {
-    setShowProfileCompletionHint(false);
-    if (persist && typeof window !== 'undefined') {
-      window.localStorage.setItem(GENTLE_PROFILE_HINT_STORAGE_KEY, '1');
-    }
-  }, []);
   const socialChatLabel = !isOwnSocialContext && activeProfile?.username
     ? `Message @${activeProfile.username}`
     : 'Open chat';
@@ -4883,54 +4855,6 @@ const Social = () => {
     }
     return Array.isArray(activeProfile?.personalInfo) ? activeProfile.personalInfo : [];
   }, [isOwnSocialContext, currentUser, activeProfile?.personalInfo]);
-  const profileCompletionItems = useMemo(() => {
-    if (!isOwnSocialContext || isGuestPreview) return [];
-
-    const items = [];
-
-    if (visiblePersonalInfoItems.length === 0) {
-      items.push({
-        id: 'details',
-        eyebrow: 'Complete profile',
-        title: 'Add a few details about yourself',
-        description: 'Work, hobbies, or a small personal note will make this page feel more lived in.',
-        actionLabel: 'Edit info'
-      });
-    }
-
-    if (posts.length === 0) {
-      items.push({
-        id: 'post',
-        eyebrow: 'Start the feed',
-        title: 'Publish your first update',
-        description: 'A short thought, status update, or pinned note is enough to warm up the timeline.',
-        actionLabel: 'Open composer'
-      });
-    }
-
-    if (galleryItems.length === 0) {
-      items.push({
-        id: 'gallery',
-        eyebrow: 'Add visuals',
-        title: 'Drop in a cover image or photo',
-        description: 'A single image helps the page feel complete and gives the hero something to echo.',
-        actionLabel: 'Open gallery'
-      });
-    }
-
-    return items;
-  }, [galleryItems.length, isGuestPreview, isOwnSocialContext, posts.length, visiblePersonalInfoItems.length]);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const hintsDisabled = window.localStorage.getItem(GENTLE_PROFILE_HINT_STORAGE_KEY) === '1';
-    if (!isOwnSocialContext || isGuestPreview || profileCompletionItems.length === 0 || hintsDisabled) {
-      setShowProfileCompletionHint(false);
-      return;
-    }
-
-    setShowProfileCompletionHint(Math.random() < GENTLE_PROFILE_HINT_CHANCE);
-  }, [activeProfile?._id, isGuestPreview, isOwnSocialContext, profileCompletionItems.length]);
   const liveTypingCount = Object.values(commentTypingByPostId).reduce((total, entry) => total + Object.keys(entry || {}).length, 0);
   const calendarCountdowns = posts.filter((post) => post?.interaction?.type === 'countdown').slice(0, 5);
   const calendarPreviewMonthDays = useMemo(
@@ -5695,7 +5619,6 @@ const Social = () => {
       default:
         return (
           <div className="space-y-6">
-            {renderProfileCompletionHint()}
             {ownerEditingEnabled && !isGuestPreview && composerVisible ? (
               renderGlassPanel('Composer', renderPanelBody('composer'), {
                 subtitle: 'Share an update to the center stage',
@@ -5710,16 +5633,6 @@ const Social = () => {
                   </button>
                 )
               })
-            ) : null}
-            {ownerEditingEnabled && !isGuestPreview && !composerVisible ? (
-              <button
-                type="button"
-                onClick={() => setComposerVisible(true)}
-                className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-white/10 px-4 py-3 text-sm text-slate-400 transition-all hover:border-white/20 hover:bg-white/[0.03] hover:text-slate-300"
-              >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>+</span>
-                <span className="font-medium">Compose a new post</span>
-              </button>
             ) : null}
             {renderGlassPanel('Feed', renderPanelBody('timeline'))}
             {renderGlassPanel('Gallery', renderPanelBody('gallery'))}
@@ -5745,56 +5658,6 @@ const Social = () => {
       }) : null}
     </div>
   );
-
-  const renderProfileCompletionHint = () => {
-    if (!showProfileCompletionHint || profileCompletionItems.length === 0) {
-      return null;
-    }
-
-    return (
-      <section className="rounded-[1.5rem] border border-amber-200/80 bg-white/88 p-4 shadow-[0_0_0_1px_rgba(253,230,138,0.72),0_18px_48px_rgba(245,158,11,0.16)]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-amber-700">Gentle nudge</p>
-            <p className="mt-2 text-base font-semibold text-slate-900">A couple of small touches would make this page feel complete.</p>
-            <p className="mt-1 text-sm leading-6 text-slate-600">These are optional. You can ignore them, hide this hint for now, or stop seeing it entirely.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => dismissProfileCompletionHint(false)}
-              className="rounded-full border border-slate-300 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"
-            >
-              Not now
-            </button>
-            <button
-              type="button"
-              onClick={() => dismissProfileCompletionHint(true)}
-              className="rounded-full border border-amber-200 px-3 py-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-50"
-            >
-              Do not show again
-            </button>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          {profileCompletionItems.slice(0, 3).map((item) => (
-            <div key={item.id} className="rounded-[1.25rem] border border-white/80 bg-white/95 p-4 shadow-sm">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">{item.eyebrow}</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">{item.title}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{item.description}</p>
-              <button
-                type="button"
-                onClick={() => handleProfileCompletionAction(item.id)}
-                className="mt-4 rounded-full border border-sky-200 px-3 py-1.5 text-[11px] font-semibold text-sky-700 transition hover:bg-sky-50"
-              >
-                {item.actionLabel}
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  };
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
