@@ -5,6 +5,9 @@ const User = require('../models/User');
 const Session = require('../models/Session');
 const {
   PREFERENCES_SCHEMA_VERSION,
+  VISIBILITY_LEVELS,
+  FRIEND_PRIVACY_LEVELS,
+  VALID_THEMES,
   buildUnifiedPreferences,
   getDefaults,
   normalizeNotificationPreferences,
@@ -12,9 +15,6 @@ const {
   normalizeSecurityPreferences,
   normalizePrivacyPreferences,
   normalizeUiPreferences,
-  DEFAULT_NOTIFICATION_PREFERENCES,
-  DEFAULT_REALTIME_PREFERENCES,
-  DEFAULT_SECURITY_PREFERENCES,
   DEFAULT_PRIVACY_PREFERENCES,
   DEFAULT_UI_PREFERENCES
 } = require('../services/unifiedPreferences');
@@ -106,7 +106,6 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       const p = input.privacy;
       if (p.profileFieldVisibility && typeof p.profileFieldVisibility === 'object') {
         const defaults = DEFAULT_PRIVACY_PREFERENCES.profileFieldVisibility;
-        const VISIBILITY_LEVELS = ['public', 'social', 'secure'];
         for (const [field, defaultLevel] of Object.entries(defaults)) {
           const val = p.profileFieldVisibility[field];
           $set[`profileFieldVisibility.${field}`] = VISIBILITY_LEVELS.includes(val)
@@ -115,19 +114,18 @@ router.put('/preferences', authenticateToken, async (req, res) => {
         }
       }
       if (p.friendListPrivacy) {
-        $set.friendListPrivacy = ['public', 'friends', 'private'].includes(p.friendListPrivacy)
+        $set.friendListPrivacy = FRIEND_PRIVACY_LEVELS.includes(p.friendListPrivacy)
           ? p.friendListPrivacy
           : DEFAULT_PRIVACY_PREFERENCES.friendListPrivacy;
       }
       if (p.topFriendsPrivacy) {
-        $set.topFriendsPrivacy = ['public', 'friends', 'private'].includes(p.topFriendsPrivacy)
+        $set.topFriendsPrivacy = FRIEND_PRIVACY_LEVELS.includes(p.topFriendsPrivacy)
           ? p.topFriendsPrivacy
           : DEFAULT_PRIVACY_PREFERENCES.topFriendsPrivacy;
       }
     }
 
     if (input.ui) {
-      const VALID_THEMES = ['default', 'light', 'dark', 'sunset', 'forest'];
       if (input.ui.profileTheme !== undefined) {
         $set.profileTheme = VALID_THEMES.includes(input.ui.profileTheme)
           ? input.ui.profileTheme

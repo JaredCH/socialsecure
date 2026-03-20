@@ -265,6 +265,11 @@ const getDefaults = () => ({
 module.exports = {
   PREFERENCES_SCHEMA_VERSION,
 
+  // Validation constants
+  VISIBILITY_LEVELS,
+  FRIEND_PRIVACY_LEVELS,
+  VALID_THEMES,
+
   // Domain defaults
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_REALTIME_PREFERENCES,

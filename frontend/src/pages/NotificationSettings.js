@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { settingsAPI, notificationAPI } from '../utils/api';
+import { settingsAPI } from '../utils/api';
 import {
   getBrowserNotificationPermission,
   isBrowserNotificationSupported,
@@ -82,11 +82,10 @@ const NotificationSettings = () => {
         const permission = await requestBrowserNotificationPermission();
         setBrowserPermission(permission);
       }
-      // Save through the legacy notification endpoint so that both the
-      // notificationPreferences and realtimePreferences fields are updated
-      // in one call (matches the existing PUT contract).
-      await notificationAPI.updatePreferences({
-        ...preferences,
+      // Save through the unified settings endpoint, updating both
+      // notification and realtime domains in one call.
+      await settingsAPI.updatePreferences({
+        notifications: preferences,
         realtime: realtimePreferences
       });
       setSuccess('Notification preferences updated.');
