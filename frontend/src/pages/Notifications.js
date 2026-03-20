@@ -1,10 +1,11 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import useInfiniteNotifications from '../hooks/useInfiniteNotifications';
 import NotificationItem from '../components/NotificationItem';
 import { ErrorBanner, EmptyState, LoadMoreButton, Spinner } from '../components/ui';
 
 const Notifications = () => {
+  const navigate = useNavigate();
   const {
     notifications,
     loading,
@@ -21,6 +22,10 @@ const Notifications = () => {
     if (notification?.data?.url) {
       window.location.href = notification.data.url;
     }
+  };
+
+  const viewDirectMessage = (notification) => {
+    navigate('/chat?tab=dm');
   };
 
   const noop = () => {};
@@ -57,6 +62,7 @@ const Notifications = () => {
               onAcknowledge={(id) => acknowledge(id)}
               onDismiss={(id) => dismiss(id)}
               onDelete={(id) => remove(id)}
+              onView={viewDirectMessage}
               onFriendRequestAction={noop}
               onFriendCircleChange={noop}
             />

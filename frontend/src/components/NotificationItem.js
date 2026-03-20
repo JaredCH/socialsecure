@@ -27,6 +27,7 @@ const NotificationItem = ({
   onDelete,
   onAcknowledge,
   onDismiss,
+  onView,
   onFriendRequestAction,
   onFriendCircleChange,
   friendActionLoading = false,
@@ -37,7 +38,8 @@ const NotificationItem = ({
   const id = String(notification?._id || '');
   const isFriendRequest = notification?.type === 'follow' && !!notification?.senderId;
   const isRequest = REQUEST_TYPES.has(notification?.type) && !!notification?.senderId;
-  const showAcknowledgeDismiss = !isRequest;
+  const isDirectMessage = notification?.type === 'message';
+  const showAcknowledgeDismiss = !isRequest && !isDirectMessage;
 
   return (
     <div className={`border-b px-3 py-2 ${notification?.isRead ? 'bg-white' : 'bg-blue-50'}`}>
@@ -102,7 +104,43 @@ const NotificationItem = ({
             </button>
           </div>
         ) : null}
-        {!isHistory ? (
+        {!isHistory && isDirectMessage ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {typeof onAcknowledge === 'function' ? (
+              <button
+                type="button"
+                onClick={() => onAcknowledge(id)}
+                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                aria-label="Mark Read"
+                title="Mark Read"
+              >
+                Mark Read
+              </button>
+            ) : null}
+            {typeof onDismiss === 'function' ? (
+              <button
+                type="button"
+                onClick={() => onDismiss(id)}
+                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                aria-label="Dismiss"
+                title="Dismiss"
+              >
+                Dismiss
+              </button>
+            ) : null}
+            {typeof onView === 'function' ? (
+              <button
+                type="button"
+                onClick={() => onView(notification)}
+                className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:border-blue-300 hover:bg-blue-100"
+                aria-label="View"
+                title="View"
+              >
+                View
+              </button>
+            ) : null}
+          </div>
+        ) : !isHistory ? (
           <div className="flex flex-wrap items-center gap-2">
             {showAcknowledgeDismiss && typeof onAcknowledge === 'function' ? (
               <button
