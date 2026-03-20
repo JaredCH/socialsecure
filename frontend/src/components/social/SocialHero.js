@@ -153,7 +153,6 @@ const SocialHero = ({
   isMobile = false,
   isEditing = false,
   onEditClick,
-  // Legacy props accepted but no longer used (navigation moved to DotNav)
   activeTab,
   onTabChange,
   activitySummary,
@@ -182,9 +181,12 @@ const SocialHero = ({
     backgroundImageBlur = 0,
     nameColor = '#ffffff',
     locationColor = '#94a3b8',
+    menuTextColor = '#e2e8f0',
+    menuActiveColor = '#3b82f6',
     fontFamily = 'Inter',
     showLocation = true,
-    showOnlineStatus = true
+    showOnlineStatus = true,
+    showNavigation = true
   } = heroConfig;
 
   const currentAvatarSize = isMobile ? 88 : 128;
@@ -337,6 +339,33 @@ const SocialHero = ({
           )}
         </div>
           </div>
+
+          {/* Desktop section navigation */}
+          {!isMobile && showNavigation && Array.isArray(visibleTabs) && visibleTabs.length > 0 && (
+            <nav
+              className="flex items-center gap-1 rounded-2xl border border-white/15 bg-black/30 px-2 py-1.5 backdrop-blur-md"
+              aria-label="Social page sections"
+            >
+              {visibleTabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => onTabChange && onTabChange(tab.id)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      isActive ? 'bg-white/20' : 'hover:bg-white/10'
+                    }`}
+                    style={{ color: isActive ? menuActiveColor : menuTextColor }}
+                    aria-current={isActive ? 'true' : undefined}
+                  >
+                    <TabIcon icon={tab.icon} className="h-3.5 w-3.5" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
         </div>
       </div>
     </div>

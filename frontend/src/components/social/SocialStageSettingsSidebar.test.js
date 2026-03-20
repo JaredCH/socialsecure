@@ -193,4 +193,60 @@ describe('SocialStageSettingsSidebar', () => {
     expect(uploadBtn).toBeTruthy();
     expect(uploadBtn.disabled).toBe(false);
   });
+
+  it('hides grain/blur sliders behind Advanced toggle for hero background', async () => {
+    const onHeroBackgroundGrainChange = jest.fn();
+    const onHeroBackgroundBlurChange = jest.fn();
+    await act(async () => {
+      root.render(
+        <SocialStageSettingsSidebar
+          isOpen
+          heroBackgroundImage="https://example.com/hero.jpg"
+          onHeroBackgroundGrainChange={onHeroBackgroundGrainChange}
+          onHeroBackgroundBlurChange={onHeroBackgroundBlurChange}
+        />
+      );
+    });
+
+    // Advanced section should be hidden initially
+    expect(document.body.querySelector('[data-testid="hero-advanced-section"]')).toBeNull();
+
+    // Click the Advanced toggle
+    const advancedBtn = document.body.querySelector('[data-testid="hero-advanced-toggle"]');
+    expect(advancedBtn).toBeTruthy();
+    await act(async () => {
+      advancedBtn.click();
+    });
+
+    // Advanced section should now be visible
+    expect(document.body.querySelector('[data-testid="hero-advanced-section"]')).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="hero-grain-slider"]')).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="hero-blur-slider"]')).toBeTruthy();
+  });
+
+  it('does not render a Top Friends section', async () => {
+    await act(async () => {
+      root.render(
+        <SocialStageSettingsSidebar
+          isOpen
+          selectedTopFriends={[]}
+          availableFriends={[]}
+        />
+      );
+    });
+
+    const headings = Array.from(document.body.querySelectorAll('h3'));
+    const friendsHeading = headings.find((h) => h.textContent === 'Top Friends');
+    expect(friendsHeading).toBeFalsy();
+  });
+
+  it('does not use pointer-events-none on the sidebar overlay container', async () => {
+    await act(async () => {
+      root.render(<SocialStageSettingsSidebar isOpen />);
+    });
+
+    const overlay = document.body.querySelector('.fixed.inset-0');
+    expect(overlay).toBeTruthy();
+    expect(overlay.className).not.toContain('pointer-events-none');
+  });
 });

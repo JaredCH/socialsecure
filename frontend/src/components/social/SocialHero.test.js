@@ -63,28 +63,58 @@ describe('SocialHero hero display', () => {
     const editBtn = Array.from(container.querySelectorAll('button'))
       .find(b => b.textContent.includes('Customize stage'));
     expect(editBtn).not.toBeNull();
-
-    await act(async () => {
-      launcher.click();
-    });
-
-    expect(container.textContent).toContain('Chat');
-    expect(container.textContent).toContain('News');
-    expect(container.textContent).toContain('Market');
-    expect(container.textContent).toContain('Find Friends');
   });
 
-  it('does not render navigation elements (navigation moved to DotNav)', async () => {
-    await renderHero({ heroConfig: { showNavigation: true } });
+  it('renders desktop section navigation when visibleTabs are provided', async () => {
+    const onTabChange = jest.fn();
+    await renderHero({
+      heroConfig: { showNavigation: true },
+      isMobile: false,
+      activeTab: 'main',
+      onTabChange,
+      visibleTabs: [
+        { id: 'main', label: 'Feed', icon: 'home' },
+        { id: 'gallery', label: 'Gallery', icon: 'photo' },
+        { id: 'friends', label: 'Friends', icon: 'users' }
+      ]
+    });
 
-    // No mobile launcher
-    expect(container.querySelector('button[aria-label="Expand social section menu"]')).toBeNull();
-    // No desktop nav
+    const nav = container.querySelector('nav');
+    expect(nav).not.toBeNull();
+    expect(nav.textContent).toContain('Feed');
+    expect(nav.textContent).toContain('Gallery');
+    expect(nav.textContent).toContain('Friends');
+
+    const galleryBtn = Array.from(nav.querySelectorAll('button'))
+      .find(b => b.textContent.includes('Gallery'));
+    await act(async () => {
+      galleryBtn.click();
+    });
+    expect(onTabChange).toHaveBeenCalledWith('gallery');
+  });
+
+  it('does not render desktop nav on mobile (navigation handled by DotNav)', async () => {
+    await renderHero({
+      heroConfig: { showNavigation: true },
+      isMobile: true,
+      visibleTabs: [
+        { id: 'main', label: 'Feed', icon: 'home' }
+      ]
+    });
+
     expect(container.querySelector('nav')).toBeNull();
-    // No site nav links
-    expect(container.textContent).not.toContain('News');
-    expect(container.textContent).not.toContain('Market');
-    expect(container.textContent).not.toContain('Discover');
+  });
+
+  it('does not render desktop nav when showNavigation is false', async () => {
+    await renderHero({
+      heroConfig: { showNavigation: false },
+      isMobile: false,
+      visibleTabs: [
+        { id: 'main', label: 'Feed', icon: 'home' }
+      ]
+    });
+
+    expect(container.querySelector('nav')).toBeNull();
   });
 
   it('hides location when showLocation is false', async () => {
