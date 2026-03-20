@@ -454,13 +454,9 @@ const normalizeHeroConfig = (heroInput, fallback) => {
   const normalizeMediaUrl = (value, valueFallback = null) => {
     if (typeof value !== 'string') return valueFallback;
     const trimmed = value.trim();
-    if (!trimmed) return valueFallback;
+    if (!trimmed || trimmed.length > MEDIA_URL_MAX_LENGTH) return valueFallback;
     if (/^\/uploads\/\S+/i.test(trimmed)) return trimmed;
-    if (
-      /^data:image\/(?:jpeg|jpg|png|gif|webp);base64,[a-z0-9+/=]+$/i.test(trimmed)
-      && trimmed.length <= BODY_BG_DATA_URL_MAX_LENGTH
-    ) return trimmed;
-    if (trimmed.length > MEDIA_URL_MAX_LENGTH) return valueFallback;
+    if (/^data:image\/(?:jpeg|jpg|png|gif|webp);base64,[a-z0-9+/=]+$/i.test(trimmed)) return trimmed;
     try {
       const parsed = new URL(trimmed);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return valueFallback;
@@ -480,7 +476,6 @@ const normalizeHeroConfig = (heroInput, fallback) => {
     for (const item of history) {
       const normalizedUrl = normalizeMediaUrl(item, null);
       if (!normalizedUrl) continue;
-      if (normalizedUrl.startsWith('data:')) continue;
       const dedupeKey = normalizedUrl.toLowerCase();
       if (dedupeKey === currentKey || seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
