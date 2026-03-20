@@ -281,7 +281,13 @@ const publicPostQuery = (userId) => ({
   targetFeedId: userId,
   visibility: 'public',
   $and: [
-    socialOrUnsetAudienceQuery('relationshipAudience'),
+    {
+      $or: [
+        { relationshipAudience: 'public' },
+        { relationshipAudience: { $exists: false } },
+        { relationshipAudience: null }
+      ]
+    },
     {
       $or: [
         { expiresAt: null },
