@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 
 const { getUserNotificationPreferences, toPayload } = require('../services/notifications');
 const { normalizeRealtimePreferences } = require('../utils/realtimePreferences');
@@ -14,6 +15,14 @@ const router = express.Router();
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
+
+const notificationReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' }
+});
 
 const hashToken = (token = '') => require('crypto').createHash('sha256').update(token).digest('hex');
 
@@ -388,7 +397,7 @@ router.put('/preferences', [
   }
 });
 
-router.get('/grouped', authenticateToken, async (req, res) => {
+router.get('/grouped', notificationReadLimiter, authenticateToken, async (req, res) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
 
@@ -422,7 +431,7 @@ router.get('/grouped', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/:id/delivery', authenticateToken, async (req, res) => {
+router.get('/:id/delivery', notificationReadLimiter, authenticateToken, async (req, res) => {
   try {
     const notification = await Notification.findOne({
       _id: req.params.id,
