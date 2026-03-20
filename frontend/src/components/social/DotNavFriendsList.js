@@ -78,7 +78,7 @@ const DotNavFriendsList = ({ isOpen, side, loggedInUser, userId }) => {
     try {
       const res = await mapsAPI.getFriendsLocations();
       if (!mountedRef.current) return;
-      const locs = res?.data?.locations || res?.data || [];
+      const locs = res?.data?.friends || res?.data?.locations || res?.data || [];
       setFriendLocations(Array.isArray(locs) ? locs : []);
     } catch {
       // Silently handle errors

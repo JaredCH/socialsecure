@@ -8,6 +8,7 @@ jest.mock('../../utils/api', () => ({
     getNotifications: jest.fn(),
     acknowledgeNotification: jest.fn(),
     dismissNotification: jest.fn(),
+    markAllAsRead: jest.fn(),
   },
 }));
 
@@ -33,6 +34,7 @@ describe('MobileDotNavNotification', () => {
     notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [] } });
     notificationAPI.acknowledgeNotification.mockResolvedValue({ data: { success: true } });
     notificationAPI.dismissNotification.mockResolvedValue({ data: { success: true } });
+    notificationAPI.markAllAsRead.mockResolvedValue({ data: { success: true } });
   });
 
   afterEach(() => {
@@ -286,5 +288,71 @@ describe('MobileDotNavNotification', () => {
     await act(async () => { jest.advanceTimersByTime(350); });
     el = document.querySelector('[data-testid="mobile-dotnav-notification"]');
     expect(el).toBeNull();
+  });
+
+  it('shows "Mark all read" button when notifications exist', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() },
+        ],
+      },
+    });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const markAll = document.querySelector('[data-testid="mobile-dotnav-notification-mark-all"]');
+    expect(markAll).not.toBeNull();
+    expect(markAll.textContent).toBe('Mark all read');
+  });
+
+  it('does not show "Mark all read" when no notifications exist', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [] } });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const markAll = document.querySelector('[data-testid="mobile-dotnav-notification-mark-all"]');
+    expect(markAll).toBeNull();
+  });
+
+  it('calls markAllAsRead API and clears notifications when "Mark all read" is clicked', async () => {
+    const onAck = jest.fn();
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() },
+          { _id: 'n2', title: 'Test2', body: 'B2', type: 'like', createdAt: new Date().toISOString() },
+        ],
+      },
+    });
+    await renderPanel({ isOpen: true, onAcknowledge: onAck });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const markAll = document.querySelector('[data-testid="mobile-dotnav-notification-mark-all"]');
+    await act(async () => { markAll.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(notificationAPI.markAllAsRead).toHaveBeenCalledTimes(1);
+    expect(onAck).toHaveBeenCalledWith(null);
+    const pills = document.querySelectorAll('[data-testid="mobile-dotnav-notification-pill"]');
+    expect(pills.length).toBe(0);
+  });
+
+  it('keeps notifications visible when markAllAsRead API fails', async () => {
+    notificationAPI.markAllAsRead.mockRejectedValue(new Error('Network error'));
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() },
+        ],
+      },
+    });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const markAll = document.querySelector('[data-testid="mobile-dotnav-notification-mark-all"]');
+    await act(async () => { markAll.click(); });
+    await act(async () => { await Promise.resolve(); });
+    const pills = document.querySelectorAll('[data-testid="mobile-dotnav-notification-pill"]');
+    expect(pills.length).toBe(1);
   });
 });

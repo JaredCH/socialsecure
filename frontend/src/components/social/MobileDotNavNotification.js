@@ -72,6 +72,7 @@ const MobileDotNavNotification = ({
   const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
   const animTimerRef = useRef(null);
 
   // Fetch active notifications when panel opens
@@ -142,6 +143,20 @@ const MobileDotNavNotification = ({
     }
   }, [onNavigate]);
 
+  const handleMarkAllRead = useCallback(async () => {
+    if (markingAll || notifications.length === 0) return;
+    setMarkingAll(true);
+    try {
+      await notificationAPI.markAllAsRead();
+      setNotifications([]);
+      if (onAcknowledge) onAcknowledge(null);
+    } catch {
+      // Silently handle errors
+    } finally {
+      setMarkingAll(false);
+    }
+  }, [markingAll, notifications.length, onAcknowledge]);
+
   const handleLogout = useCallback(() => {
     if (onLogout) onLogout();
   }, [onLogout]);
@@ -162,16 +177,32 @@ const MobileDotNavNotification = ({
     >
       {/* Header bar */}
       <div className="dotnav-mobile-notif-header" data-testid="mobile-dotnav-notification-header">
-        <span className="dotnav-mobile-notif-header-title">Notifications</span>
-        <button
-          type="button"
-          className="dotnav-mobile-notif-logout"
-          onClick={handleLogout}
-          aria-label="Logout"
-          data-testid="mobile-dotnav-notification-logout"
-        >
-          Logout
-        </button>
+        <div className="dotnav-mobile-notif-header-left">
+          <span className="dotnav-mobile-notif-header-title">Notifications</span>
+        </div>
+        <div className="dotnav-mobile-notif-header-actions">
+          {grouped.length > 0 && (
+            <button
+              type="button"
+              className="dotnav-mobile-notif-mark-all"
+              onClick={handleMarkAllRead}
+              disabled={markingAll}
+              aria-label="Mark all as read"
+              data-testid="mobile-dotnav-notification-mark-all"
+            >
+              {markingAll ? 'Marking…' : 'Mark all read'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="dotnav-mobile-notif-logout"
+            onClick={handleLogout}
+            aria-label="Logout"
+            data-testid="mobile-dotnav-notification-logout"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {/* Notification list */}
