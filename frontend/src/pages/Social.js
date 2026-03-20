@@ -11,6 +11,7 @@ import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
 import SocialHero from '../components/social/SocialHero';
 import SocialStageSettingsSidebar from '../components/social/SocialStageSettingsSidebar';
 import CircleSpiderDiagram from '../components/social/CircleSpiderDiagram';
+import InteractiveSocialGraph from '../components/social/InteractiveSocialGraph';
 import {
   getFontSizeClass,
   mergeDesignPatch,
@@ -4124,31 +4125,11 @@ const Social = () => {
         return isOwnSocialContext && !isGuestPreview ? (
           <CircleManager circles={circles} friends={friends} onCreateCircle={handleCreateCircle} onUpdateCircle={handleUpdateCircle} onDeleteCircle={handleDeleteCircle} onAddMember={handleAddCircleMember} onRemoveMember={handleRemoveCircleMember} onMoveMember={handleMoveCircleMember} />
         ) : (
-          <div className="space-y-4">
-            <CircleSpiderDiagram
-              circles={circles}
-              profileLabel={activeProfile?.username || requestedProfileIdentifier || 'user'}
-              accentColor={accentColor}
-            />
-            {circles.length > 0 ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {circles.map((circle) => (
-                  <div key={circle.name} className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-                    <div className="flex items-center gap-3">
-                      {isRenderableMediaUrl(circle.profileImageUrl) ? <img src={circle.profileImageUrl} alt={circle.name} className="h-10 w-10 rounded-full object-cover" /> : <span className="h-3 w-3 rounded-full" style={{ backgroundColor: circle.color || accentColor }} />}
-                      <div>
-                        <p className="font-semibold text-slate-900">{circle.name}</p>
-                        <p className="text-xs text-slate-500">{circle.memberCount || 0} members</p>
-                      </div>
-                      <span className={`ml-auto rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${circle.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
-                        {RELATIONSHIP_AUDIENCE_LABELS[circle.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <InteractiveSocialGraph
+            circles={circles}
+            profileLabel={activeProfile?.username || requestedProfileIdentifier || 'user'}
+            accentColor={accentColor}
+          />
         );
       case 'timeline':
         return (
