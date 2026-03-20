@@ -6,6 +6,7 @@ import MobileDotNavNotification from './MobileDotNavNotification';
 jest.mock('../../utils/api', () => ({
   notificationAPI: {
     getNotifications: jest.fn(),
+    getUnreadCount: jest.fn(),
     acknowledgeNotification: jest.fn(),
     dismissNotification: jest.fn(),
     markAllAsRead: jest.fn(),
@@ -32,6 +33,7 @@ describe('MobileDotNavNotification', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [] } });
+    notificationAPI.getUnreadCount.mockResolvedValue({ data: { count: 0 } });
     notificationAPI.acknowledgeNotification.mockResolvedValue({ data: { success: true } });
     notificationAPI.dismissNotification.mockResolvedValue({ data: { success: true } });
     notificationAPI.markAllAsRead.mockResolvedValue({ data: { success: true } });
@@ -354,5 +356,76 @@ describe('MobileDotNavNotification', () => {
     await act(async () => { await Promise.resolve(); });
     const pills = document.querySelectorAll('[data-testid="mobile-dotnav-notification-pill"]');
     expect(pills.length).toBe(1);
+  });
+
+  it('calls onCountRefresh after fetching notifications on open', async () => {
+    const onCountRefresh = jest.fn().mockResolvedValue(undefined);
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [] } });
+    await renderPanel({ isOpen: true, onCountRefresh });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    expect(onCountRefresh).toHaveBeenCalled();
+  });
+
+  it('calls onCountRefresh after successful Mark Read', async () => {
+    const onCountRefresh = jest.fn().mockResolvedValue(undefined);
+    const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
+    await renderPanel({ isOpen: true, onCountRefresh });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    onCountRefresh.mockClear();
+    const markReadBtn = document.querySelector('[data-testid="mobile-dotnav-notification-markread"]');
+    await act(async () => { markReadBtn.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(onCountRefresh).toHaveBeenCalled();
+  });
+
+  it('calls onCountRefresh after successful Dismiss', async () => {
+    const onCountRefresh = jest.fn().mockResolvedValue(undefined);
+    const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
+    await renderPanel({ isOpen: true, onCountRefresh });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    onCountRefresh.mockClear();
+    const dismissBtn = document.querySelector('[data-testid="mobile-dotnav-notification-dismiss"]');
+    await act(async () => { dismissBtn.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(onCountRefresh).toHaveBeenCalled();
+  });
+
+  it('calls onCountRefresh after successful Mark All Read', async () => {
+    const onCountRefresh = jest.fn().mockResolvedValue(undefined);
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() },
+        ],
+      },
+    });
+    await renderPanel({ isOpen: true, onCountRefresh });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    onCountRefresh.mockClear();
+    const markAll = document.querySelector('[data-testid="mobile-dotnav-notification-mark-all"]');
+    await act(async () => { markAll.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(onCountRefresh).toHaveBeenCalled();
+  });
+
+  it('does not call onCountRefresh when Mark Read API fails', async () => {
+    const onCountRefresh = jest.fn().mockResolvedValue(undefined);
+    notificationAPI.acknowledgeNotification.mockRejectedValue(new Error('Network error'));
+    const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
+    await renderPanel({ isOpen: true, onCountRefresh });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    onCountRefresh.mockClear();
+    const markReadBtn = document.querySelector('[data-testid="mobile-dotnav-notification-markread"]');
+    await act(async () => { markReadBtn.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(onCountRefresh).not.toHaveBeenCalled();
   });
 });

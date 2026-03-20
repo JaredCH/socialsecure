@@ -107,7 +107,17 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 router.get('/unread-count', authenticateToken, async (req, res) => {
-  return res.json({ count: req.user.unreadNotificationCount || 0 });
+  try {
+    const count = await Notification.countDocuments({
+      recipientId: req.user._id,
+      status: 'active',
+      isRead: false
+    });
+    return res.json({ count });
+  } catch (error) {
+    console.error('Unread count error:', error);
+    return res.json({ count: req.user.unreadNotificationCount || 0 });
+  }
 });
 
 router.put('/:id/read', authenticateToken, async (req, res) => {

@@ -23,6 +23,7 @@ const TOP_GAP_PX = 0;
  *   onNavigate    – (path) => void
  *   onAcknowledge – (notification) => void
  *   onDismiss     – (notification) => void
+ *   onCountRefresh – () => Promise<void>  – refresh parent unread count from backend
  */
 
 const formatRelativeTime = (value) => {
@@ -67,6 +68,7 @@ const MobileDotNavNotification = ({
   onNavigate,
   onAcknowledge,
   onDismiss,
+  onCountRefresh,
 }) => {
   const [visible, setVisible] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -100,12 +102,16 @@ const MobileDotNavNotification = ({
         if (!cancelled) setNotifications([]);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          // Sync parent badge with actual backend count
+          if (onCountRefresh) onCountRefresh();
+        }
       });
     // Trigger enter animation on next frame
     requestAnimationFrame(() => { if (!cancelled) setVisible(true); });
     return () => { cancelled = true; };
-  }, [isOpen]);
+  }, [isOpen, onCountRefresh]);
 
   const handleMarkRead = useCallback(async (e, notification) => {
     e.stopPropagation();
@@ -119,7 +125,8 @@ const MobileDotNavNotification = ({
     }
     setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !ids.includes(n._id)));
     if (onAcknowledge) onAcknowledge(notification);
-  }, [onAcknowledge]);
+    if (onCountRefresh) onCountRefresh();
+  }, [onAcknowledge, onCountRefresh]);
 
   const handleDismiss = useCallback(async (e, notification) => {
     e.stopPropagation();
@@ -133,7 +140,8 @@ const MobileDotNavNotification = ({
     }
     setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !ids.includes(n._id)));
     if (onDismiss) onDismiss(notification);
-  }, [onDismiss]);
+    if (onCountRefresh) onCountRefresh();
+  }, [onDismiss, onCountRefresh]);
 
   const handleView = useCallback((e, notification) => {
     e.stopPropagation();
@@ -150,12 +158,13 @@ const MobileDotNavNotification = ({
       await notificationAPI.markAllAsRead();
       setNotifications([]);
       if (onAcknowledge) onAcknowledge(null);
+      if (onCountRefresh) onCountRefresh();
     } catch {
       // Silently handle errors
     } finally {
       setMarkingAll(false);
     }
-  }, [markingAll, notifications.length, onAcknowledge]);
+  }, [markingAll, notifications.length, onAcknowledge, onCountRefresh]);
 
   const handleLogout = useCallback(() => {
     if (onLogout) onLogout();

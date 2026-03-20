@@ -254,7 +254,7 @@ function resolveRoute(catalogEntry, loggedInUser, viewingUser) {
 // ═══════════════════════════════════════════
 // DOTNAV COMPONENT
 // ═══════════════════════════════════════════
-const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0, incomingNotification = null, onNotificationAcknowledge, onNotificationDismiss, onLogout, userId = '' }) => {
+const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0, incomingNotification = null, onNotificationAcknowledge, onNotificationDismiss, onNotificationCountRefresh, onLogout, userId = '' }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -819,6 +819,7 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
         onNavigate={(path) => { navigate(path); setIsOpen(false); }}
         onAcknowledge={onNotificationAcknowledge}
         onDismiss={onNotificationDismiss}
+        onCountRefresh={onNotificationCountRefresh}
       />
     </>
   );
