@@ -2,6 +2,10 @@ const Notification = require('../models/Notification');
 const DeliveryAttempt = require('../models/DeliveryAttempt');
 const User = require('../models/User');
 const { getTemplate, resolveModelType } = require('./notificationTemplates');
+const {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  normalizeNotificationPreferences
+} = require('./unifiedPreferences');
 
 let ioInstance = null;
 
@@ -49,67 +53,7 @@ const toPayload = (notification) => ({
 });
 
 const getUserNotificationPreferences = (user) => {
-  const defaults = {
-    likes: { inApp: true, email: false, push: false },
-    comments: { inApp: true, email: true, push: false },
-    mentions: { inApp: true, email: true, push: false },
-    follows: { inApp: true, email: false, push: false },
-    messages: { inApp: true, email: false, push: false },
-    system: { inApp: true, email: true, push: false },
-    securityAlerts: { inApp: true, email: true, push: false },
-    friendPosts: { inApp: true, email: false, push: false },
-    top5: { inApp: true, email: false, push: false },
-    partnerRequests: { inApp: true, email: true, push: false },
-    realtime: { enabled: true, typingIndicators: true, presence: true },
-    quietHours: { enabled: false, start: '22:00', end: '08:00', timezone: 'UTC' },
-    digestMode: { enabled: false, frequency: 'daily' }
-  };
-
-  const candidate = user?.notificationPreferences;
-  if (!candidate || typeof candidate !== 'object') {
-    return defaults;
-  }
-
-  const normalized = { ...defaults };
-  for (const key of Object.keys(defaults)) {
-    if (!candidate[key] || typeof candidate[key] !== 'object') continue;
-    if (key === 'realtime') {
-      normalized[key] = {
-        enabled: typeof candidate[key].enabled === 'boolean' ? candidate[key].enabled : defaults[key].enabled,
-        typingIndicators: typeof candidate[key].typingIndicators === 'boolean'
-          ? candidate[key].typingIndicators
-          : defaults[key].typingIndicators,
-        presence: typeof candidate[key].presence === 'boolean'
-          ? candidate[key].presence
-          : defaults[key].presence
-      };
-      continue;
-    }
-    if (key === 'quietHours') {
-      normalized[key] = {
-        enabled: typeof candidate[key].enabled === 'boolean' ? candidate[key].enabled : defaults[key].enabled,
-        start: typeof candidate[key].start === 'string' ? candidate[key].start : defaults[key].start,
-        end: typeof candidate[key].end === 'string' ? candidate[key].end : defaults[key].end,
-        timezone: typeof candidate[key].timezone === 'string' ? candidate[key].timezone : defaults[key].timezone
-      };
-      continue;
-    }
-    if (key === 'digestMode') {
-      normalized[key] = {
-        enabled: typeof candidate[key].enabled === 'boolean' ? candidate[key].enabled : defaults[key].enabled,
-        frequency: ['daily', 'weekly'].includes(candidate[key].frequency) ? candidate[key].frequency : defaults[key].frequency
-      };
-      continue;
-    }
-
-    normalized[key] = {
-      inApp: typeof candidate[key].inApp === 'boolean' ? candidate[key].inApp : defaults[key].inApp,
-      email: typeof candidate[key].email === 'boolean' ? candidate[key].email : defaults[key].email,
-      push: typeof candidate[key].push === 'boolean' ? candidate[key].push : defaults[key].push
-    };
-  }
-
-  return normalized;
+  return normalizeNotificationPreferences(user?.notificationPreferences);
 };
 
 const setNotificationIo = (io) => {

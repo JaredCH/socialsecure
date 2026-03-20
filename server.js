@@ -212,6 +212,7 @@ registerRoute('/api/social-page', () => require('./routes/social-page'));
 registerRoute('/api/blog', () => require('./routes/blog'));
 registerRoute('/api/admin', () => require('./routes/admin'));
 registerRoute('/api/guest', () => require('./routes/guest'));
+registerRoute('/api/settings', () => require('./routes/settings'));
 
 app.get(/^\/discover(?:\/.*)?$/, (req, res) => {
   const suffix = req.path.replace(/^\/discover/, '');

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { notificationAPI } from '../utils/api';
+import { settingsAPI } from '../utils/api';
 import {
   getBrowserNotificationPermission,
   isBrowserNotificationSupported,
@@ -21,29 +21,9 @@ const TYPE_LABELS = {
   securityAlerts: 'Security alerts'
 };
 
-const defaultPreferences = {
-  likes: { inApp: true, email: false, push: false },
-  comments: { inApp: true, email: true, push: false },
-  mentions: { inApp: true, email: true, push: false },
-  follows: { inApp: true, email: false, push: false },
-  messages: { inApp: true, email: false, push: false },
-  friendPosts: { inApp: true, email: false, push: false },
-  top5: { inApp: true, email: false, push: false },
-  partnerRequests: { inApp: true, email: true, push: false },
-  system: { inApp: true, email: true, push: false },
-  securityAlerts: { inApp: true, email: true, push: false },
-  realtime: { enabled: true, typingIndicators: true, presence: true }
-};
-
-const defaultRealtimePreferences = {
-  enabled: true,
-  showPresence: true,
-  showLastSeen: true
-};
-
 const NotificationSettings = () => {
-  const [preferences, setPreferences] = useState(defaultPreferences);
-  const [realtimePreferences, setRealtimePreferences] = useState(defaultRealtimePreferences);
+  const [preferences, setPreferences] = useState(null);
+  const [realtimePreferences, setRealtimePreferences] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -55,14 +35,15 @@ const NotificationSettings = () => {
       setLoading(true);
       setError('');
       try {
-        const response = await notificationAPI.getPreferences();
-        const incoming = response.data?.preferences;
-        if (incoming && typeof incoming === 'object') {
-          setPreferences({ ...defaultPreferences, ...incoming });
+        // Use the unified settings endpoint – backend returns fully-normalized
+        // defaults so the frontend never needs its own copy.
+        const response = await settingsAPI.getPreferences();
+        const data = response.data;
+        if (data?.notifications && typeof data.notifications === 'object') {
+          setPreferences(data.notifications);
         }
-        const realtimeIncoming = response.data?.realtimePreferences;
-        if (realtimeIncoming && typeof realtimeIncoming === 'object') {
-          setRealtimePreferences({ ...defaultRealtimePreferences, ...realtimeIncoming });
+        if (data?.realtime && typeof data.realtime === 'object') {
+          setRealtimePreferences(data.realtime);
         }
       } catch (requestError) {
         setError(requestError.response?.data?.error || 'Failed to load preferences');
@@ -101,8 +82,10 @@ const NotificationSettings = () => {
         const permission = await requestBrowserNotificationPermission();
         setBrowserPermission(permission);
       }
-      await notificationAPI.updatePreferences({
-        ...preferences,
+      // Save through the unified settings endpoint, updating both
+      // notification and realtime domains in one call.
+      await settingsAPI.updatePreferences({
+        notifications: preferences,
         realtime: realtimePreferences
       });
       setSuccess('Notification preferences updated.');
@@ -152,7 +135,7 @@ const NotificationSettings = () => {
       {error ? <div className="mb-4 p-3 rounded bg-red-50 text-red-700 border border-red-200">{error}</div> : null}
       {success ? <div className="mb-4 p-3 rounded bg-green-50 text-green-700 border border-green-200">{success}</div> : null}
 
-      {loading ? (
+      {loading || !preferences ? (
         <div className="text-gray-500">Loading preferences...</div>
       ) : (
         <div className="overflow-x-auto">
@@ -189,39 +172,41 @@ const NotificationSettings = () => {
       )}
 
       <div className="mt-6">
-        <div className="mb-6 rounded-lg border border-gray-200 p-4 bg-gray-50">
-          <h2 className="text-lg font-semibold text-gray-900">Real-time Social Updates</h2>
-          <p className="text-sm text-gray-600 mt-1">Control live feed updates, presence, and last-seen visibility.</p>
+        {realtimePreferences ? (
+          <div className="mb-6 rounded-lg border border-gray-200 p-4 bg-gray-50">
+            <h2 className="text-lg font-semibold text-gray-900">Real-time Social Updates</h2>
+            <p className="text-sm text-gray-600 mt-1">Control live feed updates, presence, and last-seen visibility.</p>
 
-          <div className="mt-4 space-y-3 text-sm">
-            <label className="flex items-center justify-between gap-3">
-              <span>Enable real-time updates</span>
-              <input
-                type="checkbox"
-                checked={Boolean(realtimePreferences.enabled)}
-                onChange={() => handleRealtimeToggle('enabled')}
-              />
-            </label>
-            <label className="flex items-center justify-between gap-3">
-              <span>Show my online/offline presence to friends</span>
-              <input
-                type="checkbox"
-                checked={Boolean(realtimePreferences.showPresence)}
-                onChange={() => handleRealtimeToggle('showPresence')}
-                disabled={!realtimePreferences.enabled}
-              />
-            </label>
-            <label className="flex items-center justify-between gap-3">
-              <span>Show my last-seen time to friends</span>
-              <input
-                type="checkbox"
-                checked={Boolean(realtimePreferences.showLastSeen)}
-                onChange={() => handleRealtimeToggle('showLastSeen')}
-                disabled={!realtimePreferences.enabled || !realtimePreferences.showPresence}
-              />
-            </label>
+            <div className="mt-4 space-y-3 text-sm">
+              <label className="flex items-center justify-between gap-3">
+                <span>Enable real-time updates</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(realtimePreferences.enabled)}
+                  onChange={() => handleRealtimeToggle('enabled')}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3">
+                <span>Show my online/offline presence to friends</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(realtimePreferences.showPresence)}
+                  onChange={() => handleRealtimeToggle('showPresence')}
+                  disabled={!realtimePreferences.enabled}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3">
+                <span>Show my last-seen time to friends</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(realtimePreferences.showLastSeen)}
+                  onChange={() => handleRealtimeToggle('showLastSeen')}
+                  disabled={!realtimePreferences.enabled || !realtimePreferences.showPresence}
+                />
+              </label>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <button
           type="button"

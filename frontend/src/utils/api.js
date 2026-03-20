@@ -736,4 +736,10 @@ export const moderationAPI = {
   simulateNewsFeed: (params = {}) => api.get('/moderation/control-panel/news-review/simulate', { params }),
 };
 
+export const settingsAPI = {
+  getPreferences: () => api.get('/settings/preferences'),
+  getDefaults: () => api.get('/settings/defaults'),
+  updatePreferences: (data) => api.put('/settings/preferences', data),
+};
+
 export default api;
