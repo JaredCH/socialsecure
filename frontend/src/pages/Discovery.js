@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { discoveryAPI, friendsAPI, hasAuthToken } from '../utils/api';
+import usePaginatedResource from '../hooks/usePaginatedResource';
 import { PostCard, UserCard } from '../components/discovery/DiscoveryCards';
 
 const TABS = [
@@ -7,29 +8,11 @@ const TABS = [
   { id: 'posts', label: 'Posts' }
 ];
 
-const extractApiErrorMessage = (error, fallbackMessage) => (
-  error?.response?.data?.error || fallbackMessage
-);
-
 const Discovery = () => {
   const canInteract = hasAuthToken();
   const [activeTab, setActiveTab] = useState('people');
   const [searchQuery, setSearchQuery] = useState('');
   const searchDebounceRef = useRef(null);
-
-  const [users, setUsers] = useState([]);
-  const [usersPage, setUsersPage] = useState(1);
-  const [usersHasMore, setUsersHasMore] = useState(false);
-  const [usersLoading, setUsersLoading] = useState(false);
-  const [usersError, setUsersError] = useState('');
-  const [usersLoaded, setUsersLoaded] = useState(false);
-
-  const [posts, setPosts] = useState([]);
-  const [postsPage, setPostsPage] = useState(1);
-  const [postsHasMore, setPostsHasMore] = useState(false);
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [postsError, setPostsError] = useState('');
-  const [postsLoaded, setPostsLoaded] = useState(false);
 
   const [viewerCoords, setViewerCoords] = useState(null);
 
@@ -42,60 +25,53 @@ const Discovery = () => {
     );
   }, []);
 
-  const loadUsers = useCallback(async (page, query = '') => {
-    setUsersLoading(true);
-    setUsersError('');
-    try {
-      const { data } = await discoveryAPI.getUsers(query, page, 20);
-      if (page === 1) {
-        setUsers(data.users || []);
-      } else {
-        setUsers((prev) => [...prev, ...(data.users || [])]);
-      }
-      setUsersHasMore(data.hasMore ?? false);
-      setUsersPage(page);
-    } catch (err) {
-      setUsersError(extractApiErrorMessage(err, 'Failed to load suggestions. Please try again.'));
-    } finally {
-      setUsersLoaded(true);
-      setUsersLoading(false);
-    }
-  }, []);
+  // Keep a ref for search query so the fetcher can access it without recreating
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
 
-  const loadPosts = useCallback(async (page) => {
-    setPostsLoading(true);
-    setPostsError('');
-    try {
-      const lat = viewerCoords?.latitude ?? null;
-      const lon = viewerCoords?.longitude ?? null;
-      const { data } = await discoveryAPI.getPosts('', page, 20, lat, lon);
-      if (page === 1) {
-        setPosts(data.posts || []);
-      } else {
-        setPosts((prev) => [...prev, ...(data.posts || [])]);
-      }
-      setPostsHasMore(data.hasMore ?? false);
-      setPostsPage(page);
-    } catch (err) {
-      setPostsError(extractApiErrorMessage(err, 'Failed to load posts. Please try again.'));
-    } finally {
-      setPostsLoaded(true);
-      setPostsLoading(false);
-    }
-  }, [viewerCoords]);
+  const usersFetcher = useCallback(
+    (page, pageSize) => discoveryAPI.getUsers(searchQueryRef.current, page, pageSize),
+    [],
+  );
 
-  // Load initial data when tab changes
+  const viewerCoordsRef = useRef(viewerCoords);
+  viewerCoordsRef.current = viewerCoords;
+
+  const postsFetcher = useCallback(
+    (page, pageSize) => {
+      const lat = viewerCoordsRef.current?.latitude ?? null;
+      const lon = viewerCoordsRef.current?.longitude ?? null;
+      return discoveryAPI.getPosts('', page, pageSize, lat, lon);
+    },
+    [],
+  );
+
+  const usersResource = usePaginatedResource(usersFetcher, {
+    pageSize: 20,
+    extractItems: (res) => res.data?.users || [],
+    extractHasMore: (res) => res.data?.hasMore ?? false,
+    errorMessage: 'Failed to load suggestions. Please try again.',
+    autoLoad: true,
+  });
+
+  const postsResource = usePaginatedResource(postsFetcher, {
+    pageSize: 20,
+    extractItems: (res) => res.data?.posts || [],
+    extractHasMore: (res) => res.data?.hasMore ?? false,
+    errorMessage: 'Failed to load posts. Please try again.',
+    autoLoad: false,
+  });
+
+  // Load posts when tab changes to 'posts' (lazy load)
+  const postsLoadedRef = useRef(false);
+  const postsRefreshRef = useRef(postsResource.refresh);
+  postsRefreshRef.current = postsResource.refresh;
   useEffect(() => {
-    if (activeTab === 'people' && !usersLoaded && !usersLoading) {
-      loadUsers(1);
+    if (activeTab === 'posts' && !postsLoadedRef.current) {
+      postsLoadedRef.current = true;
+      postsRefreshRef.current();
     }
-  }, [activeTab, loadUsers, usersLoaded, usersLoading]);
-
-  useEffect(() => {
-    if (activeTab === 'posts' && !postsLoaded && !postsLoading) {
-      loadPosts(1);
-    }
-  }, [activeTab, loadPosts, postsLoaded, postsLoading]);
+  }, [activeTab]);
 
   // Clean up debounce timer on unmount
   useEffect(() => {
@@ -109,9 +85,7 @@ const Discovery = () => {
     setSearchQuery(value);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = setTimeout(() => {
-      setUsers([]);
-      setUsersLoaded(false);
-      loadUsers(1, value);
+      usersResource.refresh();
     }, 350);
   };
 
@@ -121,17 +95,12 @@ const Discovery = () => {
     discoveryAPI.trackEvent('follow_click', { targetUserId: userId, surface: 'find_friends' }).catch(() => {});
   };
 
-  const handleLoadMoreUsers = () => loadUsers(usersPage + 1, searchQuery);
-  const handleLoadMorePosts = () => loadPosts(postsPage + 1);
-
   const handleRefreshUsers = () => {
-    setUsers([]);
-    loadUsers(1, searchQuery);
+    usersResource.refresh();
   };
 
   const handleRefreshPosts = () => {
-    setPosts([]);
-    loadPosts(1);
+    postsResource.refresh();
   };
 
   return (
@@ -182,14 +151,14 @@ const Discovery = () => {
       {/* People Tab */}
       {activeTab === 'people' && (
         <div>
-          {usersError && (
+          {usersResource.error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 mb-4 flex items-center justify-between">
-              <span>{usersError}</span>
+              <span>{usersResource.error}</span>
               <button type="button" onClick={handleRefreshUsers} className="text-sm underline ml-2 min-h-[44px] px-2">Retry</button>
             </div>
           )}
 
-          {!usersLoading && users.length === 0 && !usersError && (
+          {!usersResource.loading && usersResource.items.length === 0 && !usersResource.error && (
             <div className="text-center py-12 text-gray-400">
               <p className="text-4xl mb-3">👥</p>
               <p className="font-medium text-gray-600">No suggestions yet</p>
@@ -198,7 +167,7 @@ const Discovery = () => {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {users.map((user) => (
+            {usersResource.items.map((user) => (
               <UserCard
                 key={String(user._id)}
                 user={user}
@@ -208,17 +177,17 @@ const Discovery = () => {
             ))}
           </div>
 
-          {usersLoading && (
+          {usersResource.loading && (
             <div className="text-center py-6 text-gray-400">
               <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
               <p className="text-sm mt-2">Loading suggestions…</p>
             </div>
           )}
 
-          {usersHasMore && !usersLoading && (
+          {usersResource.hasMore && !usersResource.loading && (
             <div className="text-center mt-4">
               <button
-                onClick={handleLoadMoreUsers}
+                onClick={usersResource.loadMore}
                 className="min-h-[44px] px-4 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Load more people
@@ -231,14 +200,14 @@ const Discovery = () => {
       {/* Posts Tab */}
       {activeTab === 'posts' && (
         <div>
-          {postsError && (
+          {postsResource.error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 mb-4 flex items-center justify-between">
-              <span>{postsError}</span>
+              <span>{postsResource.error}</span>
               <button type="button" onClick={handleRefreshPosts} className="text-sm underline ml-2 min-h-[44px] px-2">Retry</button>
             </div>
           )}
 
-          {!postsLoading && posts.length === 0 && !postsError && (
+          {!postsResource.loading && postsResource.items.length === 0 && !postsResource.error && (
             <div className="text-center py-12 text-gray-400">
               <p className="text-4xl mb-3">📰</p>
               <p className="font-medium text-gray-600">No posts to discover yet</p>
@@ -247,22 +216,22 @@ const Discovery = () => {
           )}
 
           <div className="space-y-3">
-            {posts.map((post) => (
+            {postsResource.items.map((post) => (
               <PostCard key={String(post._id)} post={post} />
             ))}
           </div>
 
-          {postsLoading && (
+          {postsResource.loading && (
             <div className="text-center py-6 text-gray-400">
               <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
               <p className="text-sm mt-2">Loading posts…</p>
             </div>
           )}
 
-          {postsHasMore && !postsLoading && (
+          {postsResource.hasMore && !postsResource.loading && (
             <div className="text-center mt-4">
               <button
-                onClick={handleLoadMorePosts}
+                onClick={postsResource.loadMore}
                 className="min-h-[44px] px-4 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Load more posts

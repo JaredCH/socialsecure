@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { friendsAPI, notificationAPI } from '../utils/api';
+import useInfiniteNotifications from '../hooks/useInfiniteNotifications';
 import NotificationItem from './NotificationItem';
 
-const PAGE_SIZE = 20;
 const HOVER_CLOSE_DELAY_MS = 150;
 const isResolvedFriendRequestNotification = (notification) => (
   notification?.type === 'follow' && notification?.isRead
@@ -13,7 +13,6 @@ const rollUpNotifications = (notifications) => {
   const grouped = {};
   const order = [];
   notifications.forEach((n) => {
-    // Use backend-provided groupKey; fallback mirrors services/notifications.js format for older records
     const key = n.groupKey || `${n.type}:${n.senderId || 'system'}`;
     if (!grouped[key]) {
       grouped[key] = [];
@@ -45,52 +44,27 @@ const NotificationCenter = ({
   const panelRef = useRef(null);
   const closeTimerRef = useRef(null);
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [friendActionLoadingById, setFriendActionLoadingById] = useState({});
   const [friendCircleById, setFriendCircleById] = useState({});
   const [friendActionMessage, setFriendActionMessage] = useState('');
 
-  const loadNotifications = async (nextPage = 1, replace = false) => {
-    setLoading(true);
-    try {
-      const response = await notificationAPI.getNotifications(nextPage, PAGE_SIZE);
-      const incoming = Array.isArray(response.data?.notifications)
-        ? response.data.notifications
-        : [];
+  const {
+    notifications,
+    loading,
+    hasMore,
+    loadMore,
+    markRead: hookMarkRead,
+    markAllRead: hookMarkAllRead,
+    acknowledge: hookAcknowledge,
+    dismiss: hookDismiss,
+    remove: hookRemove,
+    refresh,
+  } = useInfiniteNotifications({ incomingNotification });
 
-      setNotifications((prev) => {
-        if (replace || nextPage === 1) return incoming;
-        const map = new Map(prev.map((item) => [String(item._id), item]));
-        for (const item of incoming) {
-          map.set(String(item._id), item);
-        }
-        return [...map.values()].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      });
-
-      setPage(nextPage);
-      setHasMore(Boolean(response.data?.pagination?.hasMore));
-    } catch {
-      if (replace) {
-        setNotifications([]);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Refresh list when panel opens
   useEffect(() => {
-    if (open) {
-      loadNotifications(1, true);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!incomingNotification) return;
-    setNotifications((prev) => [incomingNotification, ...prev.filter((item) => String(item._id) !== String(incomingNotification._id))]);
-  }, [incomingNotification]);
+    if (open) refresh();
+  }, [open, refresh]);
 
   useEffect(() => {
     return () => {
@@ -114,55 +88,31 @@ const NotificationCenter = ({
   }, [open]);
 
   const markRead = async (id) => {
-    try {
-      await notificationAPI.markAsRead(id);
-      setNotifications((prev) => prev.map((item) => (
-        String(item._id) === String(id)
-          ? { ...item, isRead: true, readAt: new Date().toISOString() }
-          : item
-      )));
-      onUnreadCountChange((prev) => Math.max(0, prev - 1));
-    } catch {
-      // no-op
-    }
+    const ok = await hookMarkRead(id);
+    if (ok) onUnreadCountChange((prev) => Math.max(0, prev - 1));
   };
 
   const deleteNotification = async (id) => {
     const target = notifications.find((item) => String(item._id) === String(id));
-    try {
-      await notificationAPI.deleteNotification(id);
-      setNotifications((prev) => prev.filter((item) => String(item._id) !== String(id)));
-      if (target && !target.isRead) {
-        onUnreadCountChange((prev) => Math.max(0, prev - 1));
-      }
-    } catch {
-      // no-op
+    const ok = await hookRemove(id);
+    if (ok && target && !target.isRead) {
+      onUnreadCountChange((prev) => Math.max(0, prev - 1));
     }
   };
 
   const acknowledgeNotification = async (id) => {
     const target = notifications.find((item) => String(item._id) === String(id));
-    try {
-      await notificationAPI.acknowledgeNotification(id);
-      setNotifications((prev) => prev.filter((item) => String(item._id) !== String(id)));
-      if (target && !target.isRead) {
-        onUnreadCountChange((prev) => Math.max(0, prev - 1));
-      }
-    } catch {
-      // no-op
+    const ok = await hookAcknowledge(id);
+    if (ok && target && !target.isRead) {
+      onUnreadCountChange((prev) => Math.max(0, prev - 1));
     }
   };
 
   const dismissNotification = async (id) => {
     const target = notifications.find((item) => String(item._id) === String(id));
-    try {
-      await notificationAPI.dismissNotification(id);
-      setNotifications((prev) => prev.filter((item) => String(item._id) !== String(id)));
-      if (target && !target.isRead) {
-        onUnreadCountChange((prev) => Math.max(0, prev - 1));
-      }
-    } catch {
-      // no-op
+    const ok = await hookDismiss(id);
+    if (ok && target && !target.isRead) {
+      onUnreadCountChange((prev) => Math.max(0, prev - 1));
     }
   };
 
@@ -214,8 +164,7 @@ const NotificationCenter = ({
         await friendsAPI.declineRequest(friendshipId);
       }
 
-      await notificationAPI.acknowledgeNotification(notificationId);
-      setNotifications((prev) => prev.filter((item) => String(item._id) !== notificationId));
+      await hookAcknowledge(notificationId);
       onUnreadCountChange((prev) => Math.max(0, prev - (notification?.isRead ? 0 : 1)));
       setFriendActionMessage(action === 'accept' ? 'Friend request accepted.' : 'Friend request declined.');
     } catch {
@@ -256,20 +205,15 @@ const NotificationCenter = ({
   };
 
   const markAllRead = async () => {
-    try {
-      await notificationAPI.markAllAsRead();
-      setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true, readAt: item.readAt || new Date().toISOString() })));
-      onUnreadCountChange(0);
-    } catch {
-      // no-op
-    }
+    const ok = await hookMarkAllRead();
+    if (ok) onUnreadCountChange(0);
   };
 
   const handleScroll = (event) => {
     const el = event.currentTarget;
     const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
     if (nearBottom && hasMore && !loading) {
-      loadNotifications(page + 1);
+      loadMore();
     }
   };
 

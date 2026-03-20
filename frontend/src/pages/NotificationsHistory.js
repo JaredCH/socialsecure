@@ -1,46 +1,16 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { notificationAPI } from '../utils/api';
+import useInfiniteNotifications from '../hooks/useInfiniteNotifications';
 import NotificationItem from '../components/NotificationItem';
 
-const PAGE_SIZE = 20;
-
 const NotificationsHistory = () => {
-  const [notifications, setNotifications] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const loadHistory = useCallback(async (nextPage = 1, replace = false) => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await notificationAPI.getHistory(nextPage, PAGE_SIZE);
-      const incoming = Array.isArray(response.data?.notifications)
-        ? response.data.notifications
-        : [];
-
-      setNotifications((prev) => (replace || nextPage === 1) ? incoming : [...prev, ...incoming]);
-      setPage(nextPage);
-      setHasMore(Boolean(response.data?.pagination?.hasMore));
-    } catch {
-      setError('Failed to load notification history.');
-      if (replace) setNotifications([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadHistory(1, true);
-  }, [loadHistory]);
-
-  const loadMore = () => {
-    if (hasMore && !loading) {
-      loadHistory(page + 1);
-    }
-  };
+  const {
+    notifications,
+    loading,
+    error,
+    hasMore,
+    loadMore,
+  } = useInfiniteNotifications({ history: true });
 
   const noop = () => {};
 

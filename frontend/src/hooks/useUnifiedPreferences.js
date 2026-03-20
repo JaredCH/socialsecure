@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
 import { settingsAPI } from '../utils/api';
+import usePreferencesResource from './usePreferencesResource';
 
 /**
  * Shared hook for the unified preferences API.
@@ -17,45 +17,27 @@ import { settingsAPI } from '../utils/api';
  * }}
  */
 export default function useUnifiedPreferences() {
-  const [preferences, setPreferences] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await settingsAPI.getPreferences();
-      setPreferences(res.data || null);
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Failed to load preferences');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
-
-  const save = useCallback(async (domainUpdates) => {
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await settingsAPI.updatePreferences(domainUpdates);
-      if (res.data) {
+  const resource = usePreferencesResource(
+    settingsAPI.getPreferences,
+    settingsAPI.updatePreferences,
+    {
+      extractData: (res) => res.data || null,
+      extractSaved: (res) => {
+        if (!res.data) return null;
         const { success, ...prefs } = res.data;
-        setPreferences(prefs);
-      }
-      return true;
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Failed to save preferences');
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }, []);
+        return prefs;
+      },
+      loadError: 'Failed to load preferences',
+      saveError: 'Failed to save preferences',
+    },
+  );
 
-  return { preferences, loading, saving, error, save, refresh: fetch };
+  return {
+    preferences: resource.data,
+    loading: resource.loading,
+    saving: resource.saving,
+    error: resource.error,
+    save: resource.save,
+    refresh: resource.refresh,
+  };
 }
