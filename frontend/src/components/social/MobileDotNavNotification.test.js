@@ -6,6 +6,8 @@ import MobileDotNavNotification from './MobileDotNavNotification';
 jest.mock('../../utils/api', () => ({
   notificationAPI: {
     getNotifications: jest.fn(),
+    acknowledgeNotification: jest.fn(),
+    dismissNotification: jest.fn(),
   },
 }));
 
@@ -29,6 +31,8 @@ describe('MobileDotNavNotification', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [] } });
+    notificationAPI.acknowledgeNotification.mockResolvedValue({ data: { success: true } });
+    notificationAPI.dismissNotification.mockResolvedValue({ data: { success: true } });
   });
 
   afterEach(() => {
@@ -151,6 +155,8 @@ describe('MobileDotNavNotification', () => {
     await act(async () => { await Promise.resolve(); });
     const markReadBtn = document.querySelector('[data-testid="mobile-dotnav-notification-markread"]');
     await act(async () => { markReadBtn.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(notificationAPI.acknowledgeNotification).toHaveBeenCalledWith('n1');
     expect(onAck).toHaveBeenCalledTimes(1);
   });
 
@@ -163,7 +169,75 @@ describe('MobileDotNavNotification', () => {
     await act(async () => { await Promise.resolve(); });
     const dismissBtn = document.querySelector('[data-testid="mobile-dotnav-notification-dismiss"]');
     await act(async () => { dismissBtn.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(notificationAPI.dismissNotification).toHaveBeenCalledWith('n1');
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('acknowledges all IDs in a grouped notification on Mark Read', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n1', title: 'New like', body: 'A', type: 'like', createdAt: new Date().toISOString() },
+          { _id: 'n2', title: 'New like', body: 'B', type: 'like', createdAt: new Date().toISOString() },
+        ],
+      },
+    });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const markReadBtn = document.querySelector('[data-testid="mobile-dotnav-notification-markread"]');
+    await act(async () => { markReadBtn.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(notificationAPI.acknowledgeNotification).toHaveBeenCalledWith('n1');
+    expect(notificationAPI.acknowledgeNotification).toHaveBeenCalledWith('n2');
+  });
+
+  it('dismisses all IDs in a grouped notification on Dismiss', async () => {
+    notificationAPI.getNotifications.mockResolvedValue({
+      data: {
+        notifications: [
+          { _id: 'n1', title: 'New like', body: 'A', type: 'like', createdAt: new Date().toISOString() },
+          { _id: 'n2', title: 'New like', body: 'B', type: 'like', createdAt: new Date().toISOString() },
+        ],
+      },
+    });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const dismissBtn = document.querySelector('[data-testid="mobile-dotnav-notification-dismiss"]');
+    await act(async () => { dismissBtn.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(notificationAPI.dismissNotification).toHaveBeenCalledWith('n1');
+    expect(notificationAPI.dismissNotification).toHaveBeenCalledWith('n2');
+  });
+
+  it('keeps notification visible when API call fails on Mark Read', async () => {
+    notificationAPI.acknowledgeNotification.mockRejectedValue(new Error('Network error'));
+    const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const markReadBtn = document.querySelector('[data-testid="mobile-dotnav-notification-markread"]');
+    await act(async () => { markReadBtn.click(); });
+    await act(async () => { await Promise.resolve(); });
+    const pills = document.querySelectorAll('[data-testid="mobile-dotnav-notification-pill"]');
+    expect(pills.length).toBe(1);
+  });
+
+  it('keeps notification visible when API call fails on Dismiss', async () => {
+    notificationAPI.dismissNotification.mockRejectedValue(new Error('Network error'));
+    const notif = { _id: 'n1', title: 'Test', body: 'B', type: 'system', createdAt: new Date().toISOString() };
+    notificationAPI.getNotifications.mockResolvedValue({ data: { notifications: [notif] } });
+    await renderPanel({ isOpen: true });
+    await act(async () => { jest.advanceTimersByTime(50); });
+    await act(async () => { await Promise.resolve(); });
+    const dismissBtn = document.querySelector('[data-testid="mobile-dotnav-notification-dismiss"]');
+    await act(async () => { dismissBtn.click(); });
+    await act(async () => { await Promise.resolve(); });
+    const pills = document.querySelectorAll('[data-testid="mobile-dotnav-notification-pill"]');
+    expect(pills.length).toBe(1);
   });
 
   it('applies visible class when open', async () => {
