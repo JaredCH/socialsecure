@@ -167,11 +167,13 @@ const toDiscoverableResumeMeta = (userDoc, resumeDoc) => {
 
 const toPublicResumePayload = (resumeDoc) => ({
   visibility: resumeDoc.visibility,
-  basics: {
-    headline: resumeDoc?.basics?.headline || '',
-    summary: resumeDoc?.basics?.summary || ''
-  },
-  sections: Array.isArray(resumeDoc.sections) ? resumeDoc.sections : [],
+  basics: resumeDoc.basics || {},
+  summary: resumeDoc.summary || '',
+  experience: Array.isArray(resumeDoc.experience) ? resumeDoc.experience : [],
+  education: Array.isArray(resumeDoc.education) ? resumeDoc.education : [],
+  skills: Array.isArray(resumeDoc.skills) ? resumeDoc.skills : [],
+  certifications: Array.isArray(resumeDoc.certifications) ? resumeDoc.certifications : [],
+  projects: Array.isArray(resumeDoc.projects) ? resumeDoc.projects : [],
   updatedAt: resumeDoc.updatedAt || null,
   createdAt: resumeDoc.createdAt || null
 });
@@ -377,7 +379,7 @@ router.get('/users/:username', publicReadLimiter, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const resume = await Resume.findOne({ userId: user._id })
+    const resume = await Resume.findOne({ ownerId: user._id, isDeleted: false })
       .select('visibility basics.headline updatedAt')
       .lean();
     const resumeMeta = toDiscoverableResumeMeta(user, resume);
@@ -410,8 +412,8 @@ router.get('/users/:username/resume', publicReadLimiter, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const resume = await Resume.findOne({ userId: user._id })
-      .select('visibility basics sections createdAt updatedAt')
+    const resume = await Resume.findOne({ ownerId: user._id, isDeleted: false })
+      .select('visibility basics summary experience education skills certifications projects createdAt updatedAt')
       .lean();
     if (!resume) {
       return res.status(404).json({ error: 'Resume not found' });
@@ -470,7 +472,7 @@ router.post('/users/:username/resume/link-click', publicReadLimiter, async (req,
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const resume = await Resume.findOne({ userId: user._id })
+    const resume = await Resume.findOne({ ownerId: user._id, isDeleted: false })
       .select('visibility')
       .lean();
     if (!resume || resume.visibility !== 'public') {
@@ -523,7 +525,7 @@ router.get('/users/:userId/feed', publicReadLimiter, async (req, res) => {
     }
     const { page, limit, skip } = pagination;
 
-    const resume = await Resume.findOne({ userId: user._id })
+    const resume = await Resume.findOne({ ownerId: user._id, isDeleted: false })
       .select('visibility basics.headline updatedAt')
       .lean();
     const resumeMeta = toDiscoverableResumeMeta(user, resume);
@@ -711,7 +713,7 @@ router.get('/users/:userId/gallery', async (req, res) => {
       mediaUrls: { $exists: true, $ne: [] }
     };
 
-    const resumePromise = Resume.findOne({ userId: user._id })
+    const resumePromise = Resume.findOne({ ownerId: user._id, isDeleted: false })
       .select('visibility basics.headline updatedAt')
       .lean();
 
