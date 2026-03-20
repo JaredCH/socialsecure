@@ -21,6 +21,7 @@ const TRANSITION_FRAMES = 60;
 
 const isRenderableAvatar = (value = '') => {
   if (!value) return false;
+  if (/^\/uploads\/\S+/i.test(value)) return true;
   try {
     const parsed = new URL(value);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
