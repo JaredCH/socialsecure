@@ -66,11 +66,12 @@ jest.mock('../services/realtime', () => ({
   emitChatMessage: jest.fn()
 }));
 jest.mock('../services/notifications', () => ({
-  createNotification: jest.fn().mockResolvedValue(null)
+  createNotification: jest.fn().mockResolvedValue(null),
+  publish: jest.fn().mockResolvedValue(null)
 }));
 
 const jwt = require('jsonwebtoken');
-const { createNotification } = require('../services/notifications');
+const { createNotification, publish } = require('../services/notifications');
 const chatRouter = require('./chat');
 
 const buildApp = () => {
@@ -265,7 +266,7 @@ describe('Chat E2EE boundary hardening', () => {
       .send({ content: 'hello everyone' });
 
     expect(response.status).toBe(201);
-    expect(createNotification).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it('notifies only mentioned room members for @mention room messages', async () => {
@@ -315,12 +316,10 @@ describe('Chat E2EE boundary hardening', () => {
       .send({ content: 'hi @buddy and @outsider' });
 
     expect(response.status).toBe(201);
-    expect(createNotification).toHaveBeenCalledTimes(1);
-    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(publish).toHaveBeenCalledWith('mention', expect.objectContaining({
       recipientId: 'user-2',
-      senderId: 'user-1',
-      type: 'mention',
-      title: 'You were mentioned'
+      senderId: 'user-1'
     }));
   });
 

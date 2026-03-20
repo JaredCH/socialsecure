@@ -12,7 +12,7 @@ const {
   authErrorHandler
 } = require('../middleware/parseAuthToken');
 const { createNotification, publish } = require('../services/notifications');
-const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload, getRoomActiveViewerIds } = require('../services/realtime');
+const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload, getRoomActiveViewerIds, isUserInRealtimeRoom } = require('../services/realtime');
 const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
 const {
   findExactFilterWord,

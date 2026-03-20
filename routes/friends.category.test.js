@@ -29,7 +29,8 @@ jest.mock('../models/Friendship', () => mockFriendship);
 jest.mock('../models/TopFriend', () => mockTopFriend);
 jest.mock('../models/Presence', () => ({}));
 jest.mock('../services/notifications', () => ({
-  createNotification: jest.fn()
+  createNotification: jest.fn(),
+  publish: jest.fn()
 }));
 jest.mock('../services/realtime', () => ({
   getPresenceMapForUsers: jest.fn().mockResolvedValue(new Map()),
@@ -38,7 +39,7 @@ jest.mock('../services/realtime', () => ({
 
 const jwt = require('jsonwebtoken');
 const friendsRouter = require('./friends');
-const { createNotification } = require('../services/notifications');
+const { createNotification, publish } = require('../services/notifications');
 
 const buildApp = () => {
   const app = express();
@@ -183,11 +184,9 @@ describe('Friends category and top5 routes', () => {
     expect(response.status).toBe(200);
     expect(friendshipDoc.status).toBe('accepted');
     expect(mockUser.updateOne).toHaveBeenCalledTimes(2);
-    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+    expect(publish).toHaveBeenCalledWith('friend_request_accepted', expect.objectContaining({
       recipientId: friendshipDoc.requester,
-      senderId: friendshipDoc.recipient,
-      type: 'system',
-      title: 'Friend request accepted'
+      senderId: friendshipDoc.recipient
     }));
   });
 
@@ -210,11 +209,9 @@ describe('Friends category and top5 routes', () => {
 
     expect(response.status).toBe(200);
     expect(friendshipDoc.status).toBe('declined');
-    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+    expect(publish).toHaveBeenCalledWith('friend_request_declined', expect.objectContaining({
       recipientId: friendshipDoc.requester,
-      senderId: friendshipDoc.recipient,
-      type: 'system',
-      title: 'Friend request declined'
+      senderId: friendshipDoc.recipient
     }));
   });
 
@@ -236,11 +233,9 @@ describe('Friends category and top5 routes', () => {
     expect(response.status).toBe(200);
     expect(friendshipDoc.status).toBe('removed');
     expect(response.body.message).toMatch(/request canceled/i);
-    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+    expect(publish).toHaveBeenCalledWith('friend_request_canceled', expect.objectContaining({
       recipientId: friendshipDoc.recipient,
-      senderId: friendshipDoc.requester,
-      type: 'system',
-      title: 'Friend request canceled'
+      senderId: friendshipDoc.requester
     }));
   });
 

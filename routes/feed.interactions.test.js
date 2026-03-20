@@ -30,7 +30,8 @@ jest.mock('../models/SiteContentFilter', () => ({
   findOne: (...args) => mockSiteContentFilterFindOne(...args)
 }));
 jest.mock('../services/notifications', () => ({
-  createNotification: jest.fn().mockResolvedValue(null)
+  createNotification: jest.fn().mockResolvedValue(null),
+  publish: jest.fn().mockResolvedValue(null)
 }));
 
 const jwt = require('jsonwebtoken');

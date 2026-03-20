@@ -44,7 +44,7 @@ jest.mock('../models/Friendship', () => mockFriendship);
 jest.mock('../models/ChatConversation', () => mockChatConversation);
 jest.mock('../models/ConversationMessage', () => mockConversationMessage);
 jest.mock('../models/ConversationKeyPackage', () => mockConversationKeyPackage);
-jest.mock('../services/notifications', () => ({ createNotification: jest.fn() }));
+jest.mock('../services/notifications', () => ({ createNotification: jest.fn(), publish: jest.fn() }));
 jest.mock('../services/realtime', () => ({
   emitChatMessage: jest.fn(),
   getPresenceMapForUsers: jest.fn(),
@@ -63,7 +63,7 @@ const {
   isUserInRealtimeRoom,
   buildPresencePayload
 } = require('../services/realtime');
-const { createNotification } = require('../services/notifications');
+const { createNotification, publish } = require('../services/notifications');
 const chatRouter = require('./chat');
 
 const buildApp = () => {
@@ -410,12 +410,10 @@ describe('Unified chat hub routes', () => {
     expect(mockConversationMessage.create).toHaveBeenCalledWith(expect.objectContaining({
       chatScope: 'dm'
     }));
-    expect(createNotification).toHaveBeenCalledTimes(1);
-    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(publish).toHaveBeenCalledWith('message', expect.objectContaining({
       recipientId: '507f1f77bcf86cd799439099',
-      senderId: '507f1f77bcf86cd799439011',
-      type: 'message',
-      title: 'New direct message'
+      senderId: '507f1f77bcf86cd799439011'
     }));
   });
 
@@ -451,7 +449,7 @@ describe('Unified chat hub routes', () => {
 
     expect(response.status).toBe(201);
     expect(isUserInRealtimeRoom).toHaveBeenCalledWith('507f1f77bcf86cd799439099', 'conv-dm');
-    expect(createNotification).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it('notifies only mentioned users in non-DM conversations', async () => {
@@ -503,17 +501,15 @@ describe('Unified chat hub routes', () => {
       .send({ content: 'hello @owner and @outsider' });
 
     expect(response.status).toBe(201);
-    expect(createNotification).toHaveBeenCalledTimes(1);
-    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(publish).toHaveBeenCalledWith('mention', expect.objectContaining({
       recipientId: '507f1f77bcf86cd799439099',
-      senderId: '507f1f77bcf86cd799439011',
-      type: 'mention',
-      title: 'You were mentioned'
+      senderId: '507f1f77bcf86cd799439011'
     }));
-    expect(createNotification).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(publish).not.toHaveBeenCalledWith('mention', expect.objectContaining({
       recipientId: '507f1f77bcf86cd799439033'
     }));
-    expect(createNotification).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(publish).not.toHaveBeenCalledWith('mention', expect.objectContaining({
       recipientId: '507f1f77bcf86cd799439011'
     }));
   });
@@ -950,7 +946,7 @@ describe('Unified chat hub routes', () => {
     mockUser.findById
       .mockImplementationOnce(() => createSelectResolved({ onboardingStatus: 'completed' }))
       .mockImplementationOnce(() => createSelectLean({ _id: '507f1f77bcf86cd799439011', username: 'alpha' }));
-    createNotification.mockResolvedValue({});
+    publish.mockResolvedValue({});
 
     const response = await request(app)
       .delete('/api/chat/conversations/dm-conv-1')
@@ -961,11 +957,9 @@ describe('Unified chat hub routes', () => {
     expect(mockConversationMessage.deleteMany).toHaveBeenCalledWith({ conversationId: 'dm-conv-1' });
     expect(mockConversationKeyPackage.deleteMany).toHaveBeenCalledWith({ conversationId: 'dm-conv-1' });
     expect(deleteOneDoc).toHaveBeenCalled();
-    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({
+    expect(publish).toHaveBeenCalledWith('conversation_deleted', expect.objectContaining({
       recipientId: 'other-user-1',
-      senderId: '507f1f77bcf86cd799439011',
-      type: 'system',
-      title: 'Conversation deleted'
+      senderId: '507f1f77bcf86cd799439011'
     }));
   });
 

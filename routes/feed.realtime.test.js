@@ -32,7 +32,8 @@ jest.mock('../models/Friendship', () => mockFriendship);
 jest.mock('../models/BlockList', () => mockBlockList);
 jest.mock('../models/MuteList', () => mockMuteList);
 jest.mock('../services/notifications', () => ({
-  createNotification: jest.fn()
+  createNotification: jest.fn(),
+  publish: jest.fn()
 }));
 jest.mock('../services/realtime', () => ({
   emitFeedInteraction: jest.fn(),
