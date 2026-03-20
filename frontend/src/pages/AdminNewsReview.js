@@ -2,40 +2,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { moderationAPI } from '../utils/api';
+import { StatusBadge, Spinner } from '../components/ui';
 
 // ---------------------------------------------------------------------------
 // Shared UI helpers (mirroring ModerationDashboard patterns)
 // ---------------------------------------------------------------------------
-
-const StatusBadge = ({ status, className = '' }) => {
-  const colors = {
-    city: 'bg-blue-100 text-blue-700',
-    county: 'bg-purple-100 text-purple-700',
-    state: 'bg-amber-100 text-amber-700',
-    country: 'bg-green-100 text-green-700',
-    global: 'bg-gray-100 text-gray-600',
-    local: 'bg-blue-100 text-blue-700',
-    regional: 'bg-amber-100 text-amber-700',
-    national: 'bg-green-100 text-green-700',
-    active: 'bg-emerald-100 text-emerald-700',
-    inactive: 'bg-red-100 text-red-700',
-  };
-  return (
-    <span
-      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-        colors[status] ?? 'bg-gray-100 text-gray-600'
-      } ${className}`}
-    >
-      {status}
-    </span>
-  );
-};
-
-const Spinner = () => (
-  <div className="flex items-center justify-center py-12">
-    <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
-  </div>
-);
 
 const formatDate = (v) => {
   if (!v) return '—';

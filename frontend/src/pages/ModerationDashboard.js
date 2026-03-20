@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { moderationAPI, newsAPI } from '../utils/api';
+import { StatusBadge } from '../components/ui';
 
 const SECTION_LABELS = {
   users: 'Users',
@@ -49,36 +50,6 @@ const textToWordList = (value) => String(value || '')
   .split(/\r?\n|,/)
   .map((entry) => entry.trim())
   .filter(Boolean);
-
-const StatusBadge = ({ status, className = '' }) => {
-  const colors = {
-    processed: 'bg-emerald-100 text-emerald-700',
-    failed: 'bg-red-100 text-red-700',
-    inserted: 'bg-blue-100 text-blue-700',
-    updated: 'bg-amber-100 text-amber-700',
-    duplicate: 'bg-gray-100 text-gray-600',
-    error: 'bg-red-100 text-red-700',
-    pending: 'bg-yellow-100 text-yellow-700',
-    under_review: 'bg-blue-100 text-blue-700',
-    resolved: 'bg-emerald-100 text-emerald-700',
-    dismissed: 'bg-gray-100 text-gray-600',
-    insert: 'bg-blue-100 text-blue-700',
-    update: 'bg-amber-100 text-amber-700',
-    skip: 'bg-gray-100 text-gray-600',
-    low: 'bg-gray-100 text-gray-600',
-    medium: 'bg-yellow-100 text-yellow-700',
-    high: 'bg-orange-100 text-orange-700',
-    critical: 'bg-red-100 text-red-700',
-    info: 'bg-blue-100 text-blue-700',
-    warn: 'bg-yellow-100 text-yellow-700',
-    debug: 'bg-gray-100 text-gray-500'
-  };
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colors[status] || 'bg-gray-100 text-gray-600'} ${className}`}>
-      {status}
-    </span>
-  );
-};
 
 const Modal = ({ title, onClose, children }) => (
   <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">

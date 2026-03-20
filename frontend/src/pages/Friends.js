@@ -4,6 +4,7 @@ import { friendsAPI, circlesAPI, discoveryAPI, getAuthToken } from '../utils/api
 import { getRealtimeSocket, onFriendPresence } from '../utils/realtime';
 import { resolvePresenceStatus } from '../utils/presence';
 import toast from 'react-hot-toast';
+import { PresenceDot } from '../components/ui';
 
 const TOP_FRIENDS_LIMIT = 5;
 const MAX_CIRCLES = 5;
@@ -12,15 +13,6 @@ const SEARCH_DEFAULT_LIMIT = 25;
 const normalizeUserSearchQuery = (value = '') => String(value).trim().replace(/^@+/, '');
 
 const DEFAULT_COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
-
-const PresenceDot = ({ presence }) => {
-  const status = resolvePresenceStatus(presence);
-  const cls =
-    status === 'online' ? 'bg-emerald-500' :
-    status === 'inactive' ? 'bg-amber-400' :
-    'bg-slate-300';
-  return <span className={`inline-block h-2.5 w-2.5 rounded-full ${cls}`} title={status} />;
-};
 
 const Avatar = ({ url, size = 'w-10 h-10' }) => (
   <div className={`${size} shrink-0 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden`}>

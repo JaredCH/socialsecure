@@ -1,4 +1,5 @@
 import React from 'react';
+import { SectionHeader } from '../../ui';
 
 const healthDotColor = {
   green: 'bg-green-500',
@@ -13,10 +14,11 @@ const SourcesStatusCard = ({ sources = [], enabledCount = 0, totalCount = 0, onM
 
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200/70 p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">📡 Sources</h2>
-        <span className="text-[11px] text-gray-400">{enabledCount}/{totalCount} active</span>
-      </div>
+      <SectionHeader
+        icon="📡"
+        title="Sources"
+        subtitle={`${enabledCount}/${totalCount} active`}
+      />
 
       {sourceSummary.length === 0 ? (
         <p className="text-xs text-gray-400">No sources available.</p>

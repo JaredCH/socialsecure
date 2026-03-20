@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { discoveryAPI, friendsAPI, hasAuthToken } from '../utils/api';
 import usePaginatedResource from '../hooks/usePaginatedResource';
 import { PostCard, UserCard } from '../components/discovery/DiscoveryCards';
+import { ErrorBanner, EmptyState, LoadMoreButton, Spinner } from '../components/ui';
 
 const TABS = [
   { id: 'people', label: 'People' },
@@ -151,19 +152,17 @@ const Discovery = () => {
       {/* People Tab */}
       {activeTab === 'people' && (
         <div>
-          {usersResource.error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 mb-4 flex items-center justify-between">
-              <span>{usersResource.error}</span>
-              <button type="button" onClick={handleRefreshUsers} className="text-sm underline ml-2 min-h-[44px] px-2">Retry</button>
-            </div>
-          )}
+          <ErrorBanner
+            message={usersResource.error}
+            action={<button type="button" onClick={handleRefreshUsers} className="text-sm underline ml-2 min-h-[44px] px-2">Retry</button>}
+          />
 
           {!usersResource.loading && usersResource.items.length === 0 && !usersResource.error && (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-4xl mb-3">👥</p>
-              <p className="font-medium text-gray-600">No suggestions yet</p>
-              <p className="text-sm mt-1">We'll suggest people as more members join.</p>
-            </div>
+            <EmptyState
+              icon="👥"
+              title="No suggestions yet"
+              description="We'll suggest people as more members join."
+            />
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -178,41 +177,32 @@ const Discovery = () => {
           </div>
 
           {usersResource.loading && (
-            <div className="text-center py-6 text-gray-400">
-              <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-              <p className="text-sm mt-2">Loading suggestions…</p>
-            </div>
+            <Spinner size="h-6 w-6" label="Loading suggestions…" />
           )}
 
-          {usersResource.hasMore && !usersResource.loading && (
-            <div className="text-center mt-4">
-              <button
-                onClick={usersResource.loadMore}
-                className="min-h-[44px] px-4 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Load more people
-              </button>
-            </div>
-          )}
+          <LoadMoreButton
+            onClick={usersResource.loadMore}
+            loading={usersResource.loading}
+            hasMore={usersResource.hasMore}
+            label="Load more people"
+          />
         </div>
       )}
 
       {/* Posts Tab */}
       {activeTab === 'posts' && (
         <div>
-          {postsResource.error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 mb-4 flex items-center justify-between">
-              <span>{postsResource.error}</span>
-              <button type="button" onClick={handleRefreshPosts} className="text-sm underline ml-2 min-h-[44px] px-2">Retry</button>
-            </div>
-          )}
+          <ErrorBanner
+            message={postsResource.error}
+            action={<button type="button" onClick={handleRefreshPosts} className="text-sm underline ml-2 min-h-[44px] px-2">Retry</button>}
+          />
 
           {!postsResource.loading && postsResource.items.length === 0 && !postsResource.error && (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-4xl mb-3">📰</p>
-              <p className="font-medium text-gray-600">No posts to discover yet</p>
-              <p className="text-sm mt-1">Check back as people share more content.</p>
-            </div>
+            <EmptyState
+              icon="📰"
+              title="No posts to discover yet"
+              description="Check back as people share more content."
+            />
           )}
 
           <div className="space-y-3">
@@ -222,22 +212,15 @@ const Discovery = () => {
           </div>
 
           {postsResource.loading && (
-            <div className="text-center py-6 text-gray-400">
-              <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-              <p className="text-sm mt-2">Loading posts…</p>
-            </div>
+            <Spinner size="h-6 w-6" label="Loading posts…" />
           )}
 
-          {postsResource.hasMore && !postsResource.loading && (
-            <div className="text-center mt-4">
-              <button
-                onClick={postsResource.loadMore}
-                className="min-h-[44px] px-4 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Load more posts
-              </button>
-            </div>
-          )}
+          <LoadMoreButton
+            onClick={postsResource.loadMore}
+            loading={postsResource.loading}
+            hasMore={postsResource.hasMore}
+            label="Load more posts"
+          />
         </div>
       )}
     </div>

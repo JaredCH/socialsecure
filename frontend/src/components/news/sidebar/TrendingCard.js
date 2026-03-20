@@ -1,10 +1,11 @@
 import React from 'react';
 import { formatRelativeTime } from '../utils';
+import { SectionHeader } from '../../ui';
 
 const TrendingCard = ({ items = [], loading = false, error = null }) => {
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200/70 p-5">
-      <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">🔥 Trending</h2>
+      <SectionHeader icon="🔥" title="Trending" className="mb-4" />
       {loading ? (
         <div className="space-y-3">
           {[...Array(4)].map((_, index) => (
