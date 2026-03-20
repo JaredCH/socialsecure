@@ -46,7 +46,7 @@ export default function SettingsDrawer({ isOpen, onClose, ...panelProps }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-hidden={!isOpen}
+        inert={!isOpen ? '' : undefined}
         aria-label="News Settings"
         className={`
           fixed z-[150] flex flex-col overflow-hidden border border-white/60 bg-white/95 shadow-[0_30px_90px_rgba(15,23,42,0.28)] backdrop-blur-xl
