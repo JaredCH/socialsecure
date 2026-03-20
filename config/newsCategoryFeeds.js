@@ -49,7 +49,7 @@ const CATEGORY_FEEDS = {
     feeds: [
       { name: 'Google News Health', url: GN_TOPIC('HEALTH'), sourceType: 'googleNews' },
       { name: 'NPR Health', url: 'https://feeds.npr.org/1128/rss.xml', sourceType: 'rss' },
-      { name: 'WebMD', url: 'https://rssfeeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC', sourceType: 'rss' },
+      { name: 'MedlinePlus', url: 'https://medlineplus.gov/rss/healthtopics.xml', sourceType: 'rss' },
     ]
   },
 
@@ -59,7 +59,7 @@ const CATEGORY_FEEDS = {
     color: '#F59E0B',
     feeds: [
       { name: 'Google News Business', url: GN_TOPIC('BUSINESS'), sourceType: 'googleNews' },
-      { name: 'Reuters Business', url: 'https://feeds.reuters.com/reuters/businessNews', sourceType: 'rss' },
+      { name: 'Reuters Business', url: 'https://www.reutersagency.com/feed/?best-topics=businessNews', sourceType: 'rss' },
       { name: 'BBC Business', url: 'https://feeds.bbci.co.uk/news/business/rss.xml', sourceType: 'rss' },
     ]
   },
@@ -71,7 +71,7 @@ const CATEGORY_FEEDS = {
     feeds: [
       { name: 'Google News Sports', url: GN_TOPIC('SPORTS'), sourceType: 'googleNews' },
       { name: 'BBC Sport', url: 'https://feeds.bbci.co.uk/sport/rss.xml', sourceType: 'rss' },
-      { name: 'AP Sports', url: 'https://feeds.apnews.com/rss/apf-sports', sourceType: 'rss' },
+      { name: 'AP Sports', url: 'https://apnews.com/hub/sports/rss', sourceType: 'rss' },
     ]
   },
 
@@ -81,7 +81,7 @@ const CATEGORY_FEEDS = {
     color: '#EC4899',
     feeds: [
       { name: 'Google News Entertainment', url: GN_TOPIC('ENTERTAINMENT'), sourceType: 'googleNews' },
-      { name: 'Entertainment Weekly', url: 'https://ew.com/feed/', sourceType: 'rss' },
+      { name: 'Variety', url: 'https://variety.com/feed/', sourceType: 'rss' },
       { name: 'Hollywood Reporter', url: 'https://www.hollywoodreporter.com/feed/', sourceType: 'rss' },
     ]
   },
@@ -94,7 +94,7 @@ const CATEGORY_FEEDS = {
       { name: 'Google News Nation', url: GN_TOPIC('NATION'), sourceType: 'googleNews' },
       { name: 'Google News World', url: GN_TOPIC('WORLD'), sourceType: 'googleNews' },
       { name: 'NPR Politics', url: 'https://feeds.npr.org/1014/rss.xml', sourceType: 'rss' },
-      { name: 'Politico', url: 'https://www.politico.com/rss/politics08.xml', sourceType: 'rss' },
+      { name: 'Politico', url: 'https://rss.politico.com/politics-news.xml', sourceType: 'rss' },
       { name: 'The Hill', url: 'https://thehill.com/news/feed/', sourceType: 'rss' },
     ]
   },
@@ -105,9 +105,9 @@ const CATEGORY_FEEDS = {
     color: '#059669',
     feeds: [
       { name: 'Google News Finance', url: GN_SEARCH('finance stock market economy when:1d'), sourceType: 'googleNews' },
-      { name: 'Reuters Money', url: 'https://feeds.reuters.com/reuters/businessNews', sourceType: 'rss' },
+      { name: 'Reuters Money', url: 'https://www.reutersagency.com/feed/?best-topics=businessNews', sourceType: 'rss' },
       { name: 'MarketWatch', url: 'https://feeds.marketwatch.com/marketwatch/topstories/', sourceType: 'rss' },
-      { name: 'Investopedia News', url: 'https://www.investopedia.com/feedbuilder/feed/getfeed/?feedName=rss_headline', sourceType: 'rss' },
+      { name: 'Yahoo Finance', url: 'https://finance.yahoo.com/news/rssindex', sourceType: 'rss' },
     ]
   },
 
@@ -142,8 +142,8 @@ const CATEGORY_FEEDS = {
     feeds: [
       { name: 'Google News World', url: GN_TOPIC('WORLD'), sourceType: 'googleNews' },
       { name: 'BBC World', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', sourceType: 'rss' },
-      { name: 'Reuters World', url: 'https://feeds.reuters.com/Reuters/worldNews', sourceType: 'rss' },
-      { name: 'AP World', url: 'https://feeds.apnews.com/rss/apf-intlnews', sourceType: 'rss' },
+      { name: 'Reuters World', url: 'https://www.reutersagency.com/feed/?best-topics=worldNews', sourceType: 'rss' },
+      { name: 'AP World', url: 'https://apnews.com/hub/world-news/rss', sourceType: 'rss' },
     ]
   },
 
@@ -153,7 +153,7 @@ const CATEGORY_FEEDS = {
     color: '#64748B',
     feeds: [
       { name: 'Google News Headlines', url: GN_BASE + '?hl=en-US&gl=US&ceid=US:en', sourceType: 'googleNews' },
-      { name: 'AP Top News', url: 'https://feeds.apnews.com/rss/apf-topnews', sourceType: 'rss' },
+      { name: 'AP Top News', url: 'https://apnews.com/hub/ap-top-news/rss', sourceType: 'rss' },
       { name: 'NPR News', url: 'https://feeds.npr.org/1001/rss.xml', sourceType: 'rss' },
     ]
   },
@@ -164,7 +164,7 @@ const CATEGORY_FEEDS = {
     color: '#DC2626',
     feeds: [
       { name: 'Google News War', url: GN_SEARCH('war conflict military battle when:1d'), sourceType: 'googleNews' },
-      { name: 'Reuters World', url: 'https://feeds.reuters.com/Reuters/worldNews', sourceType: 'rss' },
+      { name: 'Reuters World', url: 'https://www.reutersagency.com/feed/?best-topics=worldNews', sourceType: 'rss' },
       { name: 'Defense News', url: 'https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml', sourceType: 'rss' },
     ]
   },
@@ -217,8 +217,8 @@ const CATEGORY_FEEDS = {
     color: '#15803D',
     feeds: [
       { name: 'Google News Nature', url: GN_SEARCH('nature environment wildlife climate conservation'), sourceType: 'googleNews' },
-      { name: 'National Geographic', url: 'https://www.nationalgeographic.com/nature/rss/', sourceType: 'rss' },
-      { name: 'BBC Nature', url: 'https://feeds.bbci.co.uk/earth/rss.xml', sourceType: 'rss' },
+      { name: 'BBC Science & Environment', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', sourceType: 'rss' },
+      { name: 'Mongabay', url: 'https://news.mongabay.com/feed/', sourceType: 'rss' },
     ]
   },
 
@@ -240,9 +240,9 @@ const CATEGORY_FEEDS = {
     icon: '🔴',
     color: '#EF4444',
     feeds: [
-      { name: 'AP Top News', url: 'https://feeds.apnews.com/rss/apf-topnews', sourceType: 'rss' },
+      { name: 'AP Top News', url: 'https://apnews.com/hub/ap-top-news/rss', sourceType: 'rss' },
       { name: 'BBC Top Stories', url: 'https://feeds.bbci.co.uk/news/rss.xml', sourceType: 'rss' },
-      { name: 'Reuters Top News', url: 'https://feeds.reuters.com/reuters/topNews', sourceType: 'rss' },
+      { name: 'Reuters Top News', url: 'https://www.reutersagency.com/feed/?best-topics=topNews', sourceType: 'rss' },
       { name: 'NPR News Now', url: 'https://feeds.npr.org/500005/podcast.xml', sourceType: 'rss' },
     ]
   },
