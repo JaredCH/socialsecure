@@ -10,7 +10,6 @@ import PresenceIndicator from '../components/PresenceIndicator';
 import GuestPreviewNotice from '../components/social/GuestPreviewNotice';
 import SocialHero from '../components/social/SocialHero';
 import SocialStageSettingsSidebar from '../components/social/SocialStageSettingsSidebar';
-import CircleSpiderDiagram from '../components/social/CircleSpiderDiagram';
 import InteractiveSocialGraph from '../components/social/InteractiveSocialGraph';
 import {
   getFontSizeClass,
@@ -4123,7 +4122,14 @@ const Social = () => {
         ) : <p className="text-sm text-slate-500">Post publishing is available only in owner view.</p>;
       case 'circles':
         return isOwnSocialContext && !isGuestPreview ? (
-          <CircleManager circles={circles} friends={friends} onCreateCircle={handleCreateCircle} onUpdateCircle={handleUpdateCircle} onDeleteCircle={handleDeleteCircle} onAddMember={handleAddCircleMember} onRemoveMember={handleRemoveCircleMember} onMoveMember={handleMoveCircleMember} />
+          <div className="space-y-6">
+            <InteractiveSocialGraph
+              circles={circles}
+              profileLabel={activeProfile?.username || requestedProfileIdentifier || 'user'}
+              accentColor={accentColor}
+            />
+            <CircleManager circles={circles} friends={friends} onCreateCircle={handleCreateCircle} onUpdateCircle={handleUpdateCircle} onDeleteCircle={handleDeleteCircle} onAddMember={handleAddCircleMember} onRemoveMember={handleRemoveCircleMember} onMoveMember={handleMoveCircleMember} />
+          </div>
         ) : (
           <InteractiveSocialGraph
             circles={circles}
