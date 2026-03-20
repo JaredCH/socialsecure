@@ -13,6 +13,29 @@ const DEFAULT_STATE_DISCOVERY_BY_NAME = new Map(
 
 const normalizeLocationToken = (value) => String(value || '').trim().replace(/\s+/g, ' ');
 const normalizeCountryCode = (value) => normalizeLocationToken(value).toUpperCase();
+const slugifyCountyToken = (value) => String(value || '').trim().toLowerCase()
+  .replace(/\s+/g, '-')
+  .replace(/[^a-z0-9-]/g, '')
+  .replace(/-+/g, '-')
+  .replace(/^-|-$/g, '');
+
+const resolveCanonicalStateCode = (state) => {
+  const token = normalizeLocationToken(state);
+  if (!token) return '';
+  const byCode = DEFAULT_STATE_DISCOVERY_BY_CODE.get(token.toUpperCase());
+  if (byCode) return byCode.code;
+  const byName = DEFAULT_STATE_DISCOVERY_BY_NAME.get(token.toLowerCase());
+  if (byName) return byName.code;
+  return token.toUpperCase();
+};
+
+const buildCountyStableKey = (county, state, country) => {
+  const countryCode = normalizeCountryCode(country || 'US');
+  const stateCode = resolveCanonicalStateCode(state);
+  const countySlug = slugifyCountyToken(county);
+  if (!stateCode || !countySlug) return null;
+  return `county:${countryCode}:${stateCode}:${countySlug}`;
+};
 
 const findDefaultStateDiscoveryEntry = (state, country) => {
   const normalizedState = normalizeLocationToken(state);
@@ -402,16 +425,33 @@ chatRoomSchema.statics.findNearby = function(longitude, latitude, maxDistanceMil
 // Static method to find or create a room by location (idempotent)
 chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
   const { type, city, state, country, county, zipCode, coordinates, radius = 50 } = locationData;
-  const canonicalDiscoveryRoom = getCanonicalDiscoveryRoomData({ type, city, state, country });
+
+  // Normalize state/country to canonical codes for county rooms
+  const normalizedCountry = normalizeCountryCode(country || 'US') || 'US';
+  const normalizedState = type === 'county' || type === 'state'
+    ? resolveCanonicalStateCode(state) || state
+    : state;
+
+  const canonicalDiscoveryRoom = getCanonicalDiscoveryRoomData({ type, city, state: normalizedState, country: normalizedCountry });
+
+  // Build county stable key for deterministic lookup
+  const countyStableKey = type === 'county' ? buildCountyStableKey(county, normalizedState, normalizedCountry) : null;
+
   const query = {
-    ...buildLocationRoomQuery({ type, city, state, country, county, zipCode }),
+    ...buildLocationRoomQuery({ type, city, state: normalizedState, country: normalizedCountry, county, zipCode }),
     archivedAt: null,
     discoverable: { $ne: false }
   };
 
-  let room = canonicalDiscoveryRoom
-    ? await this.findOne({ stableKey: canonicalDiscoveryRoom.stableKey, archivedAt: null, discoverable: { $ne: false } })
-    : await this.findOne(query);
+  // Try to find by stable key first (canonical discovery rooms or county rooms)
+  let room;
+  if (canonicalDiscoveryRoom) {
+    room = await this.findOne({ stableKey: canonicalDiscoveryRoom.stableKey, archivedAt: null, discoverable: { $ne: false } });
+  } else if (countyStableKey) {
+    room = await this.findOne({ stableKey: countyStableKey, archivedAt: null, discoverable: { $ne: false } });
+  } else {
+    room = await this.findOne(query);
+  }
 
   if (!room && canonicalDiscoveryRoom) {
     const archivedCanonicalRoom = await this.findOne({
@@ -419,6 +459,16 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
       archivedAt: { $ne: null }
     });
     if (archivedCanonicalRoom) {
+      return { room: null, created: false };
+    }
+  }
+
+  if (!room && countyStableKey) {
+    const archivedCountyRoom = await this.findOne({
+      stableKey: countyStableKey,
+      archivedAt: { $ne: null }
+    });
+    if (archivedCountyRoom) {
       return { room: null, created: false };
     }
   }
@@ -439,6 +489,18 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
       return { room, created: false };
     }
   }
+
+  // Upgrade legacy county rooms (matching by query but missing stableKey) to use stable key
+  if (!room && countyStableKey) {
+    room = await this.findOne(query);
+    if (room) {
+      room.stableKey = countyStableKey;
+      room.state = normalizedState;
+      room.country = normalizedCountry;
+      await room.save();
+      return { room, created: false };
+    }
+  }
   
   // If room exists, return it (preserve existing data - idempotent)
   if (room) {
@@ -450,13 +512,13 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
   if (type === 'city') {
     name = zipCode
       ? (city ? `${city} (ZIP ${zipCode})` : `ZIP ${zipCode}`)
-      : (city ? `${city}, ${state || ''}` : 'Unknown City');
+      : (city ? `${city}, ${normalizedState || ''}` : 'Unknown City');
   } else if (canonicalDiscoveryRoom) {
     name = canonicalDiscoveryRoom.name;
   } else if (type === 'state') {
-    name = state || 'Unknown State';
+    name = normalizedState || 'Unknown State';
   } else if (type === 'county') {
-    name = county ? `${county}, ${state || ''}` : 'Unknown County';
+    name = county ? `${county}, ${normalizedState || ''}` : 'Unknown County';
   } else {
     name = 'Unknown Location';
   }
@@ -467,8 +529,8 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
     name: name.trim(),
     type,
     city: type === 'city' ? (canonicalDiscoveryRoom?.city || city) : undefined,
-    state: canonicalDiscoveryRoom?.state || state,
-    country: canonicalDiscoveryRoom?.country || country,
+    state: canonicalDiscoveryRoom?.state || normalizedState,
+    country: canonicalDiscoveryRoom?.country || normalizedCountry,
     county: type === 'county' ? county : undefined,
     zipCode: (type === 'city' && !canonicalDiscoveryRoom) ? zipCode : undefined,
     location: {
@@ -481,7 +543,7 @@ chatRoomSchema.statics.findOrCreateByLocation = async function(locationData) {
     discoveryGroup: getDiscoveryGroupForType(type),
     parentRoomId: null,
     defaultLanding: false,
-    stableKey: canonicalDiscoveryRoom?.stableKey || undefined,
+    stableKey: canonicalDiscoveryRoom?.stableKey || countyStableKey || undefined,
     members: [],
     messageCount: 0,
     lastActivity: new Date()

@@ -170,3 +170,221 @@ describe('ChatRoom.findOrCreateByLocation canonical seeded room reuse', () => {
     expect(result).toEqual({ room: legacyRoom, created: false });
   });
 });
+
+describe('ChatRoom.findOrCreateByLocation county room stable key', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('finds county rooms by deterministic stable key', async () => {
+    const countyRoom = {
+      _id: 'county-hays',
+      stableKey: 'county:US:TX:hays-county',
+      type: 'county',
+      county: 'Hays County',
+      state: 'TX',
+      country: 'US',
+      members: []
+    };
+    const findOneSpy = jest.spyOn(ChatRoom, 'findOne')
+      .mockResolvedValueOnce(countyRoom);
+
+    const result = await ChatRoom.findOrCreateByLocation({
+      type: 'county',
+      county: 'Hays County',
+      state: 'TX',
+      country: 'US',
+      coordinates: [-98.0, 30.0]
+    });
+
+    expect(findOneSpy).toHaveBeenCalledWith({
+      stableKey: 'county:US:TX:hays-county',
+      archivedAt: null,
+      discoverable: { $ne: false }
+    });
+    expect(result).toEqual({ room: countyRoom, created: false });
+  });
+
+  it('normalizes state name to code for county stable key', async () => {
+    const countyRoom = {
+      _id: 'county-travis',
+      stableKey: 'county:US:TX:travis',
+      type: 'county',
+      county: 'Travis',
+      state: 'TX',
+      country: 'US',
+      members: []
+    };
+    const findOneSpy = jest.spyOn(ChatRoom, 'findOne')
+      .mockResolvedValueOnce(countyRoom);
+
+    const result = await ChatRoom.findOrCreateByLocation({
+      type: 'county',
+      county: 'Travis',
+      state: 'Texas',
+      country: 'US',
+      coordinates: [-97.7431, 30.2672]
+    });
+
+    expect(findOneSpy).toHaveBeenCalledWith({
+      stableKey: 'county:US:TX:travis',
+      archivedAt: null,
+      discoverable: { $ne: false }
+    });
+    expect(result).toEqual({ room: countyRoom, created: false });
+  });
+
+  it('normalizes country to uppercase code for county rooms', async () => {
+    const countyRoom = {
+      _id: 'county-harris',
+      stableKey: 'county:US:TX:harris',
+      type: 'county',
+      members: []
+    };
+    const findOneSpy = jest.spyOn(ChatRoom, 'findOne')
+      .mockResolvedValueOnce(countyRoom);
+
+    await ChatRoom.findOrCreateByLocation({
+      type: 'county',
+      county: 'Harris',
+      state: 'TX',
+      country: 'us',
+      coordinates: [-95.3698, 29.7604]
+    });
+
+    expect(findOneSpy).toHaveBeenCalledWith({
+      stableKey: 'county:US:TX:harris',
+      archivedAt: null,
+      discoverable: { $ne: false }
+    });
+  });
+
+  it('upgrades legacy county room without stableKey', async () => {
+    const legacyRoom = {
+      _id: 'legacy-county-travis',
+      type: 'county',
+      county: 'Travis',
+      state: 'TX',
+      country: 'US',
+      members: ['user-1'],
+      save: jest.fn().mockResolvedValue(true)
+    };
+    jest.spyOn(ChatRoom, 'findOne').mockImplementation(async (query) => {
+      if (query?.stableKey === 'county:US:TX:travis') return null;
+      if (query?.type === 'county' && query?.county === 'Travis') return legacyRoom;
+      return null;
+    });
+
+    const result = await ChatRoom.findOrCreateByLocation({
+      type: 'county',
+      county: 'Travis',
+      state: 'TX',
+      country: 'US',
+      coordinates: [-97.7431, 30.2672]
+    });
+
+    expect(legacyRoom.stableKey).toBe('county:US:TX:travis');
+    expect(legacyRoom.state).toBe('TX');
+    expect(legacyRoom.country).toBe('US');
+    expect(legacyRoom.save).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ room: legacyRoom, created: false });
+  });
+
+  it('creates county room with stable key when none exists', async () => {
+    const saveSpy = jest.fn().mockResolvedValue(true);
+    jest.spyOn(ChatRoom, 'findOne').mockResolvedValue(null);
+    jest.spyOn(ChatRoom.prototype, 'save').mockImplementation(saveSpy);
+
+    const result = await ChatRoom.findOrCreateByLocation({
+      type: 'county',
+      county: 'Hays County',
+      state: 'TX',
+      country: 'US',
+      coordinates: [-98.0, 30.0]
+    });
+
+    expect(result.created).toBe(true);
+    expect(result.room.stableKey).toBe('county:US:TX:hays-county');
+    expect(result.room.state).toBe('TX');
+    expect(result.room.country).toBe('US');
+    expect(result.room.county).toBe('Hays County');
+    expect(result.room.name).toBe('Hays County, TX');
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips archived county room with matching stable key', async () => {
+    jest.spyOn(ChatRoom, 'findOne').mockImplementation(async (query) => {
+      if (query?.stableKey === 'county:US:TX:travis' && query?.archivedAt?.$ne !== undefined) {
+        return { _id: 'archived-county', archivedAt: new Date() };
+      }
+      return null;
+    });
+
+    const result = await ChatRoom.findOrCreateByLocation({
+      type: 'county',
+      county: 'Travis',
+      state: 'TX',
+      country: 'US',
+      coordinates: [-97.7431, 30.2672]
+    });
+
+    expect(result).toEqual({ room: null, created: false });
+  });
+
+  it('slugifies county names with special characters and spaces', async () => {
+    const saveSpy = jest.fn().mockResolvedValue(true);
+    jest.spyOn(ChatRoom, 'findOne').mockResolvedValue(null);
+    jest.spyOn(ChatRoom.prototype, 'save').mockImplementation(saveSpy);
+
+    const result = await ChatRoom.findOrCreateByLocation({
+      type: 'county',
+      county: "St. Mary's  County",
+      state: 'MD',
+      country: 'US',
+      coordinates: [-76.5, 38.3]
+    });
+
+    expect(result.created).toBe(true);
+    expect(result.room.stableKey).toBe('county:US:MD:st-marys-county');
+  });
+
+  it('handles county name with leading/trailing whitespace', async () => {
+    const countyRoom = { _id: 'county-trim', stableKey: 'county:US:TX:bexar', members: [] };
+    const findOneSpy = jest.spyOn(ChatRoom, 'findOne')
+      .mockResolvedValueOnce(countyRoom);
+
+    await ChatRoom.findOrCreateByLocation({
+      type: 'county',
+      county: '  Bexar  ',
+      state: 'TX',
+      country: 'US',
+      coordinates: [-98.4, 29.4]
+    });
+
+    expect(findOneSpy).toHaveBeenCalledWith({
+      stableKey: 'county:US:TX:bexar',
+      archivedAt: null,
+      discoverable: { $ne: false }
+    });
+  });
+
+  it('falls back to field-based query when county or state is empty', async () => {
+    const findOneSpy = jest.spyOn(ChatRoom, 'findOne').mockResolvedValue(null);
+    jest.spyOn(ChatRoom.prototype, 'save').mockResolvedValue(true);
+
+    await ChatRoom.findOrCreateByLocation({
+      type: 'county',
+      county: '',
+      state: 'TX',
+      country: 'US',
+      coordinates: [-97.7, 30.2]
+    });
+
+    // With empty county, stableKey is null so it falls back to field-based query
+    expect(findOneSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'county',
+      state: 'TX',
+      country: 'US'
+    }));
+  });
+});

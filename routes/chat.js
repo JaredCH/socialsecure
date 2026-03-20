@@ -2544,6 +2544,7 @@ router.post('/rooms/admin', roomWriteLimiter, authenticateToken, [
         return res.status(409).json({ error: 'A similar room already exists in this list' });
       }
     }
+    const adminCountry = normalizeCountryCode(req.body.country || parentRoom?.country) || 'US';
     const room = await ChatRoom.create({
       name: incomingName,
       type,
@@ -2552,7 +2553,7 @@ router.post('/rooms/admin', roomWriteLimiter, authenticateToken, [
       city: req.body.city || undefined,
       county: req.body.county || undefined,
       state: req.body.state || parentRoom?.state || undefined,
-      country: req.body.country || parentRoom?.country || 'US',
+      country: adminCountry,
       location: { type: 'Point', coordinates: [...ADMIN_ROOM_DEFAULT_LOCATION.coordinates] },
       radius: type === 'state' || type === 'topic' ? 100 : 50,
       createdBy: req.user.userId,
@@ -2647,7 +2648,7 @@ router.put('/rooms/:roomId', roomWriteLimiter, authenticateToken, [
     if (Object.prototype.hasOwnProperty.call(req.body, 'city')) room.city = req.body.city || undefined;
     if (Object.prototype.hasOwnProperty.call(req.body, 'county')) room.county = req.body.county || undefined;
     if (Object.prototype.hasOwnProperty.call(req.body, 'state')) room.state = req.body.state || parentRoom?.state || undefined;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'country')) room.country = req.body.country || parentRoom?.country || 'US';
+    if (Object.prototype.hasOwnProperty.call(req.body, 'country')) room.country = normalizeCountryCode(req.body.country || parentRoom?.country) || 'US';
     room.discoveryGroup = discoveryGroup;
     room.parentRoomId = parentRoom ? parentRoom._id : null;
     room.name = nextName;
