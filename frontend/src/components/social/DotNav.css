@@ -773,6 +773,134 @@
   background: #bfdbfe;
 }
 
+/* ── Mini Friends List ── */
+.dotnav-friends-list {
+  position: fixed;
+  z-index: 9999;
+  bottom: var(--dotnav-PAD);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: calc(5 * 58px + 40px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  opacity: 0;
+  transform: scale(0.85);
+  pointer-events: none;
+  transition: opacity 0.25s ease,
+              transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  scrollbar-width: none;
+}
+
+.dotnav-friends-list::-webkit-scrollbar {
+  display: none;
+}
+
+.dotnav-friends-list.dotnav-visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.dotnav-friends-list.dotnav-friends-left {
+  left: var(--dotnav-PAD);
+}
+
+.dotnav-friends-list.dotnav-friends-right {
+  right: var(--dotnav-PAD);
+}
+
+.dotnav-friends-group-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dotnav-soft);
+  padding: 4px 0 2px;
+}
+
+.dotnav-friend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.dotnav-friend-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dotnav-friend-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--dotnav-btn-bg);
+  color: var(--dotnav-btn-fg);
+  font-size: 14px;
+  font-weight: 700;
+  border: 2px solid transparent;
+  transition: box-shadow 0.25s ease;
+}
+
+.dotnav-friend-glow-online {
+  box-shadow: 0 0 8px 2px rgba(34, 197, 94, 0.7),
+              0 0 2px 1px rgba(34, 197, 94, 0.5);
+  border-color: #22c55e;
+}
+
+.dotnav-friend-glow-offline {
+  box-shadow: 0 0 6px 1px rgba(160, 160, 160, 0.35);
+  border-color: #a0a0a0;
+}
+
+.dotnav-friend-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.dotnav-friend-initials {
+  user-select: none;
+  line-height: 1;
+}
+
+.dotnav-friend-distance {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 18px;
+  border-radius: 9px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  padding: 0 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dotnav-friend-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dotnav-btn-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+  line-height: 1.2;
+}
+
 /* ── Reduced motion preference ── */
 @media (prefers-reduced-motion: reduce) {
   #dotnav-dot,
@@ -786,7 +914,9 @@
   #dotnav-hint,
   #dotnav-nav-label,
   #dotnav-backdrop,
-  .dotnav-mobile-notif-panel {
+  .dotnav-mobile-notif-panel,
+  .dotnav-friends-list,
+  .dotnav-friend-avatar {
     transition: none !important;
   }
 

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import MobileDotNavNotification from './MobileDotNavNotification';
+import DotNavFriendsList from './DotNavFriendsList';
 import './DotNav.css';
 
 // ═══════════════════════════════════════════
@@ -253,7 +254,7 @@ function resolveRoute(catalogEntry, loggedInUser, viewingUser) {
 // ═══════════════════════════════════════════
 // DOTNAV COMPONENT
 // ═══════════════════════════════════════════
-const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0, incomingNotification = null, onNotificationAcknowledge, onNotificationDismiss, onLogout }) => {
+const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled = true, unreadNotificationCount = 0, incomingNotification = null, onNotificationAcknowledge, onNotificationDismiss, onLogout, userId = '' }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -801,6 +802,14 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
           </button>
         </div>
       </div>
+
+      {/* Mini Friends List – opposite side from DotNav */}
+      <DotNavFriendsList
+        isOpen={isOpen}
+        side={side}
+        loggedInUser={loggedInUser}
+        userId={userId}
+      />
 
       {/* Mobile notification overlay – positioned above DotNav, never overlapping */}
       <MobileDotNavNotification
