@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Home from './pages/Home';
@@ -383,6 +383,15 @@ function App() {
 
     bootstrapNotifications();
   }, [isAuthenticated]);
+
+  const refreshUnreadNotificationCount = useCallback(async () => {
+    try {
+      const { data } = await notificationAPI.getUnreadCount();
+      setUnreadNotificationCount(Number(data?.count || 0));
+    } catch {
+      // ignore notification count refresh failures
+    }
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || !user?._id) {
@@ -968,6 +977,7 @@ function App() {
           userId={user?._id || ''}
           unreadNotificationCount={unreadNotificationCount}
           incomingNotification={incomingNotification}
+          onNotificationCountRefresh={refreshUnreadNotificationCount}
           onLogout={handleLogout}
         />
 
