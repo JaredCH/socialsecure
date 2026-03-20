@@ -965,7 +965,6 @@ function App() {
 
         <DotNav
           loggedInUser={user?.username || ''}
-          enabled={canUseProtectedFeatures}
           unreadNotificationCount={unreadNotificationCount}
           incomingNotification={incomingNotification}
           onLogout={handleLogout}
