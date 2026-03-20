@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 
 const { normalizeRealtimePreferences } = require('../utils/realtimePreferences');
+const presenceService = require('./presenceService');
 
 const Friendship = require('../models/Friendship');
 const ChatConversation = require('../models/ChatConversation');
@@ -10,7 +11,7 @@ const User = require('../models/User');
 
 const MAX_REPLAY_EVENTS = 50;
 const TYPING_RATE_LIMIT_MS = 800;
-const INACTIVE_PRESENCE_WINDOW_MS = 5 * 60 * 1000;
+const INACTIVE_PRESENCE_WINDOW_MS = presenceService.INACTIVE_PRESENCE_WINDOW_MS;
 
 let ioInstance = null;
 let eventCounter = 0;
@@ -118,54 +119,11 @@ const toTimestamp = (value) => {
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
 
-const normalizePresenceRecord = (presence, referenceTime = Date.now()) => {
-  if (!presence) {
-    return {
-      status: 'offline',
-      lastSeen: null,
-      lastActivity: null
-    };
-  }
+const normalizePresenceRecord = (presence, referenceTime = Date.now()) =>
+  presenceService.normalizePresenceRecord(presence, referenceTime);
 
-  const rawStatus = String(presence.status || '').trim().toLowerCase();
-  if (rawStatus === 'online') {
-    return {
-      ...presence,
-      status: 'online'
-    };
-  }
-
-  const lastSeenTimestamp = toTimestamp(presence.lastSeen);
-  if (lastSeenTimestamp > 0 && (referenceTime - lastSeenTimestamp) < INACTIVE_PRESENCE_WINDOW_MS) {
-    return {
-      ...presence,
-      status: 'inactive'
-    };
-  }
-
-  return {
-    ...presence,
-    status: 'offline'
-  };
-};
-
-const buildPresencePayload = (userId, presence, preferencesInput = {}) => {
-  const preferences = normalizeRealtimePreferences(preferencesInput);
-  if (!preferences.showPresence) {
-    return {
-      userId: String(userId),
-      status: 'hidden',
-      lastSeen: null
-    };
-  }
-
-  const normalizedPresence = normalizePresenceRecord(presence);
-  return {
-    userId: String(userId),
-    status: normalizedPresence.status,
-    lastSeen: preferences.showLastSeen ? normalizedPresence.lastSeen || null : null
-  };
-};
+const buildPresencePayload = (userId, presence, preferencesInput = {}) =>
+  presenceService.buildPresencePayload(userId, presence, preferencesInput);
 
 const broadcastPresenceUpdate = async (userId) => {
   const normalizedUserId = String(userId || '').trim();
@@ -210,20 +168,7 @@ const updatePresenceConnection = async (userId, socketId, isConnected) => {
     userSocketIds.delete(normalizedUserId);
   }
 
-  const now = new Date();
-  const socketIds = [...socketSet];
-  await Presence.findOneAndUpdate(
-    { userId: normalizedUserId },
-    {
-      $set: {
-        status: socketIds.length > 0 ? 'online' : 'inactive',
-        lastActivity: now,
-        lastSeen: socketIds.length > 0 ? null : now,
-        socketIds
-      }
-    },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
-  );
+  await presenceService.updateConnection(normalizedUserId, normalizedSocketId, isConnected, socketSet);
 
   await broadcastPresenceUpdate(normalizedUserId);
 };
@@ -415,6 +360,12 @@ const bindSocketHandlers = () => {
       }
     });
 
+    socket.on('heartbeat', async () => {
+      const userId = socket.data?.userId;
+      if (!userId) return;
+      await presenceService.recordHeartbeat(userId);
+    });
+
     socket.on('replay-missed-events', ({ lastEventId } = {}) => {
       if (!socket.data?.userId) return;
       replayMissedEvents(socket, socket.data.userId, lastEventId || null);
@@ -511,16 +462,8 @@ const isUserInRealtimeRoom = (userId, roomId) => {
   return false;
 };
 
-const getPresenceMapForUsers = async (userIds) => {
-  const normalized = [...new Set((Array.isArray(userIds) ? userIds : []).map((value) => String(value || '').trim()).filter(Boolean))];
-  if (normalized.length === 0) return new Map();
-
-  const presences = await Presence.find({ userId: { $in: normalized } })
-    .select('userId status lastSeen lastActivity')
-    .lean();
-
-  return new Map(presences.map((presence) => [String(presence.userId), presence]));
-};
+const getPresenceMapForUsers = async (userIds) =>
+  presenceService.getPresenceMap(userIds);
 
 module.exports = {
   initializeRealtime,
