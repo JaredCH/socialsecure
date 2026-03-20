@@ -164,6 +164,24 @@ function News({ isGuestMode = false }) {
     return () => window.cancelAnimationFrame(id);
   }, []);
 
+  // Register/unregister the mobile article drawer as a DotNav closeable
+  useEffect(() => {
+    if (selectedArticle) {
+      window.dispatchEvent(new CustomEvent('DotNavRegisterCloseable', { detail: { id: 'news-article' } }));
+    } else {
+      window.dispatchEvent(new CustomEvent('DotNavUnregisterCloseable', { detail: { id: 'news-article' } }));
+    }
+  }, [selectedArticle]);
+
+  // Listen for DotNav close requests to close the article drawer
+  useEffect(() => {
+    const handleCloseRequest = () => {
+      if (selectedArticle) setSelectedArticle(null);
+    };
+    window.addEventListener('DotNavCloseRequest', handleCloseRequest);
+    return () => window.removeEventListener('DotNavCloseRequest', handleCloseRequest);
+  }, [selectedArticle]);
+
   const handleMobileArticleSelect = useCallback((article) => {
     setDesktopArticlePreview(null);
     setSelectedArticle(article);
@@ -343,13 +361,17 @@ function News({ isGuestMode = false }) {
         </div>
         {!isGuestMode && (
           <button
-            className="fixed bottom-20 right-2 z-40 h-14 w-14 rounded-full border border-white/20 bg-slate-950/75 text-white shadow-[0_18px_36px_rgba(2,6,23,0.35)] backdrop-blur-xl flex items-center justify-center active:scale-95 transition-transform"
+            className="fixed z-40 h-7 w-7 rounded-full border border-white/20 bg-slate-950/75 text-white shadow-[0_8px_18px_rgba(2,6,23,0.35)] backdrop-blur-xl flex items-center justify-center active:scale-95 transition-transform"
+            style={{
+              left: 'calc(var(--dotnav-anchor-left, 308px) - 36px)',
+              top: 'calc(var(--dotnav-anchor-top, 762px) + 14px)',
+            }}
             onClick={() => setSettingsOpen(true)}
             aria-label="Open news settings"
           >
-            <span className="absolute inset-[7px] rounded-full border border-white/15" aria-hidden="true" />
-            <span className="absolute inset-[12px] rounded-full bg-white/[0.04]" aria-hidden="true" />
-            <span className="relative material-symbols-outlined text-[1.3rem] leading-none">settings</span>
+            <span className="absolute inset-[3px] rounded-full border border-white/15" aria-hidden="true" />
+            <span className="absolute inset-[5px] rounded-full bg-white/[0.04]" aria-hidden="true" />
+            <span className="relative material-symbols-outlined text-[0.65rem] leading-none">settings</span>
           </button>
         )}
       </div>
