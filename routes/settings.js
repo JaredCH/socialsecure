@@ -1,5 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 
 const User = require('../models/User');
 const Session = require('../models/Session');
@@ -20,6 +21,22 @@ const {
 } = require('../services/unifiedPreferences');
 
 const router = express.Router();
+
+const settingsReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' }
+});
+
+const settingsWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' }
+});
 
 const hashToken = (token = '') =>
   require('crypto').createHash('sha256').update(token).digest('hex');
@@ -59,19 +76,19 @@ const authenticateToken = async (req, res, next) => {
 };
 
 // ── GET /api/settings/preferences ───────────────────────────────────────
-router.get('/preferences', authenticateToken, (req, res) => {
+router.get('/preferences', settingsReadLimiter, authenticateToken, (req, res) => {
   return res.json(buildUnifiedPreferences(req.user));
 });
 
 // ── GET /api/settings/defaults ──────────────────────────────────────────
-router.get('/defaults', (_req, res) => {
+router.get('/defaults', settingsReadLimiter, (_req, res) => {
   return res.json(getDefaults());
 });
 
 // ── PUT /api/settings/preferences ───────────────────────────────────────
 // Accepts a body with one or more domain keys: notifications, realtime,
 // security, privacy, ui.  Only supplied domains are updated.
-router.put('/preferences', authenticateToken, async (req, res) => {
+router.put('/preferences', settingsWriteLimiter, authenticateToken, async (req, res) => {
   const input = req.body;
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return res.status(400).json({ error: 'Request body must be an object' });
