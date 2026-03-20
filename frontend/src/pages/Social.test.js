@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { authAPI, calendarAPI, chatAPI, circlesAPI, discoveryAPI, feedAPI, friendsAPI, galleryAPI, moderationAPI, notificationAPI, resumeAPI, socialPageAPI } from '../utils/api';
-import { onFeedInteraction, onFeedPost, onFriendPresence, onTyping } from '../utils/realtime';
+import { onFeedInteraction, onFeedPost, onFeedPostRemoved, onFriendPresence, onTyping } from '../utils/realtime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -58,7 +58,8 @@ jest.mock('../utils/api', () => {
       getNotifications: jest.fn()
     },
     resumeAPI: {
-      getMyResume: jest.fn()
+      getMyResume: jest.fn(),
+      getPublicResume: jest.fn()
     },
     getAuthToken: jest.fn(() => 'token'),
     resolveUploadMediaUrl: jest.fn((value) => value),
@@ -75,6 +76,7 @@ jest.mock('../utils/realtime', () => ({
   getRealtimeSocket: jest.fn(() => null),
   onFeedInteraction: jest.fn(() => () => {}),
   onFeedPost: jest.fn(() => () => {}),
+  onFeedPostRemoved: jest.fn(() => () => {}),
   onFriendPresence: jest.fn(() => () => {}),
   onTyping: jest.fn(() => () => {}),
   subscribeToPost: jest.fn(),
@@ -201,6 +203,7 @@ describe('Social page hero background rendering', () => {
       }
     });
     resumeAPI.getMyResume.mockResolvedValue({ data: { resume: null } });
+    resumeAPI.getPublicResume.mockResolvedValue({ data: { resume: null } });
     circlesAPI.getCircles.mockResolvedValue({ data: { circles: [] } });
     friendsAPI.getFriends.mockResolvedValue({ data: { friends: [] } });
     friendsAPI.getTopFriends.mockResolvedValue({ data: { topFriends: [] } });
@@ -250,6 +253,7 @@ describe('Social page hero background rendering', () => {
     });
     chatAPI.getConversationMessages.mockResolvedValue({ data: { messages: [] } });
     onFeedPost.mockImplementation(() => () => {});
+    onFeedPostRemoved.mockImplementation(() => () => {});
     onFeedInteraction.mockImplementation(() => () => {});
     onFriendPresence.mockImplementation(() => () => {});
     onTyping.mockImplementation(() => () => {});
@@ -808,5 +812,41 @@ describe('Social page hero background rendering', () => {
     expect(messageLine?.className).toContain('border-b');
 
     expect(messageText?.closest('div.overflow-y-auto')).toBe(messageViewport);
+  });
+
+  it('routes owner resume actions on social page to /resume', async () => {
+    authAPI.getProfile.mockResolvedValue({
+      data: {
+        user: {
+          _id: 'u-1',
+          username: 'alpha',
+          socialPagePreferences: {
+            hero: {
+              backgroundImageUseRandomGallery: true
+            },
+            enabledSections: { resume: true, blog: false, aboutme: false }
+          }
+        }
+      }
+    });
+
+    resumeAPI.getPublicResume.mockResolvedValue({
+      data: {
+        resume: {
+          basics: {
+            fullName: 'Alpha User',
+            headline: 'Engineer'
+          },
+          summary: 'Summary text'
+        }
+      }
+    });
+
+    await expect(renderPage()).resolves.toBeUndefined();
+    await switchToTab('Resume');
+
+    const editResumeLink = container.querySelector('a[title="Edit resume in settings"]');
+    expect(editResumeLink).toBeTruthy();
+    expect(editResumeLink?.getAttribute('href')).toBe('/resume');
   });
 });
