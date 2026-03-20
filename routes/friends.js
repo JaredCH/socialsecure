@@ -490,8 +490,10 @@ router.put('/:id/category', friendMutationLimiter, authenticateToken, async (req
 
     if (isRequester) {
       friendship.requesterCategory = category;
+      friendship.requesterRelationshipAudience = category;
     } else {
       friendship.recipientCategory = category;
+      friendship.recipientRelationshipAudience = category;
     }
     await friendship.save();
 
@@ -684,8 +686,10 @@ router.patch('/:id/audience', friendWriteLimiter, authenticateToken, async (req,
     const viewerId = String(req.user._id || '');
     if (String(friendship.requester) === viewerId) {
       friendship.requesterRelationshipAudience = relationshipAudience;
+      friendship.requesterCategory = relationshipAudience;
     } else if (String(friendship.recipient) === viewerId) {
       friendship.recipientRelationshipAudience = relationshipAudience;
+      friendship.recipientCategory = relationshipAudience;
     } else {
       return res.status(403).json({ error: 'Not authorized to update this friendship' });
     }
