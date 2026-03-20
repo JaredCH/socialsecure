@@ -7,7 +7,7 @@ const multer = require('multer');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 
-const { createNotification } = require('../services/notifications');
+const { createNotification, publish } = require('../services/notifications');
 
 const MarketListing = require('../models/MarketListing');
 const MarketTransaction = require('../models/MarketTransaction');
@@ -918,19 +918,16 @@ router.post('/listings/:listingId/initiate-sale', [
     await listing.save();
 
     // Send notification to buyer
-    const notification = await createNotification({
+    const notification = await publish('market_transaction', {
       recipientId: buyerId,
       senderId: sellerAnonymous ? null : sellerId,
-      type: 'market_transaction',
-      title: 'Transaction Request',
-      body: sellerAnonymous
+      transactionTitle: 'Transaction Request',
+      transactionBody: sellerAnonymous
         ? `You have a new transaction request for an item priced at ${listing.currency} ${listing.price}.`
         : `You have a transaction request for "${listing.title}" priced at ${listing.currency} ${listing.price}.`,
-      data: {
-        listingId: listing._id,
-        transactionId: transaction._id,
-        url: '/market?tab=transactions'
-      }
+      listingId: listing._id,
+      transactionId: transaction._id,
+      deepLinkUrl: '/market?tab=transactions'
     });
 
     if (notification) {
@@ -991,19 +988,16 @@ router.post('/transactions/:transactionId/respond', [
       await listing.save();
 
       // Notify seller of acceptance
-      await createNotification({
+      await publish('market_transaction', {
         recipientId: transaction.sellerId,
         senderId: transaction.buyerAnonymous ? null : userId,
-        type: 'market_transaction',
-        title: 'Transaction Accepted',
-        body: transaction.buyerAnonymous
+        transactionTitle: 'Transaction Accepted',
+        transactionBody: transaction.buyerAnonymous
           ? `Your transaction for "${transaction.listingTitle}" was accepted.`
           : `Your transaction for "${transaction.listingTitle}" was accepted.`,
-        data: {
-          listingId: listing._id,
-          transactionId: transaction._id,
-          url: '/market?tab=myListings'
-        }
+        listingId: listing._id,
+        transactionId: transaction._id,
+        deepLinkUrl: '/market?tab=myListings'
       });
     } else {
       transaction.status = 'rejected';
@@ -1012,17 +1006,14 @@ router.post('/transactions/:transactionId/respond', [
       await listing.save();
 
       // Notify seller of rejection
-      await createNotification({
+      await publish('market_transaction', {
         recipientId: transaction.sellerId,
         senderId: null,
-        type: 'market_transaction',
-        title: 'Transaction Declined',
-        body: `The transaction for "${transaction.listingTitle}" was declined.`,
-        data: {
-          listingId: listing._id,
-          transactionId: transaction._id,
-          url: '/market?tab=myListings'
-        }
+        transactionTitle: 'Transaction Declined',
+        transactionBody: `The transaction for "${transaction.listingTitle}" was declined.`,
+        listingId: listing._id,
+        transactionId: transaction._id,
+        deepLinkUrl: '/market?tab=myListings'
       });
     }
 

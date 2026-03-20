@@ -22,6 +22,20 @@ const notificationSchema = new mongoose.Schema({
     ],
     required: true
   },
+  event: {
+    type: String,
+    default: null,
+    index: true
+  },
+  category: {
+    type: String,
+    default: null
+  },
+  priority: {
+    type: String,
+    enum: ['low', 'normal', 'high', 'critical'],
+    default: 'normal'
+  },
   title: {
     type: String,
     required: true,

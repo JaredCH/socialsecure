@@ -8,6 +8,7 @@ const { normalizeRealtimePreferences } = require('../utils/realtimePreferences')
 const User = require('../models/User');
 const Session = require('../models/Session');
 const Notification = require('../models/Notification');
+const DeliveryAttempt = require('../models/DeliveryAttempt');
 
 const router = express.Router();
 
@@ -292,7 +293,9 @@ router.put('/preferences', [
   body('friendPosts').optional().isObject(),
   body('top5').optional().isObject(),
   body('partnerRequests').optional().isObject(),
-  body('realtime').optional().isObject()
+  body('realtime').optional().isObject(),
+  body('quietHours').optional().isObject(),
+  body('digestMode').optional().isObject()
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -337,6 +340,28 @@ router.put('/preferences', [
         presence: typeof input?.realtime?.presence === 'boolean'
           ? input.realtime.presence
           : Boolean(existing?.realtime?.presence ?? true)
+      },
+      quietHours: {
+        enabled: typeof input?.quietHours?.enabled === 'boolean'
+          ? input.quietHours.enabled
+          : Boolean(existing?.quietHours?.enabled ?? false),
+        start: typeof input?.quietHours?.start === 'string'
+          ? input.quietHours.start
+          : (existing?.quietHours?.start || '22:00'),
+        end: typeof input?.quietHours?.end === 'string'
+          ? input.quietHours.end
+          : (existing?.quietHours?.end || '08:00'),
+        timezone: typeof input?.quietHours?.timezone === 'string'
+          ? input.quietHours.timezone
+          : (existing?.quietHours?.timezone || 'UTC')
+      },
+      digestMode: {
+        enabled: typeof input?.digestMode?.enabled === 'boolean'
+          ? input.digestMode.enabled
+          : Boolean(existing?.digestMode?.enabled ?? false),
+        frequency: ['daily', 'weekly'].includes(input?.digestMode?.frequency)
+          ? input.digestMode.frequency
+          : (existing?.digestMode?.frequency || 'daily')
       }
     };
 
@@ -360,6 +385,62 @@ router.put('/preferences', [
   } catch (error) {
     console.error('Update notification preferences error:', error);
     return res.status(500).json({ error: 'Failed to update notification preferences' });
+  }
+});
+
+router.get('/grouped', authenticateToken, async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+
+    const groups = await Notification.aggregate([
+      { $match: { recipientId: req.user._id, status: 'active' } },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: '$groupKey',
+          latestId: { $first: '$_id' },
+          type: { $first: '$type' },
+          title: { $first: '$title' },
+          body: { $first: '$body' },
+          senderId: { $first: '$senderId' },
+          data: { $first: '$data' },
+          isRead: { $first: '$isRead' },
+          priority: { $first: '$priority' },
+          category: { $first: '$category' },
+          createdAt: { $first: '$createdAt' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: limit }
+    ]);
+
+    return res.json({ groups });
+  } catch (error) {
+    console.error('Grouped notifications error:', error);
+    return res.status(500).json({ error: 'Failed to load grouped notifications' });
+  }
+});
+
+router.get('/:id/delivery', authenticateToken, async (req, res) => {
+  try {
+    const notification = await Notification.findOne({
+      _id: req.params.id,
+      recipientId: req.user._id
+    }).lean();
+
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    const attempts = await DeliveryAttempt.find({ notificationId: notification._id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({ attempts });
+  } catch (error) {
+    console.error('Delivery status error:', error);
+    return res.status(500).json({ error: 'Failed to load delivery status' });
   }
 });
 

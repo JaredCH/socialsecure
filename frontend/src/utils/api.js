@@ -519,6 +519,8 @@ export const notificationAPI = {
   getHistory: (page = 1, limit = 20) => api.get(`/notifications/history?page=${page}&limit=${limit}`),
   getPreferences: () => api.get('/notifications/preferences'),
   updatePreferences: (data) => api.put('/notifications/preferences', data),
+  getGrouped: (limit = 20) => api.get(`/notifications/grouped?limit=${limit}`),
+  getDeliveryStatus: (id) => api.get(`/notifications/${encodeURIComponent(id)}/delivery`),
 };
 
 export const discoveryAPI = {
