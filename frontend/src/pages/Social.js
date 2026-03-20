@@ -33,6 +33,7 @@ import {
   subscribeToPost,
   unsubscribeFromPost
 } from '../utils/realtime';
+import { getInitials } from '../utils/initials';
 
 const MEDIA_URL_MAX_ITEMS = 8;
 const MEDIA_URL_MAX_LENGTH = 2048;
@@ -4510,15 +4511,18 @@ const Social = () => {
         return topFriends.length === 0 ? (
           <p className="text-sm text-gray-600">Top friends are private or not set yet.</p>
         ) : (
-          <ul className="space-y-3 text-sm text-gray-700">
+          <ul className="space-y-2 text-sm text-gray-700">
             {topFriends.slice(0, TOP_FRIENDS_LIMIT).map((friend, index) => (
-              <li key={friend._id || friend.username} className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">@{friend.username}</p>
-                    {friend.realName ? <p className="text-xs text-gray-500">{friend.realName}</p> : null}
+              <li key={friend._id || friend.username} className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                    {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : getInitials(friend.realName, friend.username)}
                   </div>
-                  <span className="rounded-full bg-amber-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-900">Top {index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">@{friend.username}</p>
+                    {friend.realName ? <p className="truncate text-xs text-gray-500">{friend.realName}</p> : null}
+                  </div>
+                  <span className="shrink-0 rounded-full bg-amber-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-900">Top {index + 1}</span>
                 </div>
               </li>
             ))}
@@ -5646,7 +5650,7 @@ const Social = () => {
       {friend?.avatarUrl ? (
         <img src={friend.avatarUrl} alt={friend.username || 'friend'} className="h-full w-full object-cover" />
       ) : (
-        (friend?.realName || friend?.username || '?').charAt(0).toUpperCase()
+        getInitials(friend?.realName, friend?.username)
       )}
     </div>
   );
@@ -5842,16 +5846,16 @@ const Social = () => {
                   <h3 className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--social-text-muted)' }}>Top Friends</h3>
                   <div className="mt-3">
                     {topFriends.length > 0 ? (
-                      <div className="grid grid-cols-5 gap-2">
+                      <div className="grid grid-cols-5 gap-1">
                         {topFriends.slice(0, 5).map((friend) => (
-                          <Link key={friend._id} to={`/social?user=${friend.username}`} className="group flex flex-col items-center gap-1.5 rounded-xl p-1.5 transition-colors hover:bg-white/5">
+                          <Link key={friend._id} to={`/social?user=${friend.username}`} className="group flex flex-col items-center gap-1.5 rounded-xl p-1 transition-colors hover:bg-white/5" title={friend.realName || friend.username}>
                             <div className="relative">
-                              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10 text-xs font-semibold text-white transition-all group-hover:ring-white/25" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
-                                {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
+                              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10 text-[10px] font-semibold text-white transition-all group-hover:ring-white/25" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
+                                {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : getInitials(friend.realName, friend.username)}
                               </div>
                               <PresenceIndicator presence={friend.presence} />
                             </div>
-                            <span className="truncate text-[10px]" style={{ color: 'var(--social-text-muted)' }}>{friend.realName || friend.username}</span>
+                            <span className="w-full truncate text-center text-[10px] leading-tight" style={{ color: 'var(--social-text-muted)' }}>{friend.realName?.split(' ')[0] || friend.username}</span>
                           </Link>
                         ))}
                       </div>
@@ -5872,7 +5876,7 @@ const Social = () => {
                     {activePartnerFriend ? (
                       <Link to={`/social?user=${encodeURIComponent(activePartnerFriend.username)}`} className="group flex items-center gap-3 rounded-2xl p-3 transition hover:bg-white/[0.04]" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.06))' }}>
                         <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full text-sm font-semibold text-white ring-2 ring-emerald-400/40 transition group-hover:ring-emerald-400/70" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
-                          {activePartnerFriend.avatarUrl ? <img src={activePartnerFriend.avatarUrl} alt={activePartnerFriend.username} className="h-full w-full object-cover" /> : (activePartnerFriend.realName || activePartnerFriend.username || '?').charAt(0).toUpperCase()}
+                          {activePartnerFriend.avatarUrl ? <img src={activePartnerFriend.avatarUrl} alt={activePartnerFriend.username} className="h-full w-full object-cover" /> : getInitials(activePartnerFriend.realName, activePartnerFriend.username)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">💚 Partner</p>
@@ -5886,7 +5890,7 @@ const Social = () => {
                     {!activePartnerFriend && outgoingPartnerRequest ? (
                       <div className="flex items-center gap-3 rounded-xl bg-blue-500/10 px-3 py-3">
                         <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
-                          {outgoingPartnerRequest.avatarUrl ? <img src={outgoingPartnerRequest.avatarUrl} alt={outgoingPartnerRequest.username} className="h-full w-full object-cover" /> : (outgoingPartnerRequest.realName || outgoingPartnerRequest.username || '?').charAt(0).toUpperCase()}
+                          {outgoingPartnerRequest.avatarUrl ? <img src={outgoingPartnerRequest.avatarUrl} alt={outgoingPartnerRequest.username} className="h-full w-full object-cover" /> : getInitials(outgoingPartnerRequest.realName, outgoingPartnerRequest.username)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-400">Pending request</p>
@@ -5901,7 +5905,7 @@ const Social = () => {
                     {incomingPartnerRequests.map((friend) => (
                       <div key={`partner-incoming-${friend.friendshipId || friend._id}`} className="flex items-center gap-3 rounded-xl bg-amber-500/10 px-3 py-3">
                         <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
-                          {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
+                          {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : getInitials(friend.realName, friend.username)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">Incoming request</p>
@@ -5978,7 +5982,7 @@ const Social = () => {
                           style={partnerConfirmFriend && String(partnerConfirmFriend.friendshipId) === String(friend.friendshipId) ? { background: 'var(--social-surface-soft)', '--tw-ring-color': 'var(--accent)' } : undefined}
                         >
                           <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg, ${accentColor}, ${accentColor2})` }}>
-                            {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : (friend.realName || friend.username || '?').charAt(0).toUpperCase()}
+                            {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.username} className="h-full w-full object-cover" /> : getInitials(friend.realName, friend.username)}
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-semibold" style={{ color: 'var(--social-text-primary)' }}>@{friend.username}</p>
