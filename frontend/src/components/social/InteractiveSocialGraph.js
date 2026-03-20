@@ -12,6 +12,8 @@ const ORBIT_RADIUS_STEP = 60;
 const OWNER_RADIUS = 28;
 const CIRCLE_NODE_RADIUS = 22;
 const MEMBER_NODE_RADIUS = 13;
+const MEMBER_ORBIT_RADIUS = 38;
+const STAR_COUNT = 180;
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 3.0;
 const ZOOM_STEP = 0.15;
@@ -161,15 +163,31 @@ function computeGraphData(circles, profileLabel) {
   const memberEntries = Array.from(membersById.values())
     .sort((a, b) => (b.isMutual ? 1 : 0) - (a.isMutual ? 1 : 0));
 
-  memberEntries.forEach((member, mi) => {
+  // Group members by primary circle for even angle distribution
+  const membersByCircle = new Map();
+  memberEntries.forEach((member) => {
+    const key = member.circleIndexes[0];
+    if (!membersByCircle.has(key)) membersByCircle.set(key, []);
+    membersByCircle.get(key).push(member);
+  });
+
+  memberEntries.forEach((member) => {
     if (member.isMutual) mutualCount++;
 
     const primaryCircleIdx = member.circleIndexes[0];
-    const parentOrbitRadius = ORBIT_BASE_RADIUS + primaryCircleIdx * ORBIT_RADIUS_STEP;
-    const memberOrbitRadius = parentOrbitRadius + 35;
-    const memberAngle = memberEntries.length === 1
+    const circleMembers = membersByCircle.get(primaryCircleIdx) || [member];
+    const indexInCircle = circleMembers.indexOf(member);
+    const countInCircle = circleMembers.length;
+
+    const memberAngle = countInCircle === 1
       ? -Math.PI / 2
-      : ((Math.PI * 2) / memberEntries.length) * mi - Math.PI / 2;
+      : ((Math.PI * 2) / countInCircle) * indexInCircle - Math.PI / 2;
+
+    // Find parent circle node to set initial position relative to it
+    const parentCircleId = member.circleIds[0];
+    const parentNode = nodes.find((n) => n.id === parentCircleId);
+    const parentX = parentNode ? parentNode.x : CENTER_X;
+    const parentY = parentNode ? parentNode.y : CENTER_Y;
 
     const memberNode = {
       id: `member-${member._id}`,
@@ -177,11 +195,12 @@ function computeGraphData(circles, profileLabel) {
       label: member.realName || member.username,
       color: member.circleColor,
       radius: MEMBER_NODE_RADIUS,
-      orbitRadius: memberOrbitRadius,
+      parentCircleId,
+      orbitRadius: MEMBER_ORBIT_RADIUS,
       orbitAngle: memberAngle,
-      orbitSpeed: 0.0006 + mi * 0.00004,
-      x: CENTER_X + memberOrbitRadius * Math.cos(memberAngle),
-      y: CENTER_Y + memberOrbitRadius * Math.sin(memberAngle),
+      orbitSpeed: 0.0002 + indexInCircle * 0.00003,
+      x: parentX + MEMBER_ORBIT_RADIUS * Math.cos(memberAngle),
+      y: parentY + MEMBER_ORBIT_RADIUS * Math.sin(memberAngle),
       targetX: 0,
       targetY: 0,
       avatarUrl: member.avatarUrl || '',
@@ -304,6 +323,22 @@ function InteractiveSocialGraph({ circles = [], profileLabel = 'User', accentCol
   const hoveredRef = useRef(null);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
 
+  // Generate star field once
+  const starsRef = useRef([]);
+  if (starsRef.current.length === 0) {
+    const stars = [];
+    for (let i = 0; i < STAR_COUNT; i++) {
+      stars.push({
+        x: Math.random() * CANVAS_WIDTH,
+        y: Math.random() * CANVAS_HEIGHT,
+        r: Math.random() * 1.2 + 0.3,
+        baseOpacity: Math.random() * 0.4 + 0.08,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+    starsRef.current = stars;
+  }
+
   const { nodes: graphNodes, edges: graphEdges, memberCount, mutualCount } = useMemo(
     () => computeGraphData(circles, profileLabel),
     [circles, profileLabel],
@@ -329,15 +364,29 @@ function InteractiveSocialGraph({ circles = [], profileLabel = 'User', accentCol
 
   /* ──── compute orbit positions ──── */
   const computeOrbitPositions = useCallback((time) => {
+    const nodeMap = new Map(nodesRef.current.map((n) => [n.id, n]));
+
+    // First pass: owner stays at center, circles orbit the center
     nodesRef.current.forEach((n) => {
       if (n.type === 'owner') {
         n.targetX = CENTER_X;
         n.targetY = CENTER_Y;
-        return;
+      } else if (n.type === 'circle') {
+        const angle = n.orbitAngle + time * n.orbitSpeed;
+        n.targetX = CENTER_X + n.orbitRadius * Math.cos(angle);
+        n.targetY = CENTER_Y + n.orbitRadius * Math.sin(angle);
       }
+    });
+
+    // Second pass: members orbit their parent circle
+    nodesRef.current.forEach((n) => {
+      if (n.type !== 'member') return;
+      const parent = n.parentCircleId ? nodeMap.get(n.parentCircleId) : null;
+      const cx = parent ? parent.targetX : CENTER_X;
+      const cy = parent ? parent.targetY : CENTER_Y;
       const angle = n.orbitAngle + time * n.orbitSpeed;
-      n.targetX = CENTER_X + n.orbitRadius * Math.cos(angle);
-      n.targetY = CENTER_Y + n.orbitRadius * Math.sin(angle);
+      n.targetX = cx + n.orbitRadius * Math.cos(angle);
+      n.targetY = cy + n.orbitRadius * Math.sin(angle);
     });
   }, []);
 
@@ -422,6 +471,17 @@ function InteractiveSocialGraph({ circles = [], profileLabel = 'User', accentCol
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Star field (drawn in screen space before pan/zoom)
+    const time = timeRef.current;
+    starsRef.current.forEach((star) => {
+      const twinkle = 0.6 + 0.4 * Math.sin(time * 0.0008 + star.phase);
+      const opacity = star.baseOpacity * twinkle;
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+      ctx.fill();
+    });
+
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.scale(z, z);
@@ -449,6 +509,22 @@ function InteractiveSocialGraph({ circles = [], profileLabel = 'User', accentCol
           ctx.strokeStyle = ringColor;
           ctx.lineWidth = 1.5;
           ctx.setLineDash([6, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      });
+      // Member orbit rings around each circle
+      const circlesWithMembers = new Set();
+      nodesRef.current.forEach((n) => {
+        if (n.type === 'member' && n.parentCircleId) circlesWithMembers.add(n.parentCircleId);
+      });
+      nodesRef.current.forEach((n) => {
+        if (n.type === 'circle' && circlesWithMembers.has(n.id)) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, MEMBER_ORBIT_RADIUS, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+          ctx.lineWidth = 0.8;
+          ctx.setLineDash([3, 3]);
           ctx.stroke();
           ctx.setLineDash([]);
         }
