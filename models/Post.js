@@ -297,8 +297,8 @@ postSchema.methods.canView = function(viewerId, context = {}) {
   if (!viewerId) return this.visibility === 'public' && relationshipAudience === 'public';
 
   const viewer = String(viewerId);
-  const author = String(this.authorId);
-  const target = String(this.targetFeedId);
+  const author = String(this.authorId?._id || this.authorId || '');
+  const target = String(this.targetFeedId?._id || this.targetFeedId || '');
 
   if (this.expiresAt && this.expiresAt.getTime() < Date.now()) {
     return false;
