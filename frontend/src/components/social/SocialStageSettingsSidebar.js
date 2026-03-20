@@ -73,11 +73,6 @@ const SocialStageSettingsSidebar = ({
   onToggleTopFriend,
   onMoveTopFriend
 }) => {
-  if (!isOpen) return null;
-  const themeValues = themeOptions.map((option) => option.value);
-  const resolvedThemePreset = themeValues.includes(themePreset)
-    ? themePreset
-    : (themeValues[0] || 'default');
   const backgroundFileInputRef = useRef(null);
   const profileFileInputRef = useRef(null);
   const bodyBgFileInputRef = useRef(null);
@@ -98,6 +93,12 @@ const SocialStageSettingsSidebar = ({
   useEffect(() => {
     setBodyBgDraft(bodyBackgroundImage || '');
   }, [bodyBackgroundImage]);
+
+  if (!isOpen) return null;
+  const themeValues = themeOptions.map((option) => option.value);
+  const resolvedThemePreset = themeValues.includes(themePreset)
+    ? themePreset
+    : (themeValues[0] || 'default');
 
   return createPortal(
     <div className={`fixed inset-0 ${SIDEBAR_OVERLAY_Z_INDEX_CLASS} pointer-events-none`}>
