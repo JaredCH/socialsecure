@@ -10,7 +10,7 @@ const presenceSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['online', 'inactive', 'offline'],
+    enum: ['online', 'inactive', 'offline', 'hidden', 'unknown'],
     default: 'offline'
   },
   lastSeen: {
@@ -20,6 +20,10 @@ const presenceSchema = new mongoose.Schema({
   lastActivity: {
     type: Date,
     default: Date.now
+  },
+  lastHeartbeat: {
+    type: Date,
+    default: null
   },
   socketIds: [{
     type: String,

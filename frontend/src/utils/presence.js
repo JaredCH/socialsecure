@@ -1,3 +1,16 @@
+/**
+ * Presence utilities — rendering helpers for the canonical presence DTO
+ * produced by the backend presenceService.
+ *
+ * The backend is the single source of truth for status derivation.
+ * These helpers format and classify the DTO for rendering purposes only;
+ * they do NOT re-derive the status from raw timestamps (the 5-minute
+ * inactive window is evaluated server-side).  A lightweight fallback is
+ * retained so that if the frontend receives a stale/raw DTO it can still
+ * approximate a reasonable status without diverging from the backend
+ * thresholds.
+ */
+
 export const PRESENCE_INACTIVE_WINDOW_MS = 5 * 60 * 1000;
 
 const toTimestamp = (value) => {
@@ -7,9 +20,16 @@ const toTimestamp = (value) => {
 
 export const resolvePresenceStatus = (presence, referenceTime = Date.now()) => {
   const rawStatus = String(presence?.status || '').trim().toLowerCase();
+
+  // Backend-resolved canonical states are authoritative
   if (rawStatus === 'hidden') return 'hidden';
   if (rawStatus === 'online') return 'online';
+  if (rawStatus === 'inactive') return 'inactive';
+  if (rawStatus === 'unknown') return 'unknown';
 
+  // Fallback: if backend sent 'offline' or unrecognized status, do a
+  // lightweight staleness check so recently-disconnected users still
+  // render as "inactive" even if the DTO was slightly stale.
   const lastSeenTimestamp = toTimestamp(presence?.lastSeen);
   if (lastSeenTimestamp > 0 && (referenceTime - lastSeenTimestamp) < PRESENCE_INACTIVE_WINDOW_MS) {
     return 'inactive';
@@ -59,6 +79,15 @@ export const getPresenceMeta = (presence, referenceTime = Date.now()) => {
       label: 'Inactive',
       shortLabel: 'Inactive',
       dotClassName: 'bg-amber-400'
+    };
+  }
+
+  if (status === 'unknown') {
+    return {
+      status,
+      label: 'Status unavailable',
+      shortLabel: 'Unknown',
+      dotClassName: 'bg-slate-300'
     };
   }
 
