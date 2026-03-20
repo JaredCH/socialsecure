@@ -414,6 +414,54 @@ describe('DotNav navigation system', () => {
     expect(document.getElementById('dotnav-bell')).toBeNull();
     expect(document.getElementById('dotnav-notification-panel')).toBeNull();
   });
+
+  it('shows guest CTA when menu is open and user is not logged in', async () => {
+    await renderNav({ loggedInUser: '' });
+
+    const dot = document.getElementById('dotnav-dot');
+    await act(async () => { dot.click(); });
+
+    const cta = document.querySelector('[data-testid="dotnav-guest-cta"]');
+    expect(cta).not.toBeNull();
+    expect(cta.textContent).toBe('Register / Login');
+  });
+
+  it('does not show guest CTA when user is logged in', async () => {
+    await renderNav({ loggedInUser: 'testuser' });
+
+    const dot = document.getElementById('dotnav-dot');
+    await act(async () => { dot.click(); });
+
+    const cta = document.querySelector('[data-testid="dotnav-guest-cta"]');
+    expect(cta).toBeNull();
+  });
+
+  it('does not show guest CTA when menu is closed', async () => {
+    await renderNav({ loggedInUser: '' });
+
+    const cta = document.querySelector('[data-testid="dotnav-guest-cta"]');
+    expect(cta).toBeNull();
+  });
+
+  it('navigates Main to /login for guest not viewing another user', async () => {
+    const events = [];
+    const handler = (e) => events.push(e.detail);
+    window.addEventListener('VoidNavTrigger', handler);
+
+    await renderNav({ loggedInUser: '' });
+
+    const dot = document.getElementById('dotnav-dot');
+    await act(async () => { dot.click(); });
+
+    const mainBtn = document.querySelector('.dotnav-nbtn[aria-label="Main"]');
+    expect(mainBtn).not.toBeNull();
+    await act(async () => { mainBtn.click(); });
+    expect(events.length).toBe(1);
+    expect(events[0].key).toBe('main');
+    expect(events[0].route).toBe('/login');
+
+    window.removeEventListener('VoidNavTrigger', handler);
+  });
 });
 
 describe('resolveRoute', () => {
@@ -451,6 +499,14 @@ describe('resolveRoute', () => {
   it('resolves about to aboutme tab', () => {
     expect(resolveRoute(findCatalogEntry('about'), 'me', 'other')).toBe('/social?user=other&tab=aboutme');
     expect(resolveRoute(findCatalogEntry('my-about'), 'me', 'other')).toBe('/social?tab=aboutme');
+  });
+
+  it('resolves main to /login for guest not viewing another user', () => {
+    expect(resolveRoute(findCatalogEntry('main'), '', '')).toBe('/login');
+  });
+
+  it('resolves main to /social for guest viewing another user profile', () => {
+    expect(resolveRoute(findCatalogEntry('main'), '', 'someone')).toBe('/social');
   });
 
   it('returns null for null entry', () => {

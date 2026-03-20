@@ -213,7 +213,11 @@ function resolveRoute(catalogEntry, loggedInUser, viewingUser) {
 
   // Global routes
   if (catalogEntry.type === 'global') {
-    if (catalogEntry.target === 'feed') return '/social';
+    if (catalogEntry.target === 'feed') {
+      // Guest user not viewing another user's profile → login page
+      if (!loggedInUser && !viewingUser) return '/login';
+      return '/social';
+    }
     if (catalogEntry.target === 'map') return '/maps';
     return `/${catalogEntry.target}`;
   }
@@ -533,6 +537,8 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     return viewingUser;
   }, [viewingUser, loggedInUser]);
 
+  const isGuest = !loggedInUser;
+
   const isMobile = windowSize.w <= MOBILE_MAX_WIDTH
     || (isLikelyTouchMobileDevice() && windowSize.w <= TOUCH_DEVICE_MAX_WIDTH);
 
@@ -566,6 +572,19 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
         }}
         aria-hidden="true"
       />
+
+      {/* Guest CTA – centered on overlay */}
+      {isGuest && isOpen && (
+        <button
+          className="dotnav-guest-cta"
+          data-testid="dotnav-guest-cta"
+          type="button"
+          onClick={() => { navigate('/login'); setIsOpen(false); }}
+          aria-label="Register or Login"
+        >
+          Register / Login
+        </button>
+      )}
 
       {/* Main Dot Button */}
       <button
