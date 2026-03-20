@@ -5,7 +5,6 @@ import { resolvePresenceStatus } from '../../utils/presence';
 
 const METERS_TO_FEET = 3.28084;
 const EARTH_RADIUS_METERS = 6378137;
-const MAX_VISIBLE = 5;
 const FRIENDS_REFRESH_INTERVAL_MS = 30000;
 
 /**
@@ -246,5 +245,5 @@ const DotNavFriendsList = ({ isOpen, side, loggedInUser, userId }) => {
   );
 };
 
-export { getInitials, getDisplayName, isFriendOnline, haversineDistanceMeters, METERS_TO_FEET, MAX_VISIBLE };
+export { getInitials, getDisplayName, isFriendOnline, haversineDistanceMeters, METERS_TO_FEET };
 export default DotNavFriendsList;
