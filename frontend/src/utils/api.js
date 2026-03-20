@@ -217,6 +217,8 @@ export const feedAPI = {
     api.get(`/public/users/${encodeURIComponent(userIdOrUsername)}/feed?page=${page}&limit=${limit}`),
   createPost: (data) => api.post('/feed/post', data),
   deletePost: (postId) => api.delete(`/feed/post/${postId}`),
+  updatePostAudience: (postId, relationshipAudience) =>
+    api.patch(`/feed/post/${postId}/audience`, { relationshipAudience }),
   likePost: (postId) => api.post(`/feed/post/${postId}/like`),
   unlikePost: (postId) => api.delete(`/feed/post/${postId}/like`),
   addComment: (postId, content) => api.post(`/feed/post/${postId}/comment`, { content }),

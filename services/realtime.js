@@ -435,6 +435,10 @@ const emitFeedPost = ({ userIds, post }) => {
   emitToUsers(userIds, 'feed:new-post', { post });
 };
 
+const emitFeedPostRemoved = ({ userIds, postId }) => {
+  emitToUsers(userIds, 'feed:post-removed', { postId: String(postId) });
+};
+
 const emitFeedInteraction = ({ userIds, interaction }) => {
   emitToUsers(userIds, 'feed:interaction', interaction);
 };
@@ -471,6 +475,7 @@ module.exports = {
   emitToUsers,
   getMissedEvents,
   emitFeedPost,
+  emitFeedPostRemoved,
   emitFeedInteraction,
   emitChatMessage,
   isUserInRealtimeRoom,
