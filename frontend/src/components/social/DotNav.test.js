@@ -361,6 +361,59 @@ describe('DotNav navigation system', () => {
 
     window.removeEventListener('VoidNavTrigger', handler);
   });
+
+  it('shows notification badge on dot when unread count is provided', async () => {
+    await renderNav({ unreadNotificationCount: 5 });
+
+    const badge = document.querySelector('[data-testid="dotnav-dot-badge"]');
+    expect(badge).not.toBeNull();
+    expect(badge.textContent).toBe('5');
+  });
+
+  it('does not show notification badge when unread count is zero', async () => {
+    await renderNav({ unreadNotificationCount: 0 });
+
+    const badge = document.querySelector('[data-testid="dotnav-dot-badge"]');
+    expect(badge).toBeNull();
+  });
+
+  it('caps notification badge at 99+', async () => {
+    await renderNav({ unreadNotificationCount: 150 });
+
+    const badge = document.querySelector('[data-testid="dotnav-dot-badge"]');
+    expect(badge).not.toBeNull();
+    expect(badge.textContent).toBe('99+');
+  });
+
+  it('hides notification badge when menu is open', async () => {
+    await renderNav({ unreadNotificationCount: 3 });
+
+    // Badge visible when closed
+    let badge = document.querySelector('[data-testid="dotnav-dot-badge"]');
+    expect(badge).not.toBeNull();
+
+    // Open the menu
+    const dot = document.getElementById('dotnav-dot');
+    await act(async () => { dot.click(); });
+
+    // Badge hidden when open (MobileDotNavNotification takes over)
+    badge = document.querySelector('[data-testid="dotnav-dot-badge"]');
+    expect(badge).toBeNull();
+  });
+
+  it('includes unread count in aria-label when notifications exist', async () => {
+    await renderNav({ unreadNotificationCount: 7 });
+
+    const dot = document.getElementById('dotnav-dot');
+    expect(dot.getAttribute('aria-label')).toBe('Open navigation menu (7 unread notifications)');
+  });
+
+  it('does not render the bell button or notification panel', async () => {
+    await renderNav({ unreadNotificationCount: 5 });
+
+    expect(document.getElementById('dotnav-bell')).toBeNull();
+    expect(document.getElementById('dotnav-notification-panel')).toBeNull();
+  });
 });
 
 describe('resolveRoute', () => {
