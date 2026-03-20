@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 
 const { createNotification, publish } = require('../services/notifications');
-const { emitFeedInteraction, emitFeedPost } = require('../services/realtime');
+const { emitFeedInteraction, emitFeedPost, emitFeedPostRemoved } = require('../services/realtime');
 
 const Post = require('../models/Post');
 const User = require('../models/User');
@@ -19,6 +19,7 @@ const {
   RELATIONSHIP_AUDIENCE_VALUES,
   normalizeRelationshipAudience,
   getViewerRelationshipContext,
+  getOwnerSecureFriendIds,
   logRelationshipAudienceEvent
 } = require('../utils/relationshipAudience');
 const {
@@ -91,16 +92,29 @@ const extractMentions = (content = '') => {
   return [...usernames];
 };
 
-const buildRealtimeAudience = async (...seedUserIds) => {
-  const normalizedSeedIds = [...new Set(seedUserIds.map((value) => String(value || '').trim()).filter(Boolean))];
+const buildRealtimeAudience = async (seedUserIds, { authorId: postAuthorId, relationshipAudience: postRelationshipAudience } = {}) => {
+  const normalizedSeedIds = [...new Set(
+    (Array.isArray(seedUserIds) ? seedUserIds : [seedUserIds])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  )];
   const audience = new Set(normalizedSeedIds);
+  const isSecurePost = normalizeRelationshipAudience(postRelationshipAudience) === 'secure';
+  const normalizedAuthorId = postAuthorId ? String(postAuthorId).trim() : null;
 
-  await Promise.all(normalizedSeedIds.map(async (seedUserId) => {
-    const { friendIds } = await getViewerRelationshipContext(seedUserId);
-    for (const friendId of friendIds) {
+  if (isSecurePost && normalizedAuthorId) {
+    const secureFriendIds = await getOwnerSecureFriendIds(normalizedAuthorId);
+    for (const friendId of secureFriendIds) {
       audience.add(String(friendId));
     }
-  }));
+  } else {
+    await Promise.all(normalizedSeedIds.map(async (seedUserId) => {
+      const { friendIds } = await getViewerRelationshipContext(seedUserId);
+      for (const friendId of friendIds) {
+        audience.add(String(friendId));
+      }
+    }));
+  }
 
   return [...audience];
 };
@@ -857,7 +871,10 @@ router.post('/post', [
     const responsePost = decoratePostContent(postObject, contentFilter.maturityCensoredWords, authorCensorEnabled);
     const realtimePost = decoratePostContent(postObject, contentFilter.maturityCensoredWords, false);
 
-    const audienceUserIds = await buildRealtimeAudience(authorId, normalizedTargetFeedId);
+    const audienceUserIds = await buildRealtimeAudience(
+      [authorId, normalizedTargetFeedId],
+      { authorId, relationshipAudience: normalizedRelationshipAudience }
+    );
     emitFeedPost({
       userIds: audienceUserIds,
       post: realtimePost
@@ -902,6 +919,109 @@ router.delete('/post/:postId', authenticateToken, async (req, res) => {
   }
 });
 
+// Update a post's relationship audience
+router.patch('/post/:postId/audience', authenticateToken, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = String(req.user.userId);
+    const requestedAudience = String(req.body?.relationshipAudience || '').trim().toLowerCase();
+
+    if (!RELATIONSHIP_AUDIENCE_VALUES.includes(requestedAudience)) {
+      return res.status(400).json({ error: 'Invalid relationship audience' });
+    }
+    const newAudience = normalizeRelationshipAudience(requestedAudience);
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    if (String(post.authorId) !== userId) {
+      return res.status(403).json({ error: 'Only the author can change post audience' });
+    }
+
+    const oldAudience = normalizeRelationshipAudience(post.relationshipAudience);
+    if (oldAudience === newAudience) {
+      return res.json({ success: true, message: 'Audience unchanged', relationshipAudience: newAudience });
+    }
+
+    if (newAudience === 'secure' && post.visibility !== 'friends') {
+      return res.status(400).json({ error: 'Secure audience currently supports only friends visibility' });
+    }
+    if (newAudience === 'public' && post.visibility !== 'public') {
+      return res.status(400).json({ error: 'Public audience currently supports only public visibility' });
+    }
+    if (post.visibility === 'public' && newAudience !== 'public') {
+      return res.status(400).json({ error: 'Public visibility currently supports only public audience' });
+    }
+
+    post.relationshipAudience = newAudience;
+    await post.save();
+
+    await post.populate('authorId', 'username realName');
+    await post.populate('targetFeedId', 'username realName');
+
+    const postObject = post.toObject ? post.toObject() : post;
+    const [contentFilter, censorEnabled] = await Promise.all([
+      getContentFilterConfig(),
+      getViewerContentFilterPreference(userId, true)
+    ]);
+    const realtimePost = decoratePostContent(postObject, contentFilter.maturityCensoredWords, false);
+
+    const { friendIds } = await getViewerRelationshipContext(userId);
+    const secureFriendIds = await getOwnerSecureFriendIds(userId);
+    const targetId = String(post.targetFeedId?._id || post.targetFeedId);
+
+    if (oldAudience !== 'secure' && newAudience === 'secure') {
+      // Escalated to secure: social-only friends must lose access
+      const socialOnlyFriendIds = [...friendIds].filter((id) => !secureFriendIds.has(id));
+      if (socialOnlyFriendIds.length > 0) {
+        emitFeedPostRemoved({ userIds: socialOnlyFriendIds, postId: String(post._id) });
+      }
+      // Notify secure friends of the updated audience tag
+      const secureAudience = [...new Set([userId, targetId, ...secureFriendIds])];
+      emitFeedPost({ userIds: secureAudience, post: realtimePost });
+    } else if (oldAudience === 'secure' && newAudience !== 'secure') {
+      // Downgraded from secure: social friends can now see it
+      const audienceUserIds = await buildRealtimeAudience(
+        [userId, targetId],
+        { authorId: userId, relationshipAudience: newAudience }
+      );
+      emitFeedPost({ userIds: audienceUserIds, post: realtimePost });
+    } else {
+      // Other transitions (e.g. social ↔ public)
+      const audienceUserIds = await buildRealtimeAudience(
+        [userId, targetId],
+        { authorId: userId, relationshipAudience: newAudience }
+      );
+      emitFeedPost({ userIds: audienceUserIds, post: realtimePost });
+    }
+
+    logRelationshipAudienceEvent({
+      eventType: 'content_audience_changed',
+      viewerId: userId,
+      ownerId: userId,
+      req,
+      metadata: {
+        contentType: 'post',
+        contentId: String(post._id),
+        oldAudience,
+        newAudience
+      }
+    });
+
+    const responsePost = decoratePostContent(postObject, contentFilter.maturityCensoredWords, censorEnabled);
+    res.json({
+      success: true,
+      message: 'Post audience updated',
+      post: responsePost
+    });
+  } catch (error) {
+    console.error('Error updating post audience:', error);
+    res.status(500).json({ error: 'Failed to update post audience', details: error.message });
+  }
+});
+
 // Like a post
 router.post('/post/:postId/like', interactionRateLimiter, authenticateToken, async (req, res) => {
   try {
@@ -933,7 +1053,10 @@ router.post('/post/:postId/like', interactionRateLimiter, authenticateToken, asy
       });
     }
 
-    const audienceUserIds = await buildRealtimeAudience(post.authorId, post.targetFeedId, userId);
+    const audienceUserIds = await buildRealtimeAudience(
+      [post.authorId, post.targetFeedId, userId],
+      { authorId: post.authorId, relationshipAudience: post.relationshipAudience }
+    );
     emitFeedInteraction({
       userIds: audienceUserIds,
       interaction: {
@@ -969,7 +1092,10 @@ router.delete('/post/:postId/like', interactionRateLimiter, authenticateToken, a
     
     await post.removeLike(userId);
 
-    const audienceUserIds = await buildRealtimeAudience(post.authorId, post.targetFeedId, userId);
+    const audienceUserIds = await buildRealtimeAudience(
+      [post.authorId, post.targetFeedId, userId],
+      { authorId: post.authorId, relationshipAudience: post.relationshipAudience }
+    );
     emitFeedInteraction({
       userIds: audienceUserIds,
       interaction: {
@@ -1054,7 +1180,10 @@ router.post('/post/:postId/comment', [
       }
     }
 
-    const audienceUserIds = await buildRealtimeAudience(post.authorId, post.targetFeedId, userId);
+    const audienceUserIds = await buildRealtimeAudience(
+      [post.authorId, post.targetFeedId, userId],
+      { authorId: post.authorId, relationshipAudience: post.relationshipAudience }
+    );
     emitFeedInteraction({
       userIds: audienceUserIds,
       interaction: {

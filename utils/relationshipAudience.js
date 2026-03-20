@@ -101,6 +101,33 @@ const getViewerRelationshipContext = async (viewerId) => {
   };
 };
 
+const getOwnerSecureFriendIds = async (ownerId) => {
+  const normalizedOwnerId = String(ownerId || '').trim();
+  if (!normalizedOwnerId) return new Set();
+
+  const friendships = await Friendship.find({
+    status: 'accepted',
+    $or: [
+      { requester: normalizedOwnerId },
+      { recipient: normalizedOwnerId }
+    ]
+  }).select(
+    'status requester recipient requesterRelationshipAudience recipientRelationshipAudience requesterAudience recipientAudience requesterCategory recipientCategory'
+  ).lean();
+
+  const secureFriendIds = new Set();
+  for (const friendship of friendships) {
+    const requesterId = String(friendship.requester || '');
+    const recipientId = String(friendship.recipient || '');
+    const friendId = requesterId === normalizedOwnerId ? recipientId : requesterId;
+    if (!friendId) continue;
+    if (ownerCategorizedViewerAsSecure(friendship, normalizedOwnerId, friendId)) {
+      secureFriendIds.add(friendId);
+    }
+  }
+  return secureFriendIds;
+};
+
 const isViewerSecureFriendOfOwner = async (viewerId, ownerId) => {
   const normalizedViewerId = String(viewerId || '').trim();
   const normalizedOwnerId = String(ownerId || '').trim();
@@ -141,6 +168,7 @@ module.exports = {
   socialOrUnsetAudienceQuery,
   ownerCategorizedViewerAsSecure,
   getViewerRelationshipContext,
+  getOwnerSecureFriendIds,
   isViewerSecureFriendOfOwner,
   logRelationshipAudienceEvent
 };

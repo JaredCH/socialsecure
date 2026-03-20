@@ -120,6 +120,7 @@ export const emitTypingStop = ({ scope, targetId }) => {
 };
 
 export const onFeedPost = (callback) => bindListener('feed:new-post', callback);
+export const onFeedPostRemoved = (callback) => bindListener('feed:post-removed', callback);
 export const onFeedInteraction = (callback) => bindListener('feed:interaction', callback);
 export const onChatMessage = (callback) => bindListener('chat:message', callback);
 export const onTyping = (callback) => bindListener('typing', callback);

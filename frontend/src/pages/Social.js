@@ -28,6 +28,7 @@ import {
   getRealtimeSocket,
   onFeedInteraction,
   onFeedPost,
+  onFeedPostRemoved,
   onFriendPresence,
   onTyping,
   subscribeToPost,
@@ -1886,6 +1887,14 @@ const Social = () => {
       subscribeToPost(incomingPost._id);
     });
 
+    const offFeedPostRemoved = onFeedPostRemoved((payload) => {
+      const removedPostId = String(payload?.postId || '').trim();
+      if (!removedPostId) return;
+
+      setPosts((prev) => prev.filter((item) => String(item._id) !== removedPostId));
+      unsubscribeFromPost(removedPostId);
+    });
+
     const offFeedInteraction = onFeedInteraction((payload) => {
       const postId = String(payload?.postId || '').trim();
       if (!postId) return;
@@ -1981,6 +1990,7 @@ const Social = () => {
     return () => {
       subscribedPostIds.forEach((postId) => unsubscribeFromPost(postId));
       offFeedPost();
+      offFeedPostRemoved();
       offFeedInteraction();
       offFriendPresence();
       offTyping();
@@ -3270,6 +3280,23 @@ const Social = () => {
     }
   };
 
+  const handleUpdatePostAudience = async (postId, newAudience) => {
+    if (!postId || !newAudience) return;
+    setPostActionLoading(postId, true);
+    setFeedError('');
+    try {
+      const response = await feedAPI.updatePostAudience(postId, newAudience);
+      const updatedPost = response.data?.post ? normalizePost(response.data.post) : null;
+      if (updatedPost) {
+        setPosts((prev) => prev.map((p) => (String(p._id) === String(postId) ? { ...p, ...updatedPost } : p)));
+      }
+    } catch (error) {
+      setFeedError(error.response?.data?.error || 'Failed to update post audience.');
+    } finally {
+      setPostActionLoading(postId, false);
+    }
+  };
+
   const handleDeleteCalendarEvent = async (eventId) => {
     if (!eventId || !window.confirm('Are you sure you want to delete this?')) return;
     setCalendarPreviewError('');
@@ -4167,7 +4194,30 @@ const Social = () => {
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="rounded-full px-2 py-1 text-xs uppercase tracking-wide" style={{ background: 'var(--social-surface-muted)', color: 'var(--social-text-secondary)' }}>{PRIVACY_BADGE_LABELS[post.visibility] || post.visibility}</span>
-                      <span className={`rounded-full px-2 py-1 text-xs uppercase tracking-wide ${post.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : post.relationshipAudience === 'public' ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800'}`}>{RELATIONSHIP_AUDIENCE_LABELS[post.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</span>
+                      {isAuthenticated && !isGuestPreview && isPostOwner && post.visibility === 'friends' ? (
+                        <div className="flex rounded-full p-px" style={{ border: '1px solid color-mix(in srgb, var(--social-text-muted) 25%, transparent)' }}>
+                          <button
+                            type="button"
+                            disabled={postBusy}
+                            onClick={() => post.relationshipAudience !== 'social' && handleUpdatePostAudience(post._id, 'social')}
+                            className="rounded-l-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide disabled:opacity-60"
+                            style={post.relationshipAudience !== 'secure' ? { backgroundColor: '#0284c7', color: '#fff' } : { color: 'var(--social-text-muted)' }}
+                          >
+                            Social
+                          </button>
+                          <button
+                            type="button"
+                            disabled={postBusy}
+                            onClick={() => post.relationshipAudience !== 'secure' && handleUpdatePostAudience(post._id, 'secure')}
+                            className="rounded-r-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide disabled:opacity-60"
+                            style={post.relationshipAudience === 'secure' ? { backgroundColor: '#d97706', color: '#fff' } : { color: 'var(--social-text-muted)' }}
+                          >
+                            Secure
+                          </button>
+                        </div>
+                      ) : (
+                        <span className={`rounded-full px-2 py-1 text-xs uppercase tracking-wide ${post.relationshipAudience === 'secure' ? 'bg-amber-100 text-amber-800' : post.relationshipAudience === 'public' ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800'}`}>{RELATIONSHIP_AUDIENCE_LABELS[post.relationshipAudience] || RELATIONSHIP_AUDIENCE_LABELS.social}</span>
+                      )}
                       {isAuthenticated && !isGuestPreview && isPostOwner ? (
                         <button type="button" onClick={() => handleDeletePost(post._id)} disabled={postBusy} className="rounded-full border px-2 py-1 text-xs font-semibold disabled:opacity-60" style={{ borderColor: 'color-mix(in srgb, #ef4444 40%, transparent)', color: '#ef4444' }}>
                           Delete
