@@ -245,7 +245,7 @@ const normalizeMediaUrls = (mediaUrls) => {
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
-    normalized.push(trimmed);
+    normalized.push(resolveUploadMediaUrl(trimmed));
     if (normalized.length >= MEDIA_URL_MAX_ITEMS) break;
   }
 
@@ -1053,7 +1053,7 @@ const Social = () => {
     return {
       name: profileSource?.realName || profileSource?.name || profileSource?.username || 'User',
       location: locationLabel || profileSource?.location || '',
-      avatarUrl: socialPreferences.hero?.profileImage || profileSource?.avatarUrl || '',
+      avatarUrl: resolveUploadMediaUrl(socialPreferences.hero?.profileImage || '') || profileSource?.avatarUrl || '',
       presence,
       isOnline: Boolean(isOwnSocialContext),
       lastActive: presence.lastSeen || profileSource?.lastActive || null

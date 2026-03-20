@@ -136,6 +136,7 @@ const toPublicUserProfile = (userDoc, relationshipContext = {}) => {
     _id: userDoc._id,
     username: userDoc.username,
     realName: userDoc.realName,
+    avatarUrl: userDoc.avatarUrl || '',
     city: userDoc.city || null,
     state: userDoc.state || null,
     country: userDoc.country || null,

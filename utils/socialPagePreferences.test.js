@@ -119,6 +119,26 @@ describe('socialPagePreferences utility', () => {
     expect(normalized.value.hero.profileImage).toBe('/uploads/gallery/user-1/photo-2.jpg');
   });
 
+  it('strips host from absolute URLs that contain server upload paths', () => {
+    const normalized = normalizeSocialPagePreferences({
+      hero: {
+        backgroundImage: 'https://example.com/uploads/gallery/user-1/photo-1.jpg',
+        profileImage: 'https://old-host.railway.app/uploads/gallery/user-1/photo-2.jpg',
+        backgroundImageHistory: [
+          'https://example.com/uploads/gallery/user-1/old.jpg',
+          'https://cdn.example.com/image.jpg'
+        ]
+      }
+    });
+
+    expect(normalized.value.hero.backgroundImage).toBe('/uploads/gallery/user-1/photo-1.jpg');
+    expect(normalized.value.hero.profileImage).toBe('/uploads/gallery/user-1/photo-2.jpg');
+    expect(normalized.value.hero.backgroundImageHistory).toEqual([
+      '/uploads/gallery/user-1/old.jpg',
+      'https://cdn.example.com/image.jpg'
+    ]);
+  });
+
   it('persists optional social section visibility fields used by blog, resume, and about me', () => {
     const normalized = normalizeSocialPagePreferences({
       enabledSections: { blog: true, resume: true, aboutme: false },
