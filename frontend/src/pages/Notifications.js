@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import useInfiniteNotifications from '../hooks/useInfiniteNotifications';
 import NotificationItem from '../components/NotificationItem';
+import { ErrorBanner, EmptyState, LoadMoreButton, Spinner } from '../components/ui';
 
 const Notifications = () => {
   const {
@@ -41,12 +42,10 @@ const Notifications = () => {
         Active notifications requiring your attention.
       </p>
 
-      {error ? (
-        <div className="mb-4 p-3 rounded bg-red-50 text-red-700 border border-red-200">{error}</div>
-      ) : null}
+      <ErrorBanner message={error} />
 
       {notifications.length === 0 && !loading ? (
-        <div className="p-4 text-sm text-gray-500">No new notifications.</div>
+        <EmptyState title="No new notifications." className="py-4 text-sm" />
       ) : (
         <div className="border rounded-lg overflow-hidden">
           {notifications.map((notification) => (
@@ -65,21 +64,9 @@ const Notifications = () => {
         </div>
       )}
 
-      {loading ? (
-        <div className="p-4 text-sm text-gray-500">Loading...</div>
-      ) : null}
+      {loading ? <Spinner size="h-6 w-6" label="Loading..." className="py-4" /> : null}
 
-      {hasMore && !loading ? (
-        <div className="mt-4 text-center">
-          <button
-            type="button"
-            onClick={loadMore}
-            className="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
-          >
-            Load more
-          </button>
-        </div>
-      ) : null}
+      <LoadMoreButton onClick={loadMore} loading={loading} hasMore={hasMore} />
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { SectionHeader } from '../../ui';
 
 const KeywordHitsCard = ({ keywords = [], articles = [], onKeywordClick }) => {
   if (keywords.length === 0) return null;
@@ -15,7 +16,7 @@ const KeywordHitsCard = ({ keywords = [], articles = [], onKeywordClick }) => {
 
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200/70 p-5">
-      <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3"># Keyword Hits</h2>
+      <SectionHeader icon="#" title="Keyword Hits" />
       <div className="space-y-1.5">
         {keywordCounts.map((item) => (
           <button

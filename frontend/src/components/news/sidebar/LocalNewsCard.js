@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatRelativeTime } from '../utils';
+import { SectionHeader } from '../../ui';
 
 const LocalNewsCard = ({ articles = [], locations = [], onManageLocations }) => {
   // Get local articles (those with localityLevel = 'local' or 'regional')
@@ -14,12 +15,13 @@ const LocalNewsCard = ({ articles = [], locations = [], onManageLocations }) => 
 
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200/70 p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">📍 Local News</h2>
-        {locationLabel && (
+      <SectionHeader
+        icon="📍"
+        title="Local News"
+        action={locationLabel ? (
           <span className="text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-medium">{locationLabel}</span>
-        )}
-      </div>
+        ) : null}
+      />
 
       {localArticles.length === 0 ? (
         <div>
