@@ -3,7 +3,7 @@ const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 
-const { createNotification } = require('../services/notifications');
+const { createNotification, publish } = require('../services/notifications');
 const { emitFeedInteraction, emitFeedPost } = require('../services/realtime');
 
 const Post = require('../models/Post');
@@ -925,16 +925,11 @@ router.post('/post/:postId/like', interactionRateLimiter, authenticateToken, asy
 
     if (!wasAlreadyLiked && String(post.authorId) !== String(userId)) {
       const actor = await User.findById(userId).select('username realName').lean();
-      await createNotification({
+      await publish('like', {
         recipientId: post.authorId,
         senderId: userId,
-        type: 'like',
-        title: 'New like',
-        body: `${actor?.username || actor?.realName || 'Someone'} liked your post`,
-        data: {
-          postId: post._id,
-          url: '/social'
-        }
+        senderLabel: actor?.username || actor?.realName || 'Someone',
+        postId: post._id
       });
     }
 
@@ -1032,17 +1027,12 @@ router.post('/post/:postId/comment', [
 
     const actor = await User.findById(userId).select('username realName').lean();
     if (String(post.authorId) !== String(userId)) {
-      await createNotification({
+      await publish('comment', {
         recipientId: post.authorId,
         senderId: userId,
-        type: 'comment',
-        title: 'New comment',
-        body: `${actor?.username || actor?.realName || 'Someone'} commented on your post`,
-        data: {
-          postId: post._id,
-          commentId: newComment?._id,
-          url: '/social'
-        }
+        senderLabel: actor?.username || actor?.realName || 'Someone',
+        postId: post._id,
+        commentId: newComment?._id
       });
     }
 
@@ -1054,17 +1044,12 @@ router.post('/post/:postId/comment', [
 
       for (const mentionedUser of mentionedUsers) {
         if (String(mentionedUser._id) === String(userId)) continue;
-        await createNotification({
+        await publish('mention', {
           recipientId: mentionedUser._id,
           senderId: userId,
-          type: 'mention',
-          title: 'You were mentioned',
-          body: `${actor?.username || actor?.realName || 'Someone'} mentioned you in a comment`,
-          data: {
-            postId: post._id,
-            commentId: newComment?._id,
-            url: '/social'
-          }
+          senderLabel: actor?.username || actor?.realName || 'Someone',
+          postId: post._id,
+          commentId: newComment?._id
         });
       }
     }

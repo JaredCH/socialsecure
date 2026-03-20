@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 
-const { createNotification } = require('../services/notifications');
+const { createNotification, publish } = require('../services/notifications');
 const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
 const { resolveCanonicalLocationInput } = require('../services/newsLocationMaster');
 const {
@@ -1513,15 +1513,14 @@ router.post('/address-approval/respond', [
     owner.updatedAt = new Date();
     await owner.save();
 
-    await createNotification({
+    await publish('system', {
       recipientId: requester._id,
       senderId: owner._id,
-      type: 'system',
-      title: decision === 'approved' ? 'Home address approved' : 'Home address denied',
-      body: decision === 'approved'
+      customTitle: decision === 'approved' ? 'Home address approved' : 'Home address denied',
+      customBody: decision === 'approved'
         ? 'Your pending home address was approved and is now saved.'
         : 'Your pending home address was denied. You can update and submit a different address at any time.',
-      data: { url: '/onboarding' }
+      deepLinkUrl: '/onboarding'
     });
 
     return res.json({
@@ -1848,13 +1847,12 @@ router.put('/profile', [
               existingResident.updatedAt = now;
               await existingResident.save();
 
-              await createNotification({
+              await publish('system', {
                 recipientId: existingResident._id,
                 senderId: user._id,
-                type: 'system',
-                title: 'Address approval requested',
-                body: `${user.username || 'A user'} is requesting approval to use your home address.`,
-                data: { url: '/settings#account' }
+                customTitle: 'Address approval requested',
+                customBody: `${user.username || 'A user'} is requesting approval to use your home address.`,
+                deepLinkUrl: '/settings#account'
               });
             }
           } else {

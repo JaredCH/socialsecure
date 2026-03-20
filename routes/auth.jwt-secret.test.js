@@ -93,7 +93,8 @@ jest.mock('../models/SiteContentFilter', () => ({
   })
 }));
 jest.mock('../services/notifications', () => ({
-  createNotification: jest.fn().mockResolvedValue(null)
+  createNotification: jest.fn().mockResolvedValue(null),
+  publish: jest.fn().mockResolvedValue(null)
 }));
 jest.mock('../services/realtime', () => ({
   emitFeedInteraction: jest.fn(),

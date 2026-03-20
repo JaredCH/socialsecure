@@ -47,7 +47,7 @@ jest.mock('../models/DeviceKey', () => ({ findOne: jest.fn() }));
 jest.mock('../models/SecurityEvent', () => ({ create: jest.fn() }));
 jest.mock('../models/BlockList', () => ({ find: jest.fn(), exists: jest.fn() }));
 jest.mock('../models/RoomKeyPackage', () => ({ findOne: jest.fn(), updateOne: jest.fn() }));
-jest.mock('../services/notifications', () => ({ createNotification: jest.fn() }));
+jest.mock('../services/notifications', () => ({ createNotification: jest.fn(), publish: jest.fn() }));
 jest.mock('../services/eventRoomLifecycle', () => ({ reconcileEventRooms: jest.fn().mockResolvedValue({ created: 0, updated: 0, archived: 0 }) }));
 
 const jwt = require('jsonwebtoken');

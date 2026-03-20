@@ -16,7 +16,7 @@ const mockSessionModel = {
 jest.mock('../models/User', () => mockUserModel);
 jest.mock('../models/Session', () => mockSessionModel);
 jest.mock('../models/SecurityEvent', () => ({ create: jest.fn() }));
-jest.mock('../services/notifications', () => ({ createNotification: jest.fn() }));
+jest.mock('../services/notifications', () => ({ createNotification: jest.fn(), publish: jest.fn() }));
 
 // Mock news routes to prevent database operations during profile update tests
 const mockQueueImmediateLocationFetch = jest.fn().mockResolvedValue({ status: 'queued', locationKey: 'TEST:KEY' });
@@ -25,7 +25,7 @@ jest.mock('./news', () => ({
 }));
 
 const jwt = require('jsonwebtoken');
-const { createNotification } = require('../services/notifications');
+const { createNotification, publish } = require('../services/notifications');
 const authRouter = require('./auth');
 const { canonicalizeNewsLocation } = require('../utils/newsLocationTaxonomy');
 const { canonicalizeLocationInput, resolveCanonicalLocationInput, buildLocationKey } = require('../services/newsLocationMaster');
@@ -244,7 +244,7 @@ describe('Auth profile location update cooldown', () => {
     expect(user.pendingStreetAddress).toBe('123 Main St');
     expect(user.pendingStreetAddressStatus).toBe('pending');
     expect(existingResident.save).toHaveBeenCalled();
-    expect(createNotification).toHaveBeenCalled();
+    expect(publish).toHaveBeenCalled();
   });
 
   it('allows resident to approve an address request', async () => {
@@ -286,7 +286,7 @@ describe('Auth profile location update cooldown', () => {
     expect(requester.streetAddress).toBe('123 Main St');
     expect(requester.pendingStreetAddressStatus).toBe('approved');
     expect(owner.addressApprovalRequests[0].status).toBe('approved');
-    expect(createNotification).toHaveBeenCalled();
+    expect(publish).toHaveBeenCalled();
   });
 
   it('accepts zipCode in profile update and backfills city/state/country from the zip index', async () => {

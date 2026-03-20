@@ -23,7 +23,8 @@ jest.mock('../models/Friendship', () => mockFriendship);
 jest.mock('../models/TopFriend', () => mockTopFriend);
 jest.mock('../models/Presence', () => mockPresence);
 jest.mock('../services/notifications', () => ({
-  createNotification: jest.fn()
+  createNotification: jest.fn(),
+  publish: jest.fn()
 }));
 jest.mock('../services/realtime', () => ({
   getPresenceMapForUsers: jest.fn(),

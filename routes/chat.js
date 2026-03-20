@@ -11,8 +11,8 @@ const {
   optionalAuth: parseOptionalAuth,
   authErrorHandler
 } = require('../middleware/parseAuthToken');
-const { createNotification } = require('../services/notifications');
-const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload, getRoomActiveViewerIds } = require('../services/realtime');
+const { createNotification, publish } = require('../services/notifications');
+const { emitChatMessage, getPresenceMapForUsers, buildPresencePayload, getRoomActiveViewerIds, isUserInRealtimeRoom } = require('../services/realtime');
 const { reconcileEventRooms } = require('../services/eventRoomLifecycle');
 const {
   findExactFilterWord,
@@ -861,17 +861,13 @@ const notifyRoomMembers = async ({ room, senderId, senderLabel, message, message
   if (recipientIds.length === 0) return;
 
   for (const recipientId of recipientIds) {
-    await createNotification({
+    await publish('mention', {
       recipientId,
       senderId,
-      type: messageType === 'message' ? 'mention' : messageType,
-      title: 'You were mentioned',
-      body: `${senderLabel} mentioned you in ${room.name || room.city || 'a room'}`,
-      data: {
-        messageId: message?._id,
-        roomId: room._id,
-        url: '/chat'
-      }
+      senderLabel,
+      roomName: room.name || room.city || 'a room',
+      messageId: message?._id,
+      roomId: room._id
     });
   }
 };
@@ -911,16 +907,12 @@ const notifyMentionedConversationParticipants = async ({
   if (recipientIds.length === 0) return;
 
   for (const recipientId of recipientIds) {
-    await createNotification({
+    await publish('mention', {
       recipientId,
       senderId,
-      type: 'mention',
-      title: 'You were mentioned',
-      body: `${senderLabel} mentioned you in ${conversation.title || 'a conversation'}`,
-      data: {
-        messageId: message?._id,
-        url: '/chat'
-      }
+      senderLabel,
+      conversationTitle: conversation.title || 'a conversation',
+      messageId: message?._id
     });
   }
 };
@@ -3733,16 +3725,11 @@ router.post(
       const senderLabel = publicMessage?.userId?.username
         || publicMessage?.userId?.realName
         || 'Someone';
-      await Promise.all(recipientsToNotify.map((recipientId) => createNotification({
+      await Promise.all(recipientsToNotify.map((recipientId) => publish('message', {
         recipientId,
         senderId: userId,
-        type: 'message',
-        title: 'New direct message',
-        body: `${senderLabel} sent you a direct message`,
-        data: {
-          messageId: message?._id,
-          url: '/chat'
-        }
+        senderLabel,
+        messageId: message?._id
       })));
     } else if (hasContent) {
       const senderLabel = publicMessage?.userId?.username
@@ -3904,12 +3891,10 @@ router.delete('/conversations/:conversationId', unifiedChatLimiter, authenticate
     if (otherUserId) {
       const deletingUser = await User.findById(userId).select('username').lean();
       const deletingUsername = deletingUser?.username || 'A user';
-      await createNotification({
+      await publish('conversation_deleted', {
         recipientId: otherUserId,
         senderId: userId,
-        type: 'system',
-        title: 'Conversation deleted',
-        body: `@${deletingUsername} deleted a direct message conversation with you.`
+        senderLabel: deletingUsername
       });
     }
 

@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 
 const { logEvent } = require('../utils/logEvent');
-const { createNotification } = require('../services/notifications');
+const { createNotification, publish } = require('../services/notifications');
 const { buildPresencePayload, getPresenceMapForUsers } = require('../services/realtime');
 const { RELATIONSHIP_AUDIENCE_VALUES, normalizeRelationshipAudience } = require('../utils/relationshipAudience');
 
@@ -136,15 +136,10 @@ router.post('/request', authenticateToken, async (req, res) => {
         existingFriendship.recipientCategory = 'social';
         await existingFriendship.save();
 
-        await createNotification({
+        await publish('follow', {
           recipientId: userId,
           senderId: req.user._id,
-          type: 'follow',
-          title: 'New follow request',
-          body: `${req.user.username || req.user.realName || 'Someone'} sent you a follow request`,
-          data: {
-            url: '/social'
-          }
+          senderLabel: req.user.username || req.user.realName || 'Someone'
         });
         
         return res.json({
@@ -167,15 +162,10 @@ router.post('/request', authenticateToken, async (req, res) => {
     
     await friendship.save();
 
-    await createNotification({
+    await publish('follow', {
       recipientId: userId,
       senderId: req.user._id,
-      type: 'follow',
-      title: 'New follow request',
-      body: `${req.user.username || req.user.realName || 'Someone'} sent you a follow request`,
-      data: {
-        url: '/social'
-      }
+      senderLabel: req.user.username || req.user.realName || 'Someone'
     });
     
     res.status(201).json({
@@ -238,15 +228,10 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
       { $inc: { friendCount: 1 } }
     );
 
-    await createNotification({
+    await publish('friend_request_accepted', {
       recipientId: friendship.requester,
       senderId: friendship.recipient,
-      type: 'system',
-      title: 'Friend request accepted',
-      body: `${req.user.username || req.user.realName || 'Someone'} accepted your friend request`,
-      data: {
-        url: '/social'
-      }
+      senderLabel: req.user.username || req.user.realName || 'Someone'
     });
     
     res.json({
@@ -292,15 +277,10 @@ router.post('/:id/decline', authenticateToken, async (req, res) => {
     friendship.declinedAt = new Date();
     await friendship.save();
 
-    await createNotification({
+    await publish('friend_request_declined', {
       recipientId: friendship.requester,
       senderId: friendship.recipient,
-      type: 'system',
-      title: 'Friend request declined',
-      body: `${req.user.username || req.user.realName || 'Someone'} declined your friend request`,
-      data: {
-        url: '/friends'
-      }
+      senderLabel: req.user.username || req.user.realName || 'Someone'
     });
     
     res.json({
@@ -387,15 +367,10 @@ router.delete('/:id', friendMutationLimiter, authenticateToken, async (req, res)
     await friendship.save();
 
     if (wasPendingRequest) {
-      await createNotification({
+      await publish('friend_request_canceled', {
         recipientId: friendship.recipient,
         senderId: friendship.requester,
-        type: 'system',
-        title: 'Friend request canceled',
-        body: `${req.user.username || req.user.realName || 'Someone'} canceled a friend request`,
-        data: {
-          url: '/friends'
-        }
+        senderLabel: req.user.username || req.user.realName || 'Someone'
       });
     }
     
@@ -601,31 +576,24 @@ router.patch('/:id/partner', friendMutationLimiter, authenticateToken, async (re
     const senderName = req.user.username || req.user.realName || 'Someone';
 
     if (action === 'request') {
-      await createNotification({
+      await publish('partner_request', {
         recipientId: otherId,
         senderId: req.user._id,
-        type: 'partner_request',
-        title: 'Partner/Spouse Request',
-        body: `@${senderName} sent you a partner/spouse request`,
-        data: { url: '/friends' }
+        senderLabel: senderName
       });
     } else if (action === 'accept') {
-      await createNotification({
+      await publish('partner_response', {
         recipientId: otherId,
         senderId: req.user._id,
-        type: 'partner_response',
-        title: 'Partner Request Accepted',
-        body: `@${senderName} accepted your partner/spouse request`,
-        data: { url: '/friends' }
+        senderLabel: senderName,
+        accepted: true
       });
     } else if (action === 'deny') {
-      await createNotification({
+      await publish('partner_response', {
         recipientId: otherId,
         senderId: req.user._id,
-        type: 'partner_response',
-        title: 'Partner Request Declined',
-        body: `@${senderName} declined your partner/spouse request`,
-        data: { url: '/friends' }
+        senderLabel: senderName,
+        accepted: false
       });
     }
 
