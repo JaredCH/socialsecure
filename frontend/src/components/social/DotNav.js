@@ -20,13 +20,20 @@ const TOUCH_DEVICE_MAX_WIDTH = 1024;
 const MOBILE_USER_AGENT_RE = /Mobi|Android|iPhone|iPad|iPod/i;
 const MACINTOSH_USER_AGENT_RE = /Macintosh/i;
 
+// Utility buttons (Back / Close) sizing
+const UTIL_BTN = 34;
+const UTIL_BELOW = 10;
+const UTIL_OFFSET = 22;
+// Extra vertical space reserved below the dot for the utility buttons
+const UTIL_SPACE = UTIL_BELOW + UTIL_BTN;
+
 // ═══════════════════════════════════════════
 // DOCK POSITION CONFIGS
 // ═══════════════════════════════════════════
 const DOCK_CONFIGS = {
-  br:  { label: 'Bottom Right',  anchor: (w, h) => ({ left: w - PAD - DSIZ, top: h - PAD - DSIZ }),  cogCorner: 'tl', labelSide: 'left' },
+  br:  { label: 'Bottom Right',  anchor: (w, h) => ({ left: w - PAD - DSIZ, top: h - PAD - DSIZ - UTIL_SPACE }),  cogCorner: 'tl', labelSide: 'left' },
   ubr: { label: 'Mid Right',     anchor: (w, h) => ({ left: w - PAD - DSIZ, top: Math.round(h * 2 / 3) - DSIZ }), cogCorner: 'tl', labelSide: 'left' },
-  bl:  { label: 'Bottom Left',   anchor: (w, h) => ({ left: PAD, top: h - PAD - DSIZ }),             cogCorner: 'tr', labelSide: 'right' },
+  bl:  { label: 'Bottom Left',   anchor: (w, h) => ({ left: PAD, top: h - PAD - DSIZ - UTIL_SPACE }),             cogCorner: 'tr', labelSide: 'right' },
   ubl: { label: 'Mid Left',      anchor: (w, h) => ({ left: PAD, top: Math.round(h * 2 / 3) - DSIZ }), cogCorner: 'tr', labelSide: 'right' },
 };
 
@@ -293,10 +300,12 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   const [draggedSlotIndex, setDraggedSlotIndex] = useState(null);
   const [dragOverSlotIndex, setDragOverSlotIndex] = useState(null);
+  const [closeableCount, setCloseableCount] = useState(0);
 
   const dotRef = useRef(null);
   const draggedSlotRef = useRef(null);
   const dragOverSlotRef = useRef(null);
+  const closeablesRef = useRef(new Set());
 
   // Persist state changes
   useEffect(() => {
@@ -332,9 +341,44 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     setPickerSlotIndex(null);
   }, [location.pathname, location.search]);
 
+  // Track closeable popups via custom events
+  useEffect(() => {
+    const handleRegister = (e) => {
+      const id = e.detail?.id;
+      if (id) {
+        closeablesRef.current.add(id);
+        setCloseableCount(closeablesRef.current.size);
+      }
+    };
+    const handleUnregister = (e) => {
+      const id = e.detail?.id;
+      if (id) {
+        closeablesRef.current.delete(id);
+        setCloseableCount(closeablesRef.current.size);
+      }
+    };
+    window.addEventListener('DotNavRegisterCloseable', handleRegister);
+    window.addEventListener('DotNavUnregisterCloseable', handleUnregister);
+    return () => {
+      window.removeEventListener('DotNavRegisterCloseable', handleRegister);
+      window.removeEventListener('DotNavUnregisterCloseable', handleUnregister);
+    };
+  }, []);
+
   // Compute anchor position
   const config = DOCK_CONFIGS[dock] || DOCK_CONFIGS.br;
   const anchorPos = useMemo(() => config.anchor(windowSize.w, windowSize.h), [config, windowSize]);
+
+  // Expose anchor position as CSS custom properties for other components
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--dotnav-anchor-left', `${anchorPos.left}px`);
+    root.style.setProperty('--dotnav-anchor-top', `${anchorPos.top}px`);
+    return () => {
+      root.style.removeProperty('--dotnav-anchor-left');
+      root.style.removeProperty('--dotnav-anchor-top');
+    };
+  }, [anchorPos]);
 
   // Compute side
   const side = dock.includes('l') ? 'left' : 'right';
@@ -367,6 +411,17 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     top: anchorPos.top + DSIZ / 2 - 6,
   }), [anchorPos, config.labelSide]);
 
+  // Utility button positions (Back and Close below the main dot)
+  const backBtnPos = useMemo(() => ({
+    left: anchorPos.left + DSIZ / 2 - UTIL_OFFSET - UTIL_BTN / 2,
+    top: anchorPos.top + DSIZ + UTIL_BELOW,
+  }), [anchorPos]);
+
+  const closeBtnPos = useMemo(() => ({
+    left: anchorPos.left + DSIZ / 2 + UTIL_OFFSET - UTIL_BTN / 2,
+    top: anchorPos.top + DSIZ + UTIL_BELOW,
+  }), [anchorPos]);
+
   // Resolve which catalog entries are used
   const usedKeys = useMemo(() => new Set(assigned.filter(Boolean)), [assigned]);
 
@@ -383,6 +438,14 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
     setIsOpen(prev => !prev);
     if (isEditing && isOpen) setIsEditing(false);
   }, [showSettings, pickerSlotIndex, isEditing, isOpen]);
+
+  const handleBackClick = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
+  const handleCloseClick = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('DotNavCloseRequest'));
+  }, []);
 
   const handleNavClick = useCallback((slotIndex) => {
     const key = assigned[slotIndex];
@@ -614,6 +677,37 @@ const DotNav = ({ loggedInUser = '', viewingUser: viewingUserProp = '', enabled 
             {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
           </span>
         )}
+      </button>
+
+      {/* Back Button (always visible) */}
+      <button
+        id="dotnav-back"
+        className="dotnav-util-btn"
+        style={{ left: backBtnPos.left, top: backBtnPos.top }}
+        onClick={handleBackClick}
+        aria-label="Go back"
+        type="button"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+        <span className="dotnav-util-label" aria-hidden="true">Back</span>
+      </button>
+
+      {/* Close Button (visible only when closeable popups are registered) */}
+      <button
+        id="dotnav-close"
+        className={`dotnav-util-btn${closeableCount > 0 ? ' dotnav-visible' : ''}`}
+        style={{ left: closeBtnPos.left, top: closeBtnPos.top }}
+        onClick={handleCloseClick}
+        aria-label="Close popup"
+        type="button"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+        <span className="dotnav-util-label" aria-hidden="true">Close</span>
       </button>
 
       {/* Settings Cog */}

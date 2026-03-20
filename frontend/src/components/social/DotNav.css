@@ -604,6 +604,69 @@
   }
 }
 
+/* ── Utility buttons (Back / Close) ── */
+.dotnav-util-btn {
+  position: fixed;
+  z-index: 10000;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--dotnav-border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--dotnav-shadow-sm);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  outline: none;
+  transition: opacity 0.2s ease,
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#dotnav-back {
+  background: var(--dotnav-bg);
+  color: var(--dotnav-ink);
+}
+
+#dotnav-close {
+  background: var(--dotnav-bg);
+  color: var(--dotnav-ink);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.5);
+}
+
+#dotnav-close.dotnav-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+#dotnav-back:active,
+#dotnav-close.dotnav-visible:active {
+  transform: scale(0.9);
+}
+
+.dotnav-util-btn svg {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.dotnav-util-label {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--dotnav-mid);
+  pointer-events: none;
+}
+
 /* ── Mobile DotNav Notification Panel ── */
 .dotnav-mobile-notif-panel {
   position: fixed;
