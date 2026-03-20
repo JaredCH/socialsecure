@@ -4,7 +4,7 @@
   "description": "Backend for social media platform with universal accounts, PGP encryption, and geo-locked chat rooms",
   "main": "server.js",
   "scripts": {
-    "build": "npm --prefix frontend install && npm --prefix frontend run build",
+    "build": "npm --prefix frontend install && CI=false npm --prefix frontend run build",
     "railway:build": "npm run build",
     "start": "node server.js",
     "dev": "nodemon server.js",

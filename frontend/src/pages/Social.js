@@ -1106,7 +1106,6 @@ const Social = () => {
 
     if (actionId === 'gallery') {
       setActiveHeroTab('gallery');
-      setGalleryComposerPanels((prev) => ({ ...prev, details: true }));
       setShowProfileCompletionHint(false);
       return;
     }
