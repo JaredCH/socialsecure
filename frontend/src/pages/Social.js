@@ -211,12 +211,21 @@ const SURFACE_TONE_STYLES = {
 
 const normalizeSocialPreferences = (input, profileTheme = 'default') => normalizePageDesign(input, profileTheme);
 
+const HERO_DATA_URL_MAX_LENGTH = Math.ceil((3 * 1024 * 1024) * 4 / 3) + 64;
+
 const isRenderableMediaUrl = (value) => {
   if (typeof value !== 'string') return false;
   const trimmed = value.trim();
-  if (!trimmed || trimmed.length > MEDIA_URL_MAX_LENGTH) return false;
+  if (!trimmed) return false;
 
   if (/^\/uploads\/\S+/i.test(trimmed)) return true;
+
+  if (
+    /^data:image\/(?:jpeg|jpg|png|gif|webp);base64,[a-z0-9+/=]+$/i.test(trimmed)
+    && trimmed.length <= HERO_DATA_URL_MAX_LENGTH
+  ) return true;
+
+  if (trimmed.length > MEDIA_URL_MAX_LENGTH) return false;
 
   try {
     const parsed = new URL(trimmed);
@@ -330,6 +339,8 @@ const getDisplayContent = (content, contentCensored, censorEnabled) => (
   censorEnabled && typeof contentCensored === 'string' ? contentCensored : content
 );
 
+const isDataUrl = (value) => typeof value === 'string' && value.startsWith('data:');
+
 const buildRecentImageHistory = (previousValue, nextValue, existing = []) => {
   const normalizedPrevious = typeof previousValue === 'string' ? previousValue.trim() : '';
   const normalizedNext = typeof nextValue === 'string' ? nextValue.trim() : '';
@@ -337,6 +348,7 @@ const buildRecentImageHistory = (previousValue, nextValue, existing = []) => {
   const history = [];
   const append = (url) => {
     if (!isRenderableMediaUrl(url)) return;
+    if (isDataUrl(url)) return;
     const key = url.toLowerCase();
     if (key === normalizedNext.toLowerCase() || seen.has(key)) return;
     seen.add(key);
@@ -2266,7 +2278,7 @@ const Social = () => {
   const updateHeroMediaPreference = useCallback((field, rawValue) => {
     const value = typeof rawValue === 'string' ? rawValue.trim() : '';
     if (value && !isRenderableMediaUrl(value)) {
-      setDesignError('Hero images must use a valid http/https URL.');
+      setDesignError('Hero images must use a valid image URL.');
       return;
     }
     const historyField = field === 'backgroundImage' ? 'backgroundImageHistory' : 'profileImageHistory';
@@ -2283,7 +2295,7 @@ const Social = () => {
     });
   }, [patchDraftPreferences]);
   const uploadHeroMediaPreference = useCallback(async (event, field) => {
-    if (!isOwnSocialContext || !galleryOwnerIdentifier) return;
+    if (!isOwnSocialContext) return;
     const [file] = Array.from(event.target.files || []);
     event.target.value = '';
     if (!file) return;
@@ -2301,20 +2313,19 @@ const Social = () => {
     setDesignBusy(true);
     setDesignError('');
     try {
-      const response = await galleryAPI.uploadGalleryItem(galleryOwnerIdentifier, file, `Hero ${field === 'backgroundImage' ? 'background' : 'profile'} image`, 'social');
-      const created = response.data?.item ? normalizeGalleryItem(response.data.item) : null;
-      if (created) {
-        setGalleryItems((prev) => [created, ...prev]);
-        updateHeroMediaPreference(field, created.mediaUrl || '');
-      } else {
-        await loadGallery();
-      }
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+      updateHeroMediaPreference(field, dataUrl);
     } catch (error) {
-      setDesignError(error.response?.data?.error || 'Failed to upload image.');
+      setDesignError('Failed to read image file.');
     } finally {
       setDesignBusy(false);
     }
-  }, [isOwnSocialContext, galleryOwnerIdentifier, updateHeroMediaPreference, loadGallery]);
+  }, [isOwnSocialContext, updateHeroMediaPreference]);
   const updateThemePreset = useCallback((themePreset) => {
     const resolvedPreset = SOCIAL_THEME_PRESETS.includes(themePreset) ? themePreset : 'default';
     const themeStylePatch = STAGE_THEME_STYLE_PATCH[resolvedPreset] || STAGE_THEME_STYLE_PATCH.default;
