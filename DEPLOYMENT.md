@@ -52,9 +52,34 @@ Notes:
 2. `/` loads the React app.
 3. Browser network calls hit `/api/...` with no CORS errors.
 
+## 4) Persistent storage (volumes)
+
+Railway uses an ephemeral filesystem by default — uploaded files (gallery
+images, marketplace photos, background images, chat audio) are lost on every
+deploy or restart. Attach a **Railway Volume** so uploads persist.
+
+1. Open your service in the Railway dashboard.
+2. Go to **Settings → Volumes** (or right-click the service → **Add Volume**).
+3. Add a volume with the mount path **`/app/uploads`**.
+   - `/app` is the default working directory for Nixpacks builds. If your
+     Railway root directory differs, adjust accordingly (e.g.
+     `/app/social-media/uploads` when using a sub-directory root).
+4. If your app stores private uploads (e.g. chat audio), add a second volume
+   mounted at **`/app/private_uploads`**.
+5. Redeploy the service so the volume mounts take effect.
+
+After the volume is attached, files written to `uploads/` (gallery images,
+hero banner images, profile pictures, marketplace listings, body backgrounds)
+will survive deploys and restarts.
+
+> **Tip:** You can verify the volume is working by uploading an image, then
+> triggering a new deploy and confirming the image still loads.
+
 ## Common issues
 
 - `CLIENT_URL` should be your Railway domain **without relying on trailing slash**.
 - If Mongo auth fails, map `MONGODB_URI` directly to Railway Mongo `MONGO_URL`.
 - `JWT_SECRET` should not be `change-this-in-production` in production.
+- If uploaded images disappear after deploys, make sure a Railway Volume is
+  mounted at `/app/uploads` (see section 4 above).
 
