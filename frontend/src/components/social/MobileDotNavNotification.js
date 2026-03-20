@@ -104,7 +104,7 @@ const MobileDotNavNotification = ({
       .finally(() => {
         if (!cancelled) {
           setLoading(false);
-          // Sync parent badge with actual backend count
+          // Notify parent to refresh unread count
           if (onCountRefresh) onCountRefresh();
         }
       });
