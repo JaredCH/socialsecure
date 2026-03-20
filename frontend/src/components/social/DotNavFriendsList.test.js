@@ -291,6 +291,27 @@ describe('DotNavFriendsList', () => {
     expect(groups[1].textContent).toBe('Offline');
   });
 
+  it('links friend avatar and name to that user social page', async () => {
+    friendsAPI.getFriends.mockResolvedValue({
+      data: { friends: [makeFriend({ _id: 'u1', username: 'alice' })] },
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <DotNavFriendsList isOpen={true} side="right" loggedInUser="me" userId="uid1" />
+        </MemoryRouter>
+      );
+    });
+
+    const avatarLink = document.querySelector('.dotnav-friend-avatar-link');
+    const nameLink = document.querySelector('.dotnav-friend-name-link');
+    expect(avatarLink).not.toBeNull();
+    expect(nameLink).not.toBeNull();
+    expect(avatarLink.getAttribute('href')).toBe('/social?user=alice');
+    expect(nameLink.getAttribute('href')).toBe('/social?user=alice');
+  });
+
   it('renders avatar image when avatarUrl is provided', async () => {
     friendsAPI.getFriends.mockResolvedValue({
       data: { friends: [makeFriend({ avatarUrl: 'https://example.com/avatar.jpg' })] },

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { friendsAPI, mapsAPI, getAuthToken } from '../../utils/api';
 import { getRealtimeSocket, onFriendPresence } from '../../utils/realtime';
 import { resolvePresenceStatus } from '../../utils/presence';
@@ -206,6 +207,7 @@ const DotNavFriendsList = ({ isOpen, side, loggedInUser, userId }) => {
               const id = String(friend._id);
               const initials = getInitials(friend);
               const displayName = getDisplayName(friend);
+              const profilePath = `/social?user=${encodeURIComponent(friend.username || '')}`;
               const showImg = friend.avatarUrl && !imgErrors[id];
               const isOnline = friend._online;
               const distFt = friend._distanceFt;
@@ -218,23 +220,27 @@ const DotNavFriendsList = ({ isOpen, side, loggedInUser, userId }) => {
                   data-testid={`dotnav-friend-${id}`}
                 >
                   <div className="dotnav-friend-avatar-wrap">
-                    <div className={`dotnav-friend-avatar ${isOnline ? 'dotnav-friend-glow-online' : 'dotnav-friend-glow-offline'}`}>
-                      {showImg ? (
-                        <img
-                          src={friend.avatarUrl}
-                          alt={displayName}
-                          className="dotnav-friend-avatar-img"
-                          onError={() => handleImgError(id)}
-                        />
-                      ) : (
-                        <span className="dotnav-friend-initials">{initials}</span>
-                      )}
-                    </div>
+                    <Link to={profilePath} className="dotnav-friend-avatar-link" aria-label={`View ${displayName}'s social page`}>
+                      <div className={`dotnav-friend-avatar ${isOnline ? 'dotnav-friend-glow-online' : 'dotnav-friend-glow-offline'}`}>
+                        {showImg ? (
+                          <img
+                            src={friend.avatarUrl}
+                            alt={displayName}
+                            className="dotnav-friend-avatar-img"
+                            onError={() => handleImgError(id)}
+                          />
+                        ) : (
+                          <span className="dotnav-friend-initials">{initials}</span>
+                        )}
+                      </div>
+                    </Link>
                     {distFt != null && (
                       <span className="dotnav-friend-distance">{distFt} Ft</span>
                     )}
                   </div>
-                  <span className="dotnav-friend-name">{displayName}</span>
+                  <Link to={profilePath} className="dotnav-friend-name-link">
+                    <span className="dotnav-friend-name">{displayName}</span>
+                  </Link>
                 </div>
               );
             })}
