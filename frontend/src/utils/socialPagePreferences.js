@@ -460,6 +460,9 @@ const normalizeHeroConfig = (heroInput, fallback) => {
     try {
       const parsed = new URL(trimmed);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return valueFallback;
+      // Store server upload paths as relative so they resolve against the current
+      // origin on every load, preventing stale absolute URLs when the host changes.
+      if (/^\/uploads\/\S+/i.test(parsed.pathname)) return parsed.pathname;
       return parsed.toString();
     } catch {
       return valueFallback;
