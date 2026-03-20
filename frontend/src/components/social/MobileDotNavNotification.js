@@ -106,16 +106,32 @@ const MobileDotNavNotification = ({
     return () => { cancelled = true; };
   }, [isOpen]);
 
-  const handleMarkRead = useCallback((e, notification) => {
+  const handleMarkRead = useCallback(async (e, notification) => {
     e.stopPropagation();
+    const ids = notification._ids && notification._ids.length > 0
+      ? notification._ids
+      : [notification._id];
+    try {
+      await Promise.all(ids.map((id) => notificationAPI.acknowledgeNotification(id)));
+    } catch {
+      return;
+    }
+    setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !ids.includes(n._id)));
     if (onAcknowledge) onAcknowledge(notification);
-    setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !(notification._ids || []).includes(n._id)));
   }, [onAcknowledge]);
 
-  const handleDismiss = useCallback((e, notification) => {
+  const handleDismiss = useCallback(async (e, notification) => {
     e.stopPropagation();
+    const ids = notification._ids && notification._ids.length > 0
+      ? notification._ids
+      : [notification._id];
+    try {
+      await Promise.all(ids.map((id) => notificationAPI.dismissNotification(id)));
+    } catch {
+      return;
+    }
+    setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !ids.includes(n._id)));
     if (onDismiss) onDismiss(notification);
-    setNotifications((prev) => prev.filter((n) => n._id !== notification._id && !(notification._ids || []).includes(n._id)));
   }, [onDismiss]);
 
   const handleView = useCallback((e, notification) => {
