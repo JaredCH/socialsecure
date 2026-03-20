@@ -80,7 +80,7 @@ export default function usePaginatedResource(fetcher, options = {}) {
   useEffect(() => {
     if (autoLoad) fetchPage(1, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchPage]);
+  }, [fetchPage, autoLoad]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) fetchPage(page + 1, false);

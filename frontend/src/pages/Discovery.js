@@ -64,12 +64,14 @@ const Discovery = () => {
 
   // Load posts when tab changes to 'posts' (lazy load)
   const postsLoadedRef = useRef(false);
+  const postsRefreshRef = useRef(postsResource.refresh);
+  postsRefreshRef.current = postsResource.refresh;
   useEffect(() => {
     if (activeTab === 'posts' && !postsLoadedRef.current) {
       postsLoadedRef.current = true;
-      postsResource.refresh();
+      postsRefreshRef.current();
     }
-  }, [activeTab, postsResource.refresh]);
+  }, [activeTab]);
 
   // Clean up debounce timer on unmount
   useEffect(() => {
