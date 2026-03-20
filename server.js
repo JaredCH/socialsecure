@@ -103,7 +103,10 @@ app.use(helmet({
   originAgentCluster: strictBrowserIsolation,
   contentSecurityPolicy: {
     directives: cspDirectives
-  }
+  },
+  // Allow the origin to be sent as Referer on cross-origin requests so that
+  // OpenStreetMap tile servers receive the header their usage policy requires.
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
 app.use(cors({
   origin: corsOrigin,
