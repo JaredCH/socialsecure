@@ -816,7 +816,7 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--dotnav-soft);
+  color: rgba(255, 255, 255, 0.82);
   padding: 4px 0 2px;
 }
 
@@ -846,6 +846,12 @@
   font-weight: 700;
   border: 2px solid transparent;
   transition: box-shadow 0.25s ease;
+}
+
+.dotnav-friend-avatar-link {
+  display: block;
+  border-radius: 50%;
+  text-decoration: none;
 }
 
 .dotnav-friend-glow-online {
@@ -899,6 +905,11 @@
   text-overflow: ellipsis;
   max-width: 80px;
   line-height: 1.2;
+}
+
+.dotnav-friend-name-link {
+  text-decoration: none;
+  color: inherit;
 }
 
 /* ── Reduced motion preference ── */
