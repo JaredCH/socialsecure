@@ -1,0 +1,255 @@
+name: Create News Page Improvement Issues
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create news improvement issues
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = 'JaredCH';
+            const repo = 'socialsecure';
+
+            const issues = [
+              {
+                title: 'Fix Control Panel Z-Index & Redesign Header (News Page)',
+                body: `## Problem
+            - News control panel renders behind the sitewide menu bar on desktop; top panel buttons may be unclickable.
+            - Header is too large, contains redundant badge, description, and 4-metric cards.
+
+            ## Implementation Plan
+
+            ### 1. Fix z-index and header position
+            - In \`frontend/src/components/news/SettingsDrawer.js\`, ensure the main panel's z-index is above the main menu bar (at least \`z-[200]\`).
+            - If the panel slides from top, ensure offset (\`lg:top-16\` or \`top-[64px]\`) is used so it doesn't hide below the sitewide nav.
+            - Example:
+            \`\`\`jsx
+            <div className="fixed z-[200] ... lg:top-16 ...">
+            \`\`\`
+
+            ### 2. Redesign/simplify news control panel header
+            - In \`frontend/src/components/news/control/NewsControlPanel.js\`, **replace lines 181–225** with a slimmed header:
+            \`\`\`jsx
+            <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
+              <span className="font-semibold text-sm">News Settings</span>
+              <div className="flex gap-2">
+                {/* essential action buttons only */}
+              </div>
+            </div>
+            \`\`\`
+            - Remove the badge, h2, description, and 4-card metrics block.
+
+            ### 3. Remove the metrics grid beneath header
+            - Delete or comment out lines 89–94 and 217–224 (\`summaryCards\`).
+
+            ## Acceptance Criteria
+            - Control panel always renders above menu bar.
+            - Header is slim, with no redundant information. Only "News Settings" title and essential action buttons remain.
+            - Metrics cards section is completely gone.`
+              },
+              {
+                title: 'Remove Sources, Schedule & Export Panels from News Page',
+                body: `## Problem
+            These panels are now deprecated and must be fully removed:
+            - Sources Panel
+            - Schedule Panel (default to local, no selection UI)
+            - Export Panel
+
+            ## Implementation Plan
+
+            ### 1. Update the News Control Panel Tab Definitions
+            - In \`frontend/src/components/news/control/NewsControlPanel.js\`, remove \`sources\`, \`schedule\`, and \`export\` from the TABS array (lines 11–19).
+
+            ### 2. Remove Imports and Use
+            - Delete or comment out imports for \`SourcesPanel\`, \`SchedulePanel\`, and \`ExportPanel\` (lines 3, 7, 8).
+
+            ### 3. Remove Corresponding Cases in Panel Renderer
+            - In the \`renderActivePanel\` function, remove all conditional blocks for \`sources\` (lines 97–108), \`schedule\` (139–147), and the fallback \`export\` (176).
+
+            ### 4. Remove Sidebar "Active Feeds" Widget
+            - The secondary sidebar widget (lines 255–279) relies on sources—delete this block.
+
+            ### 5. Delete All Redundant Panel Files
+            - Fully remove: \`SourcesPanel.js\`, \`SchedulePanel.js\`, \`ExportPanel.js\` (and corresponding CSS/tests as needed).
+
+            ### 6. Cleanup Props and State
+            - Delete now-obsolete props and local state: \`sources\`, \`isSourceEnabled\`, \`onToggleSource\`, \`onToggleGoogleNews\`, \`onToggleSourceCategory\` from the ControlPanel and its parents.
+            - The default scope for News should be local (no user selection UI/panel).
+
+            ## Acceptance Criteria
+            - News page only has: Keywords, Locations, Sports Teams, and Weather tabs.
+            - No Sources/Schedule/Export tab/buttons, nor any code or UI relating to them.
+            - No sidebar "Active Feeds" card.
+            - Page defaults to Local scope unconditionally.`
+              },
+              {
+                title: 'Slim Section Sub-Headers & Densify Control Panel (News Page)',
+                body: `## Problem
+            - Each section of the News control panel includes a verbose, multi-line sub-header, wasting vertical space and displaying redundant information.
+            - Section sub-header includes a badge, a heading, a paragraph, and a "Simple view" infobox—crowding the UI.
+            - Sidebar tab buttons are large, with a two-line label/summary and substantial vertical padding.
+
+            ## Implementation Plan
+
+            ### 1. Remove Section Sub-Header Card
+            - In \`frontend/src/components/news/control/NewsControlPanel.js\` (lines 306–327), replace the entire \`[rounded-28px]\` card and its header/sub-header (lines 308–322) with *just* the rendered panel content:
+            \`\`\`jsx
+            <div className="flex-1 overflow-y-auto p-4">
+              {renderActivePanel()}
+            </div>
+            \`\`\`
+
+            ### 2. Make Sidebar Tab Buttons Compact
+            - In the tab button mapping (lines 232–251), change each button so it only contains a single line: icon and label. Remove summary text and extra padding.
+            \`\`\`jsx
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={\`flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left \${activeTab === tab.id ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'}\`}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            ))}
+            \`\`\`
+
+            ### 3. Reduce Sidebar Column Width
+            - In the page grid/container, change from \`lg:grid-cols-[280px_minmax(0,1fr)]\` to \`lg:grid-cols-[220px_minmax(0,1fr)]\` for a denser look.
+
+            ## Acceptance Criteria
+            - Each panel shows only the content for the active section, with no unnecessary card, badge, sub-header, or "Simple view" box.
+            - Sidebar is visually narrower and easier to scan.
+            - Sidebar tab buttons fit on one line.`
+              },
+              {
+                title: 'Add Stock & Crypto Tickers to News Briefing Header (Desktop & Mobile)',
+                body: `## Problem
+            - /news dashboard needs live stock and crypto tickers in the "Your daily Briefing" header. Should show: symbol, value, 2-hour sparkline, and color (green for up, red for down).
+            - Must fit up to 9 tickers desktop, scaling if fewer; mobile: up to 3 per row.
+            - Users must be able to enable, search, add and remove tickers in a Settings panel (max 9).
+
+            ## Implementation Plan
+
+            ### 1. Backend/API
+            - Add proxy endpoints (e.g. in \`routes/news.js\`) for \`/stocks/search?q=\`, \`/stocks/quotes?symbols=AAPL,BTC-USD\`.
+            - Use Alpha Vantage, Yahoo Finance, or similar free sources.
+
+            ### 2. UI Components
+            - Create \`frontend/src/components/news/StockTicker.js\` for ticker row (desktop/mobile layouts).
+            - Show: symbol, value, sparkline. Color green (up) or red (down).
+            - Smart grid: up to 9 across on desktop, up to 3-per-row mobile, auto-size if fewer.
+
+            ### 3. Settings UI
+            - Add tab or modal for ticker settings (\`StockTickerSettings.js\`).
+            - Show check to enable/disable tickers, list of current, plus + for new (autocomplete search via symbol/name), remove (×). Enforce max of 9.
+            - Save to user pref or local storage as appropriate.
+
+            ### 4. Integration
+            - Insert \`<StockTicker tickers={tickers} />\` in the /news header after title.
+            - Periodically update from backend for live data.
+
+            ## Acceptance Criteria
+            - Tickers are responsive and visible in both desktop and mobile layouts.
+            - User can add, remove, and reorder (optional) their watchlist, up to 9.
+            - Color and sparkline reflect live price change and recent trend.
+            - Settings respect and persist user choices.`
+              },
+              {
+                title: 'Smart Left Sidebar Height & Sports Team Colors (News Page)',
+                body: `## Problem
+            - The left-hand categories list on the desktop /news panel sometimes requires scrolling when it could scale to fit the viewport.
+            - The sports teams schedule on the right needs to show team-specific colors in a visually appealing (but non-infringing) way, using team color data.
+
+            ## Implementation Plan
+
+            ### 1. Sidebar Sizing
+            - In \`frontend/src/components/news/NewsLeftPanel.js\`, set the \`<aside>\` height dynamically: \`style={{height: 'calc(100vh - 64px)'}}\` to match viewport minus navbar. Ensure the nav section uses \`flex-1 min-h-0 overflow-y-auto\`.
+            - Compact the sidebar width to match the new density of other panel elements.
+
+            ### 2. Store & Use Team Colors
+            - Add a lookup map in \`frontend/src/constants/teamColors.js\` mapping team ids to \`{ primary, secondary }\` colors.
+            - In \`SportsSchedulePanel.js\`, apply team colors to the left border or tile backgrounds/accents for each team/game entry.
+            - Example:
+            \`\`\`jsx
+            <div style={{borderLeft: '4px solid ' + colors.primary}} ...>
+            \`\`\`
+            - Team abbreviation backgrounds and league labels may also use these colors (with translucent/gradient for higher contrast).
+
+            ### 3. Redesign Schedule Item Layout
+            - Enhance each team/game listing: bold team, logo/initial with background, opponent, date/time, all color-keyed. Use rounded corners, flex layout for clarity.
+
+            ## Acceptance Criteria
+            - The category list sidebar dynamically fits the viewport height and only scrolls when absolutely necessary.
+            - The sports panel displays team color accents for every game, visually distinct, without IP infringement.
+            - All changes mesh seamlessly with surrounding compact UI work.`
+              },
+              {
+                title: 'Densify Condensed Weather Widget (News Page Desktop)',
+                body: `## Problem
+            - The condensed weather widget on the desktop right-side panel (\`WeatherBar variant="card"\`) is not informative enough. It should show a denser view with more data points visible at a glance.
+
+            ## Implementation Plan
+
+            ### 1. Enhance the Condensed Weather Card
+            - In \`frontend/src/components/news/WeatherBar.js\`, when \`variant="card"\`, render a mini hourly forecast strip centered on "now" showing past 1 hour and up to 4 hours ahead.
+            - Each hour cell should show: time label, weather icon, temperature, rain probability, and wind speed — all in a compact inline layout.
+            - Use small weather icons/emojis for conditions (☀️🌧️⛅ etc.) and keep font sizes tiny (\`text-[10px]\` or \`text-xs\`).
+
+            ### 2. Layout
+            - Horizontal scroll or fixed 5–6 column grid within the card.
+            - Current hour highlighted with a subtle background accent.
+            - Example structure per cell:
+            \`\`\`jsx
+            <div className="flex flex-col items-center gap-0.5 px-1">
+              <span className="text-[10px] text-white/50">{hour}</span>
+              <span className="text-base">{icon}</span>
+              <span className="text-[11px] font-medium">{temp}°</span>
+              <span className="text-[9px] text-blue-300">{rain}%</span>
+              <span className="text-[9px] text-white/40">{wind}mph</span>
+            </div>
+            \`\`\`
+
+            ### 3. Data Source
+            - Use the existing hourly forecast data already fetched by \`WeatherBar\` from the weather API.
+
+            ## Acceptance Criteria
+            - The condensed desktop weather card shows a mini hourly strip with temperature, icons, rain chance, and wind.
+            - Current hour is visually highlighted.
+            - The widget fits within the existing 320px right panel without overflow issues.
+            - Past 1 hour and next 1–4 hours are visible.`
+              },
+            ];
+
+            // Fetch existing open issues to avoid duplicates
+            const existingIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existingTitles = new Set(existingIssues.map(i => i.title));
+
+            for (const issue of issues) {
+              if (existingTitles.has(issue.title)) {
+                console.log(`Skipping (already exists): ${issue.title}`);
+                continue;
+              }
+              const { data } = await github.rest.issues.create({
+                owner,
+                repo,
+                title: issue.title,
+                body: issue.body,
+              });
+              console.log(`Created issue #${data.number}: ${data.title}`);
+              console.log(`URL: ${data.html_url}`);
+            }
+
+            console.log('Done! All new issues created.');
