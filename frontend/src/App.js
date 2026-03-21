@@ -840,7 +840,7 @@ function App() {
             <Route
               path="/social"
               element={
-                <SocialLoadingOverlay>
+                <SocialLoadingOverlay user={user}>
                   {isAuthenticated ? (
                     <ProtectedRoute
                       isAuthenticated={isAuthenticated}

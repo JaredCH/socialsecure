@@ -9,6 +9,14 @@ describe('SocialLoadingOverlay', () => {
   let container;
   let root;
 
+  const mockUser = {
+    username: 'testuser',
+    realName: 'Test User',
+    city: 'Dallas',
+    state: 'TX',
+    country: 'US',
+  };
+
   beforeEach(() => {
     jest.useFakeTimers();
     container = document.createElement('div');
@@ -24,11 +32,11 @@ describe('SocialLoadingOverlay', () => {
     jest.useRealTimers();
   });
 
-  const renderOverlay = async (initialPath = '/social') => {
+  const renderOverlay = async (initialPath = '/social', user = null) => {
     await act(async () => {
       root.render(
         <MemoryRouter initialEntries={[initialPath]}>
-          <SocialLoadingOverlay>
+          <SocialLoadingOverlay user={user}>
             <div data-testid="real-content">Real Content</div>
           </SocialLoadingOverlay>
         </MemoryRouter>
@@ -51,17 +59,40 @@ describe('SocialLoadingOverlay', () => {
     expect(right).toBeTruthy();
   });
 
-  it('displays the username when ?user= query param is present', async () => {
-    await renderOverlay('/social?user=testuser');
-    const name = container.querySelector('[data-testid="overlay-username"]');
-    expect(name).toBeTruthy();
-    expect(name.textContent).toBe('testuser');
+  it('displays full user info when viewing own profile', async () => {
+    await renderOverlay('/social?user=testuser', mockUser);
+    const info = container.querySelector('[data-testid="overlay-user-info"]');
+    expect(info).toBeTruthy();
+    const displayName = container.querySelector('[data-testid="overlay-display-name"]');
+    expect(displayName).toBeTruthy();
+    expect(displayName.textContent).toBe('Test User');
+    const username = container.querySelector('[data-testid="overlay-username"]');
+    expect(username).toBeTruthy();
+    expect(username.textContent).toBe('@testuser');
+    const loc = container.querySelector('[data-testid="overlay-location"]');
+    expect(loc).toBeTruthy();
+    expect(loc.textContent).toBe('Dallas, TX, US');
+    const status = container.querySelector('[data-testid="overlay-status"]');
+    expect(status).toBeTruthy();
+    expect(status.textContent).toBe('Secure');
   });
 
-  it('does not display username when no ?user= param', async () => {
+  it('displays @username and Social status when viewing another profile', async () => {
+    await renderOverlay('/social?user=otheruser', mockUser);
+    const displayName = container.querySelector('[data-testid="overlay-display-name"]');
+    expect(displayName).toBeFalsy();
+    const username = container.querySelector('[data-testid="overlay-username"]');
+    expect(username).toBeTruthy();
+    expect(username.textContent).toBe('@otheruser');
+    const status = container.querySelector('[data-testid="overlay-status"]');
+    expect(status).toBeTruthy();
+    expect(status.textContent).toBe('Social');
+  });
+
+  it('does not display user info when no user and no ?user= param', async () => {
     await renderOverlay('/social');
-    const name = container.querySelector('[data-testid="overlay-username"]');
-    expect(name).toBeFalsy();
+    const info = container.querySelector('[data-testid="overlay-user-info"]');
+    expect(info).toBeFalsy();
   });
 
   it('renders skeleton shimmer placeholders with profile details', async () => {
@@ -79,11 +110,13 @@ describe('SocialLoadingOverlay', () => {
     expect(container.querySelector('[data-testid="skeleton-about-panel"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="skeleton-details-panel"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="skeleton-friends-panel"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="skeleton-partner-panel"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="skeleton-now-playing-panel"]')).toBeTruthy();
     // Detail rows (location, website, pronouns, joined)
     expect(container.querySelectorAll('[data-testid="skeleton-detail-row"]').length).toBe(4);
-    // Stat squares and feed cards
-    expect(container.querySelectorAll('.skeleton-square').length).toBe(3);
-    expect(container.querySelectorAll('.skeleton-card').length).toBeGreaterThanOrEqual(3);
+    // Center glass panels for Feed and Gallery
+    expect(container.querySelector('[data-testid="skeleton-feed-panel"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="skeleton-gallery-panel"]')).toBeTruthy();
     // Friend avatars
     expect(container.querySelectorAll('.skeleton-friend-avatar').length).toBe(5);
   });
