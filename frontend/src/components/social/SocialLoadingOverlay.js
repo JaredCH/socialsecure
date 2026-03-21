@@ -44,6 +44,7 @@ const SocialLoadingOverlay = ({ children, user }) => {
         displayName: user.realName || user.username || '',
         atUsername: user.username ? `@${user.username}` : '',
         location: locationParts.join(', ') || user.location || '',
+        // Default to 'secure' — matches the platform default posting audience
         status: 'secure',
       };
     }
@@ -52,6 +53,7 @@ const SocialLoadingOverlay = ({ children, user }) => {
         displayName: '',
         atUsername: `@${username}`,
         location: '',
+        // Show 'social' when visiting another user's social page
         status: 'social',
       };
     }
