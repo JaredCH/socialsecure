@@ -7,6 +7,7 @@ import NewsLeftPanel from '../components/news/NewsLeftPanel';
 import SettingsDrawer from '../components/news/SettingsDrawer';
 import ArticleDrawer from '../components/news/ArticleDrawer';
 import SportsSchedulePanel from '../components/news/SportsSchedulePanel';
+import StockTicker from '../components/news/StockTicker';
 import { CATEGORY_ICONS } from '../constants/categoryIcons';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -311,6 +312,8 @@ function News({ isGuestMode = false }) {
   // ── Derived values ─────────────────────────────────────────────────────────
   const keywords      = useMemo(() => (preferences?.followedKeywords || []).map((k) => k.keyword || k), [preferences]);
   const followedTeams = useMemo(() => preferences?.followedSportsTeams || [], [preferences]);
+  const stockTickers  = useMemo(() => preferences?.stockTickers || [], [preferences]);
+  const stockTickersEnabled = preferences?.stockTickersEnabled || false;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (sessionError) {
@@ -332,6 +335,7 @@ function News({ isGuestMode = false }) {
           <h1 className="text-sm font-bold text-slate-900">News</h1>
         </div>
         <WeatherBar variant="sticky" />
+        <StockTicker tickers={stockTickers} enabled={stockTickersEnabled} />
         <div data-testid="news-mobile-filter-bar-shell" className="relative z-40 border-b border-slate-200 bg-white">
           <FilterBar
             categories={enabledCategories}
@@ -398,6 +402,7 @@ function News({ isGuestMode = false }) {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">News</p>
             <h1 className="text-2xl font-semibold text-slate-900">Your Daily Briefing</h1>
           </div>
+          <StockTicker tickers={stockTickers} enabled={stockTickersEnabled} />
           <div className="border-b border-slate-200">
             <FilterBar
               categories={enabledCategories}

@@ -666,6 +666,9 @@ export const newsAPI = {
   reportImpressions: (impressions) => api.post('/news/impressions', { impressions }).catch(() => {}),
   // Full-text article search
   searchArticles: (params = {}) => api.get('/news/search', { params }),
+  // Stock & crypto tickers
+  searchStocks: (q) => api.get('/news/stocks/search', { params: { q } }),
+  getStockQuotes: (symbols) => api.get('/news/stocks/quotes', { params: { symbols: symbols.join(',') } }),
 };
 
 // Maps API

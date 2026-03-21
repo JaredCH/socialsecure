@@ -7,6 +7,7 @@ import SportsTeamsPanel from './panels/SportsTeamsPanel';
 import SchedulePanel from './panels/SchedulePanel';
 import ExportPanel from './panels/ExportPanel';
 import WeatherLocationsPanel from './panels/WeatherLocationsPanel';
+import StockTickerSettingsPanel from './panels/StockTickerSettingsPanel';
 
 const TABS = [
   { id: 'sources', label: 'Sources', icon: 'rss_feed', summary: 'Control which feeds are active and healthy.' },
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'locations', label: 'Locations', icon: 'location_on', summary: 'Set the places used for local news relevance.' },
   { id: 'sports', label: 'Sports Teams', icon: 'sports_football', summary: 'Pick teams for personalized schedules and coverage.' },
   { id: 'weather', label: 'Weather', icon: 'partly_cloudy_day', summary: 'Manage forecast locations and saved coordinates.' },
+  { id: 'tickers', label: 'Tickers', icon: 'trending_up', summary: 'Add stock & crypto tickers to your news briefing.' },
   { id: 'schedule', label: 'Schedule', icon: 'schedule', summary: 'Tune cadence and default feed scope.' },
   { id: 'export', label: 'Export', icon: 'upload', summary: 'Export or review your current news settings.' }
 ];
@@ -169,6 +171,16 @@ export default function NewsControlPanel({
           onReorder={onReorderWeatherLocations}
           statusMessage={weatherStatusMessage}
           setStatusMessage={setWeatherStatusMessage}
+        />
+      );
+    }
+
+    if (activeTab === 'tickers') {
+      return (
+        <StockTickerSettingsPanel
+          tickers={preferences?.stockTickers || []}
+          enabled={preferences?.stockTickersEnabled || false}
+          onUpdatePreferences={onUpdatePreferences}
         />
       );
     }
