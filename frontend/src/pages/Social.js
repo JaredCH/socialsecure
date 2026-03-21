@@ -5675,7 +5675,18 @@ const Social = () => {
                 )
               })
             ) : null}
-            {renderGlassPanel('Feed', renderPanelBody('timeline'))}
+            {renderGlassPanel('Feed', renderPanelBody('timeline'), {
+              action: ownerEditingEnabled && !composerVisible ? (
+                <button
+                  type="button"
+                  onClick={() => setComposerVisible(true)}
+                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+                  style={{ background: 'var(--accent)' }}
+                >
+                  +New
+                </button>
+              ) : null
+            })}
             {renderGlassPanel('Gallery', renderPanelBody('gallery'))}
           </div>
         );
