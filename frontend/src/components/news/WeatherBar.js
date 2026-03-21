@@ -375,9 +375,9 @@ export default function WeatherBar({ variant = 'sticky' }) {
           {/* ── Mini hourly strip ──────────────────────────────────────── */}
           {hourlyStrip.length > 0 && (
             <div data-testid="weather-hourly-strip" className="flex justify-between gap-0.5 mt-1">
-              {hourlyStrip.map((h, i) => (
+              {hourlyStrip.map((h) => (
                 <div
-                  key={i}
+                  key={h.time}
                   className={`flex flex-col items-center gap-0.5 px-1 py-1 rounded-lg flex-1 min-w-0${h.isCurrent ? ' bg-white/15' : ''}`}
                 >
                   <span className="text-[10px] text-white/50">
