@@ -86,13 +86,6 @@ export default function NewsControlPanel({
     });
   }, [sources, googleNewsEnabled, isSourceEnabled]);
 
-  const summaryCards = [
-    { label: 'Enabled sources', value: `${stats.enabledCount}/${stats.totalCount}`, tone: 'from-sky-500/15 to-cyan-500/5' },
-    { label: 'Saved keywords', value: activeKeywords.length, tone: 'from-amber-500/15 to-orange-500/5' },
-    { label: 'News locations', value: locations.length, tone: 'from-emerald-500/15 to-teal-500/5' },
-    { label: 'Weather points', value: (weatherLocations || []).length, tone: 'from-indigo-500/15 to-violet-500/5' }
-  ];
-
   const renderActivePanel = () => {
     if (activeTab === 'sources') {
       return (
@@ -178,18 +171,9 @@ export default function NewsControlPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.12),_transparent_32%),linear-gradient(180deg,_rgba(248,250,252,0.98),_rgba(255,255,255,0.96))] text-slate-900">
-      <div className="border-b border-slate-200/80 bg-white/80 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">
-              <span className="material-symbols-outlined text-sm leading-none">tune</span>
-              News workspace
-            </div>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">News Control Panel</h2>
-            <p className="mt-1 max-w-2xl text-sm text-slate-600">A clearer workspace for managing sources, local coverage, sports teams, and weather locations without losing context from the rest of the page.</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+      <div className="flex items-center justify-between border-b border-slate-200/80 bg-white/80 px-4 py-2 backdrop-blur-xl sm:px-6 lg:px-8">
+          <span className="font-semibold text-sm text-slate-950">News Settings</span>
+          <div className="flex items-center gap-2">
             <button
               onClick={onRestore}
               className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
@@ -212,16 +196,6 @@ export default function NewsControlPanel({
               <span className="material-symbols-outlined text-[20px] leading-none">close</span>
             </button>
           </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {summaryCards.map((card) => (
-            <div key={card.label} className={`rounded-2xl border border-white/80 bg-gradient-to-br ${card.tone} px-4 py-3 shadow-sm`}>
-              <div className="text-xs font-medium text-slate-500">{card.label}</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-950">{card.value}</div>
-            </div>
-          ))}
-        </div>
       </div>
 
       <div className="min-h-0 flex-1 lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">

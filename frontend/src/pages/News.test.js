@@ -306,7 +306,7 @@ describe('News inline preferences updates', () => {
     });
 
     // Verify control panel header
-    expect(container.textContent).toContain('News Control Panel');
+    expect(container.textContent).toContain('News Settings');
 
     // Verify tab pills are rendered
     const tabs = container.querySelectorAll('button[role="tab"]');
