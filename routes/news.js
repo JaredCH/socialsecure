@@ -894,6 +894,7 @@ router.get('/sports-schedules/seasons', authenticateToken, async (req, res) => {
 // ===========================================================================
 
 const STOCK_TICKER_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const YAHOO_FINANCE_BASE = 'https://query1.finance.yahoo.com';
 const stockTickerCache = new Map();
 
 /**
@@ -906,7 +907,7 @@ router.get('/stocks/search', authenticateToken, async (req, res) => {
     if (q.length < 1) return res.json({ results: [] });
 
     const encoded = encodeURIComponent(q);
-    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encoded}&quotesCount=8&newsCount=0&listsCount=0&enableFuzzyQuery=false`;
+    const url = `${YAHOO_FINANCE_BASE}/v1/finance/search?q=${encoded}&quotesCount=8&newsCount=0&listsCount=0&enableFuzzyQuery=false`;
 
     let data;
     try {
@@ -962,7 +963,7 @@ router.get('/stocks/quotes', authenticateToken, async (req, res) => {
       }
 
       try {
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=5m&range=1d`;
+        const url = `${YAHOO_FINANCE_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=5m&range=1d`;
         const data = await fetchJsonWithTimeout(url, 7000);
         const result = data?.chart?.result?.[0];
         if (!result) {
@@ -974,7 +975,7 @@ router.get('/stocks/quotes', authenticateToken, async (req, res) => {
         const closePrices = result.indicators?.quote?.[0]?.close || [];
         const timestamps = result.timestamp || [];
 
-        // Build 2-hour sparkline (last ~24 five-minute candles)
+        // Build 2-hour sparkline from 1-day chart data (last 24 × 5-min candles ≈ 2h)
         const sparklinePoints = closePrices.slice(-24).filter((v) => v != null);
 
         const currentPrice = meta.regularMarketPrice ?? closePrices[closePrices.length - 1] ?? null;
