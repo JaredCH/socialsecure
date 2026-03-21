@@ -3,6 +3,9 @@ import React, { useEffect, useState, useMemo } from 'react';
 const MAX_TOTAL_LOCATIONS = 3;
 const MAX_ADDITIONAL_LOCATIONS = 2;
 
+const hasValidCoordinates = (lat, lon) =>
+  Number.isFinite(Number(lat)) && Number.isFinite(Number(lon));
+
 const getLocationGranularityLabel = (location) => {
   const hasZip = Boolean(location.zipCode?.trim());
   const hasCity = Boolean(location.city?.trim());
@@ -116,7 +119,7 @@ export default function LocationWeatherPanel({
     onAddLocation({
       city: suggestion.city || '',
       cityKey: suggestion.city && suggestion.state
-        ? `${(suggestion.state || '').substring(0, 2).toUpperCase()}:${(suggestion.city || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        ? `${String(suggestion.state).length === 2 ? suggestion.state : String(suggestion.state).substring(0, 2).toUpperCase()}:${(suggestion.city || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
         : '',
       zipCode: '',
       state: suggestion.state || '',
@@ -436,7 +439,7 @@ export default function LocationWeatherPanel({
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-800 truncate">{loc.label || [loc.city, loc.state, loc.country].filter(Boolean).join(', ') || 'Weather location'}</p>
                     <p className="text-[11px] text-slate-500 truncate">
-                      {Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lon)) ? `${Number(loc.lat).toFixed(4)}, ${Number(loc.lon).toFixed(4)}` : 'Coordinates pending'}
+                      {hasValidCoordinates(loc.lat, loc.lon) ? `${Number(loc.lat).toFixed(4)}, ${Number(loc.lon).toFixed(4)}` : 'Coordinates pending'}
                     </p>
                     {loc.isPrimary && <p className="text-[11px] text-indigo-600 font-semibold mt-0.5">Primary</p>}
                   </div>

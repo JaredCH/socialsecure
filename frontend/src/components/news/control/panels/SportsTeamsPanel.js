@@ -2,16 +2,20 @@ import React, { useMemo, useState } from 'react';
 import { getTeamColors } from '../../../../constants/teamColors';
 
 /**
- * Determine readable text color (black or white) against a hex background.
+ * Determine readable text color (black or white) against a hex background
+ * using the W3C relative luminance formula with sRGB gamma correction.
  */
 function contrastText(hex) {
   if (!hex || hex.length < 7) return '#ffffff';
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  // W3C relative luminance
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.55 ? '#000000' : '#ffffff';
+  const toLinear = (c) => {
+    const s = c / 255;
+    return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const r = toLinear(parseInt(hex.slice(1, 3), 16));
+  const g = toLinear(parseInt(hex.slice(3, 5), 16));
+  const b = toLinear(parseInt(hex.slice(5, 7), 16));
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.179 ? '#000000' : '#ffffff';
 }
 
 export default function SportsTeamsPanel({
