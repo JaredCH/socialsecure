@@ -88,7 +88,7 @@ export default function StockTickerSettingsPanel({
       <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
         <div>
           <div className="text-sm font-medium text-slate-900">Show Market Tickers</div>
-          <div className="text-xs text-slate-500">Display stocks, crypto, currencies, metals &amp; commodities</div>
+          <div className="text-xs text-slate-500">Display stocks, crypto, currencies, metals & commodities</div>
         </div>
         <button
           onClick={handleToggleEnabled}
