@@ -225,15 +225,22 @@ function computeGraphData(circles, profileLabel) {
     const budget = MAX_VISIBLE_NODES - owners.length - circleNodes.length;
     const kept = [...owners, ...circleNodes, ...members.slice(0, Math.max(0, budget))];
     const keptIds = new Set(kept.map((n) => n.id));
+    const maxOrbitExtent = safeCircles.length > 0
+      ? (ORBIT_BASE_RADIUS + (safeCircles.length - 1) * ORBIT_RADIUS_STEP) + MEMBER_ORBIT_RADIUS + MEMBER_NODE_RADIUS
+      : OWNER_RADIUS;
     return {
       nodes: kept,
       edges: edges.filter((e) => keptIds.has(e.from) && keptIds.has(e.to)),
       memberCount: membersById.size,
       mutualCount,
+      maxOrbitExtent,
     };
   }
 
-  return { nodes, edges, memberCount: membersById.size, mutualCount };
+  const maxOrbitExtent = safeCircles.length > 0
+    ? (ORBIT_BASE_RADIUS + (safeCircles.length - 1) * ORBIT_RADIUS_STEP) + MEMBER_ORBIT_RADIUS + MEMBER_NODE_RADIUS
+    : OWNER_RADIUS;
+  return { nodes, edges, memberCount: membersById.size, mutualCount, maxOrbitExtent };
 }
 
 /* ──────── image cache ──────── */
@@ -339,10 +346,25 @@ function InteractiveSocialGraph({ circles = [], profileLabel = 'User', accentCol
     starsRef.current = stars;
   }
 
-  const { nodes: graphNodes, edges: graphEdges, memberCount, mutualCount } = useMemo(
+  const { nodes: graphNodes, edges: graphEdges, memberCount, mutualCount, maxOrbitExtent } = useMemo(
     () => computeGraphData(circles, profileLabel),
     [circles, profileLabel],
   );
+
+  // Compute zoom & pan that fits all circles + members inside the viewport
+  const { fitZoom, fitPanX, fitPanY } = useMemo(() => {
+    const padding = 20;
+    const extent = maxOrbitExtent + padding;
+    // Determine zoom so the entire extent (radius from center) is visible
+    const zoomH = (CANVAS_WIDTH / 2) / extent;
+    const zoomV = (CANVAS_HEIGHT / 2) / extent;
+    const z = clamp(Math.min(zoomH, zoomV), ZOOM_MIN, ZOOM_MAX);
+    return {
+      fitZoom: z,
+      fitPanX: (CANVAS_WIDTH / 2) * (1 - z),
+      fitPanY: (CANVAS_HEIGHT / 2) * (1 - z),
+    };
+  }, [maxOrbitExtent]);
 
   // Sync computed data into mutable refs
   useEffect(() => {
@@ -361,6 +383,12 @@ function InteractiveSocialGraph({ circles = [], profileLabel = 'User', accentCol
     });
     edgesRef.current = graphEdges;
   }, [graphNodes, graphEdges, accentColor]);
+
+  // Apply fit zoom/pan whenever the circle topology changes
+  useEffect(() => {
+    zoomRef.current = fitZoom;
+    panRef.current = { x: fitPanX, y: fitPanY };
+  }, [fitZoom, fitPanX, fitPanY]);
 
   /* ──── compute orbit positions ──── */
   const computeOrbitPositions = useCallback((time) => {
@@ -823,9 +851,9 @@ function InteractiveSocialGraph({ circles = [], profileLabel = 'User', accentCol
   }, []);
 
   const resetView = useCallback(() => {
-    zoomRef.current = 1;
-    panRef.current = { x: 0, y: 0 };
-  }, []);
+    zoomRef.current = fitZoom;
+    panRef.current = { x: fitPanX, y: fitPanY };
+  }, [fitZoom, fitPanX, fitPanY]);
 
   /* ──── cursor style ──── */
   const cursorStyle = isDragging
