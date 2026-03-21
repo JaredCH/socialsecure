@@ -4,6 +4,12 @@ import SocialStageSettingsSidebar from './SocialStageSettingsSidebar';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+/* Helper: navigate to a specific tab by clicking its button */
+const switchTab = async (tabId) => {
+  const btn = document.body.querySelector(`[data-testid="tab-${tabId}"]`);
+  if (btn) await act(async () => { btn.click(); });
+};
+
 describe('SocialStageSettingsSidebar', () => {
   let container;
   let root;
@@ -39,6 +45,7 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
+    // Theme tab is active by default
     const selector = document.body.querySelector('select');
     expect(selector).toBeTruthy();
     expect(selector.value).toBe('default');
@@ -88,6 +95,9 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
+    // Switch to hero tab
+    await switchTab('hero');
+
     const urlInput = document.body.querySelector('input[placeholder="https://example.com/hero-image.jpg"]');
     expect(urlInput).toBeTruthy();
     expect(urlInput.value).toBe('https://example.com/new-hero.jpg');
@@ -124,13 +134,16 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
+    // Switch to background tab
+    await switchTab('background');
+
     const modeSelector = document.body.querySelector('[data-testid="display-mode-selector"]');
     expect(modeSelector).toBeTruthy();
     const buttons = Array.from(modeSelector.querySelectorAll('button'));
     expect(buttons.map((b) => b.textContent)).toEqual(['Stretched', 'Repeating', 'Fixed']);
 
     const stretchedBtn = buttons.find((b) => b.textContent === 'Stretched');
-    expect(stretchedBtn.className).toContain('bg-blue-50');
+    expect(stretchedBtn.className).toContain('bg-blue-600');
 
     await act(async () => {
       buttons.find((b) => b.textContent === 'Fixed').click();
@@ -149,6 +162,9 @@ describe('SocialStageSettingsSidebar', () => {
         />
       );
     });
+
+    // Switch to effects tab
+    await switchTab('effects');
 
     const animSelector = document.body.querySelector('[data-testid="overlay-animation-selector"]');
     expect(animSelector).toBeTruthy();
@@ -174,6 +190,9 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
+    // Switch to background tab
+    await switchTab('background');
+
     const modeSelector = document.body.querySelector('[data-testid="display-mode-selector"]');
     expect(modeSelector).toBeNull();
   });
@@ -188,6 +207,9 @@ describe('SocialStageSettingsSidebar', () => {
         />
       );
     });
+
+    // Switch to background tab
+    await switchTab('background');
 
     const uploadBtn = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent === 'Upload image');
     expect(uploadBtn).toBeTruthy();
@@ -208,8 +230,11 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
+    // Switch to hero tab
+    await switchTab('hero');
+
     // Advanced section should be hidden initially
-    expect(document.body.querySelector('[data-testid="hero-advanced-section"]')).toBeNull();
+    expect(document.body.querySelector('[data-testid="hero-advanced-toggle-content"]')).toBeNull();
 
     // Click the Advanced toggle
     const advancedBtn = document.body.querySelector('[data-testid="hero-advanced-toggle"]');
@@ -219,7 +244,7 @@ describe('SocialStageSettingsSidebar', () => {
     });
 
     // Advanced section should now be visible
-    expect(document.body.querySelector('[data-testid="hero-advanced-section"]')).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="hero-advanced-toggle-content"]')).toBeTruthy();
     expect(document.body.querySelector('[data-testid="hero-grain-slider"]')).toBeTruthy();
     expect(document.body.querySelector('[data-testid="hero-blur-slider"]')).toBeTruthy();
   });
@@ -248,5 +273,55 @@ describe('SocialStageSettingsSidebar', () => {
     const overlay = document.body.querySelector('.fixed.inset-0');
     expect(overlay).toBeTruthy();
     expect(overlay.className).not.toContain('pointer-events-none');
+  });
+
+  it('renders glass morph toggle on the theme tab', async () => {
+    const onGlassMorphToggle = jest.fn();
+    await act(async () => {
+      root.render(
+        <SocialStageSettingsSidebar
+          isOpen
+          glassMorphEnabled={false}
+          onGlassMorphToggle={onGlassMorphToggle}
+        />
+      );
+    });
+
+    const toggle = document.body.querySelector('[role="switch"]');
+    expect(toggle).toBeTruthy();
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+    await act(async () => {
+      toggle.click();
+    });
+    expect(onGlassMorphToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('shows tabbed navigation with 4 tabs', async () => {
+    await act(async () => {
+      root.render(<SocialStageSettingsSidebar isOpen />);
+    });
+
+    const tabIds = ['theme', 'hero', 'background', 'effects'];
+    tabIds.forEach((id) => {
+      const btn = document.body.querySelector(`[data-testid="tab-${id}"]`);
+      expect(btn).toBeTruthy();
+    });
+  });
+
+  it('shows a live preview when body background is set', async () => {
+    await act(async () => {
+      root.render(
+        <SocialStageSettingsSidebar
+          isOpen
+          bodyBackgroundImage="https://example.com/bg.jpg"
+        />
+      );
+    });
+
+    await switchTab('background');
+
+    const preview = document.body.querySelector('[data-testid="bg-preview"]');
+    expect(preview).toBeTruthy();
   });
 });
