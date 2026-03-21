@@ -890,7 +890,7 @@ router.get('/sports-schedules/seasons', authenticateToken, async (req, res) => {
 });
 
 // ===========================================================================
-// STOCK & CRYPTO TICKER ROUTES
+// MARKET TICKER ROUTES (stocks, crypto, currencies, commodities/futures)
 // ===========================================================================
 
 const STOCK_TICKER_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
@@ -917,7 +917,7 @@ router.get('/stocks/search', authenticateToken, async (req, res) => {
     }
 
     const results = (data?.quotes || [])
-      .filter((item) => item.symbol && (item.quoteType === 'EQUITY' || item.quoteType === 'CRYPTOCURRENCY' || item.quoteType === 'ETF' || item.quoteType === 'INDEX'))
+      .filter((item) => item.symbol && (item.quoteType === 'EQUITY' || item.quoteType === 'CRYPTOCURRENCY' || item.quoteType === 'ETF' || item.quoteType === 'INDEX' || item.quoteType === 'CURRENCY' || item.quoteType === 'FUTURE'))
       .slice(0, 8)
       .map((item) => ({
         symbol: item.symbol,
