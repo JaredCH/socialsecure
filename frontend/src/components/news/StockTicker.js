@@ -114,7 +114,7 @@ export default function StockTicker({ tickers = [], enabled = true }) {
           <span className="text-xs text-slate-400">Loading tickers…</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2">
+        <div className="grid grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2">
           {validQuotes.map((q) => (
             <TickerCard key={q.symbol} quote={q} />
           ))}
