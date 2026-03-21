@@ -519,6 +519,20 @@ describe('Social page hero background rendering', () => {
     expect(container.textContent).not.toContain('Publish Post');
   });
 
+  it('shows a +New button and opens composer when owner taps it', async () => {
+    await expect(renderPage()).resolves.toBeUndefined();
+
+    const newPostButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '+New');
+    expect(newPostButton).toBeTruthy();
+    expect(container.textContent).not.toContain('Publish Post');
+
+    await act(async () => {
+      newPostButton?.click();
+    });
+
+    expect(container.textContent).toContain('Publish Post');
+  });
+
   it('shows a 3-way Social/Secure/Public audience toggle and removes privacy chips', async () => {
     await expect(renderPage()).resolves.toBeUndefined();
 
