@@ -12,7 +12,7 @@ import './SocialLoadingOverlay.css';
  *
  * Usage:  <SocialLoadingOverlay>{children}</SocialLoadingOverlay>
  */
-const SocialLoadingOverlay = ({ children }) => {
+const SocialLoadingOverlay = ({ children, user }) => {
   const location = useLocation();
   const [showOverlay, setShowOverlay] = useState(true);
   const [overlayRevealed, setOverlayRevealed] = useState(false);
@@ -28,6 +28,35 @@ const SocialLoadingOverlay = ({ children }) => {
     const params = new URLSearchParams(location.search);
     return params.get('user') || '';
   }, [location.search]);
+
+  // Determine if viewing own profile
+  const isOwnProfile = React.useMemo(() => {
+    if (!user?.username) return false;
+    if (!username) return true;
+    return username.toLowerCase() === user.username.toLowerCase();
+  }, [user, username]);
+
+  // Build display info for the overlay
+  const overlayInfo = React.useMemo(() => {
+    if (isOwnProfile && user) {
+      const locationParts = [user.city, user.state, user.country].filter(Boolean);
+      return {
+        displayName: user.realName || user.username || '',
+        atUsername: user.username ? `@${user.username}` : '',
+        location: locationParts.join(', ') || user.location || '',
+        status: 'secure',
+      };
+    }
+    if (username) {
+      return {
+        displayName: '',
+        atUsername: `@${username}`,
+        location: '',
+        status: 'social',
+      };
+    }
+    return null;
+  }, [isOwnProfile, user, username]);
 
   // Re-trigger overlay on location change (pathname or search)
   useEffect(() => {
@@ -129,10 +158,28 @@ const SocialLoadingOverlay = ({ children }) => {
         >
           <div className="po-panel po-panel-left" />
           <div className="po-panel po-panel-right" />
-          {username && (
-            <span className="overlay-username" data-testid="overlay-username">
-              {username}
-            </span>
+          {overlayInfo && (
+            <div className="overlay-user-info" data-testid="overlay-user-info">
+              {overlayInfo.displayName && (
+                <span className="overlay-display-name" data-testid="overlay-display-name">
+                  {overlayInfo.displayName}
+                </span>
+              )}
+              <span className="overlay-username" data-testid="overlay-username">
+                {overlayInfo.atUsername}
+              </span>
+              {overlayInfo.location && (
+                <span className="overlay-location" data-testid="overlay-location">
+                  {overlayInfo.location}
+                </span>
+              )}
+              <span
+                className={`overlay-status overlay-status--${overlayInfo.status}`}
+                data-testid="overlay-status"
+              >
+                {overlayInfo.status.charAt(0).toUpperCase() + overlayInfo.status.slice(1)}
+              </span>
+            </div>
           )}
         </div>
       )}
@@ -237,21 +284,61 @@ const SocialLoadingOverlay = ({ children }) => {
                     </div>
                   </div>
                 </div>
-              </aside>
 
-              {/* Center content */}
-              <main style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                {/* Stats row */}
-                <div className="skeleton-stat-row">
-                  <div className="skeleton-base skeleton-square" />
-                  <div className="skeleton-base skeleton-square" />
-                  <div className="skeleton-base skeleton-square" />
+                {/* Partner / Spouse panel */}
+                <div className="skeleton-panel" data-testid="skeleton-partner-panel">
+                  <div style={{ padding: '16px' }}>
+                    <div className="skeleton-base skeleton-line" style={{ width: '50%', marginBottom: 12 }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: 16, background: 'rgba(16,185,129,0.05)' }}>
+                      <div className="skeleton-base" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div className="skeleton-base skeleton-line" style={{ width: '40%', height: 8 }} />
+                        <div className="skeleton-base skeleton-line" style={{ width: '60%' }} />
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Feed cards */}
-                <div className="skeleton-base skeleton-card" />
-                <div className="skeleton-base skeleton-card" />
-                <div className="skeleton-base skeleton-card" />
+                {/* Now Playing widget */}
+                <div className="skeleton-panel" data-testid="skeleton-now-playing-panel">
+                  <div style={{ padding: '16px' }}>
+                    <div className="skeleton-base skeleton-line" style={{ width: '40%', marginBottom: 12 }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div className="skeleton-base" style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0 }} />
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div className="skeleton-base skeleton-line" style={{ width: '60%' }} />
+                        <div className="skeleton-base skeleton-line" style={{ width: '35%', height: 8 }} />
+                      </div>
+                    </div>
+                    <div className="skeleton-base" style={{ height: 4, borderRadius: 999, marginTop: 12, width: '100%' }} />
+                  </div>
+                </div>
+              </aside>
+
+              {/* Center content — matches glass-panel Feed + Gallery layout */}
+              <main style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                {/* Feed glass panel */}
+                <div className="skeleton-glass-panel" data-testid="skeleton-feed-panel">
+                  <div className="skeleton-glass-panel-header">
+                    <div className="skeleton-base skeleton-line" style={{ width: '15%', height: 14 }} />
+                  </div>
+                  <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="skeleton-base skeleton-card" />
+                    <div className="skeleton-base skeleton-card" />
+                  </div>
+                </div>
+
+                {/* Gallery glass panel */}
+                <div className="skeleton-glass-panel" data-testid="skeleton-gallery-panel">
+                  <div className="skeleton-glass-panel-header">
+                    <div className="skeleton-base skeleton-line" style={{ width: '18%', height: 14 }} />
+                  </div>
+                  <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {Array.from({ length: 6 }, (_, i) => (
+                      <div key={i} className="skeleton-base" style={{ width: '100%', paddingBottom: '100%', borderRadius: 8 }} />
+                    ))}
+                  </div>
+                </div>
               </main>
             </div>
           </div>

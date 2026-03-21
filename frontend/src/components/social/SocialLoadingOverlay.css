@@ -33,22 +33,69 @@
 #loading-overlay.open .po-panel-right { transform: scaleX(0); }
 
 /* Centered username shown during reveal */
-#loading-overlay .overlay-username {
+#loading-overlay .overlay-user-info {
   position: relative;
   z-index: 2;
-  font-size: clamp(1.4rem, 4vw, 2.4rem);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   opacity: 0;
   transform: translateY(6px);
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-#loading-overlay.revealed .overlay-username {
+#loading-overlay.revealed .overlay-user-info {
   opacity: 1;
   transform: translateY(0);
+}
+
+#loading-overlay .overlay-display-name {
+  font-size: clamp(1.4rem, 4vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  color: #fff;
+}
+
+#loading-overlay .overlay-username {
+  font-size: clamp(0.9rem, 2vw, 1.2rem);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+#loading-overlay .overlay-location {
+  font-size: clamp(0.75rem, 1.5vw, 0.95rem);
+  font-weight: 400;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+#loading-overlay .overlay-status {
+  margin-top: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 12px;
+  border-radius: 999px;
+}
+
+#loading-overlay .overlay-status--social {
+  background: rgba(2, 132, 199, 0.25);
+  color: #7dd3fc;
+}
+
+#loading-overlay .overlay-status--secure {
+  background: rgba(217, 119, 6, 0.25);
+  color: #fcd34d;
+}
+
+#loading-overlay .overlay-status--public {
+  background: rgba(22, 163, 74, 0.25);
+  color: #86efac;
 }
 
 /* ── Skeleton Shimmer ────────────────────────────────────── */
@@ -125,6 +172,23 @@
 .skeleton-panel-accent {
   height: 2px;
   background: linear-gradient(90deg, #6366f1, #a855f7);
+}
+
+/* Glass panel skeleton — matches renderGlassPanel style */
+.skeleton-glass-panel {
+  border-radius: 1.75rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+}
+
+.skeleton-dark .skeleton-glass-panel {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.skeleton-glass-panel-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* Detail row inside details panel */
