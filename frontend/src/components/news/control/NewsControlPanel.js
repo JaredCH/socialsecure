@@ -1,16 +1,10 @@
 import React, { useState } from 'react';
-import KeywordsPanel from './panels/KeywordsPanel';
-import LocationsPanel from './panels/LocationsPanel';
-import SportsTeamsPanel from './panels/SportsTeamsPanel';
-import WeatherLocationsPanel from './panels/WeatherLocationsPanel';
-import StockTickerSettingsPanel from './panels/StockTickerSettingsPanel';
+import LocationWeatherPanel from './panels/LocationWeatherPanel';
+import ContentTrackingPanel from './panels/ContentTrackingPanel';
 
 const TABS = [
-  { id: 'keywords', label: 'Keywords', icon: 'sell', summary: 'Follow topics you want to surface first.' },
-  { id: 'locations', label: 'Locations', icon: 'location_on', summary: 'Set the places used for local news relevance.' },
-  { id: 'sports', label: 'Sports Teams', icon: 'sports_football', summary: 'Pick teams for personalized schedules and coverage.' },
-  { id: 'weather', label: 'Weather', icon: 'partly_cloudy_day', summary: 'Manage forecast locations and saved coordinates.' },
-  { id: 'tickers', label: 'Tickers', icon: 'trending_up', summary: 'Add stock & crypto tickers to your news briefing.' },
+  { id: 'location-weather', label: 'Location & Weather', icon: 'location_on', summary: 'Manage locations for local news and weather forecasts.' },
+  { id: 'content-tracking', label: 'Content Tracking', icon: 'tune', summary: 'Keywords, sports teams, and market tickers in one place.' },
 ];
 
 export default function NewsControlPanel({
@@ -45,29 +39,15 @@ export default function NewsControlPanel({
   onClose,
   onRestore,
 }) {
-  const [activeTab, setActiveTab] = useState('keywords');
+  const [activeTab, setActiveTab] = useState('location-weather');
 
   const activeKeywords = preferences?.followedKeywords || [];
-  const locations = preferences?.locations || [];
 
   const renderActivePanel = () => {
-    if (activeTab === 'keywords') {
+    if (activeTab === 'location-weather') {
       return (
-        <KeywordsPanel
-          keywords={activeKeywords}
-          onAddKeyword={onAddKeyword}
-          onRemoveKeyword={onRemoveKeyword}
-          onRenameKeyword={onRenameKeyword}
-          newKeyword={newKeyword}
-          setNewKeyword={setNewKeyword}
-        />
-      );
-    }
-
-    if (activeTab === 'locations') {
-      return (
-        <LocationsPanel
-          locations={locations}
+        <LocationWeatherPanel
+          locations={preferences?.locations || []}
           onAddLocation={onAddLocation}
           onRemoveLocation={onRemoveLocation}
           onSetPrimaryLocation={onSetPrimaryLocation}
@@ -75,42 +55,34 @@ export default function NewsControlPanel({
           setNewLocation={setNewLocation}
           locationTaxonomy={locationTaxonomy}
           registrationAlignment={registrationAlignment}
+          weatherLocations={weatherLocations}
+          onSearchWeatherLocations={onSearchWeatherLocations}
+          onAddWeatherLocation={onAddWeatherLocation}
+          onRemoveWeatherLocation={onRemoveWeatherLocation}
+          onSetPrimaryWeatherLocation={onSetPrimaryWeatherLocation}
+          onReorderWeatherLocations={onReorderWeatherLocations}
+          weatherStatusMessage={weatherStatusMessage}
+          setWeatherStatusMessage={setWeatherStatusMessage}
         />
       );
     }
 
-    if (activeTab === 'sports') {
+    if (activeTab === 'content-tracking') {
       return (
-        <SportsTeamsPanel
-          leagues={sportsLeagues}
+        <ContentTrackingPanel
+          keywords={activeKeywords}
+          onAddKeyword={onAddKeyword}
+          onRemoveKeyword={onRemoveKeyword}
+          onRenameKeyword={onRenameKeyword}
+          newKeyword={newKeyword}
+          setNewKeyword={setNewKeyword}
+          sportsLeagues={sportsLeagues}
           followedSportsTeams={followedSportsTeams}
-          onSetAllTeams={onSetAllSportsTeams}
-          onSetLeagueTeams={onSetLeagueSportsTeams}
-          onToggleTeam={onToggleSportsTeam}
-        />
-      );
-    }
-
-    if (activeTab === 'weather') {
-      return (
-        <WeatherLocationsPanel
-          locations={weatherLocations}
-          onSearchLocations={onSearchWeatherLocations}
-          onAddLocation={onAddWeatherLocation}
-          onRemoveLocation={onRemoveWeatherLocation}
-          onSetPrimary={onSetPrimaryWeatherLocation}
-          onReorder={onReorderWeatherLocations}
-          statusMessage={weatherStatusMessage}
-          setStatusMessage={setWeatherStatusMessage}
-        />
-      );
-    }
-
-    if (activeTab === 'tickers') {
-      return (
-        <StockTickerSettingsPanel
+          onSetAllSportsTeams={onSetAllSportsTeams}
+          onSetLeagueSportsTeams={onSetLeagueSportsTeams}
+          onToggleSportsTeam={onToggleSportsTeam}
           tickers={preferences?.stockTickers || []}
-          enabled={preferences?.stockTickersEnabled || false}
+          tickersEnabled={preferences?.stockTickersEnabled || false}
           onUpdatePreferences={onUpdatePreferences}
         />
       );

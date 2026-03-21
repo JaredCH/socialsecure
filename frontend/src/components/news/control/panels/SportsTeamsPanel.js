@@ -1,4 +1,18 @@
 import React, { useMemo, useState } from 'react';
+import { getTeamColors } from '../../../../constants/teamColors';
+
+/**
+ * Determine readable text color (black or white) against a hex background.
+ */
+function contrastText(hex) {
+  if (!hex || hex.length < 7) return '#ffffff';
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  // W3C relative luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.55 ? '#000000' : '#ffffff';
+}
 
 export default function SportsTeamsPanel({
   leagues,
@@ -7,130 +21,124 @@ export default function SportsTeamsPanel({
   onSetLeagueTeams,
   onToggleTeam
 }) {
+  const safeLeagues = leagues || [];
+  const [activeLeagueId, setActiveLeagueId] = useState(safeLeagues[0]?.id || '');
   const [query, setQuery] = useState('');
-  const [expandedLeagueIds, setExpandedLeagueIds] = useState([]);
 
   const selectedSet = useMemo(() => new Set(followedSportsTeams || []), [followedSportsTeams]);
+
+  const activeLeague = safeLeagues.find((l) => l.id === activeLeagueId) || safeLeagues[0];
   const normalizedQuery = query.trim().toLowerCase();
 
-  const filteredLeagues = useMemo(() => {
-    return (leagues || []).map((league) => {
-      const teams = (league.teams || []).filter((team) => {
-        if (!normalizedQuery) return true;
-        const haystack = `${team.team || team.name || ''} ${team.city || ''} ${team.state || ''} ${team.leagueLabel || league.label || league.name || ''}`.toLowerCase();
-        return haystack.includes(normalizedQuery);
-      });
-      return { ...league, teams };
-    }).filter((league) => league.teams.length > 0 || !normalizedQuery);
-  }, [leagues, normalizedQuery]);
+  const filteredTeams = useMemo(() => {
+    if (!activeLeague) return [];
+    return (activeLeague.teams || []).filter((team) => {
+      if (!normalizedQuery) return true;
+      const haystack = `${team.team || team.name || ''} ${team.city || ''} ${team.state || ''}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [activeLeague, normalizedQuery]);
 
-  const allVisibleTeamIds = filteredLeagues.flatMap((league) => league.teams.map((team) => team.id));
-  const allVisibleSelected = allVisibleTeamIds.length > 0 && allVisibleTeamIds.every((id) => selectedSet.has(id));
-
-  const toggleLeague = (leagueId) => {
-    setExpandedLeagueIds((prev) => (
-      prev.includes(leagueId)
-        ? prev.filter((id) => id !== leagueId)
-        : [...prev, leagueId]
-    ));
-  };
+  const leagueTeamIds = filteredTeams.map((t) => t.id);
+  const selectedInLeague = leagueTeamIds.filter((id) => selectedSet.has(id)).length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-2 gap-2">
+    <div className="space-y-4" data-testid="sports-teams-panel">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-gray-900">Sports Team Monitoring</h3>
-        <span className="text-xs text-gray-400">{selectedSet.size} selected</span>
+        <span className="text-xs text-slate-400">{selectedSet.size} selected</span>
       </div>
 
-      <input
-        type="text"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search by team or city"
-        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none"
-      />
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onSetAllTeams(allVisibleTeamIds)}
-          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
-        >
-          Select All
-        </button>
-        <button
-          type="button"
-          onClick={() => onSetAllTeams([])}
-          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
-        >
-          Deselect All
-        </button>
-        <span className="text-xs text-gray-400">{allVisibleSelected ? 'All visible selected' : 'Fast bulk actions'}</span>
+      {/* League tabs */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide" role="tablist" data-testid="sports-league-tabs">
+        {safeLeagues.map((league) => {
+          const isActive = league.id === (activeLeague?.id || '');
+          const count = (league.teams || []).filter((t) => selectedSet.has(t.id)).length;
+          return (
+            <button
+              key={league.id}
+              role="tab"
+              type="button"
+              aria-selected={isActive}
+              onClick={() => { setActiveLeagueId(league.id); setQuery(''); }}
+              className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                isActive
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {league.icon && <span className="text-sm leading-none">{league.icon}</span>}
+              <span>{league.label || league.name || league.id}</span>
+              {count > 0 && (
+                <span className={`ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-700'
+                }`}>{count}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="space-y-2 max-h-[26rem] overflow-y-auto pr-1">
-        {filteredLeagues.map((league) => {
-          const leagueTeamIds = league.teams.map((team) => team.id);
-          const selectedCount = leagueTeamIds.filter((id) => selectedSet.has(id)).length;
-          const expanded = expandedLeagueIds.includes(league.id);
+      {/* Search + bulk actions */}
+      {activeLeague && (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${activeLeague.label || activeLeague.name || ''} teams…`}
+            className="flex-1 min-w-0 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => onSetLeagueTeams(activeLeague.id, true, leagueTeamIds)}
+            className="shrink-0 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetLeagueTeams(activeLeague.id, false, leagueTeamIds)}
+            className="shrink-0 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+          >
+            None
+          </button>
+          <span className="shrink-0 text-[11px] text-slate-400">{selectedInLeague}/{filteredTeams.length}</span>
+        </div>
+      )}
+
+      {/* Team cards grid */}
+      <div className="flex flex-wrap gap-2 max-h-[28rem] overflow-y-auto pr-0.5" data-testid="sports-team-cards">
+        {filteredTeams.map((team) => {
+          const selected = selectedSet.has(team.id);
+          const colors = getTeamColors(team.id);
+          const textColor = contrastText(colors.primary);
+          const teamName = team.team || team.name || team.shortName || team.id;
 
           return (
-            <section key={league.id} className="rounded-xl ring-1 ring-gray-200 bg-white overflow-hidden">
-              <button
-                type="button"
-                onClick={() => toggleLeague(league.id)}
-                className="w-full px-3 py-2.5 flex items-center justify-between text-left hover:bg-gray-50"
-              >
-                <span className="text-sm font-semibold text-gray-800">{league.icon} {league.label || league.name || league.id}</span>
-                <span className="text-xs text-gray-500">{selectedCount}/{league.teams.length}</span>
-              </button>
-
-              {expanded && (
-                <div className="border-t border-gray-100 px-3 py-2 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onSetLeagueTeams(league.id, true, leagueTeamIds)}
-                      className="px-2 py-1 text-[11px] font-semibold rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
-                    >
-                      Select All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onSetLeagueTeams(league.id, false, leagueTeamIds)}
-                      className="px-2 py-1 text-[11px] font-semibold rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    >
-                      Deselect All
-                    </button>
-                  </div>
-
-                  <div className="grid gap-1">
-                    {league.teams.map((team) => {
-                      const checked = selectedSet.has(team.id);
-                      return (
-                        <label key={team.id} className="flex items-center justify-between gap-3 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer">
-                          <div className="min-w-0">
-                            <p className="text-sm text-gray-800 truncate">{team.team || team.name || team.shortName || team.id}</p>
-                            <p className="text-[11px] text-gray-500 truncate">{team.city}{team.state ? `, ${team.state}` : ''}</p>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => onToggleTeam(team.id, checked)}
-                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
-                          />
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
+            <button
+              key={team.id}
+              type="button"
+              onClick={() => onToggleTeam(team.id, selected)}
+              data-testid={`sports-team-card-${team.id}`}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer select-none ${
+                selected ? 'ring-2 ring-offset-1 ring-indigo-500 shadow-sm' : 'ring-1 ring-slate-200 opacity-60 hover:opacity-90'
+              }`}
+              style={selected ? { backgroundColor: colors.primary, color: textColor, borderColor: colors.secondary } : {}}
+            >
+              {selected && (
+                <span
+                  className="inline-block h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: colors.secondary }}
+                />
               )}
-            </section>
+              <span className="truncate">{teamName}</span>
+            </button>
           );
         })}
 
-        {filteredLeagues.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-3">No teams match your search.</p>
+        {filteredTeams.length === 0 && (
+          <p className="w-full text-sm text-slate-400 text-center py-4">No teams match your search.</p>
         )}
       </div>
     </div>
