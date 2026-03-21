@@ -68,6 +68,11 @@ const drawRoundRect = (ctx, x, y, w, h, r) => {
 
 /* ──────── compute graph data ──────── */
 
+const computeMaxOrbitExtent = (circleCount) =>
+  circleCount > 0
+    ? (ORBIT_BASE_RADIUS + (circleCount - 1) * ORBIT_RADIUS_STEP) + MEMBER_ORBIT_RADIUS + MEMBER_NODE_RADIUS
+    : OWNER_RADIUS;
+
 function computeGraphData(circles, profileLabel) {
   const safeCircles = Array.isArray(circles) ? circles : [];
   const ownerLabel = String(profileLabel || 'User').replace(/^@/, '') || 'User';
@@ -225,9 +230,7 @@ function computeGraphData(circles, profileLabel) {
     const budget = MAX_VISIBLE_NODES - owners.length - circleNodes.length;
     const kept = [...owners, ...circleNodes, ...members.slice(0, Math.max(0, budget))];
     const keptIds = new Set(kept.map((n) => n.id));
-    const maxOrbitExtent = safeCircles.length > 0
-      ? (ORBIT_BASE_RADIUS + (safeCircles.length - 1) * ORBIT_RADIUS_STEP) + MEMBER_ORBIT_RADIUS + MEMBER_NODE_RADIUS
-      : OWNER_RADIUS;
+    const maxOrbitExtent = computeMaxOrbitExtent(safeCircles.length);
     return {
       nodes: kept,
       edges: edges.filter((e) => keptIds.has(e.from) && keptIds.has(e.to)),
@@ -237,9 +240,7 @@ function computeGraphData(circles, profileLabel) {
     };
   }
 
-  const maxOrbitExtent = safeCircles.length > 0
-    ? (ORBIT_BASE_RADIUS + (safeCircles.length - 1) * ORBIT_RADIUS_STEP) + MEMBER_ORBIT_RADIUS + MEMBER_NODE_RADIUS
-    : OWNER_RADIUS;
+  const maxOrbitExtent = computeMaxOrbitExtent(safeCircles.length);
   return { nodes, edges, memberCount: membersById.size, mutualCount, maxOrbitExtent };
 }
 
@@ -361,6 +362,8 @@ function InteractiveSocialGraph({ circles = [], profileLabel = 'User', accentCol
     const z = clamp(Math.min(zoomH, zoomV), ZOOM_MIN, ZOOM_MAX);
     return {
       fitZoom: z,
+      // Pan offsets keep the world center (CENTER_X, CENTER_Y) mapped to the
+      // screen center: screen = pan + world * zoom → pan = screenCenter − worldCenter * zoom.
       fitPanX: (CANVAS_WIDTH / 2) * (1 - z),
       fitPanY: (CANVAS_HEIGHT / 2) * (1 - z),
     };
