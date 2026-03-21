@@ -2,6 +2,26 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { newsAPI } from '../../utils/api';
 import { getTeamColors } from '../../constants/teamColors';
 
+/** Return relative luminance (0–1) from a hex color string (#RGB or #RRGGBB). */
+function hexLuminance(hex) {
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+  const r = parseInt(c.substring(0, 2), 16) / 255;
+  const g = parseInt(c.substring(2, 4), 16) / 255;
+  const b = parseInt(c.substring(4, 6), 16) / 255;
+  const toLinear = (v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+}
+
+/**
+ * Pick the better text color: use secondary if dark enough, otherwise fall back to primary.
+ * Threshold 0.4 roughly corresponds to mid-gray (#999); colors brighter than that lack
+ * sufficient contrast against the light tinted card background.
+ */
+function readableTextColor(colors) {
+  return hexLuminance(colors.secondary) > 0.4 ? colors.primary : colors.secondary;
+}
+
 /**
  * SportsSchedulePanel - Displays upcoming games for user's followed sports teams
  * 
@@ -220,26 +240,27 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
           const schedule = schedules[team.id];
           const gameStatus = getGameStatus(schedule, team.id);
           const colors = getTeamColors(team.id);
+          const nameColor = readableTextColor(colors);
           
           return (
             <div
               key={team.id}
               className="flex items-start gap-2.5 rounded-xl py-2 px-2.5"
-              style={{ borderLeft: `3px solid ${colors.primary}` }}
+              style={{ backgroundColor: colors.primary + '18', borderLeft: `3px solid ${colors.primary}` }}
             >
               <div
                 className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
-                style={{ backgroundColor: colors.primary + '1A', color: colors.primary }}
+                style={{ backgroundColor: colors.primary + '33', color: nameColor }}
               >
                 {team.abbreviation || team.displayName?.substring(0, 2).toUpperCase() || '??'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">
+                <p className="text-sm font-semibold truncate" style={{ color: nameColor }}>
                   {team.displayName}
                 </p>
                 <span
                   className="inline-block text-[10px] font-semibold rounded px-1.5 py-0.5 mt-0.5"
-                  style={{ backgroundColor: colors.primary + '14', color: colors.primary }}
+                  style={{ backgroundColor: colors.primary + '22', color: colors.primary }}
                 >
                   {team.leagueName}
                 </span>
