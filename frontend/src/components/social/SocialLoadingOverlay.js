@@ -66,8 +66,8 @@ const SocialLoadingOverlay = ({ children }) => {
   // visually hidden behind the real content once React renders it.
   useEffect(() => {
     if (!showSkeleton) return;
-    const t = setTimeout(() => setShowSkeleton(false), 2000);
-    return () => clearTimeout(t);
+    const skeletonTimer = setTimeout(() => setShowSkeleton(false), 2000);
+    return () => clearTimeout(skeletonTimer);
   }, [showSkeleton]);
 
   // Detect dark-ish page background to toggle skeleton color scheme.
