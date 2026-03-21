@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { newsAPI } from '../../utils/api';
+import { getTeamColors } from '../../constants/teamColors';
 
 /**
  * SportsSchedulePanel - Displays upcoming games for user's followed sports teams
@@ -218,19 +219,30 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
         {!loading && !error && processedFollowedTeams.map((team) => {
           const schedule = schedules[team.id];
           const gameStatus = getGameStatus(schedule, team.id);
+          const colors = getTeamColors(team.id);
           
           return (
-            <div key={team.id} className="flex items-start gap-2.5 py-1.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-100 to-amber-50 flex items-center justify-center text-xs font-bold text-orange-600 shrink-0">
+            <div
+              key={team.id}
+              className="flex items-start gap-2.5 rounded-xl py-2 px-2.5"
+              style={{ borderLeft: `3px solid ${colors.primary}` }}
+            >
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
+                style={{ backgroundColor: colors.primary + '1A', color: colors.primary }}
+              >
                 {team.abbreviation || team.displayName?.substring(0, 2).toUpperCase() || '??'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">
+                <p className="text-sm font-semibold text-gray-900 truncate">
                   {team.displayName}
                 </p>
-                <p className="text-[11px] text-gray-400">
+                <span
+                  className="inline-block text-[10px] font-semibold rounded px-1.5 py-0.5 mt-0.5"
+                  style={{ backgroundColor: colors.primary + '14', color: colors.primary }}
+                >
                   {team.leagueName}
-                </p>
+                </span>
                 {gameStatus.status === 'off-season' ? (
                   <div className="mt-1">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium">

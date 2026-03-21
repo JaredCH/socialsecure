@@ -460,12 +460,7 @@ function News({ isGuestMode = false }) {
         <SettingsDrawer
           isOpen={settingsOpen}
           onClose={() => setSettingsOpen(false)}
-          sources={availableSources}
           preferences={preferences}
-          onToggleSource={handleToggleSource}
-          isSourceEnabled={isSourceEnabled}
-          onToggleGoogleNews={handleToggleGoogleNews}
-          onToggleSourceCategory={handleToggleSourceCategory}
           onAddKeyword={handleAddKeyword}
           onRemoveKeyword={handleRemoveKeyword}
           onRenameKeyword={handleRenameKeyword}
@@ -494,7 +489,6 @@ function News({ isGuestMode = false }) {
           onUpdatePreferences={handleUpdatePreferences}
           onRefreshHealth={handleRefreshHealth}
           onRestore={bootstrap}
-          scopes={NEWS_SCOPES}
         />
       )}
     </>

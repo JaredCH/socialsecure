@@ -10,7 +10,6 @@ import NewsControlPanel from './control/NewsControlPanel';
  * Accepts all NewsControlPanel props plus:
  *   isOpen   {bool}
  *   onClose  {Function}
- *   scopes   {Array}
  */
 export default function SettingsDrawer({ isOpen, onClose, ...panelProps }) {
   // Trap scroll when drawer is open

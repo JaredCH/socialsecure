@@ -1,32 +1,20 @@
-import React, { useState, useMemo } from 'react';
-import { HealthDot } from './HealthDot';
-import SourcesPanel from './panels/SourcesPanel';
+import React, { useState } from 'react';
 import KeywordsPanel from './panels/KeywordsPanel';
 import LocationsPanel from './panels/LocationsPanel';
 import SportsTeamsPanel from './panels/SportsTeamsPanel';
-import SchedulePanel from './panels/SchedulePanel';
-import ExportPanel from './panels/ExportPanel';
 import WeatherLocationsPanel from './panels/WeatherLocationsPanel';
 import StockTickerSettingsPanel from './panels/StockTickerSettingsPanel';
 
 const TABS = [
-  { id: 'sources', label: 'Sources', icon: 'rss_feed', summary: 'Control which feeds are active and healthy.' },
   { id: 'keywords', label: 'Keywords', icon: 'sell', summary: 'Follow topics you want to surface first.' },
   { id: 'locations', label: 'Locations', icon: 'location_on', summary: 'Set the places used for local news relevance.' },
   { id: 'sports', label: 'Sports Teams', icon: 'sports_football', summary: 'Pick teams for personalized schedules and coverage.' },
   { id: 'weather', label: 'Weather', icon: 'partly_cloudy_day', summary: 'Manage forecast locations and saved coordinates.' },
   { id: 'tickers', label: 'Tickers', icon: 'trending_up', summary: 'Add stock & crypto tickers to your news briefing.' },
-  { id: 'schedule', label: 'Schedule', icon: 'schedule', summary: 'Tune cadence and default feed scope.' },
-  { id: 'export', label: 'Export', icon: 'upload', summary: 'Export or review your current news settings.' }
 ];
 
 export default function NewsControlPanel({
-  sources,
   preferences,
-  onToggleSource,
-  isSourceEnabled,
-  onToggleGoogleNews,
-  onToggleSourceCategory,
   onAddKeyword,
   onRemoveKeyword,
   onRenameKeyword,
@@ -56,52 +44,13 @@ export default function NewsControlPanel({
   onRefreshHealth,
   onClose,
   onRestore,
-  scopes
 }) {
-  const [activeTab, setActiveTab] = useState('sources');
+  const [activeTab, setActiveTab] = useState('keywords');
 
-  const googleNewsEnabled = preferences?.googleNewsEnabled !== false;
   const activeKeywords = preferences?.followedKeywords || [];
   const locations = preferences?.locations || [];
-  const getSourcePreferenceId = (source) => source?._id || source?.providerId || source?.id;
-
-  // Compute sidebar stats
-  const stats = useMemo(() => {
-    const enabledCount = sources.filter(s => {
-      if (s.id === 'google-news') return googleNewsEnabled;
-      const sourcePreferenceId = getSourcePreferenceId(s);
-      return sourcePreferenceId ? isSourceEnabled(sourcePreferenceId) : false;
-    }).length;
-    const greenCount = sources.filter(s => s.health === 'green').length;
-    const yellowCount = sources.filter(s => s.health === 'yellow').length;
-    const redCount = sources.filter(s => s.health === 'red').length;
-    return { enabledCount, totalCount: sources.length, greenCount, yellowCount, redCount };
-  }, [sources, googleNewsEnabled, isSourceEnabled]);
-
-  // Active feeds for sidebar widget
-  const activeFeeds = useMemo(() => {
-    return sources.filter(s => {
-      if (s.id === 'google-news') return googleNewsEnabled;
-      const sourcePreferenceId = getSourcePreferenceId(s);
-      return s.enabled || (sourcePreferenceId && isSourceEnabled(sourcePreferenceId));
-    });
-  }, [sources, googleNewsEnabled, isSourceEnabled]);
 
   const renderActivePanel = () => {
-    if (activeTab === 'sources') {
-      return (
-        <SourcesPanel
-          sources={sources}
-          onToggleSource={onToggleSource}
-          isSourceEnabled={isSourceEnabled}
-          onToggleGoogleNews={onToggleGoogleNews}
-          googleNewsEnabled={googleNewsEnabled}
-          preferences={preferences}
-          onToggleSourceCategory={onToggleSourceCategory}
-        />
-      );
-    }
-
     if (activeTab === 'keywords') {
       return (
         <KeywordsPanel
@@ -126,16 +75,6 @@ export default function NewsControlPanel({
           setNewLocation={setNewLocation}
           locationTaxonomy={locationTaxonomy}
           registrationAlignment={registrationAlignment}
-        />
-      );
-    }
-
-    if (activeTab === 'schedule') {
-      return (
-        <SchedulePanel
-          preferences={preferences}
-          onUpdatePreferences={onUpdatePreferences}
-          scopes={scopes}
         />
       );
     }
@@ -177,7 +116,7 @@ export default function NewsControlPanel({
       );
     }
 
-    return <ExportPanel />;
+    return null;
   };
 
   return (
@@ -229,32 +168,6 @@ export default function NewsControlPanel({
                   <span>{tab.label}</span>
                 </button>
               ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-sky-200/80 bg-sky-50/70 p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-800">Active feeds</div>
-                <div className="mt-1 text-sm text-sky-900">{activeFeeds.length > 0 ? `${activeFeeds.length} source${activeFeeds.length === 1 ? '' : 's'} currently active` : 'No feeds enabled yet'}</div>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />{stats.greenCount}</span>
-                <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-500" />{stats.yellowCount}</span>
-                <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" />{stats.redCount}</span>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {activeFeeds.length > 0 ? activeFeeds.slice(0, 8).map((source, index) => (
-                <div key={`${source._id || source.providerId || source.id || source.name}-${index}`} className="flex items-center gap-2 rounded-2xl bg-white/85 px-3 py-2 text-sm text-slate-700">
-                  <HealthDot health={source.health} healthReason={source.healthReason} size={7} />
-                  <span className="min-w-0 flex-1 truncate">{source.name}</span>
-                  {source.wiringState === 'catalog_only' ? <span className="text-[10px] font-semibold text-amber-600">Needs wiring</span> : null}
-                </div>
-              )) : (
-                <div className="rounded-2xl bg-white/80 px-3 py-3 text-sm text-slate-500">Enable a feed to see it here.</div>
-              )}
             </div>
           </div>
         </aside>
