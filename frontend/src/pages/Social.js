@@ -6210,6 +6210,12 @@ const Social = () => {
         }}
         onToggleTopFriend={toggleDraftTopFriend}
         onMoveTopFriend={moveDraftTopFriend}
+        glassMorphEnabled={Boolean(socialPreferences.globalStyles?.glassMorphEnabled)}
+        onGlassMorphToggle={(enabled) => updateGlobalStyles({ glassMorphEnabled: enabled })}
+        panelColorOverride={socialPreferences.globalStyles?.panelColor || ''}
+        onPanelColorOverrideChange={(value) => updateGlobalStyles({ panelColor: value })}
+        pageBackgroundColorOverride={socialPreferences.globalStyles?.pageBackgroundColor || ''}
+        onPageBackgroundColorOverrideChange={(value) => updateGlobalStyles({ pageBackgroundColor: value })}
       />
 
       {activeGalleryImage ? createPortal(
