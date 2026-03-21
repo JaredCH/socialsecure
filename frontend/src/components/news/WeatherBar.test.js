@@ -325,4 +325,87 @@ describe('WeatherBar', () => {
     expect(hourlyLabels).not.toContain(new Date(2026, 2, 15, 12, 0, 0).toLocaleTimeString([], { hour: 'numeric' }));
     expect(hourlyLabels).not.toContain(new Date(2026, 2, 15, 13, 0, 0).toLocaleTimeString([], { hour: 'numeric' }));
   });
+
+  it('shows a mini hourly strip in the collapsed card with the current hour highlighted', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 2, 21, 14, 30, 0));
+
+    const localHour = (hour) => new Date(2026, 2, 21, hour, 0, 0).toISOString();
+
+    newsAPI.getWeather.mockResolvedValue({
+      data: {
+        locations: [
+          {
+            _id: 'strip-test',
+            city: 'Austin',
+            state: 'TX',
+            isPrimary: true,
+            weather: {
+              current: {
+                temperature: 72,
+                shortForecast: 'Sunny',
+                humidity: 41,
+                icon: 'sun',
+                windSpeed: 14,
+              },
+              high: 78,
+              low: 59,
+              hourly: [
+                { time: localHour(12), temperature: 68, icon: 'sun', precipitationProbability: 0, windSpeed: 8 },
+                { time: localHour(13), temperature: 70, icon: 'sun', precipitationProbability: 5, windSpeed: 10 },
+                { time: localHour(14), temperature: 72, icon: 'cloud-sun', precipitationProbability: 10, windSpeed: 12 },
+                { time: localHour(15), temperature: 73, icon: 'cloud-sun', precipitationProbability: 15, windSpeed: 13 },
+                { time: localHour(16), temperature: 74, icon: 'cloud', precipitationProbability: 20, windSpeed: 14 },
+                { time: localHour(17), temperature: 75, icon: 'cloud', precipitationProbability: 25, windSpeed: 15 },
+                { time: localHour(18), temperature: 76, icon: 'cloud-rain', precipitationProbability: 40, windSpeed: 16 },
+                { time: localHour(19), temperature: 77, icon: 'cloud-rain', precipitationProbability: 50, windSpeed: 17 },
+              ],
+              weekly: [],
+            },
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      root.render(<WeatherBar variant="card" />);
+    });
+    await flush();
+
+    // Strip should be visible without expanding
+    const strip = container.querySelector('[data-testid="weather-hourly-strip"]');
+    expect(strip).toBeTruthy();
+
+    // Should show hours 13-18 (1 hour past, current 14, and 4 hours ahead)
+    const cells = strip.querySelectorAll(':scope > div');
+    expect(cells.length).toBe(6);
+
+    // Current hour (14:00) should show "Now"
+    expect(strip.textContent).toContain('Now');
+
+    // Verify temperatures are shown
+    expect(strip.textContent).toContain('70°');
+    expect(strip.textContent).toContain('72°');
+    expect(strip.textContent).toContain('73°');
+
+    // Verify rain probabilities
+    expect(strip.textContent).toContain('5%');
+    expect(strip.textContent).toContain('10%');
+
+    // Verify wind speeds
+    expect(strip.textContent).toContain('10mph');
+    expect(strip.textContent).toContain('12mph');
+
+    // Current hour cell should have highlight class
+    const currentCell = Array.from(cells).find((cell) => cell.textContent.includes('Now'));
+    expect(currentCell.className).toContain('bg-white/15');
+
+    // Hour 12 should NOT be in the strip (2 hours before current)
+    expect(strip.textContent).not.toContain('68°');
+    // Hour 19 should NOT be in the strip (5 hours after current)
+    expect(strip.textContent).not.toContain('77°');
+
+    // Expanded section should NOT be visible
+    expect(container.querySelector('[data-testid="weather-card-expanded"]')).toBeFalsy();
+  });
 });

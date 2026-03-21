@@ -76,6 +76,36 @@ function getUpcomingHourlyForecast(hourly) {
   return (upcoming.length > 0 ? upcoming : parsedHourly).map(({ entry }) => entry);
 }
 
+function getHourlyStrip(hourly) {
+  if (!Array.isArray(hourly) || hourly.length === 0) return [];
+
+  const parsed = hourly
+    .map((entry) => {
+      const time = new Date(entry?.time);
+      if (Number.isNaN(time.getTime())) return null;
+      return { ...entry, _parsed: time };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a._parsed - b._parsed);
+
+  if (parsed.length === 0) return [];
+
+  const now = new Date();
+  const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
+  const windowStart = currentHour.getTime() - 60 * 60 * 1000;
+  const windowEnd = currentHour.getTime() + 4 * 60 * 60 * 1000;
+
+  return parsed
+    .filter(({ _parsed }) => _parsed.getTime() >= windowStart && _parsed.getTime() <= windowEnd)
+    .map(({ _parsed, ...entry }) => {
+      const entryHour = new Date(_parsed.getFullYear(), _parsed.getMonth(), _parsed.getDate(), _parsed.getHours(), 0, 0, 0);
+      return {
+        ...entry,
+        isCurrent: entryHour.getTime() === currentHour.getTime(),
+      };
+    });
+}
+
 function hasUsableWeather(location) {
   return Boolean(location?.weather?.current);
 }
@@ -247,6 +277,7 @@ export default function WeatherBar({ variant = 'sticky' }) {
   const { weather, label, city, state, zipCode } = primary;
   const { current, high, low, hourly = [], weekly: wk = [], uvIndex, airQuality, pollen } = weather;
   const upcomingHourly = getUpcomingHourlyForecast(hourly);
+  const hourlyStrip = variant === 'card' ? getHourlyStrip(hourly) : [];
   const displayCity = formatLocationLine(primary) || label || city || '';
   const currentIcon = ICON_MAP[current?.icon] || '🌤️';
   const pressure = current?.pressure ?? null;
@@ -340,6 +371,30 @@ export default function WeatherBar({ variant = 'sticky' }) {
               <p className="text-[10px] font-bold">{current?.precipitationProbability != null ? `${current.precipitationProbability}%` : '--%'}</p>
             </div>
           </div>
+
+          {/* ── Mini hourly strip ──────────────────────────────────────── */}
+          {hourlyStrip.length > 0 && (
+            <div data-testid="weather-hourly-strip" className="flex justify-between gap-0.5 mt-1">
+              {hourlyStrip.map((h, i) => (
+                <div
+                  key={i}
+                  className={`flex flex-col items-center gap-0.5 px-1 py-1 rounded-lg flex-1 min-w-0${h.isCurrent ? ' bg-white/15' : ''}`}
+                >
+                  <span className="text-[10px] text-white/50">
+                    {h.isCurrent ? 'Now' : new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}
+                  </span>
+                  <span className="text-base leading-none" aria-hidden="true">{ICON_MAP[h.icon] || '🌤️'}</span>
+                  <span className="text-[11px] font-medium">{h.temperature != null ? `${h.temperature}°` : '--°'}</span>
+                  {h.precipitationProbability != null && (
+                    <span className="text-[9px] text-blue-300">{h.precipitationProbability}%</span>
+                  )}
+                  {h.windSpeed != null && (
+                    <span className="text-[9px] text-white/40">{h.windSpeed}mph</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
               {/* ── Expanded section ────────────────────────────────────────── */}
               {cardExpanded && (
