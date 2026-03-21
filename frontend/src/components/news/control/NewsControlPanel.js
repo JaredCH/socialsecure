@@ -57,7 +57,6 @@ export default function NewsControlPanel({
   scopes
 }) {
   const [activeTab, setActiveTab] = useState('sources');
-  const activeTabMeta = TABS.find((tab) => tab.id === activeTab) || TABS[0];
 
   const googleNewsEnabled = preferences?.googleNewsEnabled !== false;
   const activeKeywords = preferences?.followedKeywords || [];
@@ -224,7 +223,7 @@ export default function NewsControlPanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="min-h-0 flex-1 lg:grid lg:grid-cols-[220px_minmax(0,1fr)]">
         <aside className="hidden border-r border-slate-200/80 bg-white/70 px-6 py-6 backdrop-blur-xl lg:flex lg:min-h-0 lg:flex-col lg:gap-6">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Sections</div>
@@ -234,19 +233,14 @@ export default function NewsControlPanel({
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left ${
                     activeTab === tab.id
-                      ? 'border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10'
-                      : 'border-slate-200 bg-white/85 text-slate-700 hover:border-slate-300 hover:bg-white'
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/5'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-[20px] leading-none">{tab.icon}</span>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold">{tab.label}</div>
-                      <div className={`mt-0.5 text-xs ${activeTab === tab.id ? 'text-white/75' : 'text-slate-500'}`}>{tab.summary}</div>
-                    </div>
-                  </div>
+                  <span className="material-symbols-outlined text-[20px] leading-none">{tab.icon}</span>
+                  <span>{tab.label}</span>
                 </button>
               ))}
             </div>
@@ -302,30 +296,8 @@ export default function NewsControlPanel({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-            <div className="mx-auto flex max-w-4xl flex-col gap-5">
-              <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:p-6">
-                <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-                      <span className="material-symbols-outlined text-[16px] leading-none">{activeTabMeta.icon}</span>
-                      {activeTabMeta.label}
-                    </div>
-                    <h3 className="mt-3 text-xl font-semibold tracking-tight text-slate-950">{activeTabMeta.label}</h3>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">{activeTabMeta.summary}</p>
-                  </div>
-
-                  <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    <div className="font-medium text-slate-900">Simple view</div>
-                    <div className="mt-1">Everything in this panel is grouped into one focused workspace so it is easier to scan and use.</div>
-                  </div>
-                </div>
-
-                <div className="pt-5" id={`panel-${activeTab}`} role="tabpanel">
-                  {renderActivePanel()}
-                </div>
-              </div>
-            </div>
+          <div className="flex-1 overflow-y-auto p-4" id={`panel-${activeTab}`} role="tabpanel">
+            {renderActivePanel()}
           </div>
         </section>
       </div>
