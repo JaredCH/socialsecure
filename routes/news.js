@@ -890,6 +890,131 @@ router.get('/sports-schedules/seasons', authenticateToken, async (req, res) => {
 });
 
 // ===========================================================================
+// STOCK & CRYPTO TICKER ROUTES
+// ===========================================================================
+
+const STOCK_TICKER_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const YAHOO_FINANCE_BASE = 'https://query1.finance.yahoo.com';
+const stockTickerCache = new Map();
+
+/**
+ * GET /api/news/stocks/search?q=AAPL
+ * Proxies symbol search via Yahoo Finance v1 search endpoint.
+ */
+router.get('/stocks/search', authenticateToken, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 1) return res.json({ results: [] });
+
+    const encoded = encodeURIComponent(q);
+    const url = `${YAHOO_FINANCE_BASE}/v1/finance/search?q=${encoded}&quotesCount=8&newsCount=0&listsCount=0&enableFuzzyQuery=false`;
+
+    let data;
+    try {
+      data = await fetchJsonWithTimeout(url, 7000);
+    } catch {
+      return res.json({ results: [] });
+    }
+
+    const results = (data?.quotes || [])
+      .filter((item) => item.symbol && (item.quoteType === 'EQUITY' || item.quoteType === 'CRYPTOCURRENCY' || item.quoteType === 'ETF' || item.quoteType === 'INDEX'))
+      .slice(0, 8)
+      .map((item) => ({
+        symbol: item.symbol,
+        name: item.shortname || item.longname || item.symbol,
+        type: item.quoteType,
+        exchange: item.exchDisp || item.exchange || ''
+      }));
+
+    res.json({ results });
+  } catch (error) {
+    console.error('Error searching stocks:', error);
+    res.status(500).json({ error: 'Stock search failed' });
+  }
+});
+
+/**
+ * GET /api/news/stocks/quotes?symbols=AAPL,MSFT,BTC-USD
+ * Returns current quotes with 2-hour sparkline data for the given symbols.
+ * Results are cached for 2 minutes.
+ */
+router.get('/stocks/quotes', authenticateToken, async (req, res) => {
+  try {
+    const raw = String(req.query.symbols || '').trim();
+    if (!raw) return res.json({ quotes: [] });
+
+    const symbols = raw
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean)
+      .slice(0, 9);
+
+    if (symbols.length === 0) return res.json({ quotes: [] });
+
+    const now = Date.now();
+    const quotes = [];
+
+    for (const symbol of symbols) {
+      // Check cache
+      const cached = stockTickerCache.get(symbol);
+      if (cached && now - cached.ts < STOCK_TICKER_CACHE_TTL_MS) {
+        quotes.push(cached.data);
+        continue;
+      }
+
+      try {
+        const url = `${YAHOO_FINANCE_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=5m&range=1d`;
+        const data = await fetchJsonWithTimeout(url, 7000);
+        const result = data?.chart?.result?.[0];
+        if (!result) {
+          quotes.push({ symbol, error: 'not_found' });
+          continue;
+        }
+
+        const meta = result.meta || {};
+        const closePrices = result.indicators?.quote?.[0]?.close || [];
+        const timestamps = result.timestamp || [];
+
+        // Build 2-hour sparkline from 1-day chart data (last 24 × 5-min candles ≈ 2h)
+        const sparklinePoints = closePrices.slice(-24).filter((v) => v != null);
+
+        const currentPrice = meta.regularMarketPrice ?? closePrices[closePrices.length - 1] ?? null;
+        const previousClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+        const change = currentPrice != null && previousClose != null
+          ? currentPrice - previousClose
+          : null;
+        const changePercent = change != null && previousClose
+          ? (change / previousClose) * 100
+          : null;
+
+        const quoteData = {
+          symbol,
+          name: meta.shortName || meta.longName || symbol,
+          price: currentPrice,
+          previousClose,
+          change: change != null ? Math.round(change * 100) / 100 : null,
+          changePercent: changePercent != null ? Math.round(changePercent * 100) / 100 : null,
+          direction: change > 0 ? 'up' : change < 0 ? 'down' : 'flat',
+          sparkline: sparklinePoints,
+          currency: meta.currency || 'USD',
+          marketState: meta.marketState || 'UNKNOWN'
+        };
+
+        stockTickerCache.set(symbol, { data: quoteData, ts: now });
+        quotes.push(quoteData);
+      } catch {
+        quotes.push({ symbol, error: 'fetch_failed' });
+      }
+    }
+
+    res.json({ quotes });
+  } catch (error) {
+    console.error('Error fetching stock quotes:', error);
+    res.status(500).json({ error: 'Failed to fetch stock quotes' });
+  }
+});
+
+// ===========================================================================
 // NEWS PREFERENCES ROUTES
 // ===========================================================================
 
@@ -1013,7 +1138,8 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       'gdletCategories', 'gdletEnabled',
       'followedKeywords', 'defaultScope', 'localPriorityEnabled',
       'hiddenCategories', 'disabledSourceCategories',
-      'refreshInterval', 'articlesPerPage'
+      'refreshInterval', 'articlesPerPage',
+      'stockTickers', 'stockTickersEnabled'
     ];
     const update = {};
     for (const field of ALLOWED_FIELDS) {

@@ -174,6 +174,26 @@ const newsPreferencesSchema = new mongoose.Schema({
     default: []
   },
   
+  // Stock & crypto ticker watchlist (max 9 symbols)
+  stockTickers: {
+    type: [{
+      type: String,
+      uppercase: true,
+      trim: true
+    }],
+    default: [],
+    validate: {
+      validator: function(v) { return v.length <= 9; },
+      message: 'Maximum 9 stock tickers allowed'
+    }
+  },
+
+  // Whether stock tickers are shown in the briefing header
+  stockTickersEnabled: {
+    type: Boolean,
+    default: false
+  },
+
   // General settings
   refreshInterval: {
     type: Number,
