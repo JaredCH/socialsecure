@@ -213,26 +213,12 @@ const SocialLoadingOverlay = ({ children }) => {
                   <div style={{ padding: '16px' }}>
                     <div className="skeleton-base skeleton-line" style={{ width: '30%', marginBottom: 12 }} />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {/* Detail row: location */}
-                      <div className="skeleton-detail-row" data-testid="skeleton-detail-row">
-                        <div className="skeleton-base skeleton-detail-icon" />
-                        <div className="skeleton-base skeleton-line" style={{ width: '55%' }} />
-                      </div>
-                      {/* Detail row: website */}
-                      <div className="skeleton-detail-row">
-                        <div className="skeleton-base skeleton-detail-icon" />
-                        <div className="skeleton-base skeleton-line" style={{ width: '65%' }} />
-                      </div>
-                      {/* Detail row: pronouns */}
-                      <div className="skeleton-detail-row">
-                        <div className="skeleton-base skeleton-detail-icon" />
-                        <div className="skeleton-base skeleton-line" style={{ width: '35%' }} />
-                      </div>
-                      {/* Detail row: joined date */}
-                      <div className="skeleton-detail-row">
-                        <div className="skeleton-base skeleton-detail-icon" />
-                        <div className="skeleton-base skeleton-line" style={{ width: '50%' }} />
-                      </div>
+                      {[55, 65, 35, 50].map((w, i) => (
+                        <div className="skeleton-detail-row" data-testid="skeleton-detail-row" key={i}>
+                          <div className="skeleton-base skeleton-detail-icon" />
+                          <div className="skeleton-base skeleton-line" style={{ width: `${w}%` }} />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -242,26 +228,12 @@ const SocialLoadingOverlay = ({ children }) => {
                   <div style={{ padding: '16px' }}>
                     <div className="skeleton-base skeleton-line" style={{ width: '40%', marginBottom: 12 }} />
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                        <div className="skeleton-base skeleton-friend-avatar" />
-                        <div className="skeleton-base skeleton-line" style={{ width: '80%', height: 8 }} />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                        <div className="skeleton-base skeleton-friend-avatar" />
-                        <div className="skeleton-base skeleton-line" style={{ width: '80%', height: 8 }} />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                        <div className="skeleton-base skeleton-friend-avatar" />
-                        <div className="skeleton-base skeleton-line" style={{ width: '80%', height: 8 }} />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                        <div className="skeleton-base skeleton-friend-avatar" />
-                        <div className="skeleton-base skeleton-line" style={{ width: '80%', height: 8 }} />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                        <div className="skeleton-base skeleton-friend-avatar" />
-                        <div className="skeleton-base skeleton-line" style={{ width: '80%', height: 8 }} />
-                      </div>
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                          <div className="skeleton-base skeleton-friend-avatar" />
+                          <div className="skeleton-base skeleton-line" style={{ width: '80%', height: 8 }} />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

@@ -80,7 +80,7 @@ describe('SocialLoadingOverlay', () => {
     expect(container.querySelector('[data-testid="skeleton-details-panel"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="skeleton-friends-panel"]')).toBeTruthy();
     // Detail rows (location, website, pronouns, joined)
-    expect(container.querySelectorAll('[data-testid="skeleton-detail-row"]').length).toBeGreaterThanOrEqual(1);
+    expect(container.querySelectorAll('[data-testid="skeleton-detail-row"]').length).toBe(4);
     // Stat squares and feed cards
     expect(container.querySelectorAll('.skeleton-square').length).toBe(3);
     expect(container.querySelectorAll('.skeleton-card').length).toBeGreaterThanOrEqual(3);
