@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 
 const SIDEBAR_OVERLAY_Z_INDEX_CLASS = 'z-[1700]';
+const MAX_UPLOAD_SIZE_BYTES = 3 * 1024 * 1024;
+const GRAIN_TEXTURE_URL = 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.85\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\' opacity=\'0.5\'/%3E%3C/svg%3E")';
 
 const DISPLAY_MODE_OPTIONS = [
   { value: 'cover', label: 'Stretched', description: 'Image covers the full page' },
@@ -120,7 +122,7 @@ const BackgroundPreview = ({ image, overlay, grain, blur, displayMode }) => {
       <div className="absolute inset-0" style={bgStyle} />
       {(overlay || 0) > 0 && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
       {(grain || 0) > 0 && (
-        <div className="absolute inset-0 pointer-events-none" style={{ opacity: grain, backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.85\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\' opacity=\'0.5\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat', backgroundSize: '128px 128px' }} />
+        <div className="absolute inset-0 pointer-events-none" style={{ opacity: grain, backgroundImage: GRAIN_TEXTURE_URL, backgroundRepeat: 'repeat', backgroundSize: '128px 128px' }} />
       )}
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="rounded-full bg-black/40 px-2 py-0.5 text-[9px] font-semibold text-white/80">Preview</span>
@@ -231,7 +233,7 @@ const SocialStageSettingsSidebar = ({
     event.target.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) { setBgUploadStatus('Only image files are supported.'); return; }
-    if (file.size > 3 * 1024 * 1024) { setBgUploadStatus('Image is too large (max 3 MB).'); return; }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) { setBgUploadStatus('Image is too large (max 3 MB).'); return; }
     setBgUploading(true);
     setBgUploadStatus('');
     try {
@@ -468,6 +470,7 @@ const SocialStageSettingsSidebar = ({
             <button
               key={id}
               type="button"
+              data-testid={`tab-${id}`}
               onClick={() => setActiveTab(id)}
               className={`flex-1 px-1 py-2 text-center text-[11px] font-semibold transition ${
                 activeTab === id

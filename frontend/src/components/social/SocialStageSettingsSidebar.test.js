@@ -5,10 +5,8 @@ import SocialStageSettingsSidebar from './SocialStageSettingsSidebar';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 /* Helper: navigate to a specific tab by clicking its button */
-const switchTab = async (label) => {
-  const btn = Array.from(document.body.querySelectorAll('button')).find(
-    (b) => b.textContent.trim().includes(label)
-  );
+const switchTab = async (tabId) => {
+  const btn = document.body.querySelector(`[data-testid="tab-${tabId}"]`);
   if (btn) await act(async () => { btn.click(); });
 };
 
@@ -98,7 +96,7 @@ describe('SocialStageSettingsSidebar', () => {
     });
 
     // Switch to hero tab
-    await switchTab('Hero');
+    await switchTab('hero');
 
     const urlInput = document.body.querySelector('input[placeholder="https://example.com/hero-image.jpg"]');
     expect(urlInput).toBeTruthy();
@@ -137,7 +135,7 @@ describe('SocialStageSettingsSidebar', () => {
     });
 
     // Switch to background tab
-    await switchTab('Background');
+    await switchTab('background');
 
     const modeSelector = document.body.querySelector('[data-testid="display-mode-selector"]');
     expect(modeSelector).toBeTruthy();
@@ -166,7 +164,7 @@ describe('SocialStageSettingsSidebar', () => {
     });
 
     // Switch to effects tab
-    await switchTab('Effects');
+    await switchTab('effects');
 
     const animSelector = document.body.querySelector('[data-testid="overlay-animation-selector"]');
     expect(animSelector).toBeTruthy();
@@ -193,7 +191,7 @@ describe('SocialStageSettingsSidebar', () => {
     });
 
     // Switch to background tab
-    await switchTab('Background');
+    await switchTab('background');
 
     const modeSelector = document.body.querySelector('[data-testid="display-mode-selector"]');
     expect(modeSelector).toBeNull();
@@ -211,7 +209,7 @@ describe('SocialStageSettingsSidebar', () => {
     });
 
     // Switch to background tab
-    await switchTab('Background');
+    await switchTab('background');
 
     const uploadBtn = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent === 'Upload image');
     expect(uploadBtn).toBeTruthy();
@@ -233,7 +231,7 @@ describe('SocialStageSettingsSidebar', () => {
     });
 
     // Switch to hero tab
-    await switchTab('Hero');
+    await switchTab('hero');
 
     // Advanced section should be hidden initially
     expect(document.body.querySelector('[data-testid="hero-advanced-toggle-content"]')).toBeNull();
@@ -304,11 +302,9 @@ describe('SocialStageSettingsSidebar', () => {
       root.render(<SocialStageSettingsSidebar isOpen />);
     });
 
-    const tabLabels = ['Theme', 'Hero', 'Background', 'Effects'];
-    tabLabels.forEach((label) => {
-      const btn = Array.from(document.body.querySelectorAll('button')).find(
-        (b) => b.textContent.trim().includes(label)
-      );
+    const tabIds = ['theme', 'hero', 'background', 'effects'];
+    tabIds.forEach((id) => {
+      const btn = document.body.querySelector(`[data-testid="tab-${id}"]`);
       expect(btn).toBeTruthy();
     });
   });
@@ -323,7 +319,7 @@ describe('SocialStageSettingsSidebar', () => {
       );
     });
 
-    await switchTab('Background');
+    await switchTab('background');
 
     const preview = document.body.querySelector('[data-testid="bg-preview"]');
     expect(preview).toBeTruthy();
