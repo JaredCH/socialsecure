@@ -1,9 +1,6 @@
 name: Create News Page Improvement Issues
 
 on:
-  push:
-    branches:
-      - copilot/fix-z-index-redesign-header-news-page
   workflow_dispatch:
 
 jobs:
@@ -231,7 +228,20 @@ jobs:
               },
             ];
 
+            // Fetch existing open issues to avoid duplicates
+            const existingIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existingTitles = new Set(existingIssues.map(i => i.title));
+
             for (const issue of issues) {
+              if (existingTitles.has(issue.title)) {
+                console.log(`Skipping (already exists): ${issue.title}`);
+                continue;
+              }
               const { data } = await github.rest.issues.create({
                 owner,
                 repo,
@@ -242,4 +252,4 @@ jobs:
               console.log(`URL: ${data.html_url}`);
             }
 
-            console.log('All 6 issues created successfully!');
+            console.log('Done! All new issues created.');
