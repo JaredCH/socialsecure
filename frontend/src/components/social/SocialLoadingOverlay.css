@@ -43,6 +43,11 @@
   opacity: 0;
   transform: translateY(6px);
   transition: opacity 0.3s ease, transform 0.3s ease;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 16px 28px;
+  border-radius: 16px;
 }
 
 #loading-overlay.revealed .overlay-user-info {
@@ -162,11 +167,13 @@
 .skeleton-panel {
   border-radius: 16px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .skeleton-dark .skeleton-panel {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .skeleton-panel-accent {
@@ -178,17 +185,23 @@
 .skeleton-glass-panel {
   border-radius: 1.75rem;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
 }
 
 .skeleton-dark .skeleton-glass-panel {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .skeleton-glass-panel-header {
   padding: 14px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.skeleton-dark .skeleton-glass-panel-header {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 
 /* Detail row inside details panel */

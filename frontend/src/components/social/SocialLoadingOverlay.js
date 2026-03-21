@@ -22,6 +22,8 @@ const SocialLoadingOverlay = ({ children, user }) => {
   const overlayRef = useRef(null);
   const timersRef = useRef([]);
   const prevPathRef = useRef(location.pathname + location.search);
+  // Track whether the current navigation is intra-social (skeleton-only)
+  const intraSocialRef = useRef(false);
 
   // Derive username from ?user= query param (if present)
   const username = React.useMemo(() => {
@@ -60,16 +62,31 @@ const SocialLoadingOverlay = ({ children, user }) => {
     return null;
   }, [isOwnProfile, user, username]);
 
-  // Re-trigger overlay on location change (pathname or search)
+  // Re-trigger on location change — show full split reveal only when arriving
+  // from a non-/social route; within /social just show the skeleton shimmer.
   useEffect(() => {
     const current = location.pathname + location.search;
     if (current !== prevPathRef.current) {
+      const prevWasSocial = prevPathRef.current.startsWith('/social');
       prevPathRef.current = current;
-      setShowOverlay(true);
-      setOverlayRevealed(false);
-      setOverlayOpen(false);
-      setOverlayFading(false);
-      setShowSkeleton(true);
+
+      if (prevWasSocial) {
+        // Intra-social navigation: skeleton-only (skip split reveal)
+        intraSocialRef.current = true;
+        setShowOverlay(false);
+        setOverlayRevealed(false);
+        setOverlayOpen(false);
+        setOverlayFading(false);
+        setShowSkeleton(true);
+      } else {
+        // Arriving from another page: full split reveal + skeleton
+        intraSocialRef.current = false;
+        setShowOverlay(true);
+        setOverlayRevealed(false);
+        setOverlayOpen(false);
+        setOverlayFading(false);
+        setShowSkeleton(true);
+      }
     }
   }, [location.pathname, location.search]);
 
@@ -120,13 +137,13 @@ const SocialLoadingOverlay = ({ children, user }) => {
     };
   }, [showOverlay]);
 
-  // Hide skeleton after a generous timeout (the real content will be
-  // rendered beneath by then).  This acts as a fallback — the Social
-  // component loads its data asynchronously and the skeleton will be
-  // visually hidden behind the real content once React renders it.
+  // Hide skeleton after a short timeout — acts as a fallback for the real
+  // content to render underneath.  Use a shorter duration for intra-social
+  // navigations (skeleton-only) to avoid slowing the user down.
   useEffect(() => {
     if (!showSkeleton) return;
-    const skeletonTimer = setTimeout(() => setShowSkeleton(false), 2000);
+    const duration = intraSocialRef.current ? 600 : 1400;
+    const skeletonTimer = setTimeout(() => setShowSkeleton(false), duration);
     return () => clearTimeout(skeletonTimer);
   }, [showSkeleton]);
 
