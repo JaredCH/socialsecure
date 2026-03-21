@@ -23,6 +23,8 @@ const NewsIngestionRecord = require('../models/NewsIngestionRecord');
 const ZipLocationIndex = require('../models/ZipLocationIndex');
 const NewsPreferences = require('../models/NewsPreferences');
 const SiteContentFilter = require('../models/SiteContentFilter');
+const Session = require('../models/Session');
+const SecurityEvent = require('../models/SecurityEvent');
 
 const router = express.Router();
 
@@ -590,6 +592,14 @@ router.delete('/mute/:userId', authenticateToken, async (req, res) => {
 
 router.get('/control-panel/overview', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - 7);
+    const monthStart = new Date(todayStart);
+    monthStart.setMonth(monthStart.getMonth() - 1);
+    const sessionCutoff = new Date(now.getTime() - 30 * 60 * 1000);
+
     const [
       userCount,
       postCount,
@@ -603,7 +613,17 @@ router.get('/control-panel/overview', authenticateToken, requireAdmin, async (re
       recentUsers,
       recentPosts,
       recentRoomMessages,
-      recentDirectMessages
+      recentDirectMessages,
+      signupsToday,
+      signupsThisWeek,
+      signupsThisMonth,
+      verifiedCount,
+      bannedCount,
+      warnedCount,
+      suspendedCount,
+      activeSessions,
+      pendingReportsCount,
+      recentSecurityEvents
     ] = await Promise.all([
       User.countDocuments({}),
       Post.countDocuments({}),
@@ -632,7 +652,17 @@ router.get('/control-panel/overview', authenticateToken, requireAdmin, async (re
         .limit(12)
         .populate('userId', 'username realName')
         .populate('conversationId', 'type title')
-        .lean()
+        .lean(),
+      User.countDocuments({ createdAt: { $gte: todayStart } }),
+      User.countDocuments({ createdAt: { $gte: weekStart } }),
+      User.countDocuments({ createdAt: { $gte: monthStart } }),
+      User.countDocuments({ registrationStatus: 'active' }),
+      User.countDocuments({ moderationStatus: 'banned' }),
+      User.countDocuments({ moderationStatus: 'warned' }),
+      User.countDocuments({ moderationStatus: 'suspended' }),
+      Session.countDocuments({ isRevoked: false, lastActivity: { $gte: sessionCutoff } }).catch(() => 0),
+      Report.countDocuments({ status: 'pending' }),
+      SecurityEvent.find({}).sort({ createdAt: -1 }).limit(10).populate('userId', 'username').lean().catch(() => [])
     ]);
 
     return res.json({
@@ -648,6 +678,29 @@ router.get('/control-panel/overview', authenticateToken, requireAdmin, async (re
         rooms: roomCount,
         conversations: conversationCount
       },
+      signups: {
+        today: signupsToday,
+        thisWeek: signupsThisWeek,
+        thisMonth: signupsThisMonth
+      },
+      accounts: {
+        verified: verifiedCount,
+        banned: bannedCount,
+        warned: warnedCount,
+        suspended: suspendedCount,
+        atRisk: warnedCount + suspendedCount
+      },
+      sessions: {
+        active: activeSessions
+      },
+      pendingReports: pendingReportsCount,
+      recentSecurityEvents: recentSecurityEvents.map((event) => ({
+        _id: event._id,
+        eventType: event.eventType,
+        severity: event.severity,
+        username: event.userId?.username || '',
+        createdAt: event.createdAt
+      })),
       recents: {
         users: recentUsers.map(toUserSummary),
         posts: recentPosts.map((post) => ({
