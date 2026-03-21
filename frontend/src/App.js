@@ -22,6 +22,7 @@ import ModerationDashboard from './pages/ModerationDashboard';
 import AdminNewsReview from './pages/AdminNewsReview';
 import NotificationCenter from './components/NotificationCenter';
 import DotNav from './components/social/DotNav';
+import SocialLoadingOverlay from './components/social/SocialLoadingOverlay';
 import NotificationSettings from './pages/NotificationSettings';
 import NotificationsHistory from './pages/NotificationsHistory';
 import Notifications from './pages/Notifications';
@@ -838,16 +839,20 @@ function App() {
             <Route path="/discover" element={<LegacyDiscoverRedirect />} />
             <Route
               path="/social"
-              element={isAuthenticated ? (
-                <ProtectedRoute
-                  isAuthenticated={isAuthenticated}
-                  onboardingRequired={onboardingRequired}
-                  encryptionPasswordRequired={encryptionPasswordRequired}
-                  passwordResetRequired={passwordResetRequired}
-                >
-                  <Social />
-                </ProtectedRoute>
-              ) : <Social />}
+              element={
+                <SocialLoadingOverlay>
+                  {isAuthenticated ? (
+                    <ProtectedRoute
+                      isAuthenticated={isAuthenticated}
+                      onboardingRequired={onboardingRequired}
+                      encryptionPasswordRequired={encryptionPasswordRequired}
+                      passwordResetRequired={passwordResetRequired}
+                    >
+                      <Social />
+                    </ProtectedRoute>
+                  ) : <Social />}
+                </SocialLoadingOverlay>
+              }
             />
             <Route
               path="/friends"
