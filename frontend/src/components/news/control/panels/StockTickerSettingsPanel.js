@@ -3,6 +3,15 @@ import { newsAPI } from '../../../../utils/api';
 
 const MAX_TICKERS = 9;
 
+const TYPE_LABELS = {
+  EQUITY: 'Stock',
+  CRYPTOCURRENCY: 'Crypto',
+  ETF: 'ETF',
+  INDEX: 'Index',
+  CURRENCY: 'Currency',
+  FUTURE: 'Futures',
+};
+
 export default function StockTickerSettingsPanel({
   tickers = [],
   enabled = false,
@@ -78,8 +87,8 @@ export default function StockTickerSettingsPanel({
       {/* Enable/disable toggle */}
       <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
         <div>
-          <div className="text-sm font-medium text-slate-900">Show Stock Tickers</div>
-          <div className="text-xs text-slate-500">Display tickers in the news briefing header</div>
+          <div className="text-sm font-medium text-slate-900">Show Market Tickers</div>
+          <div className="text-xs text-slate-500">Display stocks, crypto, currencies, metals & commodities</div>
         </div>
         <button
           onClick={handleToggleEnabled}
@@ -107,7 +116,7 @@ export default function StockTickerSettingsPanel({
         </div>
         {tickers.length === 0 ? (
           <p className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
-            No tickers added yet. Search below to add stocks or crypto.
+            No tickers added yet. Search below to add stocks, crypto, currencies, metals, or commodities.
           </p>
         ) : (
           <div className="space-y-1.5">
@@ -143,7 +152,7 @@ export default function StockTickerSettingsPanel({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by symbol or name…"
+              placeholder="Search stocks, crypto, currencies, gold, oil…"
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition"
               data-testid="stock-ticker-search"
             />
@@ -168,7 +177,7 @@ export default function StockTickerSettingsPanel({
                     <span className="font-semibold text-slate-800">{item.symbol}</span>
                     <span className="ml-2 truncate text-xs text-slate-500">{item.name}</span>
                   </div>
-                  <span className="shrink-0 text-[10px] text-slate-400 uppercase">{item.type}</span>
+                  <span className="shrink-0 text-[10px] text-slate-400 uppercase">{TYPE_LABELS[item.type] || item.type}</span>
                 </button>
               ))}
             </div>
