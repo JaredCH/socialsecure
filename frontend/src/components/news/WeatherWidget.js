@@ -128,110 +128,69 @@ export default function WeatherWidget() {
   return (
     <Widget id="weather-widget" icon="🌤" title="Weather" statusText={`${current?.temperature ?? '--'}°F`}>
       {/* Current Conditions Header */}
-      <div className="p-4 border-b border-[var(--border)] relative bg-gradient-to-b from-[var(--bg)] to-[var(--bg2)]">
-        <div className="flex items-center justify-between mb-4">
+      <div className="p-3 border-b border-[var(--border)] relative bg-gradient-to-b from-[var(--bg)] to-[var(--bg2)]">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex flex-col">
-            <span className="font-[var(--mono)] text-[10px] font-bold text-[var(--accent)] uppercase tracking-[1.5px] items-center gap-1 flex">
-              <span className="material-symbols-outlined text-[14px]">location_on</span>
+            <span className="font-[var(--mono)] text-[9px] font-bold text-[var(--accent)] uppercase tracking-[1.5px] items-center gap-1 flex">
+              <span className="material-symbols-outlined text-[12px]">location_on</span>
               {displayCity}
             </span>
-            <span className="text-[11px] text-[var(--text2)] mt-0.5 font-medium">{current?.shortForecast || 'Conditions unknown'}</span>
+            <span className="text-[10px] text-[var(--text2)] mt-0.5 font-medium">{current?.shortForecast || 'Conditions unknown'}</span>
           </div>
           <button 
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--bg3)] hover:bg-[var(--bg4)] text-[11px] font-bold text-[var(--text2)] transition-all border border-[var(--border)] shadow-sm"
+            className="flex items-center gap-1 px-2 py-1 rounded-[4px] bg-[var(--bg3)] hover:bg-[var(--bg4)] text-[9px] font-bold text-[var(--text2)] transition-all border border-[var(--border)] shadow-sm"
           >
-            {isExpanded ? 'Minimize' : 'Details'}
-            <span className="material-symbols-outlined text-[16px]">{isExpanded ? 'expand_less' : 'expand_more'}</span>
+            {isExpanded ? 'LESS' : 'MORE'}
+            <span className="material-symbols-outlined text-[12px]">{isExpanded ? 'expand_less' : 'expand_more'}</span>
           </button>
         </div>
         
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3">
+          <div className="text-[42px] leading-none select-none drop-shadow-sm">{currentIcon}</div>
           <div className="flex items-baseline">
-            <span className="text-[56px] font-black text-[var(--text)] leading-none -ml-1 tracking-tighter">
+            <span className="text-[36px] font-black text-[var(--text)] leading-none tracking-tighter">
               {current?.temperature ?? '--'}
             </span>
-            <span className="text-[24px] font-[var(--display)] text-[var(--text3)] ml-1">°F</span>
+            <span className="text-[16px] font-[var(--display)] text-[var(--text3)] ml-0.5">°F</span>
           </div>
-          <div className="text-[64px] leading-none select-none drop-shadow-md">{currentIcon}</div>
           
-          <div className="flex-1 flex flex-col gap-2">
-            <div className="flex items-center justify-between text-[11px] text-[var(--text2)] font-medium">
-              <span className="opacity-70">Feels Like</span>
-              <span className="text-[var(--text)] font-bold">{current?.feelsLike ?? current?.temperature}°</span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-[var(--text2)] font-medium">
-              <span className="opacity-70">High/Low</span>
-              <span className="text-[var(--text)] font-bold">{wk[0]?.high ?? '--'}° / {wk[0]?.low ?? '--'}°</span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-[var(--text2)] font-medium">
-              <span className="opacity-70">Humidity</span>
-              <span className="text-[var(--text)] font-bold">{current?.humidity ?? '--'}%</span>
-            </div>
+          <div className="flex-1 flex flex-wrap gap-x-3 gap-y-1 justify-end text-[9px] text-[var(--text2)] font-medium">
+            <div className="flex items-center gap-1"><span className="material-symbols-outlined text-[11px]">thermostat</span> Feels {current?.feelsLike ?? current?.temperature}°</div>
+            <div className="flex items-center gap-1"><span className="material-symbols-outlined text-[11px]">swap_vert</span> {wk[0]?.high ?? '--'}°/{wk[0]?.low ?? '--'}°</div>
+            <div className="flex items-center gap-1"><span className="material-symbols-outlined text-[11px]">water_drop</span> {current?.humidity ?? '--'}%</div>
           </div>
         </div>
       </div>
 
       {/* Expanded View Content */}
       <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
-        {/* Statistics Grid */}
-        <div className="grid grid-cols-2 gap-2 p-3 bg-[var(--bg2)] border-b border-[var(--border)]">
-          <div className="bg-[var(--bg)] p-3 rounded-xl border border-[var(--border)] flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
-                <span className="material-symbols-outlined text-[20px]">air</span>
-             </div>
-             <div>
-                <div className="text-[9px] font-bold text-[var(--text3)] uppercase tracking-wider">Wind Speed</div>
-                <div className="text-[14px] font-bold text-[var(--text)]">{current?.windSpeed ?? '--'} mph</div>
-             </div>
-          </div>
-          <div className="bg-[var(--bg)] p-3 rounded-xl border border-[var(--border)] flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500">
-                <span className="material-symbols-outlined text-[20px]">water_drop</span>
-             </div>
-             <div>
-                <div className="text-[9px] font-bold text-[var(--text3)] uppercase tracking-wider">Precip Chance</div>
-                <div className="text-[14px] font-bold text-[var(--text)]">{current?.precipitationProbability ?? '0'}%</div>
-             </div>
-          </div>
-          <div className="bg-[var(--bg)] p-3 rounded-xl border border-[var(--border)] flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500">
-                <span className="material-symbols-outlined text-[20px]">wb_sunny</span>
-             </div>
-             <div>
-                <div className="text-[9px] font-bold text-[var(--text3)] uppercase tracking-wider">UV Index</div>
-                <div className="text-[14px] font-bold text-[var(--text)]">Moderate (4)</div>
-             </div>
-          </div>
-          <div className="bg-[var(--bg)] p-3 rounded-xl border border-[var(--border)] flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-                <span className="material-symbols-outlined text-[20px]">visibility</span>
-             </div>
-             <div>
-                <div className="text-[9px] font-bold text-[var(--text3)] uppercase tracking-wider">Visibility</div>
-                <div className="text-[14px] font-bold text-[var(--text)]">9.4 mi</div>
-             </div>
-          </div>
+        {/* Statistics Strip */}
+        <div className="flex items-center justify-between p-2 bg-[var(--bg2)] border-b border-[var(--border)] text-[9px] font-bold text-[var(--text)]">
+          <div className="flex items-center gap-1" title="Wind Speed"><span className="material-symbols-outlined text-[12px] text-blue-500">air</span> {current?.windSpeed ?? '--'} mph</div>
+          <div className="flex items-center gap-1" title="Precipitation Chance"><span className="material-symbols-outlined text-[12px] text-orange-500">water_drop</span> {current?.precipitationProbability ?? '0'}%</div>
+          <div className="flex items-center gap-1" title="UV Index"><span className="material-symbols-outlined text-[12px] text-amber-500">wb_sunny</span> Mod(4)</div>
+          <div className="flex items-center gap-1" title="Visibility"><span className="material-symbols-outlined text-[12px] text-indigo-500">visibility</span> 9.4 mi</div>
         </div>
 
         {/* Temperature Trend Sparkline */}
-        <div className="p-4 bg-[var(--bg)] border-b border-[var(--border)]">
-           <div className="text-[10px] font-black text-[var(--text3)] uppercase tracking-[1.5px] mb-4 flex items-center gap-2">
-              <span className="w-1 h-3 bg-[var(--accent)] rounded-full" />
-              12-Hour Temperature Trend
+        <div className="p-2 bg-[var(--bg)] border-b border-[var(--border)]">
+           <div className="text-[9px] font-black text-[var(--text3)] uppercase tracking-[1.5px] flex items-center gap-1.5 pb-2">
+              <span className="w-1 h-2 bg-[var(--accent)] rounded-full" />
+              12hr Trend
            </div>
-           <div className="flex justify-center">
-             {generateSparkline(upcomingHourly, minHourly - 5, maxHourly + 5, 260, 50)}
+           <div className="flex justify-center -mb-2">
+             {generateSparkline(upcomingHourly, minHourly - 5, maxHourly + 5, 260, 25)}
            </div>
         </div>
 
-        {/* 7-DAY FORECAST - CLEAN TABLE STYLE */}
-        <div className="p-4 bg-[var(--bg)]">
-          <div className="text-[10px] font-black text-[var(--text3)] uppercase tracking-[1.5px] mb-4 flex items-center gap-2">
-              <span className="w-1 h-3 bg-[var(--accent)] rounded-full" />
-              7-Day Outlook
+        {/* 7-DAY FORECAST - COMPACT TABLE */}
+        <div className="p-2 bg-[var(--bg)]">
+          <div className="text-[9px] font-black text-[var(--text3)] uppercase tracking-[1.5px] flex items-center gap-1.5 pb-1">
+              <span className="w-1 h-2 bg-[var(--accent)] rounded-full" />
+              7-Day
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col">
             {wk.map((day, i) => {
               const h = day.high ?? maxTempThisWeek;
               const l = day.low ?? minTempThisWeek;
@@ -239,19 +198,18 @@ export default function WeatherWidget() {
               const widthPercent = ((h - l) / tempRange) * 100;
 
               return (
-                <div key={i} className="flex items-center py-[6px] px-[8px] rounded-[8px] hover:bg-[var(--bg3)] transition-all cursor-default group">
-                  <div className="w-[42px] shrink-0 flex flex-col">
-                    <span className="text-[10px] font-bold text-[var(--text)]">{i === 0 ? 'Today' : getDayAbbr(day.date)}</span>
-                    <span className="text-[8px] text-[var(--text3)] font-medium">{new Date(day.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+                <div key={i} className="flex items-center py-[2px] px-[4px] rounded-[4px] hover:bg-[var(--bg3)] transition-all cursor-default group">
+                  <div className="w-[28px] shrink-0 font-[var(--mono)] text-[9px] font-bold text-[var(--text)] uppercase tracking-tight">
+                    {i === 0 ? 'TDY' : getDayAbbr(day.date)}
                   </div>
                   
-                  <div className="text-[18px] w-[32px] shrink-0 text-center group-hover:scale-110 transition-transform duration-300">
+                  <div className="text-[14px] w-[20px] shrink-0 text-center">
                     {ICON_MAP[day.icon] || '🌤️'}
                   </div>
 
-                  <div className="flex-1 mx-[12px] h-[4px] bg-[var(--bg4)] rounded-full relative overflow-hidden">
+                  <div className="flex-1 mx-[8px] h-[3px] bg-[var(--bg4)] rounded-full relative overflow-hidden">
                     <div 
-                      className="absolute h-full rounded-full shadow-[0_0_8px_rgba(59,130,246,0.3)] bg-gradient-to-r from-blue-500 to-[var(--accent)]" 
+                      className="absolute h-full rounded-full bg-gradient-to-r from-blue-500 to-[var(--accent)]" 
                       style={{
                         left: `${leftPercent}%`,
                         width: `${Math.max(widthPercent, 10)}%`,
@@ -259,9 +217,9 @@ export default function WeatherWidget() {
                     />
                   </div>
 
-                  <div className="flex items-center gap-[6px] w-[50px] shrink-0 justify-end">
-                    <span className="text-[11px] font-black text-[var(--text)]">{h}°</span>
-                    <span className="text-[10px] font-bold text-[var(--text3)]">{l}°</span>
+                  <div className="flex items-center gap-[4px] w-[36px] shrink-0 justify-end font-[var(--mono)] tracking-tighter">
+                    <span className="text-[9px] font-bold text-[var(--text)]">{h}°</span>
+                    <span className="text-[9px] text-[var(--text3)]">{l}°</span>
                   </div>
                 </div>
               );
@@ -272,14 +230,14 @@ export default function WeatherWidget() {
 
       {/* Hourly Quick Strip (Visible when not expanded) */}
       {!isExpanded && (
-        <div className="flex gap-2 overflow-x-auto p-4 border-t border-[var(--border)] scrollbar-none bg-[var(--bg2)]">
+        <div className="flex gap-1 overflow-x-auto p-2 border-t border-[var(--border)] scrollbar-none bg-[var(--bg2)]">
           {upcomingHourly.slice(0, 6).map((h, i) => (
-            <div key={i} className="flex-shrink-0 w-16 flex flex-col items-center gap-1.5 bg-[var(--bg)] py-3 rounded-xl border border-[var(--border)] shadow-sm">
-              <span className="text-[9px] font-bold text-[var(--text3)] uppercase">
-                {new Date(h.time).toLocaleTimeString([], { hour: 'numeric' })}
+            <div key={i} className="flex-shrink-0 w-[42px] flex flex-col items-center gap-[2px] bg-[var(--bg)] py-1.5 rounded-[6px] border border-[var(--border)] shadow-sm">
+              <span className="font-[var(--mono)] text-[8px] font-bold text-[var(--text3)] uppercase">
+                {new Date(h.time).toLocaleTimeString([], { hour: 'numeric' }).replace(' ', '')}
               </span>
-              <span className="text-[20px]">{ICON_MAP[h.icon] || '🌤️'}</span>
-              <span className="text-[13px] font-black text-[var(--text)]">
+              <span className="text-[14px] leading-none">{ICON_MAP[h.icon] || '🌤️'}</span>
+              <span className="font-[var(--mono)] text-[9px] font-black text-[var(--text)] tracking-tighter">
                 {h.temperature ?? '--'}°
               </span>
             </div>
