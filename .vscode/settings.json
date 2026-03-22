@@ -1,0 +1,66 @@
+{
+  // ─── Editor ───────────────────────────────────────────────────────
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.tabSize": 2,
+  "editor.wordWrap": "on",
+  "editor.minimap.enabled": false,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true,
+  "editor.linkedEditing": true,
+  "editor.suggest.showStatusBar": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  // ─── ESLint ───────────────────────────────────────────────────────
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact"
+  ],
+  "eslint.workingDirectories": [
+    { "directory": ".", "changeProcessCWD": true },
+    { "directory": "frontend", "changeProcessCWD": true }
+  ],
+
+  // ─── Tailwind CSS ─────────────────────────────────────────────────
+  "tailwindCSS.experimental.configFile": "frontend/tailwind.config.js",
+
+  // ─── Files ────────────────────────────────────────────────────────
+  "files.eol": "\r\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/build": true,
+    "**/coverage": true,
+    "**/.DS_Store": true
+  },
+
+  // ─── Search ───────────────────────────────────────────────────────
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/build": true,
+    "**/coverage": true,
+    "**/package-lock.json": true,
+    "**/frontend/package-lock.json": true
+  },
+
+  // ─── Jest ─────────────────────────────────────────────────────────
+  "jest.jestCommandLine": "npx jest",
+  "jest.autoRun": "off",
+
+  // ─── Git ──────────────────────────────────────────────────────────
+  "git.enableSmartCommit": true,
+  "git.confirmSync": false,
+
+  // ─── Emmet ────────────────────────────────────────────────────────
+  "emmet.includeLanguages": {
+    "javascript": "javascriptreact"
+  },
+
+  // ─── Language Associations ────────────────────────────────────────
+  "files.associations": {
+    "*.js": "javascript"
+  }
+}
