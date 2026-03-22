@@ -29,11 +29,12 @@ function readableTextColor(colors) {
  * @param {Array} props.followedTeams - Array of team objects the user follows
  * @param {Array} props.sportsLeagues - Array of league data with teams
  */
-function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
+function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [], className = '' }) {
   const [schedules, setSchedules] = useState({});
   const [leagueStatuses, setLeagueStatuses] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [expanded, setExpanded] = useState(true);
   const userTimeZone = useMemo(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
@@ -215,62 +216,88 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
   }
 
   return (
-    <div className="min-h-0 flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200/70">
-      <div className="px-4 py-3 border-b border-gray-100">
+    <div className={`flex flex-col overflow-hidden bg-white ${className}`}>
+      {/* Header bar */}
+      <button 
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-2 hover:bg-slate-100/50 transition-colors border-b border-gray-100"
+        aria-expanded={expanded}
+      >
         <div className="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-[14px] h-[14px] text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span className="text-sm font-semibold text-gray-800">Sports Schedule</span>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Sports</span>
         </div>
-      </div>
-      
-      <div className="space-y-3 px-4 py-3 overflow-y-auto" style={{ maxHeight: '20rem' }}>
-        {loading && (
-          <div className="flex items-center justify-center py-4">
-            <div className="w-5 h-5 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
-          </div>
-        )}
-        
-        {error && (
-          <p className="text-xs text-red-500 text-center py-2">{error}</p>
-        )}
-        
-        {!loading && !error && processedFollowedTeams.map((team) => {
+        <span className={`material-symbols-outlined text-base text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}>
+          expand_more
+        </span>
+      </button>
+
+      {/* Expandable content area */}
+      <div 
+        className={`grid transition-[grid-template-rows,padding,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+          expanded ? 'grid-rows-[1fr] opacity-100 px-4 pb-4 pt-3' : 'grid-rows-[0fr] opacity-0 px-4 pb-0 pt-0'
+        }`}
+      >
+        <div className="overflow-hidden">
+          {loading && (
+            <div className="flex items-center justify-center py-4 h-[60px]">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
+            </div>
+          )}
+          
+          {error && (
+            <p className="text-xs text-red-500 text-center py-2">{error}</p>
+          )}
+
+          {!loading && !error && (
+            <div 
+              className="flex overflow-x-auto snap-x snap-mandatory gap-2 pb-2 -mb-2 scrollbar-none lg:grid lg:grid-cols-[repeat(auto-fit,minmax(130px,1fr))]"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              <style>{`.scrollbar-none::-webkit-scrollbar { display: none; }`}</style>
+              
+              {[...processedFollowedTeams]
+                .sort((a, b) => {
+                  const sA = getGameStatus(schedules[a.id], a.id).status;
+                  const sB = getGameStatus(schedules[b.id], b.id).status;
+                  if (sA === 'off-season' && sB !== 'off-season') return 1;
+                  if (sB === 'off-season' && sA !== 'off-season') return -1;
+                  return 0;
+                })
+                .map((team) => {
           const schedule = schedules[team.id];
           const gameStatus = getGameStatus(schedule, team.id);
           const colors = getTeamColors(team.id);
           const game = schedule?.nextGame;
+          const isOffSeason = gameStatus.status === 'off-season';
 
           // Helper to render half the card
           const renderTeamHalf = (tName, tAbbr, tColors) => {
              const tText = readableTextColor(tColors);
              return (
-               <div className="flex-1 flex flex-col justify-center items-center p-1.5 text-center relative overflow-hidden" style={{ backgroundColor: tColors.primary, color: tText }}>
+               <div className="flex-1 flex flex-col justify-center items-center p-1 text-center relative overflow-hidden" style={{ backgroundColor: tColors.primary, color: tText }}>
                  <div className="absolute inset-0 opacity-10" style={{ backgroundColor: tColors.secondary }}></div>
-                 <span className="text-2xl font-black tracking-tight leading-none mb-0.5 relative z-10 drop-shadow-sm">
+                 <span className="text-[17px] font-black tracking-tight leading-none relative z-10 drop-shadow-sm truncate w-full px-0.5" title={tName}>
                    {tAbbr || tName?.substring(0, 3).toUpperCase() || '???'}
-                 </span>
-                 <span className="text-[9px] font-bold leading-tight opacity-95 line-clamp-2 px-1 relative z-10 drop-shadow-sm">
-                   {tName}
                  </span>
                </div>
              );
           };
 
-          if (!game || gameStatus.status === 'off-season' || gameStatus.status === 'tbd') {
-            // Render full width card for off-season / TBD so sizes match perfectly
+          if (!game || isOffSeason || gameStatus.status === 'tbd') {
             return (
-              <div key={team.id} className="h-[88px] flex rounded-xl overflow-hidden border border-gray-200 shadow-sm relative shrink-0">
+              <div key={team.id} className={`h-[60px] w-[140px] lg:w-auto flex flex-col rounded-[10px] overflow-hidden border border-gray-200 shadow-sm shrink-0 relative ${isOffSeason ? 'opacity-65 saturate-50' : ''}`}>
                 <div className="flex-1 flex" style={{ backgroundColor: colors.primary }}>
                   {renderTeamHalf(team.displayName, team.abbreviation, colors)}
                 </div>
-                <div className="absolute inset-0 bg-black/50 flex flex-col justify-center items-center backdrop-blur-[1px] z-20">
-                   <span className="bg-white/95 text-gray-900 text-[10px] font-black px-3 py-1.5 rounded shadow-lg uppercase tracking-widest text-center">
-                     {gameStatus.status === 'off-season' ? 'Off-Season' : 'Schedule TBD'}
+                <div className="absolute inset-x-0 bottom-0 bg-black/60 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center py-0.5 px-1 border-t border-white/20">
+                   <span className="text-white text-[8px] font-black uppercase tracking-widest text-center">
+                     {isOffSeason ? 'Off-Season' : 'Schedule TBD'}
                    </span>
                    {gameStatus.nextSeasonStart && (
-                     <span className="text-white/90 text-[10px] font-medium mt-1.5 drop-shadow-md bg-black/40 px-2 py-0.5 rounded-full">
+                     <span className="text-white/80 text-[7px] font-medium leading-none mt-[1px]">
                        Starts {new Date(gameStatus.nextSeasonStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                      </span>
                    )}
@@ -300,36 +327,36 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
           const isFinished = game.status === 'final' || game.status === 'completed' || gameStatus.label === 'Past game';
 
           return (
-            <div key={team.id} className="h-[88px] flex rounded-xl overflow-hidden border border-gray-200 shadow-sm shrink-0">
+            <div key={team.id} className="h-[60px] w-[140px] lg:w-auto flex rounded-[10px] overflow-hidden border border-gray-200 shadow-sm shrink-0">
                {/* AWAY */}
                {renderTeamHalf(awayTeam.name, awayTeam.abbr, awayTeam.colors)}
                
                {/* CENTER SPLIT */}
-               <div className="w-[88px] shrink-0 bg-white flex flex-col justify-center items-center border-x border-gray-100 z-10 px-1 text-center shadow-[0_0_15px_rgba(0,0,0,0.08)] relative">
-                 <span className="text-[8px] font-black text-gray-400 tracking-widest uppercase mb-1">{team.leagueName}</span>
+               <div className="w-[56px] shrink-0 bg-white flex flex-col justify-center items-center border-x border-gray-100 z-10 px-0.5 text-center shadow-[0_0_15px_rgba(0,0,0,0.08)] relative">
+                 <span className="text-[7px] font-black text-gray-400 tracking-widest uppercase mb-0.5 leading-none">{team.leagueName}</span>
                  
                  {isLive ? (
                    <>
-                     <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded animate-pulse mb-1 shadow-sm">LIVE</span>
-                     <div className="flex items-center gap-1.5 font-black text-slate-800 text-lg leading-none">
+                     <span className="bg-red-500 text-white text-[7px] font-bold px-1 py-[1px] rounded-[3px] animate-pulse mb-0.5 shadow-sm leading-none">LIVE</span>
+                     <div className="flex items-center gap-1 font-black text-slate-800 text-xs leading-none">
                        <span>{awayTeam.score ?? '-'}</span>
-                       <span className="text-gray-300 text-[10px]">-</span>
+                       <span className="text-gray-300 text-[8px]">-</span>
                        <span>{homeTeam.score ?? '-'}</span>
                      </div>
-                     <span className="text-[9px] font-bold text-red-600 mt-1">{game.period || game.clock || 'In Progress'}</span>
+                     <span className="text-[7px] font-bold text-red-600 mt-[2px] leading-none">{game.period || game.clock || 'In P'}</span>
                    </>
                  ) : isFinished ? (
                    <>
-                     <span className="text-[9px] font-black text-gray-500 mb-1 tracking-wider uppercase">FINAL</span>
-                     <div className="flex items-center gap-1.5 font-black text-slate-800 text-lg leading-none">
+                     <span className="text-[7px] font-black text-gray-500 mb-0.5 tracking-wider uppercase leading-none">FINAL</span>
+                     <div className="flex items-center gap-1 font-black text-slate-800 text-sm leading-none">
                        <span>{awayTeam.score ?? '-'}</span>
-                       <span className="text-gray-300 text-[10px]">-</span>
+                       <span className="text-gray-300 text-[8px]">-</span>
                        <span>{homeTeam.score ?? '-'}</span>
                      </div>
                    </>
                  ) : (
-                   <div className="flex flex-col items-center whitespace-pre-line mt-0.5">
-                     <span className="text-[9.5px] font-bold text-slate-800 leading-[1.3] px-1">
+                   <div className="flex flex-col items-center whitespace-pre-line mt-[2px]">
+                     <span className="text-[8px] font-bold text-slate-800 leading-[1.2] px-0.5 break-words">
                        {gameStatus.label.replace(', ', '\n')}
                      </span>
                    </div>
@@ -341,15 +368,10 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
             </div>
           );
         })}
-      </div>
-      
-      {processedFollowedTeams.length > 3 && (
-        <div className="px-4 py-2 border-t border-gray-100 bg-gray-50/50">
-          <p className="text-[10px] text-gray-400 text-center">
-            {processedFollowedTeams.length} teams followed
-          </p>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

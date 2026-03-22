@@ -336,6 +336,11 @@ function News({ isGuestMode = false }) {
         </div>
         <WeatherBar variant="sticky" />
         <StockTicker tickers={stockTickers} enabled={stockTickersEnabled} />
+        {followedTeams.length > 0 && (
+          <div className="border-b border-slate-200 lg:hidden bg-white">
+            <SportsSchedulePanel followedTeams={followedTeams} sportsLeagues={sportsLeagues} />
+          </div>
+        )}
         <div data-testid="news-mobile-filter-bar-shell" className="relative z-40 border-b border-slate-200 bg-white">
           <FilterBar
             categories={enabledCategories}
@@ -437,6 +442,7 @@ function News({ isGuestMode = false }) {
           <WeatherBar variant="card" />
           {followedTeams.length > 0 && (
             <SportsSchedulePanel
+              className="rounded-2xl shadow-sm ring-1 ring-gray-200"
               followedTeams={followedTeams}
               sportsLeagues={sportsLeagues}
             />
