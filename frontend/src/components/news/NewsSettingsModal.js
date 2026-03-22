@@ -20,6 +20,8 @@ export default function NewsSettingsModal({ isOpen, onClose, preferences, onUpda
         breakingAlerts: preferences.breakingAlerts ?? true,
         tickerSpeed: preferences.tickerSpeed ?? 'Normal',
         denseMode: preferences.denseMode ?? true,
+        keywords: (preferences.keywords || []).join(', '),
+        followedSportsTeams: (preferences.followedSportsTeams || []).join(', '),
       });
     }
   }, [isOpen, preferences]);
@@ -33,7 +35,16 @@ export default function NewsSettingsModal({ isOpen, onClose, preferences, onUpda
   }, []);
 
   const handleSave = useCallback(() => {
-    onUpdatePreferences?.(local);
+    const rawLocal = { ...local };
+    // parse CSV back into arrays
+    const procKeywords = (rawLocal.keywords || '').split(',').map(k => k.trim()).filter(Boolean);
+    const procTeams = (rawLocal.followedSportsTeams || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+    
+    onUpdatePreferences?.({
+      ...rawLocal,
+      keywords: procKeywords,
+      followedSportsTeams: procTeams
+    });
     onClose?.();
   }, [local, onUpdatePreferences, onClose]);
 
@@ -153,6 +164,25 @@ export default function NewsSettingsModal({ isOpen, onClose, preferences, onUpda
                   onChange={(v) => set('radius', Number(v))}
                   min={5}
                   max={500}
+                />
+              </SettingRow>
+            </div>
+
+            {/* ── Group 1.5: Content Filters ────────────────────────── */}
+            <div>
+              <GroupTitle>Content Filters</GroupTitle>
+              <SettingRow label="Keywords" desc="Comma-separated topics to highlight">
+                <TextInput
+                  value={local.keywords || ''}
+                  onChange={(v) => set('keywords', v)}
+                  placeholder="e.g. AI, Space, Tech"
+                />
+              </SettingRow>
+              <SettingRow label="Sports Teams" desc="Comma-separated abbreviations">
+                <TextInput
+                  value={local.followedSportsTeams || ''}
+                  onChange={(v) => set('followedSportsTeams', v.toUpperCase())}
+                  placeholder="e.g. DAL, NYY, LAL"
                 />
               </SettingRow>
             </div>

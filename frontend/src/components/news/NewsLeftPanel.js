@@ -113,6 +113,24 @@ export default function NewsLeftPanel({
         
         {secCategoriesOpen && (
           <div>
+            {/* All News Toggle */}
+            <div 
+              className={`flex items-center gap-[8px] py-[5px] px-[14px] text-[11px] cursor-pointer transition-colors ${activeCategories.length === 0 ? 'bg-[rgba(255,255,255,0.04)] text-[var(--accent)]' : 'text-[var(--text2)] hover:bg-[rgba(255,255,255,0.02)] hover:text-[var(--text)]'}`}
+            >
+              <span 
+                className="material-symbols-outlined w-[24px] text-left text-[18px] cursor-pointer"
+                style={{ lineHeight: '1' }}
+                onClick={() => onToggleCategory?.(null)}
+              >
+                apps
+              </span>
+              <span 
+                className="flex-1"
+                onClick={() => onToggleCategory?.(null)}
+              >
+                All News
+              </span>
+            </div>
             {categories.map((cat) => {
               const { symbol } = getCategoryIcon(cat.key);
               const isDisabled = disabledSet.has(cat.key);

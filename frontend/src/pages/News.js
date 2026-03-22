@@ -342,8 +342,9 @@ function News({ isGuestMode = false }) {
   return (
     <div className="news-theme h-full w-full bg-[var(--bg)] text-[var(--text)] font-[var(--sans)] flex flex-col overflow-hidden">
       {/* ─── Shared Top/Ticker (Desktop) ──────────────────────────────────── */}
-      <div className="hidden lg:flex flex-col shrink-0 z-50 relative">
+      <div className="hidden lg:flex flex-col shrink-0 z-50 relative border-b border-[var(--border)]">
         <StockTicker tickers={stockTickers} enabled={stockTickersEnabled} />
+        <BreakingBanner text="🚨 Major cybersecurity breach affects 50M users nationwide. Markets react violently as tech stocks tumble..." />
       </div>
 
       {/* ─── Mobile layout (< lg) ──────────────────────────────────────────── */}
@@ -375,6 +376,7 @@ function News({ isGuestMode = false }) {
               activeCategory={feedCategory}
               activeRegion={activeRegion}
               activeDate={activeDate}
+              activeFilter={feedFilter}
               searchQuery={searchQuery}
               onArticle={handleMobileArticleSelect}
               prefetchedFeed={prefetchedFeed}
@@ -441,7 +443,6 @@ function News({ isGuestMode = false }) {
             )}
           </div>
           <div className="border-b border-[var(--border)]">
-          <BreakingBanner text="🚨 Major cybersecurity breach affects 50M users nationwide. Markets react violently as tech stocks tumble..." />
           <FeedToolbar 
             activeFilter={feedFilter} 
             onFilterChange={(f) => {
@@ -464,6 +465,7 @@ function News({ isGuestMode = false }) {
               activeCategory={feedCategory}
               activeRegion={activeRegion}
               activeDate={activeDate}
+              activeFilter={feedFilter}
               searchQuery={searchQuery}
               onArticle={handleDesktopArticleSelect}
               prefetchedFeed={prefetchedFeed}

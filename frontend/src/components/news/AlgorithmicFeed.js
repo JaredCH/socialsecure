@@ -58,6 +58,7 @@ export default function AlgorithmicFeed({
   prefetchedFeed,
   onCountChange,
   viewMode = 'list',
+  activeFilter,
 }) {
   const [articles, setArticles]             = useState([]);
   const [loading, setLoading]               = useState(true);
@@ -256,21 +257,30 @@ export default function AlgorithmicFeed({
   const normalizedSearch = useMemo(() => String(searchQuery || '').trim().toLowerCase(), [searchQuery]);
   const isSearchActive = normalizedSearch.length > 0;
   const filteredArticles = useMemo(() => {
-    if (!isSearchActive) return articles;
-    return articles.filter((article) => {
-      const haystack = [
-        article?.title,
-        article?.description,
-        article?.summary,
-        article?.source,
-        article?.category,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(normalizedSearch);
-    });
-  }, [articles, isSearchActive, normalizedSearch]);
+    let result = articles;
+    
+    if (isSearchActive) {
+      result = result.filter((article) => {
+        const haystack = [
+          article?.title,
+          article?.description,
+          article?.summary,
+          article?.source,
+          article?.category,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(normalizedSearch);
+      });
+    }
+
+    if (activeFilter === 'Latest') {
+      result = [...result].sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+    }
+
+    return result;
+  }, [articles, isSearchActive, normalizedSearch, activeFilter]);
 
   useEffect(() => {
     onCountChange?.(filteredArticles.length);

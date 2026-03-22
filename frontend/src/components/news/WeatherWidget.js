@@ -239,19 +239,19 @@ export default function WeatherWidget() {
               const widthPercent = ((h - l) / tempRange) * 100;
 
               return (
-                <div key={i} className="flex items-center py-2.5 px-3 rounded-xl hover:bg-[var(--bg3)] transition-all cursor-default group">
-                  <div className="w-12 flex flex-col">
-                    <span className="text-[11px] font-bold text-[var(--text)]">{i === 0 ? 'Today' : getDayAbbr(day.date)}</span>
-                    <span className="text-[9px] text-[var(--text3)] font-medium">{new Date(day.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+                <div key={i} className="flex items-center py-[6px] px-[8px] rounded-[8px] hover:bg-[var(--bg3)] transition-all cursor-default group">
+                  <div className="w-[42px] shrink-0 flex flex-col">
+                    <span className="text-[10px] font-bold text-[var(--text)]">{i === 0 ? 'Today' : getDayAbbr(day.date)}</span>
+                    <span className="text-[8px] text-[var(--text3)] font-medium">{new Date(day.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
                   </div>
                   
-                  <div className="text-[22px] w-12 text-center group-hover:scale-110 transition-transform duration-300">
+                  <div className="text-[18px] w-[32px] shrink-0 text-center group-hover:scale-110 transition-transform duration-300">
                     {ICON_MAP[day.icon] || '🌤️'}
                   </div>
 
-                  <div className="flex-1 mx-6 h-[6px] bg-[var(--bg4)] rounded-full relative overflow-hidden">
+                  <div className="flex-1 mx-[12px] h-[4px] bg-[var(--bg4)] rounded-full relative overflow-hidden">
                     <div 
-                      className="absolute h-full rounded-full shadow-[0_0_12px_rgba(59,130,246,0.3)] bg-gradient-to-r from-blue-500 to-[var(--accent)]" 
+                      className="absolute h-full rounded-full shadow-[0_0_8px_rgba(59,130,246,0.3)] bg-gradient-to-r from-blue-500 to-[var(--accent)]" 
                       style={{
                         left: `${leftPercent}%`,
                         width: `${Math.max(widthPercent, 10)}%`,
@@ -259,9 +259,9 @@ export default function WeatherWidget() {
                     />
                   </div>
 
-                  <div className="flex items-center gap-4 min-w-[70px] justify-end">
-                    <span className="text-[12px] font-black text-[var(--text)]">{h}°</span>
-                    <span className="text-[12px] font-bold text-[var(--text3)]">{l}°</span>
+                  <div className="flex items-center gap-[6px] w-[50px] shrink-0 justify-end">
+                    <span className="text-[11px] font-black text-[var(--text)]">{h}°</span>
+                    <span className="text-[10px] font-bold text-[var(--text3)]">{l}°</span>
                   </div>
                 </div>
               );
