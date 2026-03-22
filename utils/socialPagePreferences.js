@@ -1,4 +1,4 @@
-const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest'];
+const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest', 'cyberpunk', 'lavender', 'retro', 'arctic'];
 const SOCIAL_LAYOUT_MODES = ['desktop', 'mobile'];
 const SOCIAL_ACCENT_TOKENS = ['blue', 'violet', 'emerald', 'rose', 'amber'];
 const SOCIAL_FONT_FAMILIES = ['Inter', 'Manrope', 'Space Grotesk', 'Merriweather', 'Fira Sans', 'Georgia'];
@@ -55,7 +55,11 @@ const THEME_TO_DEFAULT_ACCENT = {
   light: 'violet',
   dark: 'emerald',
   sunset: 'rose',
-  forest: 'emerald'
+  forest: 'emerald',
+  cyberpunk: 'rose',
+  lavender: 'violet',
+  retro: 'amber',
+  arctic: 'blue'
 };
 
 const THEME_TO_ALLOWED_ACCENTS = {
@@ -63,7 +67,11 @@ const THEME_TO_ALLOWED_ACCENTS = {
   light: ['blue', 'violet', 'emerald'],
   dark: ['blue', 'violet', 'emerald', 'rose', 'amber'],
   sunset: ['rose', 'amber', 'violet'],
-  forest: ['emerald', 'blue', 'amber']
+  forest: ['emerald', 'blue', 'amber'],
+  cyberpunk: ['rose', 'violet', 'amber', 'blue'],
+  lavender: ['violet', 'rose', 'blue'],
+  retro: ['amber', 'rose', 'emerald'],
+  arctic: ['blue', 'emerald', 'violet']
 };
 
 const BODY_BG_DISPLAY_MODES = ['cover', 'repeat', 'fixed'];
@@ -81,6 +89,7 @@ const DEFAULT_GLOBAL_STYLES = Object.freeze({
     regular: 'base',
     small: 'sm'
   },
+  glassMorphEnabled: false,
   bodyBackgroundImage: '',
   bodyBackgroundOverlay: 0,
   bodyBackgroundGrain: 0,
@@ -615,6 +624,10 @@ const normalizeHeroConfig = (value = {}, fallback = DEFAULT_HERO_CONFIG) => {
   return {
     backgroundColor: normalizeHexColor(value.backgroundColor, fallback.backgroundColor),
     backgroundImage,
+    backgroundImageDisplayMode: BODY_BG_DISPLAY_MODES.includes(value.backgroundImageDisplayMode) ? value.backgroundImageDisplayMode : (fallback.backgroundImageDisplayMode || 'cover'),
+    backgroundImageOverlay: normalizeBodyBackgroundOverlay(value.backgroundImageOverlay, fallback.backgroundImageOverlay || 0),
+    backgroundImageGrain: normalizeBodyBackgroundOverlay(value.backgroundImageGrain, fallback.backgroundImageGrain || 0),
+    backgroundImageBlur: normalizeBodyBackgroundBlur(value.backgroundImageBlur, fallback.backgroundImageBlur || 0),
     textColor: normalizeHexColor(value.textColor, fallback.textColor),
     nameColor: normalizeHexColor(value.nameColor, fallback.nameColor),
     locationColor: normalizeHexColor(value.locationColor, fallback.locationColor),
@@ -749,6 +762,7 @@ const normalizeSocialPagePreferences = (input, {
     fontColor: normalizeHexColor(raw.globalStyles?.fontColor, DEFAULT_GLOBAL_STYLES.fontColor),
     pageBackgroundColor: normalizeHexColor(raw.globalStyles?.pageBackgroundColor, DEFAULT_GLOBAL_STYLES.pageBackgroundColor),
     fontSizes: normalizeFontSizeMap(raw.globalStyles?.fontSizes, DEFAULT_GLOBAL_STYLES.fontSizes),
+    glassMorphEnabled: raw.globalStyles?.glassMorphEnabled !== undefined ? Boolean(raw.globalStyles.glassMorphEnabled) : DEFAULT_GLOBAL_STYLES.glassMorphEnabled,
     bodyBackgroundImage: normalizeBodyBackgroundImageUrl(raw.globalStyles?.bodyBackgroundImage, DEFAULT_GLOBAL_STYLES.bodyBackgroundImage),
     bodyBackgroundOverlay: normalizeBodyBackgroundOverlay(raw.globalStyles?.bodyBackgroundOverlay, DEFAULT_GLOBAL_STYLES.bodyBackgroundOverlay),
     bodyBackgroundGrain: normalizeBodyBackgroundOverlay(raw.globalStyles?.bodyBackgroundGrain, DEFAULT_GLOBAL_STYLES.bodyBackgroundGrain),

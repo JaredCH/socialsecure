@@ -1,4 +1,4 @@
-export const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest'];
+export const SOCIAL_THEME_PRESETS = ['default', 'light', 'dark', 'sunset', 'forest', 'cyberpunk', 'lavender', 'retro', 'arctic'];
 export const SOCIAL_LAYOUT_MODES = ['desktop', 'mobile'];
 export const SOCIAL_FONT_FAMILIES = ['Inter', 'Manrope', 'Space Grotesk', 'Merriweather', 'Fira Sans', 'Georgia'];
 export const SOCIAL_FONT_SIZE_TOKENS = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl'];
@@ -78,6 +78,10 @@ export const SOCIAL_PANEL_LABELS = {
 export const DEFAULT_HERO_CONFIG = {
   backgroundColor: '#1e293b',
   backgroundImage: null,
+  backgroundImageDisplayMode: 'cover',
+  backgroundImageOverlay: 0,
+  backgroundImageGrain: 0,
+  backgroundImageBlur: 0,
   textColor: '#ffffff',
   nameColor: '#ffffff',
   locationColor: '#94a3b8',
@@ -248,6 +252,74 @@ export const SOCIAL_THEME_STYLE_PRESETS = [
         fontSizes: { header: '3xl', subHeader: 'xl', regular: 'lg', small: 'base' }
       }
     }
+  },
+  {
+    id: 'cyberpunk-glow',
+    name: 'Cyberpunk Glow',
+    description: 'Neon-lit dark interface with hot pink and electric blue accents.',
+    design: {
+      themePreset: 'cyberpunk',
+      accentColorToken: 'rose',
+      globalStyles: {
+        panelColor: '#1a0a2e',
+        headerColor: '#f43f5e',
+        fontFamily: 'Space Grotesk',
+        fontColor: '#e0f2fe',
+        pageBackgroundColor: '#0c0118',
+        fontSizes: { header: '2xl', subHeader: 'lg', regular: 'base', small: 'sm' }
+      }
+    }
+  },
+  {
+    id: 'lavender-dream',
+    name: 'Lavender Dream',
+    description: 'Soft pastels and gentle purples for a calm, dreamy vibe.',
+    design: {
+      themePreset: 'lavender',
+      accentColorToken: 'violet',
+      globalStyles: {
+        panelColor: '#f5f3ff',
+        headerColor: '#7c3aed',
+        fontFamily: 'Manrope',
+        fontColor: '#3b0764',
+        pageBackgroundColor: '#ede9fe',
+        fontSizes: { header: '2xl', subHeader: 'xl', regular: 'base', small: 'sm' }
+      }
+    }
+  },
+  {
+    id: 'retro-arcade',
+    name: 'Retro Arcade',
+    description: 'Throwback pixel-era colors with bold oranges and teals.',
+    design: {
+      themePreset: 'retro',
+      accentColorToken: 'amber',
+      globalStyles: {
+        panelColor: '#fefce8',
+        headerColor: '#d97706',
+        fontFamily: 'Fira Sans',
+        fontColor: '#422006',
+        pageBackgroundColor: '#fef3c7',
+        fontSizes: { header: '2xl', subHeader: 'lg', regular: 'base', small: 'sm' }
+      }
+    }
+  },
+  {
+    id: 'arctic-frost',
+    name: 'Arctic Frost',
+    description: 'Icy blues and crisp whites for a clean, frozen-tundra look.',
+    design: {
+      themePreset: 'arctic',
+      accentColorToken: 'blue',
+      globalStyles: {
+        panelColor: '#f0f9ff',
+        headerColor: '#0284c7',
+        fontFamily: 'Inter',
+        fontColor: '#0c4a6e',
+        pageBackgroundColor: '#e0f2fe',
+        fontSizes: { header: '2xl', subHeader: 'xl', regular: 'base', small: 'sm' }
+      }
+    }
   }
 ];
 
@@ -266,7 +338,11 @@ export const THEME_TO_DEFAULT_ACCENT = {
   light: 'violet',
   dark: 'emerald',
   sunset: 'rose',
-  forest: 'emerald'
+  forest: 'emerald',
+  cyberpunk: 'rose',
+  lavender: 'violet',
+  retro: 'amber',
+  arctic: 'blue'
 };
 
 export const THEME_TO_ALLOWED_ACCENTS = {
@@ -274,7 +350,11 @@ export const THEME_TO_ALLOWED_ACCENTS = {
   light: ['blue', 'violet', 'emerald'],
   dark: ['blue', 'violet', 'emerald', 'rose', 'amber'],
   sunset: ['rose', 'amber', 'violet'],
-  forest: ['emerald', 'blue', 'amber']
+  forest: ['emerald', 'blue', 'amber'],
+  cyberpunk: ['rose', 'violet', 'amber', 'blue'],
+  lavender: ['violet', 'rose', 'blue'],
+  retro: ['amber', 'rose', 'emerald'],
+  arctic: ['blue', 'emerald', 'violet']
 };
 
 export const DEFAULT_GLOBAL_STYLES = {
@@ -289,6 +369,7 @@ export const DEFAULT_GLOBAL_STYLES = {
     regular: 'base',
     small: 'sm'
   },
+  glassMorphEnabled: false,
   bodyBackgroundImage: '',
   bodyBackgroundOverlay: 0,
   bodyBackgroundGrain: 0,
@@ -487,9 +568,14 @@ const normalizeHeroConfig = (heroInput, fallback) => {
   const backgroundImage = normalizeMediaUrl(heroInput?.backgroundImage, fallback.backgroundImage);
   const profileImage = normalizeMediaUrl(heroInput?.profileImage, fallback.profileImage);
   
+  const clampFloat = (val, min, max, fallbackVal) => { const n = Number(val); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : (Number.isFinite(fallbackVal) ? fallbackVal : min); };
   return {
     backgroundColor: isHexColor(heroInput?.backgroundColor) ? heroInput.backgroundColor : fallback.backgroundColor,
     backgroundImage,
+    backgroundImageDisplayMode: BODY_BG_DISPLAY_MODES.includes(heroInput?.backgroundImageDisplayMode) ? heroInput.backgroundImageDisplayMode : (fallback.backgroundImageDisplayMode || 'cover'),
+    backgroundImageOverlay: clampFloat(heroInput?.backgroundImageOverlay, 0, 1, fallback.backgroundImageOverlay),
+    backgroundImageGrain: clampFloat(heroInput?.backgroundImageGrain, 0, 1, fallback.backgroundImageGrain),
+    backgroundImageBlur: Math.round(clampFloat(heroInput?.backgroundImageBlur, 0, 20, fallback.backgroundImageBlur)),
     textColor: isHexColor(heroInput?.textColor) ? heroInput.textColor : fallback.textColor,
     nameColor: isHexColor(heroInput?.nameColor) ? heroInput.nameColor : fallback.nameColor,
     locationColor: isHexColor(heroInput?.locationColor) ? heroInput.locationColor : fallback.locationColor,
@@ -599,6 +685,7 @@ export const normalizeSocialPreferences = (input, profileTheme = 'default', requ
     fontColor: isHex(raw.globalStyles?.fontColor || '') ? raw.globalStyles.fontColor : DEFAULT_GLOBAL_STYLES.fontColor,
     pageBackgroundColor: isHex(raw.globalStyles?.pageBackgroundColor || '') ? raw.globalStyles.pageBackgroundColor : DEFAULT_GLOBAL_STYLES.pageBackgroundColor,
     fontSizes: normalizeFontSizes(raw.globalStyles?.fontSizes),
+    glassMorphEnabled: raw.globalStyles?.glassMorphEnabled !== undefined ? Boolean(raw.globalStyles.glassMorphEnabled) : DEFAULT_GLOBAL_STYLES.glassMorphEnabled,
     bodyBackgroundImage: normalizeBodyBgUrl(raw.globalStyles?.bodyBackgroundImage),
     bodyBackgroundOverlay: clampFloat(raw.globalStyles?.bodyBackgroundOverlay, 0, 1),
     bodyBackgroundGrain: clampFloat(raw.globalStyles?.bodyBackgroundGrain, 0, 1),

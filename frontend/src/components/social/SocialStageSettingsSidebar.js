@@ -107,7 +107,7 @@ const PillSelect = ({ options, value, onChange, testId }) => (
 
 /* ── Mini preview stripe for image backgrounds ────────────────── */
 
-const BackgroundPreview = ({ image, overlay, grain, blur, displayMode }) => {
+const BackgroundPreview = ({ image, overlay, grain, blur, displayMode, tall }) => {
   if (!image) return null;
   const bgStyle = {
     backgroundImage: `url(${image})`,
@@ -115,10 +115,11 @@ const BackgroundPreview = ({ image, overlay, grain, blur, displayMode }) => {
     backgroundRepeat: displayMode === 'repeat' ? 'repeat' : 'no-repeat',
     backgroundPosition: 'center',
     backgroundAttachment: displayMode === 'fixed' ? 'fixed' : 'scroll',
-    filter: blur ? `blur(${blur}px)` : undefined
+    filter: blur ? `blur(${blur}px)` : undefined,
+    transform: blur ? 'scale(1.05)' : undefined
   };
   return (
-    <div className="relative mt-2 h-16 overflow-hidden rounded-lg border border-slate-200" data-testid="bg-preview">
+    <div className={`relative mt-2 ${tall ? 'h-28' : 'h-16'} overflow-hidden rounded-lg border border-slate-200`} data-testid="bg-preview">
       <div className="absolute inset-0" style={bgStyle} />
       {(overlay || 0) > 0 && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
       {(grain || 0) > 0 && (
@@ -396,7 +397,7 @@ const SocialStageSettingsSidebar = ({
 
       {bodyBackgroundImage && (
         <div className="space-y-2.5">
-          <BackgroundPreview image={bodyBackgroundImage} overlay={bodyBackgroundOverlay} grain={bodyBackgroundGrain} blur={bodyBackgroundBlur} displayMode={bodyBackgroundDisplayMode} />
+          <BackgroundPreview image={bodyBackgroundImage} overlay={bodyBackgroundOverlay} grain={bodyBackgroundGrain} blur={bodyBackgroundBlur} displayMode={bodyBackgroundDisplayMode} tall />
           <PillSelect options={DISPLAY_MODE_OPTIONS} value={bodyBackgroundDisplayMode || 'cover'} onChange={onBodyBackgroundDisplayModeChange} testId="display-mode-selector" />
           <SliderField label="Darkness" value={bodyBackgroundOverlay} min={0} max={1} step={0.05} unit="%" onChange={onBodyBackgroundOverlayChange} />
           <ExpandableSection title="Advanced" testId="body-advanced-toggle">
