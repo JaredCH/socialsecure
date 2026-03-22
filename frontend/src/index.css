@@ -4,25 +4,25 @@
 
 @layer base {
   .news-theme {
-    --bg: #0a0b0d;
-    --bg2: #111318;
-    --bg3: #181c24;
-    --bg4: #1f2430;
-    --border: rgba(255,255,255,0.07);
-    --border2: rgba(255,255,255,0.12);
-    --text: #e8eaf0;
-    --text2: #8b90a0;
-    --text3: #555b6e;
-    --accent: #00d4ff;
+    --bg: #ffffff;
+    --bg2: #f9fafb;
+    --bg3: #f3f4f6;
+    --bg4: #e5e7eb;
+    --border: rgba(0,0,0,0.06);
+    --border2: rgba(0,0,0,0.1);
+    --text: #111827;
+    --text2: #4b5563;
+    --text3: #9ca3af;
+    --accent: #2563eb;
     --accent2: #7c3aed;
-    --green: #00c47a;
-    --red: #ff4757;
-    --gold: #f5a623;
-    --orange: #ff6b35;
+    --green: #10b981;
+    --red: #ef4444;
+    --gold: #f59e0b;
+    --orange: #f97316;
     --mono: 'IBM Plex Mono', monospace;
     --sans: 'DM Sans', sans-serif;
     --display: 'Bebas Neue', sans-serif;
-    --radius: 6px;
+    --radius: 12px;
   }
 }
 
@@ -41,26 +41,27 @@
   to { opacity: 1; transform: scale(1); }
 }
 
-/* ─── Dark-theme custom scrollbars ──────────────────────────────────────────── */
+/* ─── Light-theme custom scrollbars ──────────────────────────────────────────── */
 .news-theme ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
 .news-theme ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 3px;
 }
 .news-theme ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.08);
   border-radius: 3px;
   transition: background 0.2s;
 }
 .news-theme ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 212, 255, 0.30);
+  background: var(--accent);
+  opacity: 0.5;
 }
 .news-theme {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.10) rgba(255,255,255,0.03);
+  scrollbar-color: rgba(0,0,0,0.08) rgba(0,0,0,0.02);
 }
 
 body {

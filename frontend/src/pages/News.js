@@ -406,7 +406,7 @@ function News({ isGuestMode = false }) {
       </div>
 
       {/* ─── Desktop layout (>= lg) ────────────────────────────────────────── */}
-      <div className="hidden lg:grid lg:grid-cols-[200px_1fr_300px] h-full min-h-0 overflow-hidden p-4 gap-4 max-w-[1400px] mx-auto w-full">
+      <div className="hidden lg:grid lg:grid-cols-[200px_1fr_300px] h-full min-h-0 overflow-hidden p-4 gap-4 mx-auto w-full">
         <NewsLeftPanel
           categories={sortedCategories}
           activeCategories={activeCategories}
@@ -446,7 +446,7 @@ function News({ isGuestMode = false }) {
               </button>
             )}
           </div>
-          <div className="border-b border-slate-200">
+          <div className="border-b border-[var(--border)]">
           <BreakingBanner text="🚨 Major cybersecurity breach affects 50M users nationwide. Markets react violently as tech stocks tumble..." />
           <FeedToolbar 
             activeFilter={feedFilter} 

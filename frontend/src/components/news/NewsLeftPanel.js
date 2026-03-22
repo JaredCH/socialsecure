@@ -21,7 +21,8 @@ export default function NewsLeftPanel({
     { id: 'world', label: 'World', count: 124 }
   ],
   activeRegion = 'all',
-  onRegionChange
+  onRegionChange,
+  onOpenSettings
 }) {
   const [kwInput, setKwInput] = useState('');
   const [secRegionsOpen, setSecRegionsOpen] = useState(true);
@@ -123,7 +124,8 @@ export default function NewsLeftPanel({
                   className={`flex items-center gap-[8px] py-[5px] px-[14px] text-[11px] cursor-pointer transition-colors ${isActive ? 'bg-[rgba(255,255,255,0.04)] text-[var(--accent)]' : 'text-[var(--text2)] hover:bg-[rgba(255,255,255,0.02)] hover:text-[var(--text)]'}`}
                 >
                   <span 
-                    className="w-[18px] text-center text-[12px] cursor-pointer"
+                    className="material-symbols-outlined w-[24px] text-left text-[18px] cursor-pointer"
+                    style={{ lineHeight: '1' }}
                     onClick={() => !isDisabled && onToggleCategory?.(cat.key)}
                   >
                     {symbol}
@@ -193,6 +195,17 @@ export default function NewsLeftPanel({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Settings Action */}
+      <div className="mt-auto py-[16px] px-[14px]">
+        <button 
+          onClick={onOpenSettings}
+          className="w-full flex items-center gap-[10px] py-[10px] px-[12px] bg-[var(--bg3)] rounded-[var(--radius)] text-[11px] text-[var(--text2)] hover:text-[var(--accent)] hover:border-[var(--accent)] border border-[var(--border)] transition-all cursor-pointer group"
+        >
+          <span className="material-symbols-outlined text-[16px] group-hover:rotate-90 transition-transform">tune</span>
+          <span className="font-medium">Open Feed settings</span>
+        </button>
       </div>
       
     </div>
