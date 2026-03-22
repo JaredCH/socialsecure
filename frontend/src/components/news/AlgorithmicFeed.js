@@ -55,6 +55,7 @@ export default function AlgorithmicFeed({
   searchQuery,
   onArticle,
   prefetchedFeed,
+  onCountChange,
 }) {
   const [articles, setArticles]             = useState([]);
   const [loading, setLoading]               = useState(true);
@@ -268,6 +269,10 @@ export default function AlgorithmicFeed({
       return haystack.includes(normalizedSearch);
     });
   }, [articles, isSearchActive, normalizedSearch]);
+
+  useEffect(() => {
+    onCountChange?.(filteredArticles.length);
+  }, [filteredArticles.length, onCountChange]);
 
   // ── Render ───────────────────────────────────────────────────────────────────
   if (loading) {

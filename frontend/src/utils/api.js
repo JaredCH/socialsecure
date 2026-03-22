@@ -669,6 +669,14 @@ export const newsAPI = {
   // Stock & crypto tickers
   searchStocks: (q) => api.get('/news/stocks/search', { params: { q } }),
   getStockQuotes: (symbols) => api.get('/news/stocks/quotes', { params: { symbols: symbols.join(',') } }),
+  // Trending topics
+  getTrending: () => api.get('/news/trending'),
+  // Weather alerts (severe weather, NWS)
+  getWeatherAlerts: () => api.get('/news/weather/alerts'),
+  // Weather hourly forecast
+  getWeatherHourly: () => api.get('/news/weather/hourly'),
+  // Weather daily forecast
+  getWeatherDaily: () => api.get('/news/weather/daily'),
 };
 
 // Maps API

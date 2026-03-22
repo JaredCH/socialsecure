@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getAuthToken, newsAPI } from '../utils/api';
 import WeatherBar from '../components/news/WeatherBar';
-import FilterBar from '../components/news/FilterBar';
+import FeedToolbar from '../components/news/FeedToolbar';
+import BreakingBanner from '../components/news/BreakingBanner';
 import AlgorithmicFeed from '../components/news/AlgorithmicFeed';
 import NewsLeftPanel from '../components/news/NewsLeftPanel';
-import SettingsDrawer from '../components/news/SettingsDrawer';
+import RightSidebar from '../components/news/RightSidebar';
+import WeatherWidget from '../components/news/WeatherWidget';
+import MarketsWidget from '../components/news/MarketsWidget';
+import CryptoWidget from '../components/news/CryptoWidget';
+import SportsWidget from '../components/news/SportsWidget';
+import TrendingWidget from '../components/news/TrendingWidget';
+import AlertsWidget from '../components/news/AlertsWidget';
 import ArticleDrawer from '../components/news/ArticleDrawer';
 import SportsSchedulePanel from '../components/news/SportsSchedulePanel';
 import StockTicker from '../components/news/StockTicker';
+import NewsTopNav from '../components/news/NewsTopNav';
+import NewsSettingsModal from '../components/news/NewsSettingsModal';
 import { CATEGORY_ICONS } from '../constants/categoryIcons';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -57,7 +66,9 @@ function News({ isGuestMode = false }) {
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen]       = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState(null);
+  const [feedFilter, setFeedFilter]           = useState('Top');
   const [desktopArticlePreview, setDesktopArticlePreview] = useState(null);
   const [sessionError, setSessionError] = useState('');
   const desktopFeedRef = useRef(null);
@@ -328,9 +339,18 @@ function News({ isGuestMode = false }) {
   }
 
   return (
-    <>
+    <div className="news-theme h-full w-full bg-[var(--bg)] text-[var(--text)] font-[var(--sans)] flex flex-col overflow-hidden">
+      {/* ─── Shared Top/Ticker (Desktop) ──────────────────────────────────── */}
+      <div className="hidden lg:flex flex-col shrink-0 z-50 relative">
+        <NewsTopNav 
+          locationLabel={activeRegion?.label || locationTaxonomy?.preferredStateName || 'United States'} 
+          onLocationClick={isGuestMode ? undefined : () => setSettingsOpen(true)} 
+        />
+        <StockTicker tickers={stockTickers} enabled={stockTickersEnabled} />
+      </div>
+
       {/* ─── Mobile layout (< lg) ──────────────────────────────────────────── */}
-      <div data-testid="news-mobile-layout" className="lg:hidden flex h-full flex-col overflow-hidden bg-slate-100">
+      <div data-testid="news-mobile-layout" className="lg:hidden flex h-full flex-col overflow-hidden">
         <div className="flex items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-white/80">
           <h1 className="text-sm font-bold text-slate-900">News</h1>
         </div>
@@ -341,18 +361,17 @@ function News({ isGuestMode = false }) {
             <SportsSchedulePanel followedTeams={followedTeams} sportsLeagues={sportsLeagues} />
           </div>
         )}
-        <div data-testid="news-mobile-filter-bar-shell" className="relative z-40 border-b border-slate-200 bg-white">
-          <FilterBar
-            categories={enabledCategories}
-            activeCategory={feedCategory}
-            onCategoryChange={handleToggleCategory}
-            onSearch={setSearchQuery}
-            searchValue={searchQuery}
-            onRegionChange={setActiveRegion}
-            onDateChange={setActiveDate}
-            activeRegion={activeRegion}
-            activeDate={activeDate}
-            locationTaxonomy={locationTaxonomy}
+        <BreakingBanner />
+        <div data-testid="news-mobile-filter-bar-shell" className="relative z-40 border-b border-[var(--border)] bg-[var(--bg2)]">
+          <FeedToolbar 
+            activeFilter={feedFilter} 
+            onFilterChange={(f) => {
+              setFeedFilter(f);
+              if (f === 'Nearby') setActiveRegion('local');
+              else if (activeRegion === 'local') setActiveRegion('all');
+            }}
+            storyCount={articles.length}
+            viewMode="list" 
           />
         </div>
         <div data-testid="news-mobile-feed" className="flex-1 overflow-y-auto p-3">
@@ -365,6 +384,7 @@ function News({ isGuestMode = false }) {
               searchQuery={searchQuery}
               onArticle={handleMobileArticleSelect}
               prefetchedFeed={prefetchedFeed}
+              onCountChange={setStoryCount}
             />
           </div>
         </div>
@@ -386,7 +406,7 @@ function News({ isGuestMode = false }) {
       </div>
 
       {/* ─── Desktop layout (>= lg) ────────────────────────────────────────── */}
-      <div className="hidden lg:flex h-full min-h-0 overflow-hidden bg-slate-100 p-4 gap-4">
+      <div className="hidden lg:grid lg:grid-cols-[200px_1fr_300px] h-full min-h-0 overflow-hidden p-4 gap-4 max-w-[1400px] mx-auto w-full">
         <NewsLeftPanel
           categories={sortedCategories}
           activeCategories={activeCategories}
@@ -401,26 +421,44 @@ function News({ isGuestMode = false }) {
           onSearch={setSearchQuery}
           searchValue={searchQuery}
           onOpenSettings={isGuestMode ? undefined : () => setSettingsOpen(true)}
+          activeRegion={activeRegion}
+          onRegionChange={setActiveRegion}
+          regions={[
+            { id: 'all', label: 'All Regions', count: 247 },
+            { id: 'local', label: `Local (${preferences?.homeLocation || 'TX'})`, count: 34 },
+            { id: 'national', label: 'National', count: 89 },
+            { id: 'world', label: 'World', count: 124 }
+          ]}
         />
-        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-6 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">News</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Your Daily Briefing</h1>
+        <div className="flex flex-col min-h-0 min-w-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg2)] shadow-sm">
+          <div className="border-b border-[var(--border)] px-6 py-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text2)]">News</p>
+              <h1 className="text-2xl font-semibold text-[var(--text)]">Your Daily Briefing</h1>
+            </div>
+            {!isGuestMode && (
+              <button
+                onClick={() => setSettingsModalOpen(true)}
+                className="w-[30px] h-[30px] rounded-[6px] border border-[var(--border2)] flex items-center justify-center text-[var(--text3)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
+                aria-label="Quick settings"
+              >
+                <span className="material-symbols-outlined text-[16px]">tune</span>
+              </button>
+            )}
           </div>
-          <StockTicker tickers={stockTickers} enabled={stockTickersEnabled} />
           <div className="border-b border-slate-200">
-            <FilterBar
-              categories={enabledCategories}
-              activeCategory={feedCategory}
-              onCategoryChange={handleToggleCategory}
-              onSearch={setSearchQuery}
-              searchValue={searchQuery}
-              onRegionChange={setActiveRegion}
-              onDateChange={setActiveDate}
-              activeRegion={activeRegion}
-              activeDate={activeDate}
-              locationTaxonomy={locationTaxonomy}
-            />
+          <BreakingBanner text="🚨 Major cybersecurity breach affects 50M users nationwide. Markets react violently as tech stocks tumble..." />
+          <BreakingBanner text="🚨 Major cybersecurity breach affects 50M users nationwide. Markets react violently as tech stocks tumble..." />
+          <FeedToolbar 
+            activeFilter={feedFilter} 
+            onFilterChange={(f) => {
+              setFeedFilter(f);
+              if (f === 'Nearby') setActiveRegion('local');
+              else if (activeRegion === 'local') setActiveRegion('all');
+            }}
+            storyCount={articles.length}
+            viewMode="list" 
+          />
           </div>
           <div
             ref={desktopFeedRef}
@@ -438,15 +476,20 @@ function News({ isGuestMode = false }) {
             />
           </div>
         </div>
-        <div className="w-[320px] shrink-0 flex min-h-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <WeatherBar variant="card" />
-          {followedTeams.length > 0 && (
-            <SportsSchedulePanel
-              className="rounded-2xl shadow-sm ring-1 ring-gray-200"
-              followedTeams={followedTeams}
-              sportsLeagues={sportsLeagues}
-            />
-          )}
+        <div className="flex flex-col min-h-0 min-w-0 overflow-hidden">
+          <RightSidebar>
+            {preferences?.showWeather !== false && <WeatherWidget />}
+            {preferences?.showMarkets !== false && <MarketsWidget />}
+            {preferences?.showCrypto !== false && <CryptoWidget />}
+            {followedTeams?.length > 0 && <SportsWidget followedTeams={followedTeams} sportsLeagues={sportsLeagues} />}
+            {preferences?.showTrending !== false && <TrendingWidget />}
+            <AlertsWidget />
+            
+            <footer className="mt-8 text-[10px] text-[var(--text3)] pb-4 text-center font-[var(--mono)] uppercase tracking-widest pointer-events-none">
+              <p className="mb-[2px]">Data: NewsAPI / Open-Meteo</p>
+              <p>&copy; {new Date().getFullYear()} SocialSecure News</p>
+            </footer>
+          </RightSidebar>
         </div>
       </div>
 
@@ -497,7 +540,16 @@ function News({ isGuestMode = false }) {
           onRestore={bootstrap}
         />
       )}
-    </>
+
+      {!isGuestMode && (
+        <NewsSettingsModal
+          isOpen={settingsModalOpen}
+          onClose={() => setSettingsModalOpen(false)}
+          preferences={preferences}
+          onUpdatePreferences={handleUpdatePreferences}
+        />
+      )}
+    </div>
   );
 }
 

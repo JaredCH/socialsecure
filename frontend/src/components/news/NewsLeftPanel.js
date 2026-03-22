@@ -1,21 +1,5 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { getCategoryIcon } from '../../constants/categoryIcons';
-
-/**
- * NewsLeftPanel — desktop left sidebar (260px wide).
- *
- * Props:
- *   categories        {Array}    — [{ key, label }]
- *   activeCategories  {Array}    — currently active category keys
- *   multiSelect       {bool}     — true = multi-select mode
- *   onToggleCategory  {Function} — (key) => void
- *   onMultiSelectToggle {Function}
- *   keywords          {Array}    — [string]
- *   onRemoveKeyword   {Function} — (kw) => void
- *   onAddKeyword      {Function} — (kw) => void
- *   onSearch          {Function} — (q) => void
- *   onOpenSettings    {Function}
- */
 
 export default function NewsLeftPanel({
   categories = [],
@@ -30,10 +14,21 @@ export default function NewsLeftPanel({
   onAddKeyword,
   onSearch,
   searchValue = '',
-  onOpenSettings,
+  regions = [
+    { id: 'all', label: 'All Regions', count: 247 },
+    { id: 'local', label: 'Local (TX)', count: 34 },
+    { id: 'national', label: 'National', count: 89 },
+    { id: 'world', label: 'World', count: 124 }
+  ],
+  activeRegion = 'all',
+  onRegionChange
 }) {
-  const [kwInput, setKwInput] = React.useState('');
-  const disabledSet = React.useMemo(
+  const [kwInput, setKwInput] = useState('');
+  const [secRegionsOpen, setSecRegionsOpen] = useState(true);
+  const [secCategoriesOpen, setSecCategoriesOpen] = useState(true);
+  const [secKeywordsOpen, setSecKeywordsOpen] = useState(true);
+
+  const disabledSet = useMemo(
     () => new Set((disabledCategories || []).map((value) => String(value || '').trim()).filter(Boolean)),
     [disabledCategories]
   );
@@ -45,162 +40,161 @@ export default function NewsLeftPanel({
     setKwInput('');
   };
 
-  const isAllActive = activeCategories.length === 0;
-
   return (
-    <aside className="w-[260px] h-full shrink-0 flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      {/* Search */}
-      <div className="px-3 pt-4 pb-2">
-        <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 focus-within:ring-2 focus-within:ring-blue-500">
-          <span className="material-symbols-outlined text-base text-gray-400 leading-none" aria-hidden="true">search</span>
-          <input
-            type="search"
+    <div 
+      id="sidebar-left" 
+      className="bg-[var(--bg2)] border-r border-[var(--border)] overflow-y-auto flex flex-col w-full h-full [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--bg4)] [&::-webkit-scrollbar-thumb]:rounded shrink-0"
+    >
+      {/* Search Section */}
+      <div className="border-b border-[var(--border)] py-[10px]">
+        <div className="relative px-[10px] pt-0">
+          <input 
+            type="text" 
+            placeholder="Search news..." 
             value={searchValue}
             onChange={(e) => onSearch?.(e.target.value)}
-            placeholder="Search news…"
-            className="flex-1 bg-transparent text-xs outline-none text-gray-700 placeholder-gray-400"
+            className="w-full bg-[var(--bg3)] border border-[var(--border)] rounded-[var(--radius)] py-[6px] pr-[28px] pl-[10px] text-[11px] text-[var(--text)] font-[var(--sans)] transition-colors outline-none focus:border-[var(--accent)] placeholder:text-[var(--text3)]"
           />
-          {searchValue && (
-            <button onClick={() => onSearch?.('')} aria-label="Clear">
-              <span className="material-symbols-outlined text-sm text-gray-400">close</span>
-            </button>
+          {searchValue ? (
+             <span 
+               className="absolute right-[18px] top-1/2 -translate-y-1/2 text-[var(--text3)] text-[12px] cursor-pointer hover:text-[var(--text)]"
+               onClick={() => onSearch?.('')}
+             >
+               ✕
+             </span>
+          ) : (
+            <span className="absolute right-[18px] top-1/2 -translate-y-1/2 text-[var(--text3)] text-[14px]">
+              ⌕
+            </span>
           )}
         </div>
       </div>
 
-      {/* Settings */}
-      <div className="px-3 pb-2">
-        <button
-          onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors text-xs font-medium"
+      {/* Regions Section */}
+      <div className="border-b border-[var(--border)] py-[10px]">
+        <div 
+          className="flex items-center justify-between px-[14px] py-[4px] pb-[8px] text-[9px] font-[var(--mono)] tracking-[2px] text-[var(--text3)] uppercase cursor-pointer hover:text-[var(--text2)]"
+          onClick={() => setSecRegionsOpen(!secRegionsOpen)}
         >
-          <span className="material-symbols-outlined text-base leading-none">settings</span>
-          Settings
-        </button>
-      </div>
-
-      {/* Quick Actions — Keywords */}
-      <div className="px-3 pt-2 pb-2 border-t border-gray-100">
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Keywords</p>
-        {keywords.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {keywords.map((kw) => (
-              <span
-                key={kw}
-                className="inline-flex items-center gap-0.5 text-[11px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 font-medium"
-              >
-                {kw}
-                <button
-                  aria-label={`Remove keyword ${kw}`}
-                  onClick={() => onRemoveKeyword?.(kw)}
-                  className="ml-0.5 leading-none hover:text-red-500"
+          <span>Regions</span>
+          <span className={`text-[10px] transition-transform duration-200 ${!secRegionsOpen ? '-rotate-90' : ''}`}>▾</span>
+        </div>
+        
+        {secRegionsOpen && (
+          <div>
+            {regions.map(r => {
+              const isActive = activeRegion === r.id;
+              return (
+                <div 
+                  key={r.id}
+                  onClick={() => onRegionChange?.(r.id)}
+                  className={`flex items-center gap-[8px] py-[6px] px-[14px] text-[11px] cursor-pointer transition-all border-l-2 ${isActive ? 'text-[var(--accent)] border-[var(--accent)] bg-[rgba(0,212,255,0.04)]' : 'text-[var(--text2)] border-transparent hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.03)]'}`}
                 >
-                  <span className="material-symbols-outlined text-xs leading-none">close</span>
-                </button>
-              </span>
-            ))}
+                  <div className={`w-[5px] h-[5px] rounded-full shrink-0 ${isActive ? 'bg-[var(--accent)]' : 'bg-[var(--text3)]'}`} />
+                  {r.label}
+                  <span className="ml-auto font-[var(--mono)] text-[9px] text-[var(--text3)]">{r.count}</span>
+                </div>
+              );
+            })}
           </div>
         )}
-        <div className="flex gap-1">
-          <input
-            type="text"
-            value={kwInput}
-            onChange={(e) => setKwInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddKeyword()}
-            placeholder="Add keyword…"
-            className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
-          />
-          <button
-            onClick={handleAddKeyword}
-            disabled={!kwInput.trim()}
-            className="px-2.5 py-1.5 text-xs bg-purple-600 text-white rounded-lg font-medium disabled:opacity-40 hover:bg-purple-700"
-          >
-            Add
-          </button>
+      </div>
+
+      {/* Categories Section */}
+      <div className="border-b border-[var(--border)] py-[10px]">
+        <div 
+          className="flex items-center justify-between px-[14px] py-[4px] pb-[8px] text-[9px] font-[var(--mono)] tracking-[2px] text-[var(--text3)] uppercase cursor-pointer hover:text-[var(--text2)]"
+          onClick={() => setSecCategoriesOpen(!secCategoriesOpen)}
+        >
+          <span>Categories</span>
+          <span className={`text-[10px] transition-transform duration-200 ${!secCategoriesOpen ? '-rotate-90' : ''}`}>▾</span>
         </div>
+        
+        {secCategoriesOpen && (
+          <div>
+            {categories.map((cat) => {
+              const { symbol } = getCategoryIcon(cat.key);
+              const isDisabled = disabledSet.has(cat.key);
+              const isActive = activeCategories.includes(cat.key);
+              
+              return (
+                <div 
+                  key={cat.key}
+                  className={`flex items-center gap-[8px] py-[5px] px-[14px] text-[11px] cursor-pointer transition-colors ${isActive ? 'bg-[rgba(255,255,255,0.04)] text-[var(--accent)]' : 'text-[var(--text2)] hover:bg-[rgba(255,255,255,0.02)] hover:text-[var(--text)]'}`}
+                >
+                  <span 
+                    className="w-[18px] text-center text-[12px] cursor-pointer"
+                    onClick={() => !isDisabled && onToggleCategory?.(cat.key)}
+                  >
+                    {symbol}
+                  </span>
+                  <span 
+                    className={`flex-1 ${isDisabled ? 'opacity-50 line-through' : ''}`}
+                    onClick={() => !isDisabled && onToggleCategory?.(cat.key)}
+                  >
+                    {cat.label}
+                  </span>
+                  
+                  {/* Custom Toggle Switch */}
+                  <div 
+                    onClick={() => onToggleCategoryEnabled?.(cat.key, isDisabled)}
+                    className={`ml-auto w-[28px] h-[15px] rounded-[8px] border shrink-0 relative cursor-pointer transition-colors ${!isDisabled ? 'bg-[var(--accent)] border-[var(--accent)]' : 'bg-[var(--bg4)] border-[var(--border2)]'}`}
+                  >
+                    <div 
+                      className={`absolute top-[1px] left-[1px] w-[11px] h-[11px] rounded-full bg-white transition-transform shadow-[0_1px_3px_rgba(0,0,0,0.4)] ${!isDisabled ? 'translate-x-[13px]' : 'translate-x-0'}`} 
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Categories header + multi-select toggle */}
-      <div className="px-3 pt-2 pb-1 flex items-center justify-between border-t border-gray-100">
-        <span className="text-[clamp(10px,1.25vh,14px)] font-semibold text-gray-400 uppercase tracking-wide">Categories</span>
-        <button
-          onClick={onMultiSelectToggle}
-          className={`text-[clamp(10px,1.25vh,14px)] font-medium px-2 py-0.5 rounded border transition-colors ${
-            multiSelect
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'text-gray-400 border-gray-200 hover:text-blue-600 hover:border-blue-300'
-          }`}
+      {/* Keywords Section */}
+      <div className="border-b border-[var(--border)] py-[10px]">
+        <div 
+          className="flex items-center justify-between px-[14px] py-[4px] pb-[8px] text-[9px] font-[var(--mono)] tracking-[2px] text-[var(--text3)] uppercase cursor-pointer hover:text-[var(--text2)]"
+          onClick={() => setSecKeywordsOpen(!secKeywordsOpen)}
         >
-          Multi
-        </button>
-      </div>
-
-      {/* Category list */}
-      <nav className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
-        {/* All */}
-        <button
-          onClick={() => onToggleCategory?.(null)}
-          className={`w-full flex items-center gap-2 px-2 py-[clamp(0.2rem,0.6vh,0.5rem)] rounded-xl mb-0.5 text-sm transition-colors ${
-            isAllActive && !multiSelect
-              ? 'bg-blue-50 text-blue-700 font-semibold'
-              : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <span className="w-[clamp(16px,2vh,24px)] h-[clamp(16px,2vh,24px)] rounded-md bg-gray-100 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-[clamp(11px,1.35vh,18px)] text-gray-500 leading-none">newspaper</span>
-          </span>
-          <span className="flex-1 text-left text-[clamp(10px,1.25vh,16px)] leading-[1.2]">All</span>
-        </button>
-
-        {categories.map((cat) => {
-          const { symbol, bg, text } = getCategoryIcon(cat.key);
-          const active = activeCategories.includes(cat.key);
-          const isDisabled = disabledSet.has(cat.key);
-          return (
-            <div
-              key={cat.key}
-              data-category-key={cat.key}
-              data-disabled={isDisabled ? 'true' : 'false'}
-              className={`mb-0.5 flex items-center gap-2 rounded-xl px-2 py-[clamp(0.1rem,0.5vh,0.4rem)] ${isDisabled ? 'opacity-65' : ''}`}
-            >
-              <button
-                onClick={() => !isDisabled && onToggleCategory?.(cat.key)}
-                className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-[0.1rem] text-sm transition-colors ${
-                  active
-                    ? 'bg-blue-50 text-blue-700 font-semibold'
-                    : isDisabled
-                      ? 'text-gray-400'
-                      : 'text-gray-700 hover:bg-gray-50'
-                }`}
-                aria-label={`Filter by ${cat.label}`}
-                disabled={isDisabled}
-                type="button"
+          <span>Keywords</span>
+          <span className={`text-[10px] transition-transform duration-200 ${!secKeywordsOpen ? '-rotate-90' : ''}`}>▾</span>
+        </div>
+        
+        {secKeywordsOpen && (
+          <div className="px-[10px] pt-[6px] pb-[8px]">
+            <div className="flex gap-[4px] mb-[6px]">
+              <input 
+                type="text" 
+                value={kwInput}
+                onChange={(e) => setKwInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddKeyword()}
+                placeholder="Add keyword..." 
+                className="flex-1 bg-[var(--bg3)] border border-[var(--border)] rounded-[4px] px-[8px] py-[5px] text-[10px] text-[var(--text)] outline-none font-[var(--sans)]"
+              />
+              <button 
+                onClick={handleAddKeyword}
+                className="bg-[var(--accent)] border-none rounded-[4px] px-[8px] py-[5px] text-[10px] text-[var(--bg)] cursor-pointer font-bold hover:brightness-110"
               >
-                <span className={`w-[clamp(16px,2vh,24px)] h-[clamp(16px,2vh,24px)] rounded-md ${bg} flex items-center justify-center shrink-0`}>
-                  <span className={`material-symbols-outlined text-[clamp(11px,1.35vh,18px)] leading-none ${text}`}>{symbol}</span>
-                </span>
-                <span className="flex-1 text-left text-[clamp(10px,1.25vh,16px)] leading-[1.2] truncate">{cat.label}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onToggleCategoryEnabled?.(cat.key, isDisabled)}
-                aria-label={isDisabled ? `Enable category ${cat.label}` : `Disable category ${cat.label}`}
-                role="switch"
-                aria-checked={!isDisabled}
-                className={`relative inline-flex h-[0.95rem] w-7 shrink-0 rounded-full border transition-colors ${
-                  isDisabled ? 'border-gray-300 bg-gray-200' : 'border-blue-500 bg-blue-500'
-                }`}
-              >
-                <span
-                  className={`absolute left-0.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-white shadow transition-transform ${
-                    isDisabled ? 'translate-x-0' : 'translate-x-3.5'
-                  }`}
-                />
+                +
               </button>
             </div>
-          );
-        })}
-      </nav>
-    </aside>
+            
+            <div className="flex flex-wrap gap-[4px]">
+              {keywords.map(kw => (
+                <span 
+                  key={kw}
+                  onClick={() => onRemoveKeyword?.(kw)}
+                  className="font-[var(--mono)] text-[9px] px-[8px] py-[3px] rounded-[4px] border border-[var(--border2)] text-[var(--text3)] cursor-pointer transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] flex items-center gap-[4px]"
+                >
+                  {kw} <span className="text-[7px]">✕</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      
+    </div>
   );
 }

@@ -42,7 +42,7 @@ export default function ArticleRow({ article, onArticle, onScrollPast, onClick }
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [article._id]);
+  }, [article._id, article, onScrollPast]);
 
   const buildAnchor = (event) => {
     const rowRect = rowRef.current?.getBoundingClientRect?.();
@@ -59,16 +59,25 @@ export default function ArticleRow({ article, onArticle, onScrollPast, onClick }
     onArticle?.(article, buildAnchor(event));
   };
 
-  const { symbol, bg, text } = getCategoryIcon(article.category);
   const isKeyword = article._tier === 'keyword';
   const isBreaking = Number(article.viralSignals?.urgencyTerms) > 0.8;
   const sourceName = article.source?.name || article.sourceName || article.source || '';
-  const locationLabel = article.locationTags?.city || article.locationTags?.cities?.[0] || '';
-  const subtitle = article.description
-    ? article.description.length > 140
-      ? article.description.slice(0, 140) + '…'
-      : article.description
-    : '';
+  const locationLabel = article.locationTags?.city || article.locationTags?.cities?.[0] || 'Global';
+  const subtitle = article.description || article.summary || '';
+  
+  // Custom colors for categories based on prototype mapping
+  const catColorMap = {
+    breaking: '#ff4757',
+    tech: '#00d4ff',
+    politics: '#f5a623',
+    science: '#7c3aed',
+    markets: '#00c47a',
+    health: '#ff6b35',
+    sports: '#facc15',
+    entertainment: '#ec4899',
+    world: '#3b82f6',
+  };
+  const cColor = catColorMap[article.category?.toLowerCase()] || '#555b6e';
 
   return (
     <article
@@ -76,68 +85,70 @@ export default function ArticleRow({ article, onArticle, onScrollPast, onClick }
       onClick={handleClick}
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-      className={`
-        relative flex items-start gap-3 px-3 py-3 cursor-pointer
-        bg-white hover:bg-gray-50 active:bg-gray-100 transition-colors
-        border-b border-gray-100
-        ${isKeyword ? 'border-l-4 border-l-purple-500' : ''}
-      `}
+      className="flex gap-0 p-0 border-b border-[var(--border)] cursor-pointer transition-colors relative hover:bg-[rgba(255,255,255,0.02)] group"
     >
-      {/* Breaking badge */}
-      {isBreaking && (
-        <span className="absolute top-2 right-2 text-[9px] font-bold bg-red-600 text-white px-1 py-0.5 rounded tracking-wide z-10">
-          BREAKING
-        </span>
-      )}
+      {/* Article Category Bar */}
+      <div 
+        className="w-[3px] shrink-0" 
+        style={{ backgroundColor: isBreaking ? 'var(--red)' : cColor }} 
+      />
 
-      {/* Category icon square */}
-      <div
-        className={`shrink-0 w-14 h-14 rounded-xl ${bg} flex flex-col items-center justify-center gap-0.5 mt-0.5`}
-        aria-hidden="true"
-      >
-        <span className={`material-symbols-outlined text-2xl leading-none ${text}`}>{symbol}</span>
-      </div>
-
-      {/* Text content */}
-      <div className="flex-1 min-w-0">
-        {/* Keyword match chip */}
-        {isKeyword && (
-          <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded px-1 py-0.5 mb-1">
-            <span className="material-symbols-outlined text-xs leading-none">bookmark</span>
-            Keyword Match
+      <div className="flex-1 flex flex-col gap-[4px] p-[10px_14px]">
+        {/* Meta Row */}
+        <div className="flex items-center gap-[8px]">
+          <span className="font-[var(--mono)] text-[9px] font-semibold tracking-[1px] text-[var(--text3)] uppercase">
+            {sourceName}
           </span>
-        )}
+          {article.category && (
+            <span 
+              className="text-[8px] font-[var(--mono)] px-[5px] py-[1px] rounded-[3px] tracking-[0.5px]"
+              style={{
+                color: isBreaking ? 'var(--red)' : cColor,
+                border: `1px solid ${isBreaking ? 'rgba(255,71,87,0.3)' : cColor + '4D'}`,
+                backgroundColor: isBreaking ? 'rgba(255,71,87,0.15)' : cColor + '0D'
+              }}
+            >
+              {(isBreaking ? 'BREAKING' : article.category).toUpperCase()}
+            </span>
+          )}
+          {isKeyword && (
+            <span className="text-[8px] font-[var(--mono)] px-[5px] py-[1px] rounded-[3px] tracking-[0.5px] text-[var(--accent2)] border border-[rgba(124,58,237,0.3)] bg-[rgba(124,58,237,0.05)] ml-[-4px]">
+              KEYWORD
+            </span>
+          )}
+          <span className="ml-auto font-[var(--mono)] text-[9px] text-[var(--text3)]">
+            {timeAgo(article.publishedAt)}
+          </span>
+        </div>
 
         {/* Title */}
-        <h3 className="font-semibold text-sm text-gray-900 leading-snug line-clamp-2 mb-0.5">
+        <div className="text-[13px] font-semibold text-[var(--text)] leading-[1.4] tracking-[-0.1px] group-hover:text-[var(--accent)]">
           {article.title}
-        </h3>
+        </div>
 
-        {/* Subtitle */}
+        {/* Excerpt */}
         {subtitle && (
-          <p className="text-xs text-gray-500 leading-snug line-clamp-2 mb-1">
+          <div className="text-[11px] text-[var(--text2)] leading-[1.5] line-clamp-2 overflow-hidden text-ellipsis">
             {subtitle}
-          </p>
+          </div>
         )}
 
-        {/* Source + time footer */}
-        <div className="flex items-center gap-1 text-[10px] text-gray-400 flex-wrap">
-          {sourceName && (
-            <>
-              <span className="font-medium text-gray-500">{sourceName}</span>
-              <span aria-hidden="true">·</span>
-            </>
-          )}
-          <span>{timeAgo(article.publishedAt)}</span>
-          {locationLabel && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span className="flex items-center gap-0.5">
-                <span className="material-symbols-outlined text-[11px] leading-none">location_on</span>
-                {locationLabel}
-              </span>
-            </>
-          )}
+        {/* Footer */}
+        <div className="flex items-center gap-[8px] mt-[2px]">
+          <span className="font-[var(--mono)] text-[9px] text-[var(--text3)]">
+            📍 {locationLabel}
+          </span>
+          <div className="flex gap-[4px] ml-auto">
+            <span className="text-[11px] text-[var(--text3)] cursor-pointer p-[2px] transition-colors hover:text-[var(--text)]" title="Pin / Save" onClick={(e) => { e.stopPropagation(); }}>
+              📌
+            </span>
+            <span className="text-[11px] text-[var(--text3)] cursor-pointer p-[2px] transition-colors hover:text-[var(--text)]" title="Share" onClick={(e) => { e.stopPropagation(); }}>
+              🔗
+            </span>
+            <span className="text-[11px] text-[var(--text3)] cursor-pointer p-[2px] transition-colors hover:text-[var(--text)]" title="Dismiss" onClick={(e) => { e.stopPropagation(); }}>
+              ✕
+            </span>
+          </div>
         </div>
       </div>
     </article>

@@ -1094,6 +1094,27 @@ router.get('/promoted', authenticateToken, async (req, res) => {
 });
 
 /**
+ * GET /api/news/trending
+ * Returns top trending / viral articles across all categories.
+ */
+router.get('/trending', authenticateToken, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+    const normalizedLocation = await resolveFeedLocationForUser(req.user.userId, null);
+    const cacheResult = normalizedLocation?.locationKey
+      ? await getArticlesForLocation(normalizedLocation.locationKey, { normalizedLocation })
+      : { articles: [] };
+    const articles = filterCachedArticles(cacheResult.articles, {
+      category: req.query.topic || null
+    }).slice(0, limit);
+    res.json({ articles });
+  } catch (error) {
+    console.error('Error fetching trending articles:', error);
+    res.status(500).json({ error: 'Failed to fetch trending articles' });
+  }
+});
+
+/**
  * GET /api/news/preferences
  * Returns the full NewsPreferences document for the user.
  */
@@ -1139,7 +1160,8 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       'followedKeywords', 'defaultScope', 'localPriorityEnabled',
       'hiddenCategories', 'disabledSourceCategories',
       'refreshInterval', 'articlesPerPage',
-      'stockTickers', 'stockTickersEnabled'
+      'stockTickers', 'stockTickersEnabled',
+      'appearance', 'compactView', 'autoPlayMedia', 'locationMode'
     ];
     const update = {};
     for (const field of ALLOWED_FIELDS) {
@@ -1525,6 +1547,59 @@ router.get('/weather', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching weather:', error);
     res.status(500).json({ error: 'Failed to fetch weather data' });
+  }
+});
+
+async function getPrimaryWeatherLocation(userId) {
+  const preferences = await NewsPreferences.findOne({ user: userId });
+  let weatherLocations = preferences?.weatherLocations || [];
+  if (weatherLocations.length === 0) {
+    const primary = (preferences?.locations || []).find(l => l.isPrimary) || (preferences?.locations || [])[0];
+    if (primary && (primary.lat || primary.city || primary.zipCode)) return primary;
+    const user = await User.findById(userId).lean();
+    if (user?.location?.lat && user?.location?.lon) return { lat: user.location.lat, lon: user.location.lon };
+    return { city: user?.city, state: user?.state, zipCode: user?.zipCode };
+  }
+  return weatherLocations.find(l => l.isPrimary) || weatherLocations[0];
+}
+
+/**
+ * GET /api/news/weather/hourly
+ * Returns hourly forecast array for the primary user location.
+ */
+router.get('/weather/hourly', authenticateToken, async (req, res) => {
+  try {
+    const loc = await getPrimaryWeatherLocation(req.user.userId);
+    const result = await fetchWeatherForLocation(loc);
+    res.json({ hourly: result?.weather?.hourly || [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch' });
+  }
+});
+
+/**
+ * GET /api/news/weather/daily
+ * Returns weekly/daily forecast array for the primary user location.
+ */
+router.get('/weather/daily', authenticateToken, async (req, res) => {
+  try {
+    const loc = await getPrimaryWeatherLocation(req.user.userId);
+    const result = await fetchWeatherForLocation(loc);
+    res.json({ daily: result?.weather?.weekly || [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch' });
+  }
+});
+
+/**
+ * GET /api/news/weather/alerts
+ * Returns NWS alerts (stubbed for open-meteo).
+ */
+router.get('/weather/alerts', authenticateToken, async (req, res) => {
+  try {
+    res.json({ alerts: [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch' });
   }
 });
 

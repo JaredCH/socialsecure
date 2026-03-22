@@ -202,6 +202,26 @@ const newsPreferencesSchema = new mongoose.Schema({
   articlesPerPage: {
     type: Number,
     default: 20
+  },
+
+  // Prototype settings
+  appearance: {
+    type: String,
+    enum: ['system', 'dark', 'light'],
+    default: 'system'
+  },
+  compactView: {
+    type: Boolean,
+    default: false
+  },
+  autoPlayMedia: {
+    type: Boolean,
+    default: true
+  },
+  locationMode: {
+    type: String,
+    enum: ['auto', 'manual'],
+    default: 'auto'
   }
 }, {
   timestamps: true
