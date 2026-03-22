@@ -110,9 +110,9 @@ export default function NewsSettingsModal({ isOpen, onClose, preferences, onUpda
   /* ── Modal markup ──────────────────────────────────────────────────────── */
 
   const modal = (
-    <>
-      <div className="fixed inset-0 z-[1400] bg-black/60 backdrop-blur-[4px]" onClick={onClose} />
-      <div className="fixed inset-0 z-[1410] flex items-center justify-center pointer-events-none">
+    <div className="news-theme">
+      <div className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-[4px]" onClick={onClose} />
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none">
         <div
           role="dialog"
           aria-modal="true"
@@ -228,7 +228,7 @@ export default function NewsSettingsModal({ isOpen, onClose, preferences, onUpda
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 
   return createPortal(modal, document.body);
