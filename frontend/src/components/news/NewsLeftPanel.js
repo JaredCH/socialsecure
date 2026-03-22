@@ -122,10 +122,10 @@ export default function NewsLeftPanel({
 
       {/* Categories header + multi-select toggle */}
       <div className="px-3 pt-2 pb-1 flex items-center justify-between border-t border-gray-100">
-        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Categories</span>
+        <span className="text-[clamp(10px,1.25vh,14px)] font-semibold text-gray-400 uppercase tracking-wide">Categories</span>
         <button
           onClick={onMultiSelectToggle}
-          className={`text-[10px] font-medium px-2 py-0.5 rounded border transition-colors ${
+          className={`text-[clamp(10px,1.25vh,14px)] font-medium px-2 py-0.5 rounded border transition-colors ${
             multiSelect
               ? 'bg-blue-600 text-white border-blue-600'
               : 'text-gray-400 border-gray-200 hover:text-blue-600 hover:border-blue-300'
@@ -140,16 +140,16 @@ export default function NewsLeftPanel({
         {/* All */}
         <button
           onClick={() => onToggleCategory?.(null)}
-          className={`w-full flex items-center gap-2 px-2 py-[0.2rem] rounded-xl mb-0.5 text-sm transition-colors ${
+          className={`w-full flex items-center gap-2 px-2 py-[clamp(0.2rem,0.6vh,0.5rem)] rounded-xl mb-0.5 text-sm transition-colors ${
             isAllActive && !multiSelect
               ? 'bg-blue-50 text-blue-700 font-semibold'
               : 'text-gray-700 hover:bg-gray-50'
           }`}
         >
-          <span className="w-4 h-4 rounded-md bg-gray-100 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-[11px] text-gray-500 leading-none">newspaper</span>
+          <span className="w-[clamp(16px,2vh,24px)] h-[clamp(16px,2vh,24px)] rounded-md bg-gray-100 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[clamp(11px,1.35vh,18px)] text-gray-500 leading-none">newspaper</span>
           </span>
-          <span className="flex-1 text-left text-[10px] leading-[1.2]">All</span>
+          <span className="flex-1 text-left text-[clamp(10px,1.25vh,16px)] leading-[1.2]">All</span>
         </button>
 
         {categories.map((cat) => {
@@ -161,7 +161,7 @@ export default function NewsLeftPanel({
               key={cat.key}
               data-category-key={cat.key}
               data-disabled={isDisabled ? 'true' : 'false'}
-              className={`mb-0.5 flex items-center gap-2 rounded-xl px-2 py-[0.1rem] ${isDisabled ? 'opacity-65' : ''}`}
+              className={`mb-0.5 flex items-center gap-2 rounded-xl px-2 py-[clamp(0.1rem,0.5vh,0.4rem)] ${isDisabled ? 'opacity-65' : ''}`}
             >
               <button
                 onClick={() => !isDisabled && onToggleCategory?.(cat.key)}
@@ -176,10 +176,10 @@ export default function NewsLeftPanel({
                 disabled={isDisabled}
                 type="button"
               >
-                <span className={`w-4 h-4 rounded-md ${bg} flex items-center justify-center shrink-0`}>
-                  <span className={`material-symbols-outlined text-[11px] leading-none ${text}`}>{symbol}</span>
+                <span className={`w-[clamp(16px,2vh,24px)] h-[clamp(16px,2vh,24px)] rounded-md ${bg} flex items-center justify-center shrink-0`}>
+                  <span className={`material-symbols-outlined text-[clamp(11px,1.35vh,18px)] leading-none ${text}`}>{symbol}</span>
                 </span>
-                <span className="flex-1 text-left text-[10px] leading-[1.2] truncate">{cat.label}</span>
+                <span className="flex-1 text-left text-[clamp(10px,1.25vh,16px)] leading-[1.2] truncate">{cat.label}</span>
               </button>
               <button
                 type="button"
