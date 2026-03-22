@@ -240,9 +240,9 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [], className
           expanded ? 'grid-rows-[1fr] opacity-100 px-4 pb-4 pt-3' : 'grid-rows-[0fr] opacity-0 px-4 pb-0 pt-0'
         }`}
       >
-        <div className="overflow-hidden">
+        <div className="overflow-hidden lg:overflow-y-auto lg:max-h-[20rem]">
           {loading && (
-            <div className="flex items-center justify-center py-4 h-[60px]">
+            <div className="flex items-center justify-center py-4 h-[40px]">
               <div className="w-4 h-4 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
             </div>
           )}
@@ -277,9 +277,9 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [], className
           const renderTeamHalf = (tName, tAbbr, tColors) => {
              const tText = readableTextColor(tColors);
              return (
-               <div className="flex-1 flex flex-col justify-center items-center p-1 text-center relative overflow-hidden" style={{ backgroundColor: tColors.primary, color: tText }}>
+               <div className="flex-1 flex flex-col justify-center items-center p-0.5 text-center relative overflow-hidden" style={{ backgroundColor: tColors.primary, color: tText }}>
                  <div className="absolute inset-0 opacity-10" style={{ backgroundColor: tColors.secondary }}></div>
-                 <span className="text-[17px] font-black tracking-tight leading-none relative z-10 drop-shadow-sm truncate w-full px-0.5" title={tName}>
+                 <span className="text-[14px] font-black tracking-tight leading-none relative z-10 drop-shadow-sm truncate w-full px-0.5" title={tName}>
                    {tAbbr || tName?.substring(0, 3).toUpperCase() || '???'}
                  </span>
                </div>
@@ -288,16 +288,16 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [], className
 
           if (!game || isOffSeason || gameStatus.status === 'tbd') {
             return (
-              <div key={team.id} className={`h-[60px] w-[140px] lg:w-auto flex flex-col rounded-[10px] overflow-hidden border border-gray-200 shadow-sm shrink-0 relative ${isOffSeason ? 'opacity-65 saturate-50' : ''}`}>
+              <div key={team.id} className={`h-[40px] w-[140px] lg:w-auto flex flex-col rounded-lg overflow-hidden border border-gray-200 shadow-sm shrink-0 relative ${isOffSeason ? 'opacity-65 saturate-50' : ''}`}>
                 <div className="flex-1 flex" style={{ backgroundColor: colors.primary }}>
                   {renderTeamHalf(team.displayName, team.abbreviation, colors)}
                 </div>
-                <div className="absolute inset-x-0 bottom-0 bg-black/60 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center py-0.5 px-1 border-t border-white/20">
-                   <span className="text-white text-[8px] font-black uppercase tracking-widest text-center">
+                <div className="absolute inset-x-0 bottom-0 bg-black/60 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center py-[1px] px-1 border-t border-white/20">
+                   <span className="text-white text-[7px] font-black uppercase tracking-widest text-center leading-none">
                      {isOffSeason ? 'Off-Season' : 'Schedule TBD'}
                    </span>
                    {gameStatus.nextSeasonStart && (
-                     <span className="text-white/80 text-[7px] font-medium leading-none mt-[1px]">
+                     <span className="text-white/80 text-[6px] font-medium leading-none mt-[1px]">
                        Starts {new Date(gameStatus.nextSeasonStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                      </span>
                    )}
@@ -327,36 +327,35 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [], className
           const isFinished = game.status === 'final' || game.status === 'completed' || gameStatus.label === 'Past game';
 
           return (
-            <div key={team.id} className="h-[60px] w-[140px] lg:w-auto flex rounded-[10px] overflow-hidden border border-gray-200 shadow-sm shrink-0">
+            <div key={team.id} className="h-[40px] w-[140px] lg:w-auto flex rounded-lg overflow-hidden border border-gray-200 shadow-sm shrink-0">
                {/* AWAY */}
                {renderTeamHalf(awayTeam.name, awayTeam.abbr, awayTeam.colors)}
                
                {/* CENTER SPLIT */}
-               <div className="w-[56px] shrink-0 bg-white flex flex-col justify-center items-center border-x border-gray-100 z-10 px-0.5 text-center shadow-[0_0_15px_rgba(0,0,0,0.08)] relative">
-                 <span className="text-[7px] font-black text-gray-400 tracking-widest uppercase mb-0.5 leading-none">{team.leagueName}</span>
+               <div className="w-[52px] shrink-0 bg-white flex flex-col justify-center items-center border-x border-gray-100 z-10 px-0.5 text-center shadow-[0_0_15px_rgba(0,0,0,0.08)] relative py-0.5">
+                 <span className="text-[6px] font-black text-gray-400 tracking-widest uppercase mb-[1px] leading-none shrink-0">{team.leagueName}</span>
                  
                  {isLive ? (
                    <>
-                     <span className="bg-red-500 text-white text-[7px] font-bold px-1 py-[1px] rounded-[3px] animate-pulse mb-0.5 shadow-sm leading-none">LIVE</span>
-                     <div className="flex items-center gap-1 font-black text-slate-800 text-xs leading-none">
+                     <span className="bg-red-500 text-white text-[6px] font-bold px-1 py-[1px] rounded-[2px] animate-pulse mb-[1px] shadow-sm leading-none shrink-0">LIVE</span>
+                     <div className="flex items-center gap-[2px] font-black text-slate-800 text-[11px] leading-none shrink-0">
                        <span>{awayTeam.score ?? '-'}</span>
-                       <span className="text-gray-300 text-[8px]">-</span>
+                       <span className="text-gray-300 text-[6px]">-</span>
                        <span>{homeTeam.score ?? '-'}</span>
                      </div>
-                     <span className="text-[7px] font-bold text-red-600 mt-[2px] leading-none">{game.period || game.clock || 'In P'}</span>
                    </>
                  ) : isFinished ? (
                    <>
-                     <span className="text-[7px] font-black text-gray-500 mb-0.5 tracking-wider uppercase leading-none">FINAL</span>
-                     <div className="flex items-center gap-1 font-black text-slate-800 text-sm leading-none">
+                     <span className="text-[6px] font-black text-gray-500 mb-[1px] tracking-wider uppercase leading-none shrink-0">FINAL</span>
+                     <div className="flex items-center gap-[2px] font-black text-slate-800 text-[11px] leading-none shrink-0">
                        <span>{awayTeam.score ?? '-'}</span>
-                       <span className="text-gray-300 text-[8px]">-</span>
+                       <span className="text-gray-300 text-[6px]">-</span>
                        <span>{homeTeam.score ?? '-'}</span>
                      </div>
                    </>
                  ) : (
-                   <div className="flex flex-col items-center whitespace-pre-line mt-[2px]">
-                     <span className="text-[8px] font-bold text-slate-800 leading-[1.2] px-0.5 break-words">
+                   <div className="flex flex-col items-center whitespace-pre-line mt-[1px] shrink-0">
+                     <span className="text-[7px] font-bold text-slate-800 leading-[1.1] px-0.5 break-words max-h-full">
                        {gameStatus.label.replace(', ', '\n')}
                      </span>
                    </div>
