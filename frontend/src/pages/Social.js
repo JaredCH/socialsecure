@@ -138,14 +138,22 @@ const THEME_TO_PAGE_CLASS = {
   light: 'bg-white text-gray-900',
   dark: 'bg-slate-900 text-slate-100',
   sunset: 'bg-orange-50 text-gray-900',
-  forest: 'bg-emerald-50 text-gray-900'
+  forest: 'bg-emerald-50 text-gray-900',
+  cyberpunk: 'bg-slate-950 text-slate-100',
+  lavender: 'bg-violet-50 text-gray-900',
+  retro: 'bg-amber-50 text-gray-900',
+  arctic: 'bg-sky-50 text-gray-900'
 };
 const STAGE_THEME_LABELS = {
   default: 'Default',
   light: 'Light',
   dark: 'Dark',
   sunset: 'Sunset',
-  forest: 'Forest'
+  forest: 'Forest',
+  cyberpunk: 'Cyberpunk',
+  lavender: 'Lavender',
+  retro: 'Retro',
+  arctic: 'Arctic'
 };
 const STAGE_THEME_OPTIONS = SOCIAL_THEME_PRESETS.map((value) => ({
   value,
@@ -176,6 +184,26 @@ const STAGE_THEME_STYLE_PATCH = {
     accentColorToken: 'emerald',
     globalStyles: { pageBackgroundColor: '#ecfdf5', panelColor: '#d1fae5', fontColor: '#14532d', headerColor: '#059669' },
     heroColor: '#059669'
+  },
+  cyberpunk: {
+    accentColorToken: 'rose',
+    globalStyles: { pageBackgroundColor: '#0c0118', panelColor: '#1a0a2e', fontColor: '#e0f2fe', headerColor: '#f43f5e' },
+    heroColor: '#f43f5e'
+  },
+  lavender: {
+    accentColorToken: 'violet',
+    globalStyles: { pageBackgroundColor: '#ede9fe', panelColor: '#f5f3ff', fontColor: '#3b0764', headerColor: '#7c3aed' },
+    heroColor: '#7c3aed'
+  },
+  retro: {
+    accentColorToken: 'amber',
+    globalStyles: { pageBackgroundColor: '#fef3c7', panelColor: '#fefce8', fontColor: '#422006', headerColor: '#d97706' },
+    heroColor: '#d97706'
+  },
+  arctic: {
+    accentColorToken: 'blue',
+    globalStyles: { pageBackgroundColor: '#e0f2fe', panelColor: '#f0f9ff', fontColor: '#0c4a6e', headerColor: '#0284c7' },
+    heroColor: '#0284c7'
   }
 };
 
@@ -5732,17 +5760,21 @@ const Social = () => {
     return { ...base, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' };
   })();
 
+  const isGlassMorphEnabled = Boolean(socialPreferences.globalStyles?.glassMorphEnabled);
+
   const cssCustomProperties = {
     '--accent': accentColor,
     '--accent2': accentColor2,
     '--bg-base': globalPageBackground,
-    '--bg-panel': globalPanelColor,
+    '--bg-panel': isGlassMorphEnabled
+      ? `color-mix(in srgb, ${globalPanelColor} 60%, transparent)`
+      : globalPanelColor,
     '--social-text-primary': globalFontColor,
     '--social-text-secondary': `color-mix(in srgb, ${globalFontColor} 78%, ${globalPageBackground} 22%)`,
     '--social-text-muted': `color-mix(in srgb, ${globalFontColor} 56%, ${globalPageBackground} 44%)`,
     '--social-surface-soft': `color-mix(in srgb, ${globalPanelColor} 90%, ${globalPageBackground} 10%)`,
     '--social-surface-muted': `color-mix(in srgb, ${globalPanelColor} 80%, ${globalPageBackground} 20%)`,
-    '--panel-blur': '16px',
+    '--panel-blur': isGlassMorphEnabled ? '16px' : '0px',
     '--radius-md': '16px',
     backgroundColor: globalPageBackground,
     fontFamily: `"${hubFontFamily}", "DM Sans", sans-serif`,
