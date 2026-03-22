@@ -65,7 +65,6 @@ function News({ isGuestMode = false }) {
   const [searchQuery, setSearchQuery]           = useState('');
 
   // ── UI state ───────────────────────────────────────────────────────────────
-  const [settingsOpen, setSettingsOpen]       = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [feedFilter, setFeedFilter]           = useState('Top');
@@ -75,6 +74,7 @@ function News({ isGuestMode = false }) {
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   const [prefetchedFeed, setPrefetchedFeed] = useState(null);
+  const [storyCount, setStoryCount] = useState(0);
 
   const bootstrap = useCallback(async () => {
     // Fire feed prefetch in parallel with bootstrap — feed doesn't depend on bootstrap results
@@ -370,7 +370,7 @@ function News({ isGuestMode = false }) {
               if (f === 'Nearby') setActiveRegion('local');
               else if (activeRegion === 'local') setActiveRegion('all');
             }}
-            storyCount={articles.length}
+            storyCount={storyCount}
             viewMode="list" 
           />
         </div>
@@ -395,7 +395,7 @@ function News({ isGuestMode = false }) {
               left: 'calc(var(--dotnav-anchor-left, 308px) - 36px)',
               top: 'calc(var(--dotnav-anchor-top, 762px) + 14px)',
             }}
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => setSettingsModalOpen(true)}
             aria-label="Open news settings"
           >
             <span className="absolute inset-[3px] rounded-full border border-white/15" aria-hidden="true" />
@@ -420,7 +420,7 @@ function News({ isGuestMode = false }) {
           onRemoveKeyword={isGuestMode ? undefined : handleRemoveKeyword}
           onSearch={setSearchQuery}
           searchValue={searchQuery}
-          onOpenSettings={isGuestMode ? undefined : () => setSettingsOpen(true)}
+          onOpenSettings={isGuestMode ? undefined : () => setSettingsModalOpen(true)}
           activeRegion={activeRegion}
           onRegionChange={setActiveRegion}
           regions={[
@@ -448,7 +448,6 @@ function News({ isGuestMode = false }) {
           </div>
           <div className="border-b border-slate-200">
           <BreakingBanner text="🚨 Major cybersecurity breach affects 50M users nationwide. Markets react violently as tech stocks tumble..." />
-          <BreakingBanner text="🚨 Major cybersecurity breach affects 50M users nationwide. Markets react violently as tech stocks tumble..." />
           <FeedToolbar 
             activeFilter={feedFilter} 
             onFilterChange={(f) => {
@@ -456,7 +455,7 @@ function News({ isGuestMode = false }) {
               if (f === 'Nearby') setActiveRegion('local');
               else if (activeRegion === 'local') setActiveRegion('all');
             }}
-            storyCount={articles.length}
+            storyCount={storyCount}
             viewMode="list" 
           />
           </div>
@@ -473,6 +472,7 @@ function News({ isGuestMode = false }) {
               searchQuery={searchQuery}
               onArticle={handleDesktopArticleSelect}
               prefetchedFeed={prefetchedFeed}
+              onCountChange={setStoryCount}
             />
           </div>
         </div>
