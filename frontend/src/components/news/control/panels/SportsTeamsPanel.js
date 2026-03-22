@@ -18,6 +18,15 @@ function contrastText(hex) {
   return luminance > 0.179 ? '#000000' : '#ffffff';
 }
 
+/** League brand colors for tab styling */
+const LEAGUE_TAB_COLORS = {
+  nfl:  { bg: '#013369', accent: '#D50A0A' },
+  nba:  { bg: '#1D428A', accent: '#C8102E' },
+  mlb:  { bg: '#002D72', accent: '#E4002B' },
+  nhl:  { bg: '#000000', accent: '#A2AAAD' },
+  mls:  { bg: '#231F20', accent: '#80B940' },
+};
+
 export default function SportsTeamsPanel({
   leagues,
   followedSportsTeams,
@@ -54,10 +63,11 @@ export default function SportsTeamsPanel({
       </div>
 
       {/* League tabs */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide" role="tablist" data-testid="sports-league-tabs">
+      <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide" role="tablist" data-testid="sports-league-tabs">
         {safeLeagues.map((league) => {
           const isActive = league.id === (activeLeague?.id || '');
           const count = (league.teams || []).filter((t) => selectedSet.has(t.id)).length;
+          const leagueColors = LEAGUE_TAB_COLORS[league.id] || { bg: '#1e293b', accent: '#6366f1' };
           return (
             <button
               key={league.id}
@@ -65,18 +75,23 @@ export default function SportsTeamsPanel({
               type="button"
               aria-selected={isActive}
               onClick={() => { setActiveLeagueId(league.id); setQuery(''); }}
-              className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+              className={`relative inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2 text-xs font-bold tracking-wide uppercase transition-all ${
                 isActive
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  ? 'text-white rounded-lg shadow-md'
+                  : 'text-slate-500 rounded-lg hover:text-slate-800 hover:bg-slate-100'
               }`}
+              style={isActive ? { backgroundColor: leagueColors.bg, borderBottom: `3px solid ${leagueColors.accent}` } : {}}
             >
               {league.icon && <span className="text-sm leading-none">{league.icon}</span>}
               <span>{league.label || league.name || league.id}</span>
               {count > 0 && (
-                <span className={`ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-700'
-                }`}>{count}</span>
+                <span
+                  className="ml-0.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none"
+                  style={isActive
+                    ? { backgroundColor: leagueColors.accent, color: '#fff' }
+                    : { backgroundColor: leagueColors.bg + '18', color: leagueColors.bg }
+                  }
+                >{count}</span>
               )}
             </button>
           );
@@ -125,18 +140,24 @@ export default function SportsTeamsPanel({
               type="button"
               onClick={() => onToggleTeam(team.id, selected)}
               data-testid={`sports-team-card-${team.id}`}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer select-none ${
-                selected ? 'ring-2 ring-offset-1 ring-indigo-500 shadow-sm' : 'ring-1 ring-slate-200 opacity-60 hover:opacity-90'
+              className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-[13px] font-bold transition-all cursor-pointer select-none ${
+                selected
+                  ? 'shadow-md ring-1 ring-white/20 scale-[1.02]'
+                  : 'hover:scale-[1.02] hover:shadow-sm'
               }`}
-              style={selected ? { backgroundColor: colors.primary, color: textColor, borderColor: colors.secondary } : {}}
+              style={selected
+                ? { backgroundColor: colors.primary, color: textColor, boxShadow: `0 2px 8px ${colors.primary}44` }
+                : { backgroundColor: colors.primary + '14', color: colors.primary, border: `1.5px solid ${colors.primary}30` }
+              }
             >
-              {selected && (
-                <span
-                  className="inline-block h-2 w-2 rounded-full shrink-0"
-                  style={{ backgroundColor: colors.secondary }}
-                />
-              )}
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full shrink-0 ring-1 ring-white/30"
+                style={{ backgroundColor: selected ? colors.secondary : colors.primary }}
+              />
               <span className="truncate">{teamName}</span>
+              {selected && (
+                <span className="material-symbols-outlined text-[14px] leading-none opacity-80">check_circle</span>
+              )}
             </button>
           );
         })}

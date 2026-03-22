@@ -6,6 +6,7 @@ import { newsAPI } from '../../../../utils/api';
 jest.mock('../../../../utils/api', () => ({
   newsAPI: {
     searchStocks: jest.fn(),
+    getStockQuotes: jest.fn().mockResolvedValue({ data: { quotes: [] } }),
   },
 }));
 

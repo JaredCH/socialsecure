@@ -54,12 +54,17 @@ function TickerCard({ quote }) {
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-bold text-slate-800 truncate">{quote.symbol}</span>
+          <span className="text-xs font-bold text-slate-800 truncate">{quote.name || quote.symbol}</span>
           <span className={`text-[10px] font-semibold ${color}`}>
             {arrow} {quote.changePercent != null ? `${quote.changePercent > 0 ? '+' : ''}${quote.changePercent}%` : ''}
           </span>
         </div>
-        <span className="text-xs font-medium text-slate-700">{formatPrice(quote.price)}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-slate-700">{formatPrice(quote.price)}</span>
+          {quote.name && quote.name !== quote.symbol && (
+            <span className="text-[10px] text-slate-400 font-medium">{quote.symbol}</span>
+          )}
+        </div>
       </div>
       <Sparkline data={quote.sparkline} direction={quote.direction} />
     </div>
