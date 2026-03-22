@@ -568,14 +568,14 @@ const normalizeHeroConfig = (heroInput, fallback) => {
   const backgroundImage = normalizeMediaUrl(heroInput?.backgroundImage, fallback.backgroundImage);
   const profileImage = normalizeMediaUrl(heroInput?.profileImage, fallback.profileImage);
   
-  const clampFloat = (val, min, max) => { const n = Number(val); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : min; };
+  const clampFloat = (val, min, max, fallbackVal) => { const n = Number(val); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : (Number.isFinite(fallbackVal) ? fallbackVal : min); };
   return {
     backgroundColor: isHexColor(heroInput?.backgroundColor) ? heroInput.backgroundColor : fallback.backgroundColor,
     backgroundImage,
     backgroundImageDisplayMode: BODY_BG_DISPLAY_MODES.includes(heroInput?.backgroundImageDisplayMode) ? heroInput.backgroundImageDisplayMode : (fallback.backgroundImageDisplayMode || 'cover'),
-    backgroundImageOverlay: clampFloat(heroInput?.backgroundImageOverlay, 0, 1),
-    backgroundImageGrain: clampFloat(heroInput?.backgroundImageGrain, 0, 1),
-    backgroundImageBlur: Math.round(clampFloat(heroInput?.backgroundImageBlur, 0, 20)),
+    backgroundImageOverlay: clampFloat(heroInput?.backgroundImageOverlay, 0, 1, fallback.backgroundImageOverlay),
+    backgroundImageGrain: clampFloat(heroInput?.backgroundImageGrain, 0, 1, fallback.backgroundImageGrain),
+    backgroundImageBlur: Math.round(clampFloat(heroInput?.backgroundImageBlur, 0, 20, fallback.backgroundImageBlur)),
     textColor: isHexColor(heroInput?.textColor) ? heroInput.textColor : fallback.textColor,
     nameColor: isHexColor(heroInput?.nameColor) ? heroInput.nameColor : fallback.nameColor,
     locationColor: isHexColor(heroInput?.locationColor) ? heroInput.locationColor : fallback.locationColor,
