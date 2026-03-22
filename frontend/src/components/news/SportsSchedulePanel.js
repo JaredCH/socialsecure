@@ -274,30 +274,35 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [], className
           const isOffSeason = gameStatus.status === 'off-season';
 
           // Helper to render half the card
-          const renderTeamHalf = (tName, tAbbr, tColors) => {
+          const renderTeamHalf = (tName, tAbbr, tColors, score) => {
              const tText = readableTextColor(tColors);
              return (
-               <div className="flex-1 flex flex-col justify-center items-center p-0.5 text-center relative overflow-hidden" style={{ backgroundColor: tColors.primary, color: tText }}>
-                 <div className="absolute inset-0 opacity-10" style={{ backgroundColor: tColors.secondary }}></div>
-                 <span className="text-[14px] font-black tracking-tight leading-none relative z-10 drop-shadow-sm truncate w-full px-0.5" title={tName}>
+               <div className="flex-1 flex flex-col justify-center items-center py-1 text-center relative overflow-hidden" style={{ backgroundColor: tColors.primary, color: tText }}>
+                 <div className="absolute inset-0 opacity-15" style={{ backgroundColor: tColors.secondary }}></div>
+                 <span className="text-[12px] font-black tracking-tight leading-none relative z-10 drop-shadow-sm truncate w-full px-1" title={tName}>
                    {tAbbr || tName?.substring(0, 3).toUpperCase() || '???'}
                  </span>
+                 {score != null && (
+                    <span className="text-[14px] font-[var(--display)] font-black leading-none mt-1 relative z-10 opacity-90">
+                      {score}
+                    </span>
+                 )}
                </div>
              );
           };
 
           if (!game || isOffSeason || gameStatus.status === 'tbd') {
             return (
-              <div key={team.id} className={`h-[40px] w-[140px] lg:w-auto flex flex-col rounded-lg overflow-hidden border border-gray-200 shadow-sm shrink-0 relative ${isOffSeason ? 'opacity-65 saturate-50' : ''}`}>
+              <div key={team.id} className={`h-[44px] w-[140px] lg:w-auto flex flex-col rounded-[10px] overflow-hidden border border-[var(--border)] shadow-sm shrink-0 relative transition-transform hover:scale-[1.02] ${isOffSeason ? 'opacity-60 grayscale-[0.5]' : ''}`}>
                 <div className="flex-1 flex" style={{ backgroundColor: colors.primary }}>
                   {renderTeamHalf(team.displayName, team.abbreviation, colors)}
                 </div>
-                <div className="absolute inset-x-0 bottom-0 bg-black/60 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center py-[1px] px-1 border-t border-white/20">
-                   <span className="text-white text-[7px] font-black uppercase tracking-widest text-center leading-none">
+                <div className="absolute inset-x-0 bottom-0 bg-black/70 backdrop-blur-[4px] z-20 flex flex-col items-center justify-center py-[2px] px-2 border-t border-white/10">
+                   <span className="text-white text-[7px] font-black uppercase tracking-[1.5px] text-center leading-none">
                      {isOffSeason ? 'Off-Season' : 'Schedule TBD'}
                    </span>
                    {gameStatus.nextSeasonStart && (
-                     <span className="text-white/80 text-[6px] font-medium leading-none mt-[1px]">
+                     <span className="text-white/70 text-[6px] font-bold leading-none mt-[2px]">
                        Starts {new Date(gameStatus.nextSeasonStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                      </span>
                    )}
@@ -327,43 +332,38 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [], className
           const isFinished = game.status === 'final' || game.status === 'completed' || gameStatus.label === 'Past game';
 
           return (
-            <div key={team.id} className="h-[40px] w-[140px] lg:w-auto flex rounded-lg overflow-hidden border border-gray-200 shadow-sm shrink-0">
+            <div key={team.id} className="h-[44px] w-[140px] lg:w-auto flex rounded-[10px] overflow-hidden border border-[var(--border)] shadow-md shrink-0 transition-transform hover:scale-[1.02]">
                {/* AWAY */}
-               {renderTeamHalf(awayTeam.name, awayTeam.abbr, awayTeam.colors)}
+               {renderTeamHalf(awayTeam.name, awayTeam.abbr, awayTeam.colors, (isLive || isFinished) ? awayTeam.score : null)}
                
                {/* CENTER SPLIT */}
-               <div className="w-[52px] shrink-0 bg-white flex flex-col justify-center items-center border-x border-gray-100 z-10 px-0.5 text-center shadow-[0_0_15px_rgba(0,0,0,0.08)] relative py-0.5">
-                 <span className="text-[6px] font-black text-gray-400 tracking-widest uppercase mb-[1px] leading-none shrink-0">{team.leagueName}</span>
+               <div className="w-[44px] shrink-0 bg-[var(--bg)] flex flex-col justify-center items-center border-x border-[var(--border)] z-10 px-1 text-center relative py-1">
+                 <span className="text-[6px] font-black text-[var(--text3)] tracking-[1px] uppercase mb-[2px] leading-none shrink-0">{team.leagueName}</span>
                  
                  {isLive ? (
                    <>
-                     <span className="bg-red-500 text-white text-[6px] font-bold px-1 py-[1px] rounded-[2px] animate-pulse mb-[1px] shadow-sm leading-none shrink-0">LIVE</span>
-                     <div className="flex items-center gap-[2px] font-black text-slate-800 text-[11px] leading-none shrink-0">
-                       <span>{awayTeam.score ?? '-'}</span>
-                       <span className="text-gray-300 text-[6px]">-</span>
-                       <span>{homeTeam.score ?? '-'}</span>
-                     </div>
+                     <span className="bg-[var(--red)] text-white text-[7px] font-black px-1.5 py-[1px] rounded-[3px] animate-pulse mb-[2px] shadow-sm leading-none shrink-0 tracking-tighter">LIVE</span>
+                     <span className="text-[8px] font-bold text-[var(--text)] leading-none shrink-0 tracking-widest">{game.period || 'Q1'}</span>
                    </>
                  ) : isFinished ? (
                    <>
-                     <span className="text-[6px] font-black text-gray-500 mb-[1px] tracking-wider uppercase leading-none shrink-0">FINAL</span>
-                     <div className="flex items-center gap-[2px] font-black text-slate-800 text-[11px] leading-none shrink-0">
-                       <span>{awayTeam.score ?? '-'}</span>
-                       <span className="text-gray-300 text-[6px]">-</span>
-                       <span>{homeTeam.score ?? '-'}</span>
-                     </div>
+                     <span className="text-[7px] font-black text-[var(--text2)] mb-[2px] tracking-[0.5px] uppercase leading-none shrink-0">FINAL</span>
+                     <span className="material-symbols-outlined text-[12px] text-[var(--text3)] leading-none">check_circle</span>
                    </>
                  ) : (
-                   <div className="flex flex-col items-center whitespace-pre-line mt-[1px] shrink-0">
-                     <span className="text-[7px] font-bold text-slate-800 leading-[1.1] px-0.5 break-words max-h-full">
-                       {gameStatus.label.replace(', ', '\n')}
+                   <div className="flex flex-col items-center mt-[1px] shrink-0">
+                     <span className="text-[8px] font-black text-[var(--text)] leading-tight px-1">
+                       {gameStatus.label.split(', ')[0]}
+                     </span>
+                     <span className="text-[6px] text-[var(--text3)] font-bold mt-[1px]">
+                       {gameStatus.label.split(', ')[1]}
                      </span>
                    </div>
                  )}
                </div>
                
                {/* HOME */}
-               {renderTeamHalf(homeTeam.name, homeTeam.abbr, homeTeam.colors)}
+               {renderTeamHalf(homeTeam.name, homeTeam.abbr, homeTeam.colors, (isLive || isFinished) ? homeTeam.score : null)}
             </div>
           );
         })}

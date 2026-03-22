@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { newsAPI } from '../../utils/api';
 import { buildAlgorithmicSequence, buildInfiniteScrollBatch } from '../../utils/newsAlgorithmHelper';
 import ArticleRow from './ArticleRow';
+import ArticleCard from './ArticleCard';
 
 /**
  * AlgorithmicFeed
@@ -56,6 +57,7 @@ export default function AlgorithmicFeed({
   onArticle,
   prefetchedFeed,
   onCountChange,
+  viewMode = 'list',
 }) {
   const [articles, setArticles]             = useState([]);
   const [loading, setLoading]               = useState(true);
@@ -314,15 +316,27 @@ export default function AlgorithmicFeed({
         </div>
       )}
 
-      {filteredArticles.map((article) => (
-        <ArticleRow
-          key={article._id}
-          article={article}
-          onArticle={onArticle}
-          onScrollPast={(id) => bufferImpression(id, 'scroll')}
-          onClick={(id) => bufferImpression(id, 'click')}
-        />
-      ))}
+      <div className={viewMode === 'card' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[16px] p-[16px]' : ''}>
+        {filteredArticles.map((article) => (
+          viewMode === 'card' ? (
+            <ArticleCard
+              key={article._id}
+              article={article}
+              onArticle={onArticle}
+              onScrollPast={(id) => bufferImpression(id, 'scroll')}
+              onClick={(id) => bufferImpression(id, 'click')}
+            />
+          ) : (
+            <ArticleRow
+              key={article._id}
+              article={article}
+              onArticle={onArticle}
+              onScrollPast={(id) => bufferImpression(id, 'scroll')}
+              onClick={(id) => bufferImpression(id, 'click')}
+            />
+          )
+        ))}
+      </div>
 
       {/* Infinite scroll sentinel */}
       {hasMore && !isSearchActive && (

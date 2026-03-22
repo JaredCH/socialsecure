@@ -209,6 +209,23 @@ export default function NewsSettingsModal({ isOpen, onClose, preferences, onUpda
             </div>
 
           </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-[10px] px-[18px] py-[14px] border-t border-[var(--border)] bg-[var(--bg3)] rounded-b-[10px]">
+            <button
+              onClick={onClose}
+              className="px-[16px] py-[8px] rounded-[var(--radius)] text-[12px] text-[var(--text2)] font-medium hover:bg-[var(--bg4)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-[20px] py-[8px] rounded-[var(--radius)] bg-[var(--accent)] text-white text-[12px] font-bold tracking-[0.5px] hover:opacity-90 transition-opacity flex items-center gap-[6px] shadow-[0_4px_12px_rgba(0,212,255,0.2)]"
+            >
+              <span className="material-symbols-outlined text-[16px]">save</span>
+              Save Settings
+            </button>
+          </div>
         </div>
       </div>
     </>

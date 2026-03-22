@@ -63,6 +63,7 @@ function News({ isGuestMode = false }) {
   const [activeRegion, setActiveRegion]         = useState(null);
   const [activeDate, setActiveDate]             = useState('all');
   const [searchQuery, setSearchQuery]           = useState('');
+  const [viewMode, setViewMode]                 = useState('list'); // 'list' or 'card'
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -342,18 +343,11 @@ function News({ isGuestMode = false }) {
     <div className="news-theme h-full w-full bg-[var(--bg)] text-[var(--text)] font-[var(--sans)] flex flex-col overflow-hidden">
       {/* ─── Shared Top/Ticker (Desktop) ──────────────────────────────────── */}
       <div className="hidden lg:flex flex-col shrink-0 z-50 relative">
-        <NewsTopNav 
-          locationLabel={activeRegion?.label || locationTaxonomy?.preferredStateName || 'United States'} 
-          onLocationClick={isGuestMode ? undefined : () => setSettingsModalOpen(true)} 
-        />
         <StockTicker tickers={stockTickers} enabled={stockTickersEnabled} />
       </div>
 
       {/* ─── Mobile layout (< lg) ──────────────────────────────────────────── */}
       <div data-testid="news-mobile-layout" className="lg:hidden flex h-full flex-col overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-          <h1 className="text-sm font-bold text-slate-900">News</h1>
-        </div>
         <WeatherBar variant="sticky" />
         <StockTicker tickers={stockTickers} enabled={stockTickersEnabled} />
         {followedTeams.length > 0 && (
@@ -456,7 +450,8 @@ function News({ isGuestMode = false }) {
               else if (activeRegion === 'local') setActiveRegion('all');
             }}
             storyCount={storyCount}
-            viewMode="list" 
+            viewMode={viewMode}
+            onViewChange={setViewMode}
           />
           </div>
           <div
@@ -473,6 +468,7 @@ function News({ isGuestMode = false }) {
               onArticle={handleDesktopArticleSelect}
               prefetchedFeed={prefetchedFeed}
               onCountChange={setStoryCount}
+              viewMode={viewMode}
             />
           </div>
         </div>

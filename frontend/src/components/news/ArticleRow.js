@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { getCategoryIcon } from '../../constants/categoryIcons';
+import { getCategoryColor } from '../../constants/newsColors';
 
 /**
  * ArticleRow — single article list item.
@@ -65,19 +66,7 @@ export default function ArticleRow({ article, onArticle, onScrollPast, onClick }
   const locationLabel = article.locationTags?.city || article.locationTags?.cities?.[0] || 'Global';
   const subtitle = article.description || article.summary || '';
   
-  // Custom colors for categories based on prototype mapping
-  const catColorMap = {
-    breaking: '#ff4757',
-    tech: '#00d4ff',
-    politics: '#f5a623',
-    science: '#7c3aed',
-    markets: '#00c47a',
-    health: '#ff6b35',
-    sports: '#facc15',
-    entertainment: '#ec4899',
-    world: '#3b82f6',
-  };
-  const cColor = catColorMap[article.category?.toLowerCase()] || '#555b6e';
+  const cColor = getCategoryColor(article.category);
 
   return (
     <article

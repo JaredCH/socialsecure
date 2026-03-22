@@ -38,8 +38,8 @@ export default function FeedToolbar({
           <span className="material-symbols-outlined text-[14px]">view_list</span>
         </div>
         <div 
-          onClick={() => onViewChange?.('grid')}
-          className={`w-[26px] h-[22px] rounded-[3px] flex items-center justify-center text-[11px] cursor-pointer transition-all ${viewMode === 'grid' ? 'bg-[var(--bg4)] text-[var(--text)]' : 'text-[var(--text3)]'}`}
+          onClick={() => onViewChange?.('card')}
+          className={`w-[26px] h-[22px] rounded-[3px] flex items-center justify-center text-[11px] cursor-pointer transition-all ${viewMode === 'card' ? 'bg-[var(--bg4)] text-[var(--text)]' : 'text-[var(--text3)]'}`}
         >
           <span className="material-symbols-outlined text-[14px]">grid_view</span>
         </div>

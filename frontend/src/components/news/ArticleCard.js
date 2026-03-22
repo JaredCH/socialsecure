@@ -1,134 +1,123 @@
-import React from 'react';
-import NewsArticleImage from './NewsArticleImage';
+import React, { useEffect, useRef } from 'react';
+import { getCategoryColor } from '../../constants/newsColors';
 
 /**
- * ArticleCard
- *
- * Renders a single news article in one of three sizes:
- *   size="featured"  — large hero card with image (local / top articles)
- *   size="compact"   — medium row with thumbnail (state / national tier)
- *   size="mini"      — slim list item (feed tier)
- *
- * Props:
- *   article — API article object
- *   size    — "featured" | "compact" | "mini"
- *   onClick — (article) => void
+ * ArticleCard — card-style article item for the 'card' viewMode.
  */
-const ArticleCard = ({ article, size = 'compact', onClick }) => {
-  if (!article) return null;
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
-  const { title, source, sourceName, publishedAt, imageUrl, summary, category, _tier } = article;
+export default function ArticleCard({ article, onArticle, onScrollPast, onClick }) {
+  const cardRef = useRef(null);
+  const firedRef = useRef(false);
 
-  const timeAgo = (isoDate) => {
-    if (!isoDate) return '';
-    const diff = Math.floor((Date.now() - new Date(isoDate)) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || !onScrollPast) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.intersectionRatio >= 0.5 && !firedRef.current) {
+          firedRef.current = true;
+          onScrollPast(article);
+        }
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [article._id, article, onScrollPast]);
+
+  const handleClick = (e) => {
+    onClick?.(article);
+    onArticle?.(article, { x: e.clientX, y: e.clientY });
   };
 
-  const tierLabel = {
-    local: { text: 'Local', bg: 'bg-green-100', fg: 'text-green-700' },
-    state: { text: 'State', bg: 'bg-blue-100', fg: 'text-blue-700' },
-    national: { text: 'National', bg: 'bg-purple-100', fg: 'text-purple-700' },
-    trending: { text: 'Trending', bg: 'bg-orange-100', fg: 'text-orange-700' }
-  }[_tier] || null;
+  const isBreaking = Number(article.viralSignals?.urgencyTerms) > 0.8;
+  const cColor = getCategoryColor(article.category);
+  const sourceName = article.source?.name || article.sourceName || article.source || '';
+  const image = article.urlToImage || article.image || article.imageUrl;
 
-  const handleClick = () => onClick && onClick(article);
-  const handleKey = (e) => (e.key === 'Enter' || e.key === ' ') && handleClick();
-
-  if (size === 'featured') {
-    return (
-      <article
-        className="rounded-2xl overflow-hidden bg-white shadow-sm ring-1 ring-gray-200 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.99]"
-        onClick={handleClick}
-        onKeyDown={handleKey}
-        tabIndex={0}
-        role="button"
-        aria-label={title}
-      >
-        <NewsArticleImage
-          article={article}
-          wrapperClassName="aspect-[16/9] overflow-hidden bg-gray-100"
-          imageClassName="w-full h-full object-cover"
-        />
-        <div className="p-4">
-          <div className="flex items-center gap-2 mb-2">
-            {tierLabel && (
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${tierLabel.bg} ${tierLabel.fg}`}>
-                {tierLabel.text}
-              </span>
-            )}
-            {category && (
-              <span className="text-[10px] text-gray-400 capitalize">{category}</span>
-            )}
-          </div>
-          <h2 className="text-base font-semibold text-gray-900 leading-snug line-clamp-3 mb-1">{title}</h2>
-          {summary && <p className="text-xs text-gray-500 line-clamp-2 mb-2">{summary}</p>}
-          <div className="flex items-center justify-between text-[11px] text-gray-400">
-            <span className="font-medium truncate max-w-[60%]">{sourceName || source}</span>
-            <span>{timeAgo(publishedAt)}</span>
-          </div>
-        </div>
-      </article>
-    );
-  }
-
-  if (size === 'compact') {
-    return (
-      <article
-        className="flex items-start gap-3 p-3 bg-white rounded-xl ring-1 ring-gray-100 cursor-pointer hover:bg-gray-50 transition-colors active:scale-[0.99]"
-        onClick={handleClick}
-        onKeyDown={handleKey}
-        tabIndex={0}
-        role="button"
-        aria-label={title}
-      >
-        <NewsArticleImage
-          article={article}
-          wrapperClassName="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100"
-          imageClassName="w-full h-full object-cover"
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-1">
-            {tierLabel && (
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${tierLabel.bg} ${tierLabel.fg}`}>
-                {tierLabel.text}
-              </span>
-            )}
-          </div>
-          <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">{title}</h3>
-          <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400">
-            <span className="truncate">{sourceName || source}</span>
-            <span>·</span>
-            <span className="flex-shrink-0">{timeAgo(publishedAt)}</span>
-          </div>
-        </div>
-      </article>
-    );
-  }
-
-  // mini
   return (
-    <article
-      className="flex items-center gap-2 py-2 border-b border-gray-100 last:border-b-0 cursor-pointer hover:bg-gray-50 px-2 -mx-2 rounded transition-colors"
+    <div
+      ref={cardRef}
       onClick={handleClick}
-      onKeyDown={handleKey}
-      tabIndex={0}
-      role="button"
-      aria-label={title}
+      className="flex flex-col bg-[var(--bg2)] border border-[var(--border)] rounded-[12px] overflow-hidden cursor-pointer transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:translate-y-[-2px] group"
     >
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-800 line-clamp-2 leading-snug">{title}</p>
-        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-400">
-          <span className="truncate">{sourceName || source}</span>
-          <span>·</span>
-          <span className="flex-shrink-0">{timeAgo(publishedAt)}</span>
+      {/* Top Accent Bar */}
+      <div 
+        className="h-[3px] w-full" 
+        style={{ backgroundColor: isBreaking ? 'var(--red)' : cColor }} 
+      />
+
+      {/* Image / Placeholder */}
+      <div className="relative aspect-[16/9] bg-[var(--bg3)] overflow-hidden">
+        {image ? (
+          <img 
+            src={image} 
+            alt={article.title} 
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            onError={(e) => { e.target.style.display = 'none'; }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-[var(--text3)]">
+             <span className="material-symbols-outlined text-[32px]">newspaper</span>
+          </div>
+        )}
+        
+        {/* Category Badge Overlaid */}
+        {article.category && (
+          <div 
+            className="absolute top-[10px] left-[10px] text-[8px] font-[var(--mono)] font-bold px-[8px] py-[3px] rounded-[4px] backdrop-blur-[4px] shadow-sm uppercase tracking-[0.5px]"
+            style={{
+              backgroundColor: isBreaking ? 'rgba(255,71,87,0.85)' : `${cColor}D9`,
+              color: '#fff'
+            }}
+          >
+            {isBreaking ? 'Breaking' : article.category}
+          </div>
+        )}
+      </div>
+
+      <div className="p-[14px] flex flex-col gap-[8px] flex-1">
+        {/* Meta */}
+        <div className="flex items-center justify-between">
+          <span className="font-[var(--mono)] text-[9px] font-semibold tracking-[1px] text-[var(--accent)] uppercase">
+            {sourceName}
+          </span>
+          <span className="font-[var(--mono)] text-[9px] text-[var(--text3)]">
+            {timeAgo(article.publishedAt)}
+          </span>
+        </div>
+
+        {/* Title */}
+        <h3 className="text-[14px] font-bold text-[var(--text)] leading-[1.3] group-hover:text-[var(--accent)] line-clamp-2">
+          {article.title}
+        </h3>
+
+        {/* Excerpt */}
+        <p className="text-[11px] text-[var(--text2)] leading-[1.6] line-clamp-3 overflow-hidden">
+          {article.description || article.summary || ''}
+        </p>
+
+        {/* Footer */}
+        <div className="mt-auto pt-[10px] flex items-center justify-between border-t border-[var(--border)]">
+          <span className="text-[9px] text-[var(--text3)] font-[var(--mono)]">
+            📍 {article.locationTags?.city || 'Global'}
+          </span>
+          <div className="flex gap-[8px]">
+             <span className="material-symbols-outlined text-[16px] text-[var(--text3)] hover:text-[var(--text)]">push_pin</span>
+             <span className="material-symbols-outlined text-[16px] text-[var(--text3)] hover:text-[var(--text)]">share</span>
+          </div>
         </div>
       </div>
-    </article>
+    </div>
   );
-};
-
-export default ArticleCard;
+}
