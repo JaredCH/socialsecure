@@ -19,6 +19,7 @@ const SocialLoadingOverlay = ({ children, user }) => {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayFading, setOverlayFading] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(true);
+  const [skeletonFading, setSkeletonFading] = useState(false);
   const overlayRef = useRef(null);
   const timersRef = useRef([]);
   const prevPathRef = useRef(location.pathname + location.search);
@@ -77,6 +78,7 @@ const SocialLoadingOverlay = ({ children, user }) => {
         setOverlayRevealed(false);
         setOverlayOpen(false);
         setOverlayFading(false);
+        setSkeletonFading(false);
         setShowSkeleton(true);
       } else {
         // Arriving from another page: full split reveal + skeleton
@@ -85,6 +87,7 @@ const SocialLoadingOverlay = ({ children, user }) => {
         setOverlayRevealed(false);
         setOverlayOpen(false);
         setOverlayFading(false);
+        setSkeletonFading(false);
         setShowSkeleton(true);
       }
     }
@@ -137,14 +140,20 @@ const SocialLoadingOverlay = ({ children, user }) => {
     };
   }, [showOverlay]);
 
-  // Hide skeleton after a short timeout — acts as a fallback for the real
-  // content to render underneath.  Use a shorter duration for intra-social
-  // navigations (skeleton-only) to avoid slowing the user down.
+  // Skeleton lifecycle — fade out smoothly, then remove from DOM.
+  // Full reveal: skeleton stays opaque until t=1800ms, then fades over 400ms.
+  // Intra-social: skeleton stays for 800ms, then fades over 300ms.
   useEffect(() => {
     if (!showSkeleton) return;
-    const duration = intraSocialRef.current ? 600 : 1400;
-    const skeletonTimer = setTimeout(() => setShowSkeleton(false), duration);
-    return () => clearTimeout(skeletonTimer);
+    const fadeDelay = intraSocialRef.current ? 800 : 1800;
+    const fadeDuration = intraSocialRef.current ? 300 : 400;
+    const timers = [];
+    timers.push(setTimeout(() => setSkeletonFading(true), fadeDelay));
+    timers.push(setTimeout(() => {
+      setShowSkeleton(false);
+      setSkeletonFading(false);
+    }, fadeDelay + fadeDuration));
+    return () => timers.forEach(clearTimeout);
   }, [showSkeleton]);
 
   // Detect dark-ish page background to toggle skeleton color scheme.
@@ -203,169 +212,172 @@ const SocialLoadingOverlay = ({ children, user }) => {
         </div>
       )}
 
-      {/* ── Skeleton Shimmer ──────────────────────────────── */}
-      {showSkeleton && (
-        <div
-          className={`social-skeleton-wrapper ${isDark ? 'skeleton-dark' : ''}`}
-          data-testid="social-skeleton"
-          aria-hidden="true"
-        >
-          <div style={{ width: '100%', minHeight: '100vh' }}>
-            {/* Hero skeleton */}
-            <div style={{ position: 'relative', width: '100%', minHeight: 250 }}>
-              <div
-                className="skeleton-base"
-                style={{ width: '100%', height: 250, borderRadius: 0 }}
-              />
-              {/* Hero content overlay — avatar + name + location + tabs */}
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                maxWidth: 1280, margin: '0 auto', padding: '0 24px 24px',
-                display: 'flex', alignItems: 'flex-end', gap: 16,
-              }}>
-                {/* Avatar overlapping hero bottom */}
+      {/* ── Content Root — relative container so skeleton layers over children */}
+      <div className="social-loading-root">
+        {/* Real content renders first (underneath) so data-fetching starts immediately */}
+        {children}
+
+        {/* ── Skeleton Shimmer — absolutely positioned over real content ── */}
+        {showSkeleton && (
+          <div
+            className={`social-skeleton-wrapper ${isDark ? 'skeleton-dark' : ''} ${skeletonFading ? 'skeleton-fading' : ''}`}
+            data-testid="social-skeleton"
+            aria-hidden="true"
+          >
+            <div style={{ width: '100%', minHeight: '100vh' }}>
+              {/* Hero skeleton */}
+              <div style={{ position: 'relative', width: '100%', minHeight: 250 }}>
                 <div
-                  className="skeleton-base skeleton-hero-avatar"
-                  data-testid="skeleton-hero-avatar"
+                  className="skeleton-base"
+                  style={{ width: '100%', height: 250, borderRadius: 0 }}
                 />
-                {/* Name + location block */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 4 }}>
-                  {/* First name / last name */}
-                  <div className="skeleton-base skeleton-name-line" data-testid="skeleton-name" style={{ width: '40%' }} />
-                  {/* City / location */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div className="skeleton-base" style={{ width: 14, height: 14, borderRadius: '50%', flexShrink: 0 }} />
-                    <div className="skeleton-base skeleton-line" data-testid="skeleton-city" style={{ width: '25%' }} />
+                {/* Hero content overlay — avatar + name + location + tabs */}
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  maxWidth: 1280, margin: '0 auto', padding: '0 24px 24px',
+                  display: 'flex', alignItems: 'flex-end', gap: 16,
+                }}>
+                  {/* Avatar overlapping hero bottom */}
+                  <div
+                    className="skeleton-base skeleton-hero-avatar"
+                    data-testid="skeleton-hero-avatar"
+                  />
+                  {/* Name + location block */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 4 }}>
+                    {/* First name / last name */}
+                    <div className="skeleton-base skeleton-name-line" data-testid="skeleton-name" style={{ width: '40%' }} />
+                    {/* City / location */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div className="skeleton-base" style={{ width: 14, height: 14, borderRadius: '50%', flexShrink: 0 }} />
+                      <div className="skeleton-base skeleton-line" data-testid="skeleton-city" style={{ width: '25%' }} />
+                    </div>
                   </div>
-                </div>
-                {/* Tab bar */}
-                <div className="skeleton-tab-bar" data-testid="skeleton-tabs">
-                  <div className="skeleton-base skeleton-tab" />
-                  <div className="skeleton-base skeleton-tab" />
-                  <div className="skeleton-base skeleton-tab" />
-                  <div className="skeleton-base skeleton-tab" />
+                  {/* Tab bar */}
+                  <div className="skeleton-tab-bar" data-testid="skeleton-tabs">
+                    <div className="skeleton-base skeleton-tab" />
+                    <div className="skeleton-base skeleton-tab" />
+                    <div className="skeleton-base skeleton-tab" />
+                    <div className="skeleton-base skeleton-tab" />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Body layout — matches the actual Social page 2-column grid */}
-            <div
-              className="skeleton-stagger"
-              style={{
-                maxWidth: 1280,
-                margin: '0 auto',
-                padding: '24px 16px',
-                display: 'grid',
-                gridTemplateColumns: '300px minmax(0,1fr)',
-                gap: 24,
-              }}
-            >
-              {/* Left sidebar */}
-              <aside style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {/* About panel */}
-                <div className="skeleton-panel" data-testid="skeleton-about-panel">
-                  <div className="skeleton-panel-accent" />
-                  <div style={{ padding: '16px' }}>
-                    <div className="skeleton-base skeleton-line" style={{ width: '30%', marginBottom: 12 }} />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div className="skeleton-base skeleton-line" style={{ width: '90%' }} />
-                      <div className="skeleton-base skeleton-line" style={{ width: '70%' }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Details panel — location, website, pronouns, joined */}
-                <div className="skeleton-panel" data-testid="skeleton-details-panel">
-                  <div style={{ padding: '16px' }}>
-                    <div className="skeleton-base skeleton-line" style={{ width: '30%', marginBottom: 12 }} />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {[55, 65, 35, 50].map((w, i) => (
-                        <div className="skeleton-detail-row" data-testid="skeleton-detail-row" key={i}>
-                          <div className="skeleton-base skeleton-detail-icon" />
-                          <div className="skeleton-base skeleton-line" style={{ width: `${w}%` }} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Top friends panel */}
-                <div className="skeleton-panel" data-testid="skeleton-friends-panel">
-                  <div style={{ padding: '16px' }}>
-                    <div className="skeleton-base skeleton-line" style={{ width: '40%', marginBottom: 12 }} />
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-                      {Array.from({ length: 5 }, (_, i) => (
-                        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                          <div className="skeleton-base skeleton-friend-avatar" />
-                          <div className="skeleton-base skeleton-line" style={{ width: '80%', height: 8 }} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Partner / Spouse panel */}
-                <div className="skeleton-panel" data-testid="skeleton-partner-panel">
-                  <div style={{ padding: '16px' }}>
-                    <div className="skeleton-base skeleton-line" style={{ width: '50%', marginBottom: 12 }} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: 16, background: 'rgba(16,185,129,0.05)' }}>
-                      <div className="skeleton-base" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div className="skeleton-base skeleton-line" style={{ width: '40%', height: 8 }} />
-                        <div className="skeleton-base skeleton-line" style={{ width: '60%' }} />
+              {/* Body layout — matches the actual Social page 2-column grid */}
+              <div
+                className="skeleton-stagger"
+                style={{
+                  maxWidth: 1280,
+                  margin: '0 auto',
+                  padding: '24px 16px',
+                  display: 'grid',
+                  gridTemplateColumns: '300px minmax(0,1fr)',
+                  gap: 24,
+                }}
+              >
+                {/* Left sidebar */}
+                <aside style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {/* About panel */}
+                  <div className="skeleton-panel" data-testid="skeleton-about-panel">
+                    <div className="skeleton-panel-accent" />
+                    <div style={{ padding: '16px' }}>
+                      <div className="skeleton-base skeleton-line" style={{ width: '30%', marginBottom: 12 }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div className="skeleton-base skeleton-line" style={{ width: '90%' }} />
+                        <div className="skeleton-base skeleton-line" style={{ width: '70%' }} />
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Now Playing widget */}
-                <div className="skeleton-panel" data-testid="skeleton-now-playing-panel">
-                  <div style={{ padding: '16px' }}>
-                    <div className="skeleton-base skeleton-line" style={{ width: '40%', marginBottom: 12 }} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div className="skeleton-base" style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0 }} />
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div className="skeleton-base skeleton-line" style={{ width: '60%' }} />
-                        <div className="skeleton-base skeleton-line" style={{ width: '35%', height: 8 }} />
+                  {/* Details panel — location, website, pronouns, joined */}
+                  <div className="skeleton-panel" data-testid="skeleton-details-panel">
+                    <div style={{ padding: '16px' }}>
+                      <div className="skeleton-base skeleton-line" style={{ width: '30%', marginBottom: 12 }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {[55, 65, 35, 50].map((w, i) => (
+                          <div className="skeleton-detail-row" data-testid="skeleton-detail-row" key={i}>
+                            <div className="skeleton-base skeleton-detail-icon" />
+                            <div className="skeleton-base skeleton-line" style={{ width: `${w}%` }} />
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    <div className="skeleton-base" style={{ height: 4, borderRadius: 999, marginTop: 12, width: '100%' }} />
                   </div>
-                </div>
-              </aside>
 
-              {/* Center content — matches glass-panel Feed + Gallery layout */}
-              <main style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                {/* Feed glass panel */}
-                <div className="skeleton-glass-panel" data-testid="skeleton-feed-panel">
-                  <div className="skeleton-glass-panel-header">
-                    <div className="skeleton-base skeleton-line" style={{ width: '15%', height: 14 }} />
+                  {/* Top friends panel */}
+                  <div className="skeleton-panel" data-testid="skeleton-friends-panel">
+                    <div style={{ padding: '16px' }}>
+                      <div className="skeleton-base skeleton-line" style={{ width: '40%', marginBottom: 12 }} />
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                        {Array.from({ length: 5 }, (_, i) => (
+                          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                            <div className="skeleton-base skeleton-friend-avatar" />
+                            <div className="skeleton-base skeleton-line" style={{ width: '80%', height: 8 }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div className="skeleton-base skeleton-card" />
-                    <div className="skeleton-base skeleton-card" />
-                  </div>
-                </div>
 
-                {/* Gallery glass panel */}
-                <div className="skeleton-glass-panel" data-testid="skeleton-gallery-panel">
-                  <div className="skeleton-glass-panel-header">
-                    <div className="skeleton-base skeleton-line" style={{ width: '18%', height: 14 }} />
+                  {/* Partner / Spouse panel */}
+                  <div className="skeleton-panel" data-testid="skeleton-partner-panel">
+                    <div style={{ padding: '16px' }}>
+                      <div className="skeleton-base skeleton-line" style={{ width: '50%', marginBottom: 12 }} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: 16, background: 'rgba(16,185,129,0.05)' }}>
+                        <div className="skeleton-base" style={{ width: 56, height: 56, borderRadius: '50%', flexShrink: 0 }} />
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div className="skeleton-base skeleton-line" style={{ width: '40%', height: 8 }} />
+                          <div className="skeleton-base skeleton-line" style={{ width: '60%' }} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                    {Array.from({ length: 6 }, (_, i) => (
-                      <div key={i} className="skeleton-base" style={{ width: '100%', paddingBottom: '100%', borderRadius: 8 }} />
-                    ))}
+
+                  {/* Now Playing widget */}
+                  <div className="skeleton-panel" data-testid="skeleton-now-playing-panel">
+                    <div style={{ padding: '16px' }}>
+                      <div className="skeleton-base skeleton-line" style={{ width: '40%', marginBottom: 12 }} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div className="skeleton-base" style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0 }} />
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div className="skeleton-base skeleton-line" style={{ width: '60%' }} />
+                          <div className="skeleton-base skeleton-line" style={{ width: '35%', height: 8 }} />
+                        </div>
+                      </div>
+                      <div className="skeleton-base" style={{ height: 4, borderRadius: 999, marginTop: 12, width: '100%' }} />
+                    </div>
                   </div>
-                </div>
-              </main>
+                </aside>
+
+                {/* Center content — matches glass-panel Feed + Gallery layout */}
+                <main style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  {/* Feed glass panel */}
+                  <div className="skeleton-glass-panel" data-testid="skeleton-feed-panel">
+                    <div className="skeleton-glass-panel-header">
+                      <div className="skeleton-base skeleton-line" style={{ width: '15%', height: 14 }} />
+                    </div>
+                    <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div className="skeleton-base skeleton-card" />
+                      <div className="skeleton-base skeleton-card" />
+                    </div>
+                  </div>
+
+                  {/* Gallery glass panel */}
+                  <div className="skeleton-glass-panel" data-testid="skeleton-gallery-panel">
+                    <div className="skeleton-glass-panel-header">
+                      <div className="skeleton-base skeleton-line" style={{ width: '18%', height: 14 }} />
+                    </div>
+                    <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                      {Array.from({ length: 6 }, (_, i) => (
+                        <div key={i} className="skeleton-base" style={{ width: '100%', paddingBottom: '100%', borderRadius: 8 }} />
+                      ))}
+                    </div>
+                  </div>
+                </main>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ── Real Content (always rendered so data-fetching begins immediately) */}
-      {children}
+        )}
+      </div>
     </>
   );
 };

@@ -165,7 +165,7 @@ describe('SocialLoadingOverlay', () => {
     await renderOverlay();
     expect(container.querySelector('[data-testid="social-skeleton"]')).toBeTruthy();
 
-    await act(async () => { jest.advanceTimersByTime(1400); });
+    await act(async () => { jest.advanceTimersByTime(2200); });
 
     expect(container.querySelector('[data-testid="social-skeleton"]')).toBeFalsy();
   });

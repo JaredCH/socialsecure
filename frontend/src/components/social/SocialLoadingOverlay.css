@@ -253,11 +253,28 @@
 .skeleton-stagger > :nth-child(10) { animation-delay: 0.72s; }
 
 /* ── Loaded Transition ───────────────────────────────────── */
-.social-skeleton-wrapper {
-  transition: opacity 300ms ease;
+
+/* Relative container so skeleton can be absolutely positioned over children */
+.social-loading-root {
+  position: relative;
+  min-height: 100vh;
 }
 
-.social-skeleton-wrapper.is-loaded {
-  opacity: 0;
+/* Skeleton wrapper — absolute overlay on top of real content */
+.social-skeleton-wrapper {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
   pointer-events: none;
+  background: #f8fafc; /* matches default page bg so content is fully hidden */
+  transition: opacity 400ms ease;
+}
+
+.social-skeleton-wrapper.skeleton-dark {
+  background: #020617; /* dark theme page bg */
+}
+
+/* Fade-out class applied before DOM removal for smooth transition */
+.social-skeleton-wrapper.skeleton-fading {
+  opacity: 0;
 }
