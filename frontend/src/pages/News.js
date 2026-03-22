@@ -344,7 +344,7 @@ function News({ isGuestMode = false }) {
       <div className="hidden lg:flex flex-col shrink-0 z-50 relative">
         <NewsTopNav 
           locationLabel={activeRegion?.label || locationTaxonomy?.preferredStateName || 'United States'} 
-          onLocationClick={isGuestMode ? undefined : () => setSettingsOpen(true)} 
+          onLocationClick={isGuestMode ? undefined : () => setSettingsModalOpen(true)} 
         />
         <StockTicker tickers={stockTickers} enabled={stockTickersEnabled} />
       </div>
@@ -505,41 +505,6 @@ function News({ isGuestMode = false }) {
         onClose={() => setDesktopArticlePreview(null)}
       />
 
-      {!isGuestMode && (
-        <SettingsDrawer
-          isOpen={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          preferences={preferences}
-          onAddKeyword={handleAddKeyword}
-          onRemoveKeyword={handleRemoveKeyword}
-          onRenameKeyword={handleRenameKeyword}
-          newKeyword={newKeyword}
-          setNewKeyword={setNewKeyword}
-          onAddLocation={handleAddLocation}
-          onRemoveLocation={handleRemoveLocation}
-          onSetPrimaryLocation={handleSetPrimaryLocation}
-          newLocation={newLocation}
-          setNewLocation={setNewLocation}
-          locationTaxonomy={locationTaxonomy}
-          registrationAlignment={registrationAlignment}
-          sportsLeagues={sportsLeagues}
-          followedSportsTeams={followedTeams}
-          onSetAllSportsTeams={handleSetAllSportsTeams}
-          onSetLeagueSportsTeams={handleSetLeagueSportsTeams}
-          onToggleSportsTeam={handleToggleSportsTeam}
-          weatherLocations={preferences?.weatherLocations || []}
-          onSearchWeatherLocations={handleSearchWeatherLocations}
-          onAddWeatherLocation={handleAddWeatherLocation}
-          onRemoveWeatherLocation={handleRemoveWeatherLocation}
-          onSetPrimaryWeatherLocation={handleSetPrimaryWeatherLocation}
-          onReorderWeatherLocations={handleReorderWeatherLocations}
-          weatherStatusMessage={weatherStatusMessage}
-          setWeatherStatusMessage={setWeatherStatusMessage}
-          onUpdatePreferences={handleUpdatePreferences}
-          onRefreshHealth={handleRefreshHealth}
-          onRestore={bootstrap}
-        />
-      )}
 
       {!isGuestMode && (
         <NewsSettingsModal
