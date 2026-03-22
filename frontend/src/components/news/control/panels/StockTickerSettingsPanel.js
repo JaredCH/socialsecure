@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { newsAPI } from '../../../../utils/api';
 
 const MAX_TICKERS = 9;
@@ -12,6 +12,24 @@ const TYPE_LABELS = {
   FUTURE: 'Futures',
 };
 
+/** Tiny inline sparkline for ticker cards */
+function MiniSparkline({ data = [], direction = 'flat', width = 48, height = 18 }) {
+  if (data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const step = width / (data.length - 1);
+  const points = data
+    .map((v, i) => `${(i * step).toFixed(1)},${(height - ((v - min) / range) * height).toFixed(1)}`)
+    .join(' ');
+  const color = direction === 'up' ? '#16a34a' : direction === 'down' ? '#dc2626' : '#94a3b8';
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="shrink-0" aria-hidden="true">
+      <polyline fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={points} />
+    </svg>
+  );
+}
+
 export default function StockTickerSettingsPanel({
   tickers = [],
   enabled = false,
@@ -21,6 +39,36 @@ export default function StockTickerSettingsPanel({
   const [searching, setSearching] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [statusMessage, setStatusMessage] = useState('');
+  const [quotesMap, setQuotesMap] = useState({});
+  const quotesIntervalRef = useRef(null);
+
+  // Fetch live quotes for current tickers
+  useEffect(() => {
+    if (tickers.length === 0) {
+      setQuotesMap({});
+      return;
+    }
+
+    let active = true;
+    const fetchQuotes = async () => {
+      try {
+        const { data } = await newsAPI.getStockQuotes(tickers);
+        if (!active) return;
+        const map = {};
+        (data?.quotes || []).forEach((q) => { if (!q.error) map[q.symbol] = q; });
+        setQuotesMap(map);
+      } catch {
+        // keep stale data on error
+      }
+    };
+
+    fetchQuotes();
+    quotesIntervalRef.current = setInterval(fetchQuotes, 2 * 60 * 1000);
+    return () => {
+      active = false;
+      clearInterval(quotesIntervalRef.current);
+    };
+  }, [tickers]);
 
   // Debounced search
   useEffect(() => {
@@ -82,6 +130,13 @@ export default function StockTickerSettingsPanel({
     setTimeout(() => setStatusMessage(''), 2000);
   }, [tickers, onUpdatePreferences]);
 
+  const formatPrice = (val) => {
+    if (val == null) return '—';
+    return val >= 1000
+      ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : val.toFixed(2);
+  };
+
   return (
     <div className="space-y-5" data-testid="stock-ticker-settings">
       {/* Enable/disable toggle */}
@@ -119,24 +174,62 @@ export default function StockTickerSettingsPanel({
             No tickers added yet. Search below to add stocks, crypto, currencies, metals, or commodities.
           </p>
         ) : (
-          <div className="space-y-1.5">
-            {tickers.map((symbol) => (
-              <div
-                key={symbol}
-                className="flex items-center justify-between rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200 hover:ring-slate-300 transition-colors"
-                data-testid={`ticker-item-${symbol}`}
-              >
-                <span className="text-sm font-semibold text-slate-800">{symbol}</span>
-                <button
-                  onClick={() => handleRemoveTicker(symbol)}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                  aria-label={`Remove ${symbol}`}
-                  data-testid={`ticker-remove-${symbol}`}
+          <div className="space-y-2">
+            {tickers.map((symbol) => {
+              const quote = quotesMap[symbol];
+              const isUp = quote?.direction === 'up';
+              const isDown = quote?.direction === 'down';
+              const changeColor = isUp ? 'text-green-600' : isDown ? 'text-red-600' : 'text-slate-500';
+              const changeBg = isUp ? 'bg-green-50' : isDown ? 'bg-red-50' : 'bg-slate-50';
+              const arrow = isUp ? '▲' : isDown ? '▼' : '';
+
+              return (
+                <div
+                  key={symbol}
+                  className="flex items-center gap-3 rounded-xl bg-white px-3.5 py-2.5 ring-1 ring-slate-200 hover:ring-slate-300 transition-all"
+                  data-testid={`ticker-item-${symbol}`}
                 >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
-                </button>
-              </div>
-            ))}
+                  {/* Left: name + symbol */}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-bold text-slate-900 truncate">
+                      {quote?.name || symbol}
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-medium">{symbol}</div>
+                  </div>
+
+                  {/* Center: sparkline + price */}
+                  {quote && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <MiniSparkline data={quote.sparkline} direction={quote.direction} />
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-slate-800">{formatPrice(quote.price)}</div>
+                        <div className={`text-[11px] font-semibold ${changeColor}`}>
+                          {arrow} {quote.changePercent != null ? `${quote.changePercent > 0 ? '+' : ''}${quote.changePercent}%` : ''}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Loading placeholder when no quote yet */}
+                  {!quote && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-slate-200 border-t-slate-500" />
+                      <span className="text-[11px] text-slate-400">Loading…</span>
+                    </div>
+                  )}
+
+                  {/* Remove button */}
+                  <button
+                    onClick={() => handleRemoveTicker(symbol)}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors shrink-0"
+                    aria-label={`Remove ${symbol}`}
+                    data-testid={`ticker-remove-${symbol}`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
