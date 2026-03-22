@@ -240,65 +240,104 @@ function SportsSchedulePanel({ followedTeams = [], sportsLeagues = [] }) {
           const schedule = schedules[team.id];
           const gameStatus = getGameStatus(schedule, team.id);
           const colors = getTeamColors(team.id);
-          const nameColor = readableTextColor(colors);
+          const game = schedule?.nextGame;
+
+          // Helper to render half the card
+          const renderTeamHalf = (tName, tAbbr, tColors) => {
+             const tText = readableTextColor(tColors);
+             return (
+               <div className="flex-1 flex flex-col justify-center items-center p-1.5 text-center relative overflow-hidden" style={{ backgroundColor: tColors.primary, color: tText }}>
+                 <div className="absolute inset-0 opacity-10" style={{ backgroundColor: tColors.secondary }}></div>
+                 <span className="text-2xl font-black tracking-tight leading-none mb-0.5 relative z-10 drop-shadow-sm">
+                   {tAbbr || tName?.substring(0, 3).toUpperCase() || '???'}
+                 </span>
+                 <span className="text-[9px] font-bold leading-tight opacity-95 line-clamp-2 px-1 relative z-10 drop-shadow-sm">
+                   {tName}
+                 </span>
+               </div>
+             );
+          };
+
+          if (!game || gameStatus.status === 'off-season' || gameStatus.status === 'tbd') {
+            // Render full width card for off-season / TBD so sizes match perfectly
+            return (
+              <div key={team.id} className="h-[88px] flex rounded-xl overflow-hidden border border-gray-200 shadow-sm relative shrink-0">
+                <div className="flex-1 flex" style={{ backgroundColor: colors.primary }}>
+                  {renderTeamHalf(team.displayName, team.abbreviation, colors)}
+                </div>
+                <div className="absolute inset-0 bg-black/50 flex flex-col justify-center items-center backdrop-blur-[1px] z-20">
+                   <span className="bg-white/95 text-gray-900 text-[10px] font-black px-3 py-1.5 rounded shadow-lg uppercase tracking-widest text-center">
+                     {gameStatus.status === 'off-season' ? 'Off-Season' : 'Schedule TBD'}
+                   </span>
+                   {gameStatus.nextSeasonStart && (
+                     <span className="text-white/90 text-[10px] font-medium mt-1.5 drop-shadow-md bg-black/40 px-2 py-0.5 rounded-full">
+                       Starts {new Date(gameStatus.nextSeasonStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                     </span>
+                   )}
+                </div>
+              </div>
+            );
+          }
+
+          // Active game split card
+          const oppColors = getTeamColors(game.opponent);
+          const isHome = game.isHome; 
           
+          const awayTeam = {
+             name: isHome ? game.opponent : team.displayName,
+             abbr: isHome ? game.opponent?.substring(0, 3).toUpperCase() : team.abbreviation,
+             colors: isHome ? oppColors : colors,
+             score: isHome ? (game.awayScore ?? game.opponentScore) : (game.homeScore ?? game.teamScore), 
+          };
+          const homeTeam = {
+             name: isHome ? team.displayName : game.opponent,
+             abbr: isHome ? team.abbreviation : game.opponent?.substring(0, 3).toUpperCase(),
+             colors: isHome ? colors : oppColors,
+             score: isHome ? (game.homeScore ?? game.teamScore) : (game.awayScore ?? game.opponentScore),
+          };
+          
+          const isLive = game.isLive || game.status === 'live' || game.status === 'in-progress';
+          const isFinished = game.status === 'final' || game.status === 'completed' || gameStatus.label === 'Past game';
+
           return (
-            <div
-              key={team.id}
-              className="flex items-start gap-2.5 rounded-xl py-2 px-2.5"
-              style={{ backgroundColor: colors.primary + '18', borderLeft: `3px solid ${colors.primary}` }}
-            >
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
-                style={{ backgroundColor: colors.primary + '33', color: nameColor }}
-              >
-                {team.abbreviation || team.displayName?.substring(0, 2).toUpperCase() || '??'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate" style={{ color: nameColor }}>
-                  {team.displayName}
-                </p>
-                <span
-                  className="inline-block text-[10px] font-semibold rounded px-1.5 py-0.5 mt-0.5"
-                  style={{ backgroundColor: colors.primary + '22', color: colors.primary }}
-                >
-                  {team.leagueName}
-                </span>
-                {gameStatus.status === 'off-season' ? (
-                  <div className="mt-1">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Off-season
-                    </span>
-                    {gameStatus.nextSeasonStart && (
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        Season starts {new Date(gameStatus.nextSeasonStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </p>
-                    )}
-                  </div>
-                ) : gameStatus.status === 'tbd' ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded text-[10px] font-medium mt-1">
-                    Schedule TBD
-                  </span>
-                ) : gameStatus.status === 'scheduled' && schedule?.nextGame ? (
-                  <div className="mt-1">
-                    <p className="text-xs text-gray-600">
-                      <span className="font-medium">
-                        {schedule.nextGame.isHome ? 'vs' : '@'}
-                      </span>
-                      {' '}
-                      <span className="text-gray-800">{schedule.nextGame.opponent}</span>
-                    </p>
-                    <p className="text-[11px] text-indigo-600 font-medium">
-                      {gameStatus.label}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-gray-400">No upcoming games</p>
-                )}
-              </div>
+            <div key={team.id} className="h-[88px] flex rounded-xl overflow-hidden border border-gray-200 shadow-sm shrink-0">
+               {/* AWAY */}
+               {renderTeamHalf(awayTeam.name, awayTeam.abbr, awayTeam.colors)}
+               
+               {/* CENTER SPLIT */}
+               <div className="w-[88px] shrink-0 bg-white flex flex-col justify-center items-center border-x border-gray-100 z-10 px-1 text-center shadow-[0_0_15px_rgba(0,0,0,0.08)] relative">
+                 <span className="text-[8px] font-black text-gray-400 tracking-widest uppercase mb-1">{team.leagueName}</span>
+                 
+                 {isLive ? (
+                   <>
+                     <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded animate-pulse mb-1 shadow-sm">LIVE</span>
+                     <div className="flex items-center gap-1.5 font-black text-slate-800 text-lg leading-none">
+                       <span>{awayTeam.score ?? '-'}</span>
+                       <span className="text-gray-300 text-[10px]">-</span>
+                       <span>{homeTeam.score ?? '-'}</span>
+                     </div>
+                     <span className="text-[9px] font-bold text-red-600 mt-1">{game.period || game.clock || 'In Progress'}</span>
+                   </>
+                 ) : isFinished ? (
+                   <>
+                     <span className="text-[9px] font-black text-gray-500 mb-1 tracking-wider uppercase">FINAL</span>
+                     <div className="flex items-center gap-1.5 font-black text-slate-800 text-lg leading-none">
+                       <span>{awayTeam.score ?? '-'}</span>
+                       <span className="text-gray-300 text-[10px]">-</span>
+                       <span>{homeTeam.score ?? '-'}</span>
+                     </div>
+                   </>
+                 ) : (
+                   <div className="flex flex-col items-center whitespace-pre-line mt-0.5">
+                     <span className="text-[9.5px] font-bold text-slate-800 leading-[1.3] px-1">
+                       {gameStatus.label.replace(', ', '\n')}
+                     </span>
+                   </div>
+                 )}
+               </div>
+               
+               {/* HOME */}
+               {renderTeamHalf(homeTeam.name, homeTeam.abbr, homeTeam.colors)}
             </div>
           );
         })}

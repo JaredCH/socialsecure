@@ -174,16 +174,56 @@ const TEAM_COLORS = {
   'mls:dc-united':               { primary: '#EF3E42', secondary: '#000000' },
 };
 
-/** Default fallback colors when a team is not found in the map. */
-const DEFAULT_COLORS = { primary: '#6B7280', secondary: '#E5E7EB' };
+/** Generate a deterministic hue from a string (0-359). */
+function stringToHue(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash % 360);
+}
+
+/** Convert HSL to Hex. */
+function hslToHex(h, s, l) {
+  l /= 100;
+  const a = s * Math.min(l, 1 - l) / 100;
+  const f = n => {
+    const k = (n + h / 30) % 12;
+    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * color).toString(16).padStart(2, '0');
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/** Generate a vibrant fallback primary and dark secondary color pair. */
+function generateFallbackColors(teamName) {
+  const hue = stringToHue(teamName || 'unknown');
+  return {
+    primary: hslToHex(hue, 80, 45), // Vibrant primary
+    secondary: hslToHex((hue + 180) % 360, 40, 20), // Dark contrasting secondary
+  };
+}
 
 /**
  * Look up team colors by team ID (case-insensitive).
  * Returns { primary, secondary } hex strings.
+ * Falls back to deterministic generated colors if not mapped.
  */
 export function getTeamColors(teamId) {
-  if (!teamId) return DEFAULT_COLORS;
-  return TEAM_COLORS[String(teamId).toLowerCase()] || DEFAULT_COLORS;
+  if (!teamId) return { primary: '#6B7280', secondary: '#E5E7EB' };
+  const mappedColor = TEAM_COLORS[String(teamId).toLowerCase()];
+  if (mappedColor) return mappedColor;
+  
+  // Try to find a partial match (e.g. if passed "Real Madrid" instead of "la-liga:real-madrid")
+  // Just in case opponent names are passed in.
+  const query = String(teamId).toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const [key, color] of Object.entries(TEAM_COLORS)) {
+    if (key.replace(/[^a-z0-9]/g, '').includes(query) || query.includes(key.replace(/[^a-z0-9]/g, ''))) {
+      return color;
+    }
+  }
+
+  return generateFallbackColors(teamId);
 }
 
 export { TEAM_COLORS };
